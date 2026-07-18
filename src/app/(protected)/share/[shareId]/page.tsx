@@ -20,9 +20,9 @@ export default async function SharePage({ params }: SharePageProps) {
 
   if (!shareData || shareData.active !== "true") {
     return (
-      <div className="min-h-full bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl">
-          <div className="rounded-xl bg-zinc-900 p-8 text-center">
+          <div className="rounded-xl bg-white p-8 text-center">
             <svg
               className="mx-auto mb-3 h-12 w-12 text-zinc-600"
               fill="none"
@@ -37,7 +37,7 @@ export default async function SharePage({ params }: SharePageProps) {
                 d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636"
               />
             </svg>
-            <h1 className="text-lg font-semibold text-white">
+            <h1 className="text-lg font-semibold text-zinc-900">
               This setup is no longer available
             </h1>
             <p className="mt-2 text-sm text-zinc-400">
@@ -55,10 +55,10 @@ export default async function SharePage({ params }: SharePageProps) {
 
   if (!calData || Object.keys(calData).length === 0) {
     return (
-      <div className="min-h-full bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl">
-          <div className="rounded-xl bg-zinc-900 p-8 text-center">
-            <h1 className="text-lg font-semibold text-white">
+          <div className="rounded-xl bg-white p-8 text-center">
+            <h1 className="text-lg font-semibold text-zinc-900">
               This setup is no longer available
             </h1>
             <p className="mt-2 text-sm text-zinc-400">
@@ -117,106 +117,106 @@ export default async function SharePage({ params }: SharePageProps) {
   const creatorName = (creatorData?.name as string) || "Unknown User";
 
   return (
-    <div className="min-h-full bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-2xl space-y-6">
         {/* Header */}
         <div>
           <p className="text-sm text-zinc-400">Shared Calibration Setup</p>
-          <h1 className="mt-1 text-2xl font-bold text-white">
+          <h1 className="mt-1 text-2xl font-bold text-zinc-900">
             {calibration.name}
           </h1>
         </div>
 
         {/* Meta info */}
-        <div className="rounded-xl bg-zinc-900 p-4">
+        <div className="rounded-xl bg-white p-4">
           <dl className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <dt className="text-zinc-500">Car</dt>
-              <dd className="mt-0.5 font-medium text-white">{carName}</dd>
+              <dt className="text-zinc-400">Car</dt>
+              <dd className="mt-0.5 font-medium text-zinc-900">{carName}</dd>
             </div>
             <div>
-              <dt className="text-zinc-500">Created by</dt>
-              <dd className="mt-0.5 font-medium text-white">{creatorName}</dd>
+              <dt className="text-zinc-400">Created by</dt>
+              <dd className="mt-0.5 font-medium text-zinc-900">{creatorName}</dd>
             </div>
           </dl>
         </div>
 
         {/* Parameters */}
-        <div className="rounded-xl bg-zinc-900 p-4">
-          <h2 className="mb-3 text-sm font-semibold text-zinc-300">
+        <div className="rounded-xl bg-white p-4">
+          <h2 className="mb-3 text-sm font-semibold text-zinc-600">
             Steering & Alignment
           </h2>
           <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
-            <div><dt className="text-xs text-zinc-500">Front Camber</dt><dd className="font-medium text-white">{calibration.frontCamber}°</dd></div>
-            <div><dt className="text-xs text-zinc-500">Rear Camber</dt><dd className="font-medium text-white">{calibration.rearCamber}°</dd></div>
-            <div><dt className="text-xs text-zinc-500">Front Toe</dt><dd className="font-medium text-white">{calibration.frontToe}°</dd></div>
-            <div><dt className="text-xs text-zinc-500">Rear Toe</dt><dd className="font-medium text-white">{calibration.rearToe}°</dd></div>
-            <div><dt className="text-xs text-zinc-500">Caster</dt><dd className="font-medium text-white">{calibration.frontCaster}°</dd></div>
-            <div><dt className="text-xs text-zinc-500">Ackermann</dt><dd className="font-medium text-white">{calibration.ackermann}%</dd></div>
-            <div><dt className="text-xs text-zinc-500">Steering Angle</dt><dd className="font-medium text-white">{calibration.steeringAngle}°</dd></div>
+            <div><dt className="text-xs text-zinc-400">Front Camber</dt><dd className="font-medium text-zinc-900">{calibration.frontCamber}°</dd></div>
+            <div><dt className="text-xs text-zinc-400">Rear Camber</dt><dd className="font-medium text-zinc-900">{calibration.rearCamber}°</dd></div>
+            <div><dt className="text-xs text-zinc-400">Front Toe</dt><dd className="font-medium text-zinc-900">{calibration.frontToe}°</dd></div>
+            <div><dt className="text-xs text-zinc-400">Rear Toe</dt><dd className="font-medium text-zinc-900">{calibration.rearToe}°</dd></div>
+            <div><dt className="text-xs text-zinc-400">Caster</dt><dd className="font-medium text-zinc-900">{calibration.frontCaster}°</dd></div>
+            <div><dt className="text-xs text-zinc-400">Ackermann</dt><dd className="font-medium text-zinc-900">{calibration.ackermann}%</dd></div>
+            <div><dt className="text-xs text-zinc-400">Steering Angle</dt><dd className="font-medium text-zinc-900">{calibration.steeringAngle}°</dd></div>
           </dl>
         </div>
 
-        <div className="rounded-xl bg-zinc-900 p-4">
-          <h2 className="mb-3 text-sm font-semibold text-zinc-300">
+        <div className="rounded-xl bg-white p-4">
+          <h2 className="mb-3 text-sm font-semibold text-zinc-600">
             Suspension
           </h2>
           <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
-            <div><dt className="text-xs text-zinc-500">Front Ride Height</dt><dd className="font-medium text-white">{calibration.frontRideHeight}mm</dd></div>
-            <div><dt className="text-xs text-zinc-500">Rear Ride Height</dt><dd className="font-medium text-white">{calibration.rearRideHeight}mm</dd></div>
-            {calibration.frontSpringRate && <div><dt className="text-xs text-zinc-500">Front Spring</dt><dd className="font-medium text-white">{calibration.frontSpringRate}</dd></div>}
-            {calibration.rearSpringRate && <div><dt className="text-xs text-zinc-500">Rear Spring</dt><dd className="font-medium text-white">{calibration.rearSpringRate}</dd></div>}
-            <div><dt className="text-xs text-zinc-500">Front Damping</dt><dd className="font-medium text-white">{calibration.frontDamping}/10</dd></div>
-            <div><dt className="text-xs text-zinc-500">Rear Damping</dt><dd className="font-medium text-white">{calibration.rearDamping}/10</dd></div>
-            <div><dt className="text-xs text-zinc-500">Front Rebound</dt><dd className="font-medium text-white">{calibration.frontRebound}/10</dd></div>
-            <div><dt className="text-xs text-zinc-500">Rear Rebound</dt><dd className="font-medium text-white">{calibration.rearRebound}/10</dd></div>
+            <div><dt className="text-xs text-zinc-400">Front Ride Height</dt><dd className="font-medium text-zinc-900">{calibration.frontRideHeight}mm</dd></div>
+            <div><dt className="text-xs text-zinc-400">Rear Ride Height</dt><dd className="font-medium text-zinc-900">{calibration.rearRideHeight}mm</dd></div>
+            {calibration.frontSpringRate && <div><dt className="text-xs text-zinc-400">Front Spring</dt><dd className="font-medium text-zinc-900">{calibration.frontSpringRate}</dd></div>}
+            {calibration.rearSpringRate && <div><dt className="text-xs text-zinc-400">Rear Spring</dt><dd className="font-medium text-zinc-900">{calibration.rearSpringRate}</dd></div>}
+            <div><dt className="text-xs text-zinc-400">Front Damping</dt><dd className="font-medium text-zinc-900">{calibration.frontDamping}/10</dd></div>
+            <div><dt className="text-xs text-zinc-400">Rear Damping</dt><dd className="font-medium text-zinc-900">{calibration.rearDamping}/10</dd></div>
+            <div><dt className="text-xs text-zinc-400">Front Rebound</dt><dd className="font-medium text-zinc-900">{calibration.frontRebound}/10</dd></div>
+            <div><dt className="text-xs text-zinc-400">Rear Rebound</dt><dd className="font-medium text-zinc-900">{calibration.rearRebound}/10</dd></div>
           </dl>
         </div>
 
-        <div className="rounded-xl bg-zinc-900 p-4">
-          <h2 className="mb-3 text-sm font-semibold text-zinc-300">
+        <div className="rounded-xl bg-white p-4">
+          <h2 className="mb-3 text-sm font-semibold text-zinc-600">
             Electronics
           </h2>
           <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
-            <div><dt className="text-xs text-zinc-500">Gyro Gain</dt><dd className="font-medium text-white">{calibration.gyroGain}%</dd></div>
-            <div><dt className="text-xs text-zinc-500">Boost</dt><dd className="font-medium text-white">{calibration.boost}%</dd></div>
-            <div><dt className="text-xs text-zinc-500">Turbo</dt><dd className="font-medium text-white">{calibration.turbo}%</dd></div>
-            <div><dt className="text-xs text-zinc-500">Throttle EPA</dt><dd className="font-medium text-white">{calibration.throttleEPA}%</dd></div>
-            <div><dt className="text-xs text-zinc-500">Steering EPA</dt><dd className="font-medium text-white">{calibration.steeringEPA}%</dd></div>
+            <div><dt className="text-xs text-zinc-400">Gyro Gain</dt><dd className="font-medium text-zinc-900">{calibration.gyroGain}%</dd></div>
+            <div><dt className="text-xs text-zinc-400">Boost</dt><dd className="font-medium text-zinc-900">{calibration.boost}%</dd></div>
+            <div><dt className="text-xs text-zinc-400">Turbo</dt><dd className="font-medium text-zinc-900">{calibration.turbo}%</dd></div>
+            <div><dt className="text-xs text-zinc-400">Throttle EPA</dt><dd className="font-medium text-zinc-900">{calibration.throttleEPA}%</dd></div>
+            <div><dt className="text-xs text-zinc-400">Steering EPA</dt><dd className="font-medium text-zinc-900">{calibration.steeringEPA}%</dd></div>
           </dl>
         </div>
 
         {(calibration.frontTrackWidth > 0 || calibration.wheelbase > 0 || calibration.totalWeight > 0 || calibration.frontTyres) && (
-          <div className="rounded-xl bg-zinc-900 p-4">
-            <h2 className="mb-3 text-sm font-semibold text-zinc-300">
+          <div className="rounded-xl bg-white p-4">
+            <h2 className="mb-3 text-sm font-semibold text-zinc-600">
               Geometry, Weight & Tyres
             </h2>
             <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
-              {calibration.frontTrackWidth > 0 && <div><dt className="text-xs text-zinc-500">Front Track</dt><dd className="font-medium text-white">{calibration.frontTrackWidth}mm</dd></div>}
-              {calibration.rearTrackWidth > 0 && <div><dt className="text-xs text-zinc-500">Rear Track</dt><dd className="font-medium text-white">{calibration.rearTrackWidth}mm</dd></div>}
-              {calibration.wheelbase > 0 && <div><dt className="text-xs text-zinc-500">Wheelbase</dt><dd className="font-medium text-white">{calibration.wheelbase}mm</dd></div>}
-              {calibration.totalWeight > 0 && <div><dt className="text-xs text-zinc-500">Weight</dt><dd className="font-medium text-white">{calibration.totalWeight}g</dd></div>}
-              {calibration.batteryPosition && <div><dt className="text-xs text-zinc-500">Battery Position</dt><dd className="font-medium text-white">{calibration.batteryPosition}</dd></div>}
-              {calibration.frontTyres && <div><dt className="text-xs text-zinc-500">Front Tyres</dt><dd className="font-medium text-white">{calibration.frontTyres}</dd></div>}
-              {calibration.rearTyres && <div><dt className="text-xs text-zinc-500">Rear Tyres</dt><dd className="font-medium text-white">{calibration.rearTyres}</dd></div>}
+              {calibration.frontTrackWidth > 0 && <div><dt className="text-xs text-zinc-400">Front Track</dt><dd className="font-medium text-zinc-900">{calibration.frontTrackWidth}mm</dd></div>}
+              {calibration.rearTrackWidth > 0 && <div><dt className="text-xs text-zinc-400">Rear Track</dt><dd className="font-medium text-zinc-900">{calibration.rearTrackWidth}mm</dd></div>}
+              {calibration.wheelbase > 0 && <div><dt className="text-xs text-zinc-400">Wheelbase</dt><dd className="font-medium text-zinc-900">{calibration.wheelbase}mm</dd></div>}
+              {calibration.totalWeight > 0 && <div><dt className="text-xs text-zinc-400">Weight</dt><dd className="font-medium text-zinc-900">{calibration.totalWeight}g</dd></div>}
+              {calibration.batteryPosition && <div><dt className="text-xs text-zinc-400">Battery Position</dt><dd className="font-medium text-zinc-900">{calibration.batteryPosition}</dd></div>}
+              {calibration.frontTyres && <div><dt className="text-xs text-zinc-400">Front Tyres</dt><dd className="font-medium text-zinc-900">{calibration.frontTyres}</dd></div>}
+              {calibration.rearTyres && <div><dt className="text-xs text-zinc-400">Rear Tyres</dt><dd className="font-medium text-zinc-900">{calibration.rearTyres}</dd></div>}
             </dl>
           </div>
         )}
 
         {/* Custom Parameters */}
         {calibration.customParams.length > 0 && (
-          <div className="rounded-xl bg-zinc-900 p-4">
-            <h2 className="mb-3 text-sm font-semibold text-zinc-300">
+          <div className="rounded-xl bg-white p-4">
+            <h2 className="mb-3 text-sm font-semibold text-zinc-600">
               Custom Parameters
             </h2>
             <dl className="space-y-2">
               {calibration.customParams.map((param, index) => (
                 <div
                   key={index}
-                  className="flex items-center justify-between rounded-lg bg-zinc-800 px-3 py-2"
+                  className="flex items-center justify-between rounded-lg bg-zinc-100 px-3 py-2"
                 >
                   <dt className="text-sm text-zinc-400">{param.name}</dt>
-                  <dd className="text-sm font-medium text-white">
+                  <dd className="text-sm font-medium text-zinc-900">
                     {param.value}
                   </dd>
                 </div>

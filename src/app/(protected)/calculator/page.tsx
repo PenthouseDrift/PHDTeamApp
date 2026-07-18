@@ -90,10 +90,10 @@ export default function CalculatorPage() {
   }
 
   return (
-    <div className="min-h-full bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-2xl space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">
+          <h1 className="text-2xl font-bold text-zinc-900">
             Gear Ratio Calculator
           </h1>
           <p className="mt-1 text-sm text-zinc-400">
@@ -102,12 +102,12 @@ export default function CalculatorPage() {
         </div>
 
         {/* Calculator Section */}
-        <section className="rounded-xl bg-zinc-900 p-6 space-y-5">
+        <section className="rounded-xl bg-white p-6 space-y-5">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label
                 htmlFor="spur"
-                className="block text-sm font-medium text-zinc-300"
+                className="block text-sm font-medium text-zinc-600"
               >
                 Spur Gear (30–130)
               </label>
@@ -119,14 +119,14 @@ export default function CalculatorPage() {
                 step={1}
                 value={spur}
                 onChange={(e) => setSpur(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 text-zinc-900 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 placeholder="80"
               />
             </div>
             <div>
               <label
                 htmlFor="pinion"
-                className="block text-sm font-medium text-zinc-300"
+                className="block text-sm font-medium text-zinc-600"
               >
                 Pinion Gear (10–60)
               </label>
@@ -138,7 +138,7 @@ export default function CalculatorPage() {
                 step={1}
                 value={pinion}
                 onChange={(e) => setPinion(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 text-zinc-900 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 placeholder="25"
               />
             </div>
@@ -170,15 +170,15 @@ export default function CalculatorPage() {
         </section>
 
         {/* Save to Car Profile Section */}
-        <section className="rounded-xl bg-zinc-900 p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-white">
+        <section className="rounded-xl bg-white p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-zinc-900">
             Save to Car Profile
           </h2>
 
           {carsLoading ? (
             <p className="text-sm text-zinc-400">Loading car profiles...</p>
           ) : cars.length === 0 ? (
-            <div className="rounded-lg bg-zinc-800 p-4 text-center">
+            <div className="rounded-lg bg-zinc-100 p-4 text-center">
               <p className="text-sm text-zinc-400">
                 Create a car profile first to save gear ratios.
               </p>
@@ -208,7 +208,7 @@ export default function CalculatorPage() {
               <div>
                 <label
                   htmlFor="car-select"
-                  className="block text-sm font-medium text-zinc-300"
+                  className="block text-sm font-medium text-zinc-600"
                 >
                   Select Car
                 </label>
@@ -216,7 +216,7 @@ export default function CalculatorPage() {
                   id="car-select"
                   value={selectedCarId}
                   onChange={(e) => setSelectedCarId(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-white focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 text-zinc-900 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 >
                   {cars.map((car) => (
                     <option key={car.carId} value={car.carId}>

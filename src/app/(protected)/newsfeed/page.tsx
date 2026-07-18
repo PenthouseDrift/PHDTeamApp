@@ -96,11 +96,11 @@ export default async function NewsfeedPage() {
   const { posts, stale } = await getFeed();
 
   return (
-    <div className="min-h-full bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-white">Newsfeed</h1>
+          <h1 className="text-2xl font-bold text-zinc-900">Newsfeed</h1>
           <p className="text-sm text-zinc-400">
             Latest updates from Penthouse Drift
           </p>
@@ -122,12 +122,12 @@ export default async function NewsfeedPage() {
           {posts.map((post) => (
             <article
               key={post.id}
-              className="rounded-xl bg-zinc-900 p-5 transition-colors hover:bg-zinc-900/80"
+              className="rounded-xl bg-white p-5 transition-colors hover:bg-zinc-900/80"
             >
               {/* Date */}
               <time
                 dateTime={post.createdTime}
-                className="text-xs font-medium text-zinc-500"
+                className="text-xs font-medium text-zinc-400"
               >
                 {formatDate(post.createdTime)}
               </time>
@@ -136,7 +136,7 @@ export default async function NewsfeedPage() {
               {post.message && (
                 <div className="mt-2">
                   {post.message.length > 500 ? (
-                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-600">
                       {post.message.slice(0, 500)}...{" "}
                       <a
                         href={`https://facebook.com/${post.id}`}
@@ -148,7 +148,7 @@ export default async function NewsfeedPage() {
                       </a>
                     </p>
                   ) : (
-                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-300">
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-600">
                       {post.message}
                     </p>
                   )}
@@ -178,7 +178,7 @@ export default async function NewsfeedPage() {
 
               {/* Unsupported content notice */}
               {post.hasUnsupportedContent && (
-                <div className="mt-3 rounded-md border border-zinc-700 bg-zinc-800/50 px-3 py-2">
+                <div className="mt-3 rounded-md border border-zinc-300 bg-zinc-100/50 px-3 py-2">
                   <p className="text-xs text-zinc-400">
                     Additional content available on{" "}
                     <a
@@ -199,7 +199,7 @@ export default async function NewsfeedPage() {
         {/* Empty state */}
         {posts.length === 0 && !stale && (
           <div className="py-12 text-center">
-            <p className="text-zinc-500">No posts to display.</p>
+            <p className="text-zinc-400">No posts to display.</p>
           </div>
         )}
       </div>

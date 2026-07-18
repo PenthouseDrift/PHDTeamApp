@@ -311,7 +311,7 @@ export default function ImageUploader({
               <button
                 type="button"
                 onClick={() => handleRemove(file.id)}
-                className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+                className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-zinc-900 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
                 aria-label={`Remove ${file.name}`}
               >
                 <svg

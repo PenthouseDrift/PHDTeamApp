@@ -167,11 +167,11 @@ export function QRScanner() {
       >
         <div className="text-center space-y-4 max-w-md">
           {result.member?.name && (
-            <p className="text-2xl font-bold text-white">{result.member.name}</p>
+            <p className="text-2xl font-bold text-zinc-900">{result.member.name}</p>
           )}
-          <p className="text-4xl font-black text-white">{result.message}</p>
+          <p className="text-4xl font-black text-zinc-900">{result.message}</p>
           <StatusIcon status={result.status} />
-          <p className="text-sm text-white/70 mt-8">
+          <p className="text-sm text-zinc-900/70 mt-8">
             Returning to scanner in 5 seconds...
           </p>
           <button
@@ -179,7 +179,7 @@ export function QRScanner() {
               setResult(null);
               startScanner();
             }}
-            className="mt-4 px-6 py-3 bg-white/20 hover:bg-white/30 text-white font-medium rounded-lg transition-colors"
+            className="mt-4 px-6 py-3 bg-white/20 hover:bg-white/30 text-zinc-900 font-medium rounded-lg transition-colors"
           >
             Scan Next
           </button>
@@ -207,8 +207,8 @@ export function QRScanner() {
             />
           </svg>
         </div>
-        <h2 className="text-xl font-bold text-white mb-2">Camera Access Required</h2>
-        <p className="text-zinc-400 mb-6 max-w-sm">{cameraError}</p>
+        <h2 className="text-xl font-bold text-zinc-900 mb-2">Camera Access Required</h2>
+        <p className="text-zinc-500 mb-6 max-w-sm">{cameraError}</p>
         <button
           onClick={startScanner}
           className="px-6 py-3 bg-white text-zinc-900 font-medium rounded-lg hover:bg-zinc-100 transition-colors"
@@ -222,15 +222,15 @@ export function QRScanner() {
   // Scanner view
   return (
     <div className="flex flex-col items-center p-4">
-      <h1 className="text-xl font-bold text-white mb-4">Scan Member QR Code</h1>
+      <h1 className="text-xl font-bold text-zinc-900 mb-4">Scan Member QR Code</h1>
       <div
         ref={containerRef}
-        className="w-full max-w-md aspect-square rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800"
+        className="w-full max-w-md aspect-square rounded-xl overflow-hidden bg-white border border-zinc-200"
       >
         <div id="qr-reader" className="w-full h-full" />
       </div>
       {isScanning && (
-        <p className="text-sm text-zinc-400 mt-4">
+        <p className="text-sm text-zinc-500 mt-4">
           Position the QR code within the frame
         </p>
       )}
@@ -251,7 +251,7 @@ function getResultBackground(status: ScanResult["status"]): string {
     case "error":
       return "bg-red-800";
     default:
-      return "bg-zinc-800";
+      return "bg-zinc-100";
   }
 }
 
@@ -259,7 +259,7 @@ function StatusIcon({ status }: { status: ScanResult["status"] }) {
   if (status === "active") {
     return (
       <svg
-        className="w-24 h-24 mx-auto text-white"
+        className="w-24 h-24 mx-auto text-zinc-900"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -277,7 +277,7 @@ function StatusIcon({ status }: { status: ScanResult["status"] }) {
   if (status === "duplicate") {
     return (
       <svg
-        className="w-24 h-24 mx-auto text-white"
+        className="w-24 h-24 mx-auto text-zinc-900"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"
@@ -294,7 +294,7 @@ function StatusIcon({ status }: { status: ScanResult["status"] }) {
 
   return (
     <svg
-      className="w-24 h-24 mx-auto text-white"
+      className="w-24 h-24 mx-auto text-zinc-900"
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"

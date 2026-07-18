@@ -60,10 +60,10 @@ export default async function PurchaseMembershipPage() {
   }
 
   return (
-    <div className="min-h-full bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-lg space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">
+          <h1 className="text-2xl font-bold text-zinc-900">
             Purchase Membership
           </h1>
           <p className="mt-1 text-sm text-zinc-400">
@@ -72,9 +72,9 @@ export default async function PurchaseMembershipPage() {
         </div>
 
         {/* Membership Info Card */}
-        <div className="rounded-xl bg-zinc-900 p-6 space-y-4">
+        <div className="rounded-xl bg-white p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-white">
+            <h2 className="text-lg font-semibold text-zinc-900">
               {MEMBERSHIP_DURATION_DAYS}-Day Membership
             </h2>
             <span className="text-2xl font-bold text-amber-400">
@@ -82,7 +82,7 @@ export default async function PurchaseMembershipPage() {
             </span>
           </div>
 
-          <ul className="space-y-2 text-sm text-zinc-300">
+          <ul className="space-y-2 text-sm text-zinc-600">
             <li className="flex items-center gap-2">
               <svg
                 className="h-4 w-4 text-green-400"
@@ -137,7 +137,7 @@ export default async function PurchaseMembershipPage() {
           </ul>
 
           {isActive && (
-            <div className="rounded-lg bg-zinc-800 p-3 text-sm text-zinc-300">
+            <div className="rounded-lg bg-zinc-100 p-3 text-sm text-zinc-600">
               <p>
                 You currently have an active membership with{" "}
                 <span className="font-medium text-amber-400">
@@ -160,7 +160,7 @@ export default async function PurchaseMembershipPage() {
             </button>
           </form>
 
-          <p className="text-center text-xs text-zinc-500">
+          <p className="text-center text-xs text-zinc-400">
             Secure payment powered by SumUp
           </p>
         </div>

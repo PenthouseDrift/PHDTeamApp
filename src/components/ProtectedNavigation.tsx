@@ -26,8 +26,10 @@ export function ProtectedNavigation({ user }: { user: NavUser }) {
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex md:w-64 md:flex-col border-r border-zinc-800 bg-zinc-900">
-        <div className="flex items-center gap-3 p-4 border-b border-zinc-800">
+      <aside className="hidden md:flex md:w-64 md:flex-col border-r border-zinc-200 bg-white">
+        <div className="p-4 border-b border-zinc-200">
+          <img src="/logo.png" alt="Penthouse Drift" className="h-8 w-auto mb-3" />
+          <div className="flex items-center gap-3">
           {user.image ? (
             <Image
               src={user.image}
@@ -37,13 +39,14 @@ export function ProtectedNavigation({ user }: { user: NavUser }) {
               className="rounded-full"
             />
           ) : (
-            <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center text-white font-medium">
+            <div className="w-10 h-10 rounded-full bg-zinc-200 flex items-center justify-center text-zinc-700 font-medium">
               {user.name?.[0] ?? "U"}
             </div>
           )}
-          <span className="text-sm font-medium text-white truncate">
+          <span className="text-sm font-medium text-zinc-900 truncate">
             {user.name ?? "Member"}
           </span>
+          </div>
         </div>
         <nav className="flex-1 p-3 space-y-1">
           {navItems.map((item) => {
@@ -54,8 +57,8 @@ export function ProtectedNavigation({ user }: { user: NavUser }) {
                 href={item.href}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
-                    ? "bg-zinc-800 text-white"
-                    : "text-zinc-400 hover:text-white hover:bg-zinc-800/50"
+                    ? "bg-zinc-100 text-zinc-900"
+                    : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"
                 }`}
               >
                 <item.icon className="w-5 h-5" />
@@ -68,8 +71,8 @@ export function ProtectedNavigation({ user }: { user: NavUser }) {
               href="/admin/members"
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 pathname.startsWith("/admin")
-                  ? "bg-amber-500/10 text-amber-400"
-                  : "text-amber-400/70 hover:text-amber-400 hover:bg-amber-500/10"
+                  ? "bg-amber-50 text-amber-700"
+                  : "text-amber-600 hover:text-amber-700 hover:bg-amber-50"
               }`}
             >
               <AdminIcon className="w-5 h-5" />
@@ -77,10 +80,10 @@ export function ProtectedNavigation({ user }: { user: NavUser }) {
             </Link>
           )}
         </nav>
-        <div className="p-3 border-t border-zinc-800">
+        <div className="p-3 border-t border-zinc-200">
           <button
             onClick={() => signOut({ callbackUrl: "/" })}
-            className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800/50 transition-colors"
+            className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition-colors"
           >
             <LogoutIcon className="w-5 h-5" />
             Sign Out
@@ -89,7 +92,7 @@ export function ProtectedNavigation({ user }: { user: NavUser }) {
       </aside>
 
       {/* Mobile bottom tab bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden border-t border-zinc-800 bg-zinc-900/95 backdrop-blur-sm">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden border-t border-zinc-200 bg-white/95 backdrop-blur-sm">
         {navItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
@@ -97,7 +100,7 @@ export function ProtectedNavigation({ user }: { user: NavUser }) {
               key={item.href}
               href={item.href}
               className={`flex flex-1 flex-col items-center gap-1 py-2 text-xs font-medium transition-colors ${
-                isActive ? "text-white" : "text-zinc-500"
+                isActive ? "text-zinc-900" : "text-zinc-500"
               }`}
             >
               <item.icon className="w-5 h-5" />
@@ -109,7 +112,7 @@ export function ProtectedNavigation({ user }: { user: NavUser }) {
           <Link
             href="/admin/members"
             className={`flex flex-1 flex-col items-center gap-1 py-2 text-xs font-medium transition-colors ${
-              pathname.startsWith("/admin") ? "text-amber-400" : "text-amber-400/70"
+              pathname.startsWith("/admin") ? "text-amber-600" : "text-amber-500"
             }`}
           >
             <AdminIcon className="w-5 h-5" />

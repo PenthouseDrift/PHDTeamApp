@@ -44,7 +44,7 @@ function ShellCard({
   const isOwnEntry = entry.userId === userId;
 
   return (
-    <div className="group relative overflow-hidden rounded-xl bg-zinc-900 transition-colors hover:bg-zinc-800">
+    <div className="group relative overflow-hidden rounded-xl bg-white transition-colors hover:bg-zinc-100">
       {isWinner && (
         <div className="absolute top-2 left-2 z-10 rounded-md bg-amber-500/90 px-2 py-0.5 text-[10px] font-bold text-black">
           🏆 {winnerLabel}
@@ -59,11 +59,11 @@ function ShellCard({
       </div>
       <div className="space-y-2 p-4">
         {entry.description && (
-          <p className="line-clamp-2 text-sm text-zinc-300">
+          <p className="line-clamp-2 text-sm text-zinc-600">
             {entry.description}
           </p>
         )}
-        <div className="flex items-center justify-between text-xs text-zinc-500">
+        <div className="flex items-center justify-between text-xs text-zinc-400">
           <span className="truncate max-w-[120px]">{authorName}</span>
           <span>{formatDate(entry.createdAt)}</span>
         </div>
@@ -120,12 +120,12 @@ export default async function ShowcasePage({ searchParams }: ShowcasePageProps) 
   }
 
   return (
-    <div className="min-h-full bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">Shell Showcase</h1>
+            <h1 className="text-2xl font-bold text-zinc-900">Shell Showcase</h1>
             <p className="text-sm text-zinc-400">
               Check out custom shell designs from the community
             </p>
@@ -139,13 +139,13 @@ export default async function ShowcasePage({ searchParams }: ShowcasePageProps) 
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 rounded-lg bg-zinc-900 p-1">
+        <div className="flex gap-1 rounded-lg bg-white p-1">
           <Link
             href="/showcase?view=gallery"
             className={`flex-1 rounded-md px-4 py-2 text-center text-sm font-medium transition-colors ${
               view === "gallery"
-                ? "bg-zinc-700 text-white"
-                : "text-zinc-400 hover:text-zinc-200"
+                ? "bg-zinc-700 text-zinc-900"
+                : "text-zinc-500 hover:text-zinc-200"
             }`}
           >
             Gallery
@@ -154,8 +154,8 @@ export default async function ShowcasePage({ searchParams }: ShowcasePageProps) 
             href="/showcase?view=leaderboard"
             className={`flex-1 rounded-md px-4 py-2 text-center text-sm font-medium transition-colors ${
               view === "leaderboard"
-                ? "bg-zinc-700 text-white"
-                : "text-zinc-400 hover:text-zinc-200"
+                ? "bg-zinc-700 text-zinc-900"
+                : "text-zinc-500 hover:text-zinc-200"
             }`}
           >
             Leaderboard
@@ -164,7 +164,7 @@ export default async function ShowcasePage({ searchParams }: ShowcasePageProps) 
 
         {/* Grid */}
         {entries.length === 0 ? (
-          <div className="rounded-xl bg-zinc-900 p-12 text-center">
+          <div className="rounded-xl bg-white p-12 text-center">
             <p className="text-zinc-400">
               No shells submitted yet. Be the first!
             </p>

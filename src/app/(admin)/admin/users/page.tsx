@@ -9,18 +9,18 @@ export default async function AdminUsersPage() {
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">User Management</h1>
-        <p className="text-sm text-zinc-400 mt-1">
+        <h1 className="text-2xl font-bold text-zinc-900">User Management</h1>
+        <p className="text-sm text-zinc-500 mt-1">
           {users.length} registered user{users.length !== 1 ? "s" : ""} — manage admin access
         </p>
       </div>
 
       {users.length === 0 ? (
-        <div className="rounded-xl bg-zinc-900 p-8 text-center">
+        <div className="rounded-xl bg-white p-8 text-center">
           <p className="text-zinc-400">No users registered yet.</p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-zinc-800">
+        <div className="overflow-x-auto rounded-lg border border-zinc-200">
           <table className="w-full text-sm">
             <thead className="bg-zinc-900/50">
               <tr className="text-left text-zinc-400">
@@ -42,14 +42,14 @@ export default async function AdminUsersPage() {
                           className="h-8 w-8 rounded-full"
                         />
                       ) : (
-                        <div className="h-8 w-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs text-white font-medium">
+                        <div className="h-8 w-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs text-zinc-900 font-medium">
                           {user.name[0]}
                         </div>
                       )}
-                      <span className="text-white font-medium">{user.name}</span>
+                      <span className="text-zinc-900 font-medium">{user.name}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-zinc-400 hidden sm:table-cell">
+                  <td className="px-4 py-3 text-zinc-500 hidden sm:table-cell">
                     {user.email}
                   </td>
                   <td className="px-4 py-3">
@@ -57,7 +57,7 @@ export default async function AdminUsersPage() {
                       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                         user.role === "admin"
                           ? "bg-amber-500/10 text-amber-400"
-                          : "bg-zinc-700 text-zinc-300"
+                          : "bg-zinc-700 text-zinc-600"
                       }`}
                     >
                       {user.role}
@@ -67,7 +67,7 @@ export default async function AdminUsersPage() {
                     {user.id !== session?.user?.id ? (
                       <UserRoleToggle userId={user.id} currentRole={user.role} />
                     ) : (
-                      <span className="text-xs text-zinc-500">You</span>
+                      <span className="text-xs text-zinc-400">You</span>
                     )}
                   </td>
                 </tr>

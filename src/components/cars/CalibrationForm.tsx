@@ -155,7 +155,7 @@ export default function CalibrationForm({ onSubmit, initialData }: CalibrationFo
     <form onSubmit={handleSubmit} className="space-y-8">
       {/* Name */}
       <div>
-        <label htmlFor="cal-name" className="block text-sm font-medium text-zinc-300">
+        <label htmlFor="cal-name" className="block text-sm font-medium text-zinc-600">
           Setup Name
         </label>
         <input
@@ -165,7 +165,7 @@ export default function CalibrationForm({ onSubmit, initialData }: CalibrationFo
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Track Day Grip Setup"
           maxLength={50}
-          className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+          className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-zinc-100 px-4 py-2.5 text-zinc-900 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
         />
       </div>
 
@@ -178,7 +178,7 @@ export default function CalibrationForm({ onSubmit, initialData }: CalibrationFo
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {section.fields.map((field) => (
               <div key={field.key}>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">
+                <label className="block text-xs font-medium text-zinc-500 mb-1">
                   {field.label}
                   {field.unit && <span className="text-zinc-600 ml-1">({field.unit})</span>}
                 </label>
@@ -193,7 +193,7 @@ export default function CalibrationForm({ onSubmit, initialData }: CalibrationFo
                       onChange={(e) => updateValue(field.key, Number(e.target.value))}
                       className="flex-1 accent-amber-500"
                     />
-                    <span className="text-sm text-white w-8 text-right">
+                    <span className="text-sm text-zinc-900 w-8 text-right">
                       {values[field.key]}
                     </span>
                   </div>
@@ -203,7 +203,7 @@ export default function CalibrationForm({ onSubmit, initialData }: CalibrationFo
                     value={values[field.key] as string}
                     onChange={(e) => updateValue(field.key, e.target.value)}
                     placeholder={field.placeholder}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    className="w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                   />
                 ) : (
                   <input
@@ -213,7 +213,7 @@ export default function CalibrationForm({ onSubmit, initialData }: CalibrationFo
                     step={field.step}
                     value={values[field.key] as number}
                     onChange={(e) => updateValue(field.key, Number(e.target.value))}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    className="w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                   />
                 )}
               </div>
@@ -232,7 +232,7 @@ export default function CalibrationForm({ onSubmit, initialData }: CalibrationFo
             type="button"
             onClick={addCustomParam}
             disabled={customParams.length >= 10}
-            className="text-xs font-medium text-zinc-300 bg-zinc-800 px-3 py-1.5 rounded-lg hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="text-xs font-medium text-zinc-600 bg-zinc-100 px-3 py-1.5 rounded-lg hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             + Add
           </button>
@@ -248,7 +248,7 @@ export default function CalibrationForm({ onSubmit, initialData }: CalibrationFo
               onChange={(e) => updateCustomParam(index, "name", e.target.value)}
               placeholder="Name"
               maxLength={30}
-              className="flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              className="flex-1 rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
             />
             <input
               type="text"
@@ -256,12 +256,12 @@ export default function CalibrationForm({ onSubmit, initialData }: CalibrationFo
               onChange={(e) => updateCustomParam(index, "value", e.target.value)}
               placeholder="Value"
               maxLength={30}
-              className="flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              className="flex-1 rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
             />
             <button
               type="button"
               onClick={() => removeCustomParam(index)}
-              className="p-2 text-zinc-400 hover:text-red-400"
+              className="p-2 text-zinc-500 hover:text-red-400"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
