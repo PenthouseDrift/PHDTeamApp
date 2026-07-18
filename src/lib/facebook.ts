@@ -21,7 +21,7 @@ export async function getPageFeed(limit = 20): Promise<RawFacebookPost[]> {
   const token = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
 
   if (!pageId || !token) {
-    throw new Error("Facebook configuration missing");
+    return [];
   }
 
   const response = await fetch(

@@ -3,6 +3,7 @@
 import { redis } from "@/lib/redis";
 import { deleteImage } from "@/lib/blob";
 import { carProfileSchema } from "@/lib/validators";
+import { revalidatePath } from "next/cache";
 import type { CarProfile, ActionResult } from "@/types";
 
 const MAX_CARS_PER_MEMBER = 20;
@@ -49,8 +50,8 @@ export async function createCar(
     });
 
     await redis.sadd(`member:${userId}:cars`, carId);
-    await redis.sadd("memberships:all", userId);
 
+    revalidatePath("/cars");
     return { success: true, data: car };
   } catch (error) {
     return {
@@ -152,6 +153,7 @@ export async function deleteCar(
     // Remove from member's car set
     await redis.srem(`member:${userId}:cars`, carId);
 
+    revalidatePath("/cars");
     return { success: true, data: null };
   } catch (error) {
     return {

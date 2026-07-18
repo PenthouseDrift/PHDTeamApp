@@ -3,7 +3,7 @@
 import { redis } from "@/lib/redis";
 import type { ActionResult } from "@/types";
 
-function getCurrentWeek(): { year: number; week: number } {
+function calcCurrentWeek(): { year: number; week: number } {
   const now = new Date();
   const jan1 = new Date(now.getFullYear(), 0, 1);
   const dayOfYear = Math.ceil((now.getTime() - jan1.getTime()) / 86400000);
@@ -11,9 +11,13 @@ function getCurrentWeek(): { year: number; week: number } {
   return { year: now.getFullYear(), week: weekNumber };
 }
 
+export async function getCurrentWeek(): Promise<{ year: number; week: number }> {
+  return calcCurrentWeek();
+}
+
 export async function selectWeeklyWinner(shellId: string): Promise<ActionResult<{ selected: boolean }>> {
   try {
-    const { year, week } = getCurrentWeek();
+    const { year, week } = calcCurrentWeek();
     const winnerKey = `shells:winner:${year}:${week}`;
 
     // Check if this entry is already the winner
@@ -57,5 +61,3 @@ export async function getWeeklyWinners(limit = 20): Promise<Array<{ shellId: str
   }
   return winners;
 }
-
-export { getCurrentWeek };

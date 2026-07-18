@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { createCheckout } from "@/lib/sumup";
 import { redis } from "@/lib/redis";
-import { getMembership, getRemainingDays } from "@/actions/membership";
+import { getMembership } from "@/actions/membership";
+import { getRemainingDays } from "@/lib/membership-utils";
 
 const MEMBERSHIP_PRICE = 10.0;
 const MEMBERSHIP_CURRENCY = "GBP";
