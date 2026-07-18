@@ -13,14 +13,7 @@ export default function NewCalibrationPage() {
   const { data: session } = useSession();
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(data: {
-    name: string;
-    camber: number;
-    toe: number;
-    caster: number;
-    boost: number;
-    customParams: { name: string; value: string }[];
-  }) {
+  async function handleSubmit(data: Record<string, unknown> & { customParams: { name: string; value: string }[] }) {
     setError(null);
 
     if (!session?.user?.id) {

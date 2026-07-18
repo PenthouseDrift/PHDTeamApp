@@ -37,10 +37,42 @@ export interface CalibrationSetup {
   carId: string;
   userId: string;
   name: string;
-  camber: number;
-  toe: number;
-  caster: number;
+  // Steering
+  frontCamber: number;
+  rearCamber: number;
+  frontToe: number;
+  rearToe: number;
+  frontCaster: number;
+  ackermann: number;
+  steeringAngle: number;
+  // Suspension
+  frontRideHeight: number;
+  rearRideHeight: number;
+  frontSpringRate: string;
+  rearSpringRate: string;
+  frontDamping: number;
+  rearDamping: number;
+  frontRebound: number;
+  rearRebound: number;
+  frontDroop: number;
+  rearDroop: number;
+  // Drivetrain & Electronics
+  gyroGain: number;
+  throttleEPA: number;
+  steeringEPA: number;
   boost: number;
+  turbo: number;
+  // Geometry
+  frontTrackWidth: number;
+  rearTrackWidth: number;
+  wheelbase: number;
+  // Weight
+  batteryPosition: string;
+  totalWeight: number;
+  // Tyres
+  frontTyres: string;
+  rearTyres: string;
+  // Custom
   customParams: CustomParam[];
   createdAt: number;
 }

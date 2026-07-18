@@ -71,15 +71,40 @@ export default async function SharePage({ params }: SharePageProps) {
   }
 
   const calibration: CalibrationSetup = {
-    calibrationId: calData.calibrationId as string,
-    carId: calData.carId as string,
+    calibrationId: (calData.calibrationId as string) || calibrationId,
+    carId: (calData.carId as string) || "",
     userId: calData.userId as string,
-    name: calData.name as string,
-    camber: Number(calData.camber),
-    toe: Number(calData.toe),
-    caster: Number(calData.caster),
-    boost: Number(calData.boost),
-    customParams: JSON.parse((calData.customParams as string) || "[]"),
+    name: (calData.name as string) || "Untitled",
+    frontCamber: Number(calData.frontCamber) || 0,
+    rearCamber: Number(calData.rearCamber) || 0,
+    frontToe: Number(calData.frontToe) || 0,
+    rearToe: Number(calData.rearToe) || 0,
+    frontCaster: Number(calData.frontCaster) || 0,
+    ackermann: Number(calData.ackermann) || 0,
+    steeringAngle: Number(calData.steeringAngle) || 0,
+    frontRideHeight: Number(calData.frontRideHeight) || 0,
+    rearRideHeight: Number(calData.rearRideHeight) || 0,
+    frontSpringRate: (calData.frontSpringRate as string) || "",
+    rearSpringRate: (calData.rearSpringRate as string) || "",
+    frontDamping: Number(calData.frontDamping) || 0,
+    rearDamping: Number(calData.rearDamping) || 0,
+    frontRebound: Number(calData.frontRebound) || 0,
+    rearRebound: Number(calData.rearRebound) || 0,
+    frontDroop: Number(calData.frontDroop) || 0,
+    rearDroop: Number(calData.rearDroop) || 0,
+    gyroGain: Number(calData.gyroGain) || 0,
+    throttleEPA: Number(calData.throttleEPA) || 100,
+    steeringEPA: Number(calData.steeringEPA) || 100,
+    boost: Number(calData.boost) || 0,
+    turbo: Number(calData.turbo) || 0,
+    frontTrackWidth: Number(calData.frontTrackWidth) || 0,
+    rearTrackWidth: Number(calData.rearTrackWidth) || 0,
+    wheelbase: Number(calData.wheelbase) || 0,
+    batteryPosition: (calData.batteryPosition as string) || "",
+    totalWeight: Number(calData.totalWeight) || 0,
+    frontTyres: (calData.frontTyres as string) || "",
+    rearTyres: (calData.rearTyres as string) || "",
+    customParams: Array.isArray(calData.customParams) ? calData.customParams : JSON.parse((calData.customParams as string) || "[]"),
     createdAt: Number(calData.createdAt),
   };
 
@@ -119,35 +144,64 @@ export default async function SharePage({ params }: SharePageProps) {
         {/* Parameters */}
         <div className="rounded-xl bg-zinc-900 p-4">
           <h2 className="mb-3 text-sm font-semibold text-zinc-300">
-            Setup Parameters
+            Steering & Alignment
           </h2>
-          <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <div>
-              <dt className="text-xs text-zinc-500">Camber</dt>
-              <dd className="mt-0.5 text-lg font-semibold text-white">
-                {calibration.camber}°
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-zinc-500">Toe</dt>
-              <dd className="mt-0.5 text-lg font-semibold text-white">
-                {calibration.toe}°
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-zinc-500">Caster</dt>
-              <dd className="mt-0.5 text-lg font-semibold text-white">
-                {calibration.caster}°
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-zinc-500">Boost</dt>
-              <dd className="mt-0.5 text-lg font-semibold text-white">
-                {calibration.boost}%
-              </dd>
-            </div>
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
+            <div><dt className="text-xs text-zinc-500">Front Camber</dt><dd className="font-medium text-white">{calibration.frontCamber}°</dd></div>
+            <div><dt className="text-xs text-zinc-500">Rear Camber</dt><dd className="font-medium text-white">{calibration.rearCamber}°</dd></div>
+            <div><dt className="text-xs text-zinc-500">Front Toe</dt><dd className="font-medium text-white">{calibration.frontToe}°</dd></div>
+            <div><dt className="text-xs text-zinc-500">Rear Toe</dt><dd className="font-medium text-white">{calibration.rearToe}°</dd></div>
+            <div><dt className="text-xs text-zinc-500">Caster</dt><dd className="font-medium text-white">{calibration.frontCaster}°</dd></div>
+            <div><dt className="text-xs text-zinc-500">Ackermann</dt><dd className="font-medium text-white">{calibration.ackermann}%</dd></div>
+            <div><dt className="text-xs text-zinc-500">Steering Angle</dt><dd className="font-medium text-white">{calibration.steeringAngle}°</dd></div>
           </dl>
         </div>
+
+        <div className="rounded-xl bg-zinc-900 p-4">
+          <h2 className="mb-3 text-sm font-semibold text-zinc-300">
+            Suspension
+          </h2>
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
+            <div><dt className="text-xs text-zinc-500">Front Ride Height</dt><dd className="font-medium text-white">{calibration.frontRideHeight}mm</dd></div>
+            <div><dt className="text-xs text-zinc-500">Rear Ride Height</dt><dd className="font-medium text-white">{calibration.rearRideHeight}mm</dd></div>
+            {calibration.frontSpringRate && <div><dt className="text-xs text-zinc-500">Front Spring</dt><dd className="font-medium text-white">{calibration.frontSpringRate}</dd></div>}
+            {calibration.rearSpringRate && <div><dt className="text-xs text-zinc-500">Rear Spring</dt><dd className="font-medium text-white">{calibration.rearSpringRate}</dd></div>}
+            <div><dt className="text-xs text-zinc-500">Front Damping</dt><dd className="font-medium text-white">{calibration.frontDamping}/10</dd></div>
+            <div><dt className="text-xs text-zinc-500">Rear Damping</dt><dd className="font-medium text-white">{calibration.rearDamping}/10</dd></div>
+            <div><dt className="text-xs text-zinc-500">Front Rebound</dt><dd className="font-medium text-white">{calibration.frontRebound}/10</dd></div>
+            <div><dt className="text-xs text-zinc-500">Rear Rebound</dt><dd className="font-medium text-white">{calibration.rearRebound}/10</dd></div>
+          </dl>
+        </div>
+
+        <div className="rounded-xl bg-zinc-900 p-4">
+          <h2 className="mb-3 text-sm font-semibold text-zinc-300">
+            Electronics
+          </h2>
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
+            <div><dt className="text-xs text-zinc-500">Gyro Gain</dt><dd className="font-medium text-white">{calibration.gyroGain}%</dd></div>
+            <div><dt className="text-xs text-zinc-500">Boost</dt><dd className="font-medium text-white">{calibration.boost}%</dd></div>
+            <div><dt className="text-xs text-zinc-500">Turbo</dt><dd className="font-medium text-white">{calibration.turbo}%</dd></div>
+            <div><dt className="text-xs text-zinc-500">Throttle EPA</dt><dd className="font-medium text-white">{calibration.throttleEPA}%</dd></div>
+            <div><dt className="text-xs text-zinc-500">Steering EPA</dt><dd className="font-medium text-white">{calibration.steeringEPA}%</dd></div>
+          </dl>
+        </div>
+
+        {(calibration.frontTrackWidth > 0 || calibration.wheelbase > 0 || calibration.totalWeight > 0 || calibration.frontTyres) && (
+          <div className="rounded-xl bg-zinc-900 p-4">
+            <h2 className="mb-3 text-sm font-semibold text-zinc-300">
+              Geometry, Weight & Tyres
+            </h2>
+            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
+              {calibration.frontTrackWidth > 0 && <div><dt className="text-xs text-zinc-500">Front Track</dt><dd className="font-medium text-white">{calibration.frontTrackWidth}mm</dd></div>}
+              {calibration.rearTrackWidth > 0 && <div><dt className="text-xs text-zinc-500">Rear Track</dt><dd className="font-medium text-white">{calibration.rearTrackWidth}mm</dd></div>}
+              {calibration.wheelbase > 0 && <div><dt className="text-xs text-zinc-500">Wheelbase</dt><dd className="font-medium text-white">{calibration.wheelbase}mm</dd></div>}
+              {calibration.totalWeight > 0 && <div><dt className="text-xs text-zinc-500">Weight</dt><dd className="font-medium text-white">{calibration.totalWeight}g</dd></div>}
+              {calibration.batteryPosition && <div><dt className="text-xs text-zinc-500">Battery Position</dt><dd className="font-medium text-white">{calibration.batteryPosition}</dd></div>}
+              {calibration.frontTyres && <div><dt className="text-xs text-zinc-500">Front Tyres</dt><dd className="font-medium text-white">{calibration.frontTyres}</dd></div>}
+              {calibration.rearTyres && <div><dt className="text-xs text-zinc-500">Rear Tyres</dt><dd className="font-medium text-white">{calibration.rearTyres}</dd></div>}
+            </dl>
+          </div>
+        )}
 
         {/* Custom Parameters */}
         {calibration.customParams.length > 0 && (

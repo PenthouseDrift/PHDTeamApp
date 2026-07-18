@@ -6,7 +6,9 @@ export default async function CarsPage() {
   const session = await auth();
   if (!session?.user) return null;
 
+  console.log("[CarsPage] user.id:", session.user.id);
   const result = await getMemberCars(session.user.id);
+  console.log("[CarsPage] getMemberCars result:", JSON.stringify(result));
   const cars = result.success ? result.data : [];
 
   return (
