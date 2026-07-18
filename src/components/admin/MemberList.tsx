@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { performCheckIn } from "@/actions/checkin";
+import { activateMembership } from "@/actions/admin/membership";
 import type { MemberWithMembership } from "@/actions/admin/members";
 
 interface MemberListProps {
@@ -37,6 +38,23 @@ export function MemberList({ members }: MemberListProps) {
   function handleCheckIn(member: MemberWithMembership) {
     if (member.membership?.status !== "active") return;
     setConfirmMember(member);
+  }
+
+  function handleActivate(memberId: string, memberName: string) {
+    startTransition(async () => {
+      const result = await activateMembership(memberId);
+      if (result.success) {
+        const expiryDate = new Date(result.data.expiresAt).toLocaleDateString("en-AU", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        });
+        setFeedback({ type: "success", message: `${memberName} membership activated until ${expiryDate}` });
+      } else {
+        setFeedback({ type: "error", message: result.error });
+      }
+      setTimeout(() => setFeedback(null), 5000);
+    });
   }
 
   function confirmCheckIn() {
@@ -123,17 +141,28 @@ export function MemberList({ members }: MemberListProps) {
                     {m.membership ? formatDate(m.membership.expiresAt) : "—"}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => handleCheckIn(m)}
-                      disabled={m.membership?.status !== "active" || isPending}
-                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                        m.membership?.status === "active"
-                          ? "bg-green-600 hover:bg-green-700 text-white"
-                          : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
-                      }`}
-                    >
-                      {m.membership?.status === "active" ? "Check In" : "Expired"}
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      {m.membership?.status !== "active" && (
+                        <button
+                          onClick={() => handleActivate(m.member.id, m.member.name)}
+                          disabled={isPending}
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors disabled:opacity-50"
+                        >
+                          Activate
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleCheckIn(m)}
+                        disabled={m.membership?.status !== "active" || isPending}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                          m.membership?.status === "active"
+                            ? "bg-green-600 hover:bg-green-700 text-white"
+                            : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                        }`}
+                      >
+                        {m.membership?.status === "active" ? "Check In" : "No Membership"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
