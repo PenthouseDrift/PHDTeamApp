@@ -22,10 +22,14 @@ export async function getAllMembers(): Promise<MemberWithMembership[]> {
       cursor = Number(newCursor);
 
       for (const key of keys) {
-        const memberData = await redis.hgetall(key);
+        const keyStr = key as string;
+        // Skip sub-keys like member:userId:cars
+        if (keyStr.split(":").length > 2) continue;
+
+        const memberData = await redis.hgetall(keyStr);
         if (!memberData || !memberData.email) continue;
 
-        const userId = (memberData.id as string) || (key as string).replace("member:", "");
+        const userId = (memberData.id as string) || keyStr.replace("member:", "");
 
         const member: Member = {
           id: userId,

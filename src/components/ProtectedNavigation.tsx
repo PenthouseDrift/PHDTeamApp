@@ -116,6 +116,13 @@ export function ProtectedNavigation({ user }: { user: NavUser }) {
             <span className="truncate">Admin</span>
           </Link>
         )}
+        <button
+          onClick={() => signOut({ callbackUrl: "/" })}
+          className="flex flex-1 flex-col items-center gap-1 py-2 text-xs font-medium text-zinc-500 transition-colors"
+        >
+          <LogoutIcon className="w-5 h-5" />
+          <span className="truncate">Sign Out</span>
+        </button>
       </nav>
     </>
   );
