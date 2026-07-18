@@ -9,6 +9,7 @@ export async function saveGearRatio(
   userId: string,
   data: { spur: number; pinion: number; ratio: number }
 ): Promise<ActionResult<boolean>> {
+  
   try {
     // Verify car ownership
     const car = await redis.hgetall(`car:${carId}`);
