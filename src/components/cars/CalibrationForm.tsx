@@ -9,10 +9,7 @@ interface CustomParamInput {
 
 interface CalibrationFormData {
   name: string;
-  camber: number;
-  toe: number;
-  caster: number;
-  boost: number;
+  [key: string]: unknown;
   customParams: CustomParamInput[];
 }
 
@@ -21,89 +18,98 @@ interface CalibrationFormProps {
   initialData?: Partial<CalibrationFormData>;
 }
 
-export default function CalibrationForm({
-  onSubmit,
-  initialData,
-}: CalibrationFormProps) {
+interface FieldDef {
+  key: string;
+  label: string;
+  type: "number" | "text" | "range";
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  placeholder?: string;
+}
+
+const sections: { title: string; fields: FieldDef[] }[] = [
+  {
+    title: "Steering & Alignment",
+    fields: [
+      { key: "frontCamber", label: "Front Camber", type: "number", min: -15, max: 0, step: 0.5, unit: "°" },
+      { key: "rearCamber", label: "Rear Camber", type: "number", min: -15, max: 0, step: 0.5, unit: "°" },
+      { key: "frontToe", label: "Front Toe", type: "number", min: -5, max: 5, step: 0.5, unit: "°" },
+      { key: "rearToe", label: "Rear Toe", type: "number", min: -5, max: 5, step: 0.5, unit: "°" },
+      { key: "frontCaster", label: "Front Caster", type: "number", min: 0, max: 30, step: 1, unit: "°" },
+      { key: "ackermann", label: "Ackermann", type: "number", min: -100, max: 100, step: 5, unit: "%" },
+      { key: "steeringAngle", label: "Steering Angle / Throw", type: "number", min: 0, max: 90, step: 1, unit: "°" },
+    ],
+  },
+  {
+    title: "Suspension",
+    fields: [
+      { key: "frontRideHeight", label: "Front Ride Height", type: "number", min: 0, max: 20, step: 0.5, unit: "mm" },
+      { key: "rearRideHeight", label: "Rear Ride Height", type: "number", min: 0, max: 20, step: 0.5, unit: "mm" },
+      { key: "frontSpringRate", label: "Front Spring", type: "text", placeholder: "e.g. Silver / Soft" },
+      { key: "rearSpringRate", label: "Rear Spring", type: "text", placeholder: "e.g. Gold / Medium" },
+      { key: "frontDamping", label: "Front Damping", type: "range", min: 0, max: 10, step: 1 },
+      { key: "rearDamping", label: "Rear Damping", type: "range", min: 0, max: 10, step: 1 },
+      { key: "frontRebound", label: "Front Rebound", type: "range", min: 0, max: 10, step: 1 },
+      { key: "rearRebound", label: "Rear Rebound", type: "range", min: 0, max: 10, step: 1 },
+      { key: "frontDroop", label: "Front Droop", type: "number", min: 0, max: 10, step: 0.5, unit: "mm" },
+      { key: "rearDroop", label: "Rear Droop", type: "number", min: 0, max: 10, step: 0.5, unit: "mm" },
+    ],
+  },
+  {
+    title: "Drivetrain & Electronics",
+    fields: [
+      { key: "gyroGain", label: "Gyro Gain", type: "range", min: 0, max: 100, step: 5 },
+      { key: "throttleEPA", label: "Throttle EPA", type: "range", min: 0, max: 100, step: 5 },
+      { key: "steeringEPA", label: "Steering EPA", type: "range", min: 0, max: 100, step: 5 },
+      { key: "boost", label: "Boost", type: "range", min: 0, max: 100, step: 5 },
+      { key: "turbo", label: "Turbo", type: "range", min: 0, max: 100, step: 5 },
+    ],
+  },
+  {
+    title: "Geometry & Weight",
+    fields: [
+      { key: "frontTrackWidth", label: "Front Track Width", type: "number", min: 0, max: 250, step: 1, unit: "mm" },
+      { key: "rearTrackWidth", label: "Rear Track Width", type: "number", min: 0, max: 250, step: 1, unit: "mm" },
+      { key: "wheelbase", label: "Wheelbase", type: "number", min: 0, max: 300, step: 1, unit: "mm" },
+      { key: "totalWeight", label: "Total Weight", type: "number", min: 0, max: 5000, step: 10, unit: "g" },
+      { key: "batteryPosition", label: "Battery Position", type: "text", placeholder: "e.g. Front / Mid / Rear" },
+    ],
+  },
+  {
+    title: "Tyres",
+    fields: [
+      { key: "frontTyres", label: "Front Tyres", type: "text", placeholder: "e.g. DS Racing Drift Element" },
+      { key: "rearTyres", label: "Rear Tyres", type: "text", placeholder: "e.g. DS Racing Drift Element" },
+    ],
+  },
+];
+
+export default function CalibrationForm({ onSubmit, initialData }: CalibrationFormProps) {
   const [name, setName] = useState(initialData?.name ?? "");
-  const [camber, setCamber] = useState<string>(
-    initialData?.camber?.toString() ?? "0"
-  );
-  const [toe, setToe] = useState<string>(
-    initialData?.toe?.toString() ?? "0"
-  );
-  const [caster, setCaster] = useState<string>(
-    initialData?.caster?.toString() ?? "0"
-  );
-  const [boost, setBoost] = useState<number>(initialData?.boost ?? 50);
+  const [values, setValues] = useState<Record<string, string | number>>(() => {
+    const initial: Record<string, string | number> = {};
+    for (const section of sections) {
+      for (const field of section.fields) {
+        const val = initialData?.[field.key];
+        if (field.type === "text") {
+          initial[field.key] = (val as string) ?? "";
+        } else {
+          initial[field.key] = (val as number) ?? (field.key === "throttleEPA" || field.key === "steeringEPA" ? 100 : 0);
+        }
+      }
+    }
+    return initial;
+  });
   const [customParams, setCustomParams] = useState<CustomParamInput[]>(
-    initialData?.customParams ?? []
+    (initialData?.customParams as CustomParamInput[]) ?? []
   );
-  const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function validate(): boolean {
-    const newErrors: Record<string, string> = {};
-
-    if (!name.trim() || name.trim().length > 50) {
-      newErrors.name = "Name is required (1-50 characters)";
-    }
-
-    const camberNum = parseFloat(camber);
-    if (isNaN(camberNum) || camberNum < -15 || camberNum > 15) {
-      newErrors.camber = "Camber must be between -15.0 and +15.0";
-    }
-
-    const toeNum = parseFloat(toe);
-    if (isNaN(toeNum) || toeNum < -10 || toeNum > 10) {
-      newErrors.toe = "Toe must be between -10.0 and +10.0";
-    }
-
-    const casterNum = parseFloat(caster);
-    if (isNaN(casterNum) || casterNum < -15 || casterNum > 15) {
-      newErrors.caster = "Caster must be between -15.0 and +15.0";
-    }
-
-    if (boost < 0 || boost > 100 || !Number.isInteger(boost)) {
-      newErrors.boost = "Boost must be an integer between 0 and 100";
-    }
-
-    for (let i = 0; i < customParams.length; i++) {
-      const param = customParams[i];
-      if (!param.name.trim() || param.name.trim().length > 30) {
-        newErrors[`customParam_${i}_name`] =
-          "Parameter name is required (1-30 chars)";
-      }
-      if (!param.value.trim() || param.value.trim().length > 30) {
-        newErrors[`customParam_${i}_value`] =
-          "Parameter value is required (1-30 chars)";
-      }
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!validate()) return;
-
-    setSubmitting(true);
-    try {
-      await onSubmit({
-        name: name.trim(),
-        camber: parseFloat(camber),
-        toe: parseFloat(toe),
-        caster: parseFloat(caster),
-        boost,
-        customParams: customParams.map((p) => ({
-          name: p.name.trim(),
-          value: p.value.trim(),
-        })),
-      });
-    } finally {
-      setSubmitting(false);
-    }
+  function updateValue(key: string, val: string | number) {
+    setValues((prev) => ({ ...prev, [key]: val }));
   }
 
   function addCustomParam() {
@@ -113,35 +119,47 @@ export default function CalibrationForm({
 
   function removeCustomParam(index: number) {
     setCustomParams(customParams.filter((_, i) => i !== index));
-    // Clear related errors
-    const newErrors = { ...errors };
-    delete newErrors[`customParam_${index}_name`];
-    delete newErrors[`customParam_${index}_value`];
-    setErrors(newErrors);
   }
 
-  function updateCustomParam(
-    index: number,
-    field: "name" | "value",
-    val: string
-  ) {
+  function updateCustomParam(index: number, field: "name" | "value", val: string) {
     const updated = [...customParams];
     updated[index] = { ...updated[index], [field]: val };
     setCustomParams(updated);
   }
 
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    if (!name.trim()) {
+      setError("Setup name is required");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const data: CalibrationFormData = {
+        name: name.trim(),
+        ...values,
+        customParams: customParams.filter((p) => p.name.trim() && p.value.trim()),
+      };
+      await onSubmit(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-8">
       {/* Name */}
       <div>
-        <label
-          htmlFor="calibration-name"
-          className="block text-sm font-medium text-zinc-300"
-        >
+        <label htmlFor="cal-name" className="block text-sm font-medium text-zinc-300">
           Setup Name
         </label>
         <input
-          id="calibration-name"
+          id="cal-name"
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -149,226 +167,122 @@ export default function CalibrationForm({
           maxLength={50}
           className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
         />
-        {errors.name && (
-          <p className="mt-1.5 text-sm text-red-400">{errors.name}</p>
-        )}
-        <p className="mt-1.5 text-xs text-zinc-500">
-          {name.length}/50 characters
-        </p>
       </div>
 
-      {/* Camber */}
-      <div>
-        <label
-          htmlFor="calibration-camber"
-          className="block text-sm font-medium text-zinc-300"
-        >
-          Camber (°)
-        </label>
-        <input
-          id="calibration-camber"
-          type="number"
-          step="0.1"
-          min={-15}
-          max={15}
-          value={camber}
-          onChange={(e) => setCamber(e.target.value)}
-          className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-        />
-        {errors.camber && (
-          <p className="mt-1.5 text-sm text-red-400">{errors.camber}</p>
-        )}
-        <p className="mt-1.5 text-xs text-zinc-500">Range: -15.0 to +15.0</p>
-      </div>
-
-      {/* Toe */}
-      <div>
-        <label
-          htmlFor="calibration-toe"
-          className="block text-sm font-medium text-zinc-300"
-        >
-          Toe (°)
-        </label>
-        <input
-          id="calibration-toe"
-          type="number"
-          step="0.1"
-          min={-10}
-          max={10}
-          value={toe}
-          onChange={(e) => setToe(e.target.value)}
-          className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-        />
-        {errors.toe && (
-          <p className="mt-1.5 text-sm text-red-400">{errors.toe}</p>
-        )}
-        <p className="mt-1.5 text-xs text-zinc-500">Range: -10.0 to +10.0</p>
-      </div>
-
-      {/* Caster */}
-      <div>
-        <label
-          htmlFor="calibration-caster"
-          className="block text-sm font-medium text-zinc-300"
-        >
-          Caster (°)
-        </label>
-        <input
-          id="calibration-caster"
-          type="number"
-          step="0.1"
-          min={-15}
-          max={15}
-          value={caster}
-          onChange={(e) => setCaster(e.target.value)}
-          className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-        />
-        {errors.caster && (
-          <p className="mt-1.5 text-sm text-red-400">{errors.caster}</p>
-        )}
-        <p className="mt-1.5 text-xs text-zinc-500">Range: -15.0 to +15.0</p>
-      </div>
-
-      {/* Boost */}
-      <div>
-        <label
-          htmlFor="calibration-boost"
-          className="block text-sm font-medium text-zinc-300"
-        >
-          Boost: {boost}%
-        </label>
-        <input
-          id="calibration-boost"
-          type="range"
-          min={0}
-          max={100}
-          step={1}
-          value={boost}
-          onChange={(e) => setBoost(parseInt(e.target.value, 10))}
-          className="mt-1.5 w-full accent-amber-500"
-        />
-        <div className="mt-1 flex justify-between text-xs text-zinc-500">
-          <span>0%</span>
-          <span>100%</span>
-        </div>
-        {errors.boost && (
-          <p className="mt-1.5 text-sm text-red-400">{errors.boost}</p>
-        )}
-      </div>
+      {/* Parameter Sections */}
+      {sections.map((section) => (
+        <fieldset key={section.title} className="space-y-4">
+          <legend className="text-sm font-semibold text-amber-400 uppercase tracking-wide">
+            {section.title}
+          </legend>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {section.fields.map((field) => (
+              <div key={field.key}>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">
+                  {field.label}
+                  {field.unit && <span className="text-zinc-600 ml-1">({field.unit})</span>}
+                </label>
+                {field.type === "range" ? (
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="range"
+                      min={field.min}
+                      max={field.max}
+                      step={field.step}
+                      value={values[field.key] as number}
+                      onChange={(e) => updateValue(field.key, Number(e.target.value))}
+                      className="flex-1 accent-amber-500"
+                    />
+                    <span className="text-sm text-white w-8 text-right">
+                      {values[field.key]}
+                    </span>
+                  </div>
+                ) : field.type === "text" ? (
+                  <input
+                    type="text"
+                    value={values[field.key] as string}
+                    onChange={(e) => updateValue(field.key, e.target.value)}
+                    placeholder={field.placeholder}
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                ) : (
+                  <input
+                    type="number"
+                    min={field.min}
+                    max={field.max}
+                    step={field.step}
+                    value={values[field.key] as number}
+                    onChange={(e) => updateValue(field.key, Number(e.target.value))}
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        </fieldset>
+      ))}
 
       {/* Custom Parameters */}
-      <div className="space-y-3">
+      <fieldset className="space-y-3">
         <div className="flex items-center justify-between">
-          <label className="block text-sm font-medium text-zinc-300">
+          <legend className="text-sm font-semibold text-amber-400 uppercase tracking-wide">
             Custom Parameters
-          </label>
+          </legend>
           <button
             type="button"
             onClick={addCustomParam}
             disabled={customParams.length >= 10}
-            className="inline-flex items-center gap-1 rounded-lg bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="text-xs font-medium text-zinc-300 bg-zinc-800 px-3 py-1.5 rounded-lg hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <svg
-              className="h-3.5 w-3.5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4.5v15m7.5-7.5h-15"
-              />
-            </svg>
-            Add Parameter
+            + Add
           </button>
         </div>
-
         {customParams.length === 0 && (
-          <p className="text-xs text-zinc-500">
-            No custom parameters added. Up to 10 allowed.
-          </p>
+          <p className="text-xs text-zinc-500">No custom parameters. Add up to 10.</p>
         )}
-
         {customParams.map((param, index) => (
-          <div
-            key={index}
-            className="flex items-start gap-2 rounded-lg bg-zinc-900 p-3"
-          >
-            <div className="flex-1 space-y-2">
-              <input
-                type="text"
-                value={param.name}
-                onChange={(e) =>
-                  updateCustomParam(index, "name", e.target.value)
-                }
-                placeholder="Parameter name"
-                maxLength={30}
-                aria-label={`Custom parameter ${index + 1} name`}
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-              />
-              {errors[`customParam_${index}_name`] && (
-                <p className="text-xs text-red-400">
-                  {errors[`customParam_${index}_name`]}
-                </p>
-              )}
-            </div>
-            <div className="flex-1 space-y-2">
-              <input
-                type="text"
-                value={param.value}
-                onChange={(e) =>
-                  updateCustomParam(index, "value", e.target.value)
-                }
-                placeholder="Value"
-                maxLength={30}
-                aria-label={`Custom parameter ${index + 1} value`}
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-              />
-              {errors[`customParam_${index}_value`] && (
-                <p className="text-xs text-red-400">
-                  {errors[`customParam_${index}_value`]}
-                </p>
-              )}
-            </div>
+          <div key={index} className="flex items-center gap-2">
+            <input
+              type="text"
+              value={param.name}
+              onChange={(e) => updateCustomParam(index, "name", e.target.value)}
+              placeholder="Name"
+              maxLength={30}
+              className="flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            />
+            <input
+              type="text"
+              value={param.value}
+              onChange={(e) => updateCustomParam(index, "value", e.target.value)}
+              placeholder="Value"
+              maxLength={30}
+              className="flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            />
             <button
               type="button"
               onClick={() => removeCustomParam(index)}
-              aria-label={`Remove parameter ${index + 1}`}
-              className="mt-1 rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-red-400"
+              className="p-2 text-zinc-400 hover:text-red-400"
             >
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
         ))}
+      </fieldset>
 
-        {customParams.length >= 10 && (
-          <p className="text-xs text-zinc-500">
-            Maximum of 10 custom parameters reached.
-          </p>
-        )}
-      </div>
+      {/* Error */}
+      {error && (
+        <div className="rounded-lg bg-red-900/30 border border-red-800 p-3">
+          <p className="text-sm text-red-400">{error}</p>
+        </div>
+      )}
 
       {/* Submit */}
       <button
         type="submit"
         disabled={submitting}
-        className="w-full rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-black transition-colors hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-full rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-black transition-colors hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {submitting ? "Saving..." : "Save Calibration"}
       </button>

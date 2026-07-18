@@ -150,9 +150,9 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
                     </span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-3 text-xs text-zinc-400">
-                    <span>Camber: {cal.camber}°</span>
-                    <span>Toe: {cal.toe}°</span>
-                    <span>Caster: {cal.caster}°</span>
+                    <span>F.Camber: {cal.frontCamber}°</span>
+                    <span>R.Camber: {cal.rearCamber}°</span>
+                    <span>Gyro: {cal.gyroGain}%</span>
                     <span>Boost: {cal.boost}%</span>
                     {cal.customParams.length > 0 && (
                       <span>+{cal.customParams.length} custom</span>

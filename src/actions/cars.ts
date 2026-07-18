@@ -8,6 +8,20 @@ import type { CarProfile, ActionResult } from "@/types";
 
 const MAX_CARS_PER_MEMBER = 20;
 
+function parseImages(images: unknown): string[] {
+  if (Array.isArray(images)) return images;
+  if (typeof images === "string") {
+    try {
+      const parsed = JSON.parse(images);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // Single URL string
+      return [images];
+    }
+  }
+  return [];
+}
+
 export async function createCar(
   userId: string,
   data: { name: string; images: string[] }
@@ -137,7 +151,7 @@ export async function deleteCar(
     // Get car images and delete from Vercel Blob
     const carData = await redis.hgetall(`car:${carId}`);
     if (carData && carData.images) {
-      const images: string[] = JSON.parse(carData.images as string);
+      const images: string[] = parseImages(carData.images);
       for (const imageUrl of images) {
         try {
           await deleteImage(imageUrl);
@@ -181,7 +195,7 @@ export async function getMemberCars(
           carId: carData.carId as string,
           userId: carData.userId as string,
           name: carData.name as string,
-          images: JSON.parse(carData.images as string),
+          images: parseImages(carData.images),
           createdAt: Number(carData.createdAt),
         });
       }
@@ -219,7 +233,7 @@ export async function getCar(
       carId: carData.carId as string,
       userId: carData.userId as string,
       name: carData.name as string,
-      images: JSON.parse(carData.images as string),
+      images: parseImages(carData.images),
       createdAt: Number(carData.createdAt),
     };
 
