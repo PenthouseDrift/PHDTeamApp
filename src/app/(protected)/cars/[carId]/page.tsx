@@ -23,12 +23,12 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
   const calibrations = await getCarCalibrations(carId);
 
   return (
-    <div className="min-h-full bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl space-y-6">
         {/* Back link */}
         <Link
           href="/cars"
-          className="inline-flex items-center gap-1 text-sm text-zinc-400 transition-colors hover:text-white"
+          className="inline-flex items-center gap-1 text-sm text-zinc-500 transition-colors hover:text-zinc-900"
         >
           <svg
             className="h-4 w-4"
@@ -49,11 +49,11 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
 
         {/* Header */}
         <div className="flex items-start justify-between">
-          <h1 className="text-2xl font-bold text-white">{car.name}</h1>
+          <h1 className="text-2xl font-bold text-zinc-900">{car.name}</h1>
           <div className="flex gap-2">
             <Link
               href={`/cars/${carId}/edit`}
-              className="rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-700"
+              className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-200"
             >
               Edit
             </Link>
@@ -63,13 +63,13 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
 
         {/* Image Gallery */}
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold text-white">Photos</h2>
+          <h2 className="text-lg font-semibold text-zinc-900">Photos</h2>
           {car.images.length > 0 ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {car.images.map((imageUrl, index) => (
                 <div
                   key={index}
-                  className="aspect-square overflow-hidden rounded-lg bg-zinc-800"
+                  className="aspect-square overflow-hidden rounded-lg bg-zinc-100"
                 >
                   <img
                     src={imageUrl}
@@ -87,7 +87,7 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
         {/* Calibrations */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-white">
+            <h2 className="text-lg font-semibold text-zinc-900">
               Calibration Setups
             </h2>
             <Link
@@ -113,7 +113,7 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
           </div>
 
           {calibrations.length === 0 ? (
-            <div className="rounded-xl bg-zinc-900 p-8 text-center">
+            <div className="rounded-xl bg-white p-8 text-center">
               <svg
                 className="mx-auto mb-3 h-12 w-12 text-zinc-600"
                 fill="none"
@@ -129,7 +129,7 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
                 />
               </svg>
               <p className="text-sm text-zinc-400">No calibrations yet</p>
-              <p className="mt-1 text-xs text-zinc-500">
+              <p className="mt-1 text-xs text-zinc-400">
                 Add a calibration setup to track your car&apos;s settings.
               </p>
             </div>
@@ -139,13 +139,13 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
                 <Link
                   key={cal.calibrationId}
                   href={`/cars/${carId}/calibrations/${cal.calibrationId}/edit`}
-                  className="block rounded-xl bg-zinc-900 p-4 transition-colors hover:bg-zinc-800"
+                  className="block rounded-xl bg-white p-4 transition-colors hover:bg-zinc-100"
                 >
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-medium text-white">
+                    <h3 className="text-sm font-medium text-zinc-900">
                       {cal.name}
                     </h3>
-                    <span className="text-xs text-zinc-500">
+                    <span className="text-xs text-zinc-400">
                       {new Date(cal.createdAt).toLocaleDateString()}
                     </span>
                   </div>

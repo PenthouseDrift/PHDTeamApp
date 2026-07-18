@@ -62,11 +62,11 @@ export default function NewCarPage() {
   };
 
   return (
-    <div className="min-h-full bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-2xl space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-white">Add New Car</h1>
+          <h1 className="text-2xl font-bold text-zinc-900">Add New Car</h1>
           <p className="mt-1 text-sm text-zinc-400">
             Add your RC car with photos to track calibrations and setups.
           </p>
@@ -78,7 +78,7 @@ export default function NewCarPage() {
           <div>
             <label
               htmlFor="car-name"
-              className="block text-sm font-medium text-zinc-300"
+              className="block text-sm font-medium text-zinc-600"
             >
               Car Name
             </label>
@@ -92,19 +92,19 @@ export default function NewCarPage() {
               }}
               placeholder="e.g. Yokomo YD-2SX III"
               maxLength={50}
-              className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-zinc-100 px-4 py-2.5 text-zinc-900 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
             />
             {fieldError && (
               <p className="mt-1.5 text-sm text-red-400">{fieldError}</p>
             )}
-            <p className="mt-1.5 text-xs text-zinc-500">
+            <p className="mt-1.5 text-xs text-zinc-400">
               {name.length}/50 characters
             </p>
           </div>
 
           {/* Images */}
           <div>
-            <label className="block text-sm font-medium text-zinc-300 mb-2">
+            <label className="block text-sm font-medium text-zinc-600 mb-2">
               Photos
             </label>
             <ImageUploader
@@ -126,7 +126,7 @@ export default function NewCarPage() {
             <button
               type="button"
               onClick={() => router.push("/cars")}
-              className="rounded-lg bg-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-700"
+              className="rounded-lg bg-zinc-100 px-4 py-2.5 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-200"
             >
               Cancel
             </button>

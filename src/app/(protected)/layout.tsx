@@ -16,7 +16,7 @@ export default async function ProtectedLayout({
   }
 
   return (
-    <div className="flex h-dvh bg-zinc-950">
+    <div className="flex h-dvh bg-zinc-50">
       <ProtectedNavigation user={session.user} />
       <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
         {children}

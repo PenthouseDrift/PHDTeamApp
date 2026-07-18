@@ -31,12 +31,12 @@ export default function NewCalibrationPage() {
   }
 
   return (
-    <div className="min-h-full bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-2xl space-y-6">
         {/* Back link */}
         <Link
           href={`/cars/${carId}`}
-          className="inline-flex items-center gap-1 text-sm text-zinc-400 transition-colors hover:text-white"
+          className="inline-flex items-center gap-1 text-sm text-zinc-500 transition-colors hover:text-zinc-900"
         >
           <svg
             className="h-4 w-4"
@@ -57,7 +57,7 @@ export default function NewCalibrationPage() {
 
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-white">
+          <h1 className="text-2xl font-bold text-zinc-900">
             New Calibration Setup
           </h1>
           <p className="mt-1 text-sm text-zinc-400">

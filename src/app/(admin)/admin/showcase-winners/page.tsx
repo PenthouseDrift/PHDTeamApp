@@ -33,8 +33,8 @@ export default async function AdminShowcaseWinnersPage() {
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Showcase Winners</h1>
-        <p className="text-sm text-zinc-400 mt-1">
+        <h1 className="text-2xl font-bold text-zinc-900">Showcase Winners</h1>
+        <p className="text-sm text-zinc-500 mt-1">
           Week {week}, {year} — Select a weekly winner from submitted shells
         </p>
       </div>
@@ -42,14 +42,14 @@ export default async function AdminShowcaseWinnersPage() {
       {/* Past winners */}
       {pastWinners.length > 0 && (
         <div className="mb-8">
-          <h2 className="text-lg font-semibold text-white mb-3">Past Winners</h2>
+          <h2 className="text-lg font-semibold text-zinc-900 mb-3">Past Winners</h2>
           <div className="space-y-2">
             {pastWinners.map((winner) => (
               <div
                 key={winner.shellId}
-                className="flex items-center justify-between rounded-lg bg-zinc-900 px-4 py-3"
+                className="flex items-center justify-between rounded-lg bg-white px-4 py-3"
               >
-                <span className="text-sm text-zinc-300 truncate">
+                <span className="text-sm text-zinc-600 truncate">
                   {winner.shellId}
                 </span>
                 <span className="text-xs text-amber-400">
@@ -62,9 +62,9 @@ export default async function AdminShowcaseWinnersPage() {
       )}
 
       {/* All entries */}
-      <h2 className="text-lg font-semibold text-white mb-3">All Entries</h2>
+      <h2 className="text-lg font-semibold text-zinc-900 mb-3">All Entries</h2>
       {entries.length === 0 ? (
-        <div className="rounded-xl bg-zinc-900 p-8 text-center">
+        <div className="rounded-xl bg-white p-8 text-center">
           <p className="text-zinc-400">No shell entries to display.</p>
         </div>
       ) : (
@@ -77,7 +77,7 @@ export default async function AdminShowcaseWinnersPage() {
                 className={`flex items-center gap-4 rounded-lg p-4 ${
                   isCurrentWinner
                     ? "bg-amber-500/10 ring-1 ring-amber-500/30"
-                    : "bg-zinc-900"
+                    : "bg-white"
                 }`}
               >
                 <img
@@ -86,7 +86,7 @@ export default async function AdminShowcaseWinnersPage() {
                   className="h-16 w-16 rounded-md object-cover"
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">
+                  <p className="text-sm font-medium text-zinc-900 truncate">
                     {entry.description || "Untitled shell"}
                   </p>
                   <p className="text-xs text-zinc-400">

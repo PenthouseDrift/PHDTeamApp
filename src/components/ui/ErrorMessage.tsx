@@ -23,11 +23,11 @@ export function ErrorMessage({ message, onRetry }: ErrorMessageProps) {
           />
         </svg>
       </div>
-      <p className="text-sm text-zinc-400 max-w-sm">{message}</p>
+      <p className="text-sm text-zinc-500 max-w-sm">{message}</p>
       {onRetry && (
         <button
           onClick={onRetry}
-          className="px-4 py-2 text-sm font-medium text-white bg-zinc-800 rounded-lg hover:bg-zinc-700 transition-colors"
+          className="px-4 py-2 text-sm font-medium text-zinc-900 bg-zinc-100 rounded-lg hover:bg-zinc-200 transition-colors"
         >
           Try Again
         </button>

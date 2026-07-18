@@ -33,7 +33,7 @@ export function ConfirmDialog({
       />
       {/* Dialog */}
       <div
-        className="relative w-full max-w-sm rounded-xl bg-zinc-900 border border-zinc-800 p-6 shadow-xl"
+        className="relative w-full max-w-sm rounded-xl bg-white border border-zinc-200 p-6 shadow-xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
@@ -41,26 +41,26 @@ export function ConfirmDialog({
       >
         <h2
           id="confirm-dialog-title"
-          className="text-lg font-semibold text-white"
+          className="text-lg font-semibold text-zinc-900"
         >
           {title}
         </h2>
         <p
           id="confirm-dialog-message"
-          className="mt-2 text-sm text-zinc-400"
+          className="mt-2 text-sm text-zinc-500"
         >
           {message}
         </p>
         <div className="mt-6 flex gap-3 justify-end">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium text-zinc-300 bg-zinc-800 rounded-lg hover:bg-zinc-700 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-zinc-600 bg-zinc-100 rounded-lg hover:bg-zinc-200 transition-colors"
           >
             {cancelLabel}
           </button>
           <button
             onClick={onConfirm}
-            className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${
+            className={`px-4 py-2 text-sm font-medium text-zinc-900 rounded-lg transition-colors ${
               destructive
                 ? "bg-red-600 hover:bg-red-700"
                 : "bg-white text-zinc-900 hover:bg-zinc-200"

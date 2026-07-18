@@ -7,8 +7,8 @@ export default async function AdminMembersPage() {
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Members</h1>
-        <p className="text-sm text-zinc-400 mt-1">
+        <h1 className="text-2xl font-bold text-zinc-900">Members</h1>
+        <p className="text-sm text-zinc-500 mt-1">
           {members.length} registered member{members.length !== 1 ? "s" : ""}
         </p>
       </div>

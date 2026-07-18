@@ -6,12 +6,12 @@ export default function SignInPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-900">
-      <div className="bg-gray-800 rounded-2xl p-8 w-full max-w-md shadow-xl">
-        <h1 className="text-3xl font-bold text-white text-center mb-2">
-          Penthouse Drift
-        </h1>
-        <p className="text-gray-400 text-center mb-8">
+    <div className="min-h-screen flex items-center justify-center bg-zinc-50">
+      <div className="bg-white rounded-2xl p-8 w-full max-w-md shadow-lg border border-zinc-200">
+        <div className="flex justify-center mb-6">
+          <img src="/logo.png" alt="Penthouse Drift" className="h-12 w-auto" />
+        </div>
+        <p className="text-zinc-500 text-center mb-8">
           Sign in to access the track
         </p>
 
@@ -31,7 +31,7 @@ async function SignInContent({
   return (
     <>
       {params?.error && (
-        <div className="bg-red-900/50 border border-red-500 text-red-200 rounded-lg p-3 mb-6 text-sm text-center">
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-6 text-sm text-center">
           Sign-in could not be completed. Please try again.
         </div>
       )}
@@ -44,7 +44,7 @@ async function SignInContent({
       >
         <button
           type="submit"
-          className="w-full flex items-center justify-center gap-3 bg-white text-gray-900 font-medium py-3 px-4 rounded-lg hover:bg-gray-100 transition-colors"
+          className="w-full flex items-center justify-center gap-3 bg-zinc-900 text-white font-medium py-3 px-4 rounded-lg hover:bg-zinc-800 transition-colors"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path

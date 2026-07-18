@@ -88,7 +88,7 @@ export function MemberList({ members }: MemberListProps) {
           placeholder="Search by name or email..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 bg-zinc-900 border border-zinc-800 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-600 transition-colors"
+          className="w-full pl-10 pr-4 py-2.5 bg-white border border-zinc-200 rounded-lg text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-600 transition-colors"
         />
       </div>
 
@@ -111,10 +111,10 @@ export function MemberList({ members }: MemberListProps) {
           {search ? "No results found" : "No members yet"}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-zinc-800">
+        <div className="overflow-x-auto rounded-lg border border-zinc-200">
           <table className="w-full text-sm">
             <thead className="bg-zinc-900/50">
-              <tr className="text-left text-zinc-400">
+              <tr className="text-left text-zinc-500">
                 <th className="px-4 py-3 font-medium">Name</th>
                 <th className="px-4 py-3 font-medium hidden sm:table-cell">Email</th>
                 <th className="px-4 py-3 font-medium">Status</th>
@@ -125,10 +125,10 @@ export function MemberList({ members }: MemberListProps) {
             <tbody className="divide-y divide-zinc-800">
               {filtered.map((m) => (
                 <tr key={m.member.id} className="hover:bg-zinc-900/30 transition-colors">
-                  <td className="px-4 py-3 text-white font-medium">
+                  <td className="px-4 py-3 text-zinc-900 font-medium">
                     {m.member.name}
                   </td>
-                  <td className="px-4 py-3 text-zinc-400 hidden sm:table-cell">
+                  <td className="px-4 py-3 text-zinc-500 hidden sm:table-cell">
                     {m.member.email}
                   </td>
                   <td className="px-4 py-3">
@@ -137,7 +137,7 @@ export function MemberList({ members }: MemberListProps) {
                       size="sm"
                     />
                   </td>
-                  <td className="px-4 py-3 text-zinc-400 hidden md:table-cell">
+                  <td className="px-4 py-3 text-zinc-500 hidden md:table-cell">
                     {m.membership ? formatDate(m.membership.expiresAt) : "—"}
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -156,8 +156,8 @@ export function MemberList({ members }: MemberListProps) {
                         disabled={m.membership?.status !== "active" || isPending}
                         className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                           m.membership?.status === "active"
-                            ? "bg-green-600 hover:bg-green-700 text-white"
-                            : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                            ? "bg-green-600 hover:bg-green-700 text-zinc-900"
+                            : "bg-zinc-100 text-zinc-500 cursor-not-allowed"
                         }`}
                       >
                         {m.membership?.status === "active" ? "Check In" : "No Membership"}

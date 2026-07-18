@@ -100,7 +100,7 @@ export default async function DashboardPage() {
   const remainingDays = membership && isActive ? getRemainingDays(membership) : 0;
 
   return (
-    <div className="min-h-full bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl space-y-6">
         {/* Header */}
         <div className="flex items-center gap-4">
@@ -112,7 +112,7 @@ export default async function DashboardPage() {
             />
           )}
           <div>
-            <h1 className="text-2xl font-bold text-white">
+            <h1 className="text-2xl font-bold text-zinc-900">
               Welcome back, {session.user.name?.split(" ")[0] ?? "Member"}
             </h1>
             <p className="text-sm text-zinc-400">Member Dashboard</p>
@@ -120,15 +120,15 @@ export default async function DashboardPage() {
         </div>
 
         {/* Membership Status */}
-        <section className="rounded-xl bg-zinc-900 p-6">
-          <h2 className="mb-4 text-lg font-semibold text-white">
+        <section className="rounded-xl bg-white p-6">
+          <h2 className="mb-4 text-lg font-semibold text-zinc-900">
             Membership Status
           </h2>
           {membership && isActive ? (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <StatusBadge status="active" size="lg" />
-                <span className="text-zinc-300">
+                <span className="text-zinc-600">
                   {remainingDays} {remainingDays === 1 ? "day" : "days"}{" "}
                   remaining
                 </span>
@@ -155,8 +155,8 @@ export default async function DashboardPage() {
         </section>
 
         {/* QR Code Section */}
-        <section className="rounded-xl bg-zinc-900 p-6">
-          <h2 className="mb-4 text-lg font-semibold text-white">
+        <section className="rounded-xl bg-white p-6">
+          <h2 className="mb-4 text-lg font-semibold text-zinc-900">
             QR Code
           </h2>
           <p className="text-sm text-zinc-400">
@@ -186,7 +186,7 @@ export default async function DashboardPage() {
 
         {/* Quick Links */}
         <section>
-          <h2 className="mb-4 text-lg font-semibold text-white">
+          <h2 className="mb-4 text-lg font-semibold text-zinc-900">
             Quick Links
           </h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -194,7 +194,7 @@ export default async function DashboardPage() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="flex flex-col items-center gap-2 rounded-xl bg-zinc-900 p-5 text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
+                className="flex flex-col items-center gap-2 rounded-xl bg-white p-5 text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
               >
                 {link.icon}
                 <span className="text-sm font-medium">{link.title}</span>

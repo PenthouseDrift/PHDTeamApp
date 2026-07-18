@@ -20,7 +20,7 @@ export function PushNotificationSubscriber() {
     async function subscribe() {
       try {
         // Register push service worker
-        const registration = await navigator.serviceWorker.register("/push-sw.js");
+        const registration = await navigator.serviceWorker.register("/sw.js");
         await navigator.serviceWorker.ready;
 
         // Check if already subscribed

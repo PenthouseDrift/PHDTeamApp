@@ -24,10 +24,10 @@ export default async function MembershipSuccessPage() {
     : null;
 
   return (
-    <div className="min-h-full bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-lg space-y-6">
         {isActive ? (
-          <div className="rounded-xl bg-zinc-900 p-6 text-center space-y-4">
+          <div className="rounded-xl bg-white p-6 text-center space-y-4">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10">
               <svg
                 className="h-8 w-8 text-green-400"
@@ -44,13 +44,13 @@ export default async function MembershipSuccessPage() {
                 />
               </svg>
             </div>
-            <h1 className="text-2xl font-bold text-white">
+            <h1 className="text-2xl font-bold text-zinc-900">
               Payment Successful!
             </h1>
-            <p className="text-zinc-300">
+            <p className="text-zinc-600">
               Your membership is now active. Enjoy the track!
             </p>
-            <div className="rounded-lg bg-zinc-800 p-4">
+            <div className="rounded-lg bg-zinc-100 p-4">
               <p className="text-sm text-zinc-400">Membership valid until</p>
               <p className="text-lg font-semibold text-amber-400">
                 {expiryDate}
@@ -64,7 +64,7 @@ export default async function MembershipSuccessPage() {
             </Link>
           </div>
         ) : (
-          <div className="rounded-xl bg-zinc-900 p-6 text-center space-y-4">
+          <div className="rounded-xl bg-white p-6 text-center space-y-4">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/10">
               <svg
                 className="h-8 w-8 text-amber-400"
@@ -81,20 +81,20 @@ export default async function MembershipSuccessPage() {
                 />
               </svg>
             </div>
-            <h1 className="text-2xl font-bold text-white">
+            <h1 className="text-2xl font-bold text-zinc-900">
               Payment Processing
             </h1>
-            <p className="text-zinc-300">
+            <p className="text-zinc-600">
               Your payment is being processed. Your membership will be
               activated shortly.
             </p>
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-zinc-400">
               This usually takes a few seconds. Refresh the page to check.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
               <Link
                 href="/membership/success"
-                className="inline-flex items-center justify-center rounded-lg bg-zinc-700 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-zinc-600"
+                className="inline-flex items-center justify-center rounded-lg bg-zinc-700 px-6 py-3 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-600"
               >
                 Refresh
               </Link>
