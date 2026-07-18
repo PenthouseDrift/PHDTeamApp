@@ -2,6 +2,8 @@ import { redis } from "@/lib/redis";
 import { getPageFeed, type RawFacebookPost } from "@/lib/facebook";
 import type { FacebookPost } from "@/types";
 
+export const dynamic = "force-dynamic";
+
 function transformPost(raw: RawFacebookPost): FacebookPost {
   const images: string[] = [];
 
@@ -61,22 +63,30 @@ async function getFeed(): Promise<{ posts: FacebookPost[]; stale: boolean }> {
   try {
     // Try cached feed first
     const cached = await redis.get("facebook:feed");
-    if (cached) {
-      const raw: RawFacebookPost[] = JSON.parse(cached as string);
+    if (cached && typeof cached === "string" && cached.startsWith("[")) {
+      const raw: RawFacebookPost[] = JSON.parse(cached);
       return { posts: raw.map(transformPost), stale: false };
     }
 
-    // Cache miss: fetch directly
+    // Cache miss or invalid: fetch directly
     const raw = await getPageFeed(20);
-    await redis.set("facebook:feed", JSON.stringify(raw));
-    await redis.set("facebook:feed:updated", Date.now().toString());
-    return { posts: raw.map(transformPost), stale: false };
+    if (raw.length > 0) {
+      await redis.set("facebook:feed", JSON.stringify(raw));
+      await redis.set("facebook:feed:updated", Date.now().toString());
+      return { posts: raw.map(transformPost), stale: false };
+    }
+
+    return { posts: [], stale: false };
   } catch {
     // If API fails, try stale cache
-    const stale = await redis.get("facebook:feed");
-    if (stale) {
-      const raw: RawFacebookPost[] = JSON.parse(stale as string);
-      return { posts: raw.map(transformPost), stale: true };
+    try {
+      const stale = await redis.get("facebook:feed");
+      if (stale && typeof stale === "string" && stale.startsWith("[")) {
+        const raw: RawFacebookPost[] = JSON.parse(stale);
+        return { posts: raw.map(transformPost), stale: true };
+      }
+    } catch {
+      // ignore parse errors on stale cache
     }
     return { posts: [], stale: true };
   }

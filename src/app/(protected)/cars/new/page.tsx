@@ -49,6 +49,7 @@ export default function NewCarPage() {
       });
 
       if (result.success) {
+        router.refresh();
         router.push("/cars");
       } else {
         setError(result.error);

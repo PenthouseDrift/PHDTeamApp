@@ -13,7 +13,7 @@ function formatDate(timestamp: number): string {
 
 export default async function AdminShowcaseWinnersPage() {
   const entries = await getShowcaseEntries();
-  const { year, week } = getCurrentWeek();
+  const { year, week } = await getCurrentWeek();
   const currentWinnerKey = `shells:winner:${year}:${week}`;
   const currentWinnerId = await redis.get(currentWinnerKey);
   const pastWinners = await getWeeklyWinners();

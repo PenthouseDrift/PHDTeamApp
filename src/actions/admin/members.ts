@@ -9,60 +9,77 @@ export interface MemberWithMembership {
 }
 
 export async function getAllMembers(): Promise<MemberWithMembership[]> {
-  // Get all member IDs from the memberships:all sorted set
-  const memberIds = await redis.zrange("memberships:all", 0, -1);
+  try {
+    // Get all member IDs from the memberships:all sorted set
+    const memberIdsFromMemberships = await redis.zrange("memberships:all", 0, -1);
 
-  if (!memberIds || memberIds.length === 0) {
-    return [];
-  }
+    // Also get members who signed in (stored via auth callback as member:{userId})
+    // We'll use a scan approach or just use what we have
+    const memberIds = new Set<string>();
 
-  const members: MemberWithMembership[] = [];
-
-  for (const userId of memberIds) {
-    const [memberData, membershipData] = await Promise.all([
-      redis.hgetall(`member:${userId as string}`),
-      redis.hgetall(`membership:${userId as string}`),
-    ]);
-
-    if (!memberData || Object.keys(memberData).length === 0) continue;
-
-    const member: Member = {
-      id: memberData.id as string,
-      email: memberData.email as string,
-      name: memberData.name as string,
-      image: (memberData.image as string) || null,
-      role: memberData.role as "admin" | "member",
-      qrCode: null,
-      createdAt: Number(memberData.createdAt),
-    };
-
-    let membership: Membership | null = null;
-    if (membershipData && Object.keys(membershipData).length > 0) {
-      membership = {
-        userId: membershipData.userId as string,
-        status:
-          Number(membershipData.expiresAt) > Date.now()
-            ? "active"
-            : "expired",
-        purchasedAt: Number(membershipData.purchasedAt),
-        expiresAt: Number(membershipData.expiresAt),
-        paymentRef: (membershipData.paymentRef as string) || "",
-      };
+    // Add members from memberships sorted set
+    if (memberIdsFromMemberships && memberIdsFromMemberships.length > 0) {
+      for (const id of memberIdsFromMemberships) {
+        memberIds.add(id as string);
+      }
     }
 
-    members.push({ member, membership });
+    // If no members found at all, return empty
+    if (memberIds.size === 0) {
+      return [];
+    }
+
+    const members: MemberWithMembership[] = [];
+
+    for (const userId of memberIds) {
+      const [memberData, membershipData] = await Promise.all([
+        redis.hgetall(`member:${userId}`),
+        redis.hgetall(`membership:${userId}`),
+      ]);
+
+      if (!memberData || Object.keys(memberData).length === 0) continue;
+
+      const member: Member = {
+        id: (memberData.id as string) || userId,
+        email: (memberData.email as string) || "",
+        name: (memberData.name as string) || "Unknown",
+        image: (memberData.image as string) || null,
+        role: (memberData.role as "admin" | "member") || "member",
+        qrCode: null,
+        createdAt: Number(memberData.createdAt) || 0,
+      };
+
+      let membership: Membership | null = null;
+      if (membershipData && Object.keys(membershipData).length > 0) {
+        membership = {
+          userId: (membershipData.userId as string) || userId,
+          status:
+            Number(membershipData.expiresAt) > Date.now()
+              ? "active"
+              : "expired",
+          purchasedAt: Number(membershipData.purchasedAt) || 0,
+          expiresAt: Number(membershipData.expiresAt) || 0,
+          paymentRef: (membershipData.paymentRef as string) || "",
+        };
+      }
+
+      members.push({ member, membership });
+    }
+
+    // Sort: active first, then by expiration date ascending
+    members.sort((a, b) => {
+      const aActive = a.membership?.status === "active" ? 0 : 1;
+      const bActive = b.membership?.status === "active" ? 0 : 1;
+      if (aActive !== bActive) return aActive - bActive;
+
+      const aExpiry = a.membership?.expiresAt ?? 0;
+      const bExpiry = b.membership?.expiresAt ?? 0;
+      return aExpiry - bExpiry;
+    });
+
+    return members;
+  } catch (error) {
+    console.error("getAllMembers error:", error);
+    return [];
   }
-
-  // Sort: active first, then by expiration date ascending
-  members.sort((a, b) => {
-    const aActive = a.membership?.status === "active" ? 0 : 1;
-    const bActive = b.membership?.status === "active" ? 0 : 1;
-    if (aActive !== bActive) return aActive - bActive;
-
-    const aExpiry = a.membership?.expiresAt ?? 0;
-    const bExpiry = b.membership?.expiresAt ?? 0;
-    return aExpiry - bExpiry;
-  });
-
-  return members;
 }

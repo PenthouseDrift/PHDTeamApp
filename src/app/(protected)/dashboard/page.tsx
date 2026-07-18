@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
-import { getMembership, getRemainingDays } from "@/actions/membership";
+import { getMembership } from "@/actions/membership";
+import { getRemainingDays } from "@/lib/membership-utils";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
 const quickLinks = [

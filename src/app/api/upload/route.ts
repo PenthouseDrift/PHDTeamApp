@@ -18,6 +18,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         return {
           allowedContentTypes: ["image/jpeg", "image/png", "image/webp"],
           maximumSizeInBytes: 5 * 1024 * 1024, // 5MB
+          addRandomSuffix: true,
           tokenPayload: JSON.stringify({ userId: session.user.id }),
         };
       },
