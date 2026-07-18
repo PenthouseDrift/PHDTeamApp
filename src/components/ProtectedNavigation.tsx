@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import Image from "next/image";
 
 interface NavUser {
   name?: string | null;
@@ -31,16 +30,16 @@ export function ProtectedNavigation({ user }: { user: NavUser }) {
           <img src="/logo.png" alt="Penthouse Drift" className="h-8 w-auto mb-3" />
           <div className="flex items-center gap-3">
           {user.image ? (
-            <Image
+            <img
               src={user.image}
               alt={user.name ?? "User"}
               width={40}
               height={40}
-              className="rounded-full"
+              className="w-10 h-10 rounded-full object-cover ring-1 ring-zinc-200"
             />
           ) : (
-            <div className="w-10 h-10 rounded-full bg-zinc-200 flex items-center justify-center text-zinc-700 font-medium">
-              {user.name?.[0] ?? "U"}
+            <div className="w-10 h-10 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-sm">
+              {user.name ? user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() : "?"}
             </div>
           )}
           <span className="text-sm font-medium text-zinc-900 truncate">

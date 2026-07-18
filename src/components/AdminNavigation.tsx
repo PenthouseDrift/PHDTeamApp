@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import Image from "next/image";
 
 interface NavUser {
   name?: string | null;
@@ -28,16 +27,14 @@ export function AdminNavigation({ user }: { user: NavUser }) {
           <img src="/logo.png" alt="Penthouse Drift" className="h-8 w-auto mb-3" />
           <div className="flex items-center gap-3">
           {user.image ? (
-            <Image
+            <img
               src={user.image}
               alt={user.name ?? "Admin"}
-              width={40}
-              height={40}
-              className="rounded-full"
+              className="w-10 h-10 rounded-full object-cover ring-1 ring-zinc-200"
             />
           ) : (
-            <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center text-zinc-900 font-medium">
-              {user.name?.[0] ?? "A"}
+            <div className="w-10 h-10 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-sm">
+              {user.name ? user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() : "?"}
             </div>
           )}
           <div className="flex flex-col min-w-0">

@@ -42,7 +42,6 @@ export default async function ProfilePage() {
                 src={avatarUrl}
                 alt=""
                 className="h-16 w-16 rounded-full object-cover ring-2 ring-zinc-200"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
               />
             ) : (
               <div className="h-16 w-16 rounded-full bg-amber-500 flex items-center justify-center text-xl font-bold text-white">
