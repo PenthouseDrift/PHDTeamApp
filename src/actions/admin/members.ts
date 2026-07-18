@@ -10,7 +10,7 @@ export interface MemberWithMembership {
 
 export async function getAllMembers(): Promise<MemberWithMembership[]> {
   try {
-    const members: MemberWithMembership[] = [];
+    const membersMap = new Map<string, MemberWithMembership>();
 
     // Scan all member:* keys to find everyone who has signed in
     let cursor = 0;
@@ -26,10 +26,12 @@ export async function getAllMembers(): Promise<MemberWithMembership[]> {
         // Skip sub-keys like member:userId:cars
         if (keyStr.split(":").length > 2) continue;
 
+        const userId = keyStr.replace("member:", "");
+        // Skip if we've already processed this user
+        if (membersMap.has(userId)) continue;
+
         const memberData = await redis.hgetall(keyStr);
         if (!memberData || !memberData.email) continue;
-
-        const userId = (memberData.id as string) || keyStr.replace("member:", "");
 
         const member: Member = {
           id: userId,
@@ -55,9 +57,11 @@ export async function getAllMembers(): Promise<MemberWithMembership[]> {
           };
         }
 
-        members.push({ member, membership });
+        membersMap.set(userId, { member, membership });
       }
     } while (cursor !== 0);
+
+    const members = Array.from(membersMap.values());
 
     // Sort: active first, then expired, then no membership; within each group by name
     members.sort((a, b) => {
