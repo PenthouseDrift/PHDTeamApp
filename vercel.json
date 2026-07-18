@@ -1,12 +1,2 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/expire-memberships",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/cron/facebook-sync",
-      "schedule": "*/15 * * * *"
-    }
-  ]
 }
