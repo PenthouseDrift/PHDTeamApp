@@ -57,6 +57,8 @@ export interface CalibrationSetup {
   frontDroop: number;
   rearDroop: number;
   // Drivetrain & Electronics
+  motorTurns: number;
+  motorTiming: number;
   gyroGain: number;
   throttleEPA: number;
   steeringEPA: number;

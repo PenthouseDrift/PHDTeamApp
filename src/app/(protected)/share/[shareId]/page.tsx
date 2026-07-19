@@ -96,6 +96,8 @@ export default async function SharePage({ params }: SharePageProps) {
     frontDroop: Number(calData.frontDroop) || 0,
     rearDroop: Number(calData.rearDroop) || 0,
     gyroGain: Number(calData.gyroGain) || 0,
+    motorTurns: Number(calData.motorTurns) || 0,
+    motorTiming: Number(calData.motorTiming) || 0,
     throttleEPA: Number(calData.throttleEPA) || 100,
     steeringEPA: Number(calData.steeringEPA) || 100,
     boost: Number(calData.boost) || 0,

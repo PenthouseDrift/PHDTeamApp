@@ -60,11 +60,13 @@ const sections: { title: string; fields: FieldDef[] }[] = [
   {
     title: "Drivetrain & Electronics",
     fields: [
-      { key: "gyroGain", label: "Gyro Gain", type: "range", min: 0, max: 100, step: 5 },
-      { key: "throttleEPA", label: "Throttle EPA", type: "range", min: 0, max: 100, step: 5 },
-      { key: "steeringEPA", label: "Steering EPA", type: "range", min: 0, max: 100, step: 5 },
-      { key: "boost", label: "Boost", type: "range", min: 0, max: 100, step: 5 },
-      { key: "turbo", label: "Turbo", type: "range", min: 0, max: 100, step: 5 },
+      { key: "motorTurns", label: "Motor Turns", type: "number", min: 1, max: 30, step: 0.5, unit: "T" },
+      { key: "motorTiming", label: "Motor Timing", type: "number", min: 0, max: 60, step: 1, unit: "°" },
+      { key: "gyroGain", label: "Gyro Gain", type: "range", min: 0, max: 100, step: 1 },
+      { key: "throttleEPA", label: "Throttle EPA", type: "range", min: 0, max: 100, step: 1 },
+      { key: "steeringEPA", label: "Steering EPA", type: "range", min: 0, max: 100, step: 1 },
+      { key: "boost", label: "Boost", type: "range", min: 0, max: 100, step: 1 },
+      { key: "turbo", label: "Turbo", type: "range", min: 0, max: 100, step: 1 },
     ],
   },
   {
