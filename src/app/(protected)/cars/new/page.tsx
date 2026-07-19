@@ -67,7 +67,7 @@ export default function NewCarPage() {
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">Add New Car</h1>
-          <p className="mt-1 text-sm text-zinc-400">
+          <p className="mt-1 text-sm text-zinc-500">
             Add your RC car with photos to track calibrations and setups.
           </p>
         </div>
@@ -97,7 +97,7 @@ export default function NewCarPage() {
             {fieldError && (
               <p className="mt-1.5 text-sm text-red-400">{fieldError}</p>
             )}
-            <p className="mt-1.5 text-xs text-zinc-400">
+            <p className="mt-1.5 text-xs text-zinc-500">
               {name.length}/50 characters
             </p>
           </div>

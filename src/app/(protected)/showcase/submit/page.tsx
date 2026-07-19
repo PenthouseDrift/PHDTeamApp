@@ -56,7 +56,7 @@ export default function SubmitShellPage() {
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">Submit Your Shell</h1>
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-zinc-500">
             Share your custom shell design with the community
           </p>
         </div>
@@ -82,7 +82,7 @@ export default function SubmitShellPage() {
               className="block text-sm font-medium text-zinc-600"
             >
               Description{" "}
-              <span className="text-zinc-400">(optional)</span>
+              <span className="text-zinc-500">(optional)</span>
             </label>
             <textarea
               id="description"
@@ -97,7 +97,7 @@ export default function SubmitShellPage() {
               className="w-full resize-none rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder-zinc-400 transition-colors focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
               maxLength={MAX_DESCRIPTION_LENGTH}
             />
-            <p className="text-right text-xs text-zinc-400">
+            <p className="text-right text-xs text-zinc-500">
               {description.length}/{MAX_DESCRIPTION_LENGTH}
             </p>
           </div>

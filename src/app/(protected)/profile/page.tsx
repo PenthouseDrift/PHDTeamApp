@@ -4,6 +4,7 @@ import { getOrCreateQRCode } from "@/actions/qr";
 import { QRDownloadButton } from "@/components/QRDownloadButton";
 import { ProfileQRError } from "./ProfileQRError";
 import { ProfileAvatarUpload } from "./ProfileAvatarUpload";
+import { SignOutSection } from "./SignOutSection";
 
 function getInitials(name: string | null | undefined): string {
   if (!name) return "?";
@@ -97,6 +98,9 @@ export default async function ProfilePage() {
             <ProfileQRError message={qrResult.error} />
           )}
         </section>
+
+        {/* Sign Out */}
+        <SignOutSection />
       </div>
     </div>
   );

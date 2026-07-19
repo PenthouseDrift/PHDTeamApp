@@ -66,7 +66,7 @@ export default async function PurchaseMembershipPage() {
           <h1 className="text-2xl font-bold text-zinc-900">
             Purchase Membership
           </h1>
-          <p className="mt-1 text-sm text-zinc-400">
+          <p className="mt-1 text-sm text-zinc-500">
             Get access to the Penthouse Drift RC track
           </p>
         </div>
@@ -160,7 +160,7 @@ export default async function PurchaseMembershipPage() {
             </button>
           </form>
 
-          <p className="text-center text-xs text-zinc-400">
+          <p className="text-center text-xs text-zinc-500">
             Secure payment powered by SumUp
           </p>
         </div>

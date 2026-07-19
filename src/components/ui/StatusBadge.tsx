@@ -22,8 +22,8 @@ export function StatusBadge({ status, size = "md" }: StatusBadgeProps) {
     <span
       className={`inline-flex items-center gap-1.5 font-medium rounded-full ${sizeClasses[size]} ${
         isActive
-          ? "bg-green-500/10 text-green-400"
-          : "bg-red-500/10 text-red-400"
+          ? "bg-green-50 text-green-700"
+          : "bg-red-50 text-red-700"
       }`}
     >
       <span

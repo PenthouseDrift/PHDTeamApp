@@ -16,8 +16,21 @@ const navItems = [
   { href: "/showcase", label: "Showcase", icon: ShowcaseIcon },
   { href: "/calculator", label: "Calculator", icon: CalculatorIcon },
   { href: "/newsfeed", label: "Newsfeed", icon: NewsfeedIcon },
-  { href: "/profile", label: "Profile", icon: ProfileIcon },
 ];
+
+// Mobile tab items (no Profile or Logout — those are on profile page)
+const mobileNavItems = [
+  { href: "/dashboard", label: "Home", icon: DashboardIcon },
+  { href: "/cars", label: "Cars", icon: CarIcon },
+  { href: "/showcase", label: "Showcase", icon: ShowcaseIcon },
+  { href: "/calculator", label: "Calc", icon: CalculatorIcon },
+  { href: "/newsfeed", label: "Feed", icon: NewsfeedIcon },
+];
+
+function getInitials(name: string | null | undefined): string {
+  if (!name) return "?";
+  return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+}
 
 export function ProtectedNavigation({ user }: { user: NavUser }) {
   const pathname = usePathname();
@@ -26,27 +39,28 @@ export function ProtectedNavigation({ user }: { user: NavUser }) {
     <>
       {/* Desktop sidebar */}
       <aside className="hidden md:flex md:w-64 md:flex-col border-r border-zinc-200 bg-white">
-        <div className="p-4 border-b border-zinc-200">
-          <img src="/logo.png" alt="Penthouse Drift" className="h-8 w-auto mb-3" />
-          <div className="flex items-center gap-3">
-          {user.image ? (
-            <img
-              src={user.image}
-              alt={user.name ?? "User"}
-              width={40}
-              height={40}
-              className="w-10 h-10 rounded-full object-cover ring-1 ring-zinc-200"
-            />
-          ) : (
-            <div className="w-10 h-10 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-sm">
-              {user.name ? user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() : "?"}
-            </div>
-          )}
-          <span className="text-sm font-medium text-zinc-900 truncate">
-            {user.name ?? "Member"}
-          </span>
+        {/* Header: logo + user on same line */}
+        <div className="flex items-center justify-between p-4 border-b border-zinc-200">
+          <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-8 w-8" />
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-zinc-700 truncate max-w-[120px]">
+              {user.name ?? "Member"}
+            </span>
+            {user.image ? (
+              <img
+                src={user.image}
+                alt={user.name ?? "User"}
+                className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-200"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-xs">
+                {getInitials(user.name)}
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Nav links */}
         <nav className="flex-1 p-3 space-y-1">
           {navItems.map((item) => {
             const isActive = pathname.startsWith(item.href);
@@ -65,6 +79,17 @@ export function ProtectedNavigation({ user }: { user: NavUser }) {
               </Link>
             );
           })}
+          <Link
+            href="/profile"
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              pathname.startsWith("/profile")
+                ? "bg-zinc-100 text-zinc-900"
+                : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"
+            }`}
+          >
+            <ProfileIcon className="w-5 h-5" />
+            Profile
+          </Link>
           {user.role === "admin" && (
             <Link
               href="/admin/members"
@@ -79,6 +104,8 @@ export function ProtectedNavigation({ user }: { user: NavUser }) {
             </Link>
           )}
         </nav>
+
+        {/* Sign out */}
         <div className="p-3 border-t border-zinc-200">
           <button
             onClick={() => signOut({ callbackUrl: "/" })}
@@ -90,41 +117,52 @@ export function ProtectedNavigation({ user }: { user: NavUser }) {
         </div>
       </aside>
 
+      {/* Mobile top header */}
+      <header className="fixed top-0 left-0 right-0 z-40 flex md:hidden items-center justify-between px-4 py-3 border-b border-zinc-200 bg-white/95 backdrop-blur-sm">
+        <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-7 w-7" />
+        <Link href="/profile">
+          {user.image ? (
+            <img
+              src={user.image}
+              alt={user.name ?? "User"}
+              className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-200"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-xs">
+              {getInitials(user.name)}
+            </div>
+          )}
+        </Link>
+      </header>
+
       {/* Mobile bottom tab bar */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden border-t border-zinc-200 bg-white/95 backdrop-blur-sm">
-        {navItems.map((item) => {
+        {mobileNavItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-1 flex-col items-center gap-1 py-2 text-xs font-medium transition-colors ${
-                isActive ? "text-zinc-900" : "text-zinc-500"
+              className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
+                isActive ? "text-zinc-900" : "text-zinc-400"
               }`}
             >
               <item.icon className="w-5 h-5" />
-              <span className="truncate">{item.label}</span>
+              <span>{item.label}</span>
             </Link>
           );
         })}
         {user.role === "admin" && (
           <Link
             href="/admin/members"
-            className={`flex flex-1 flex-col items-center gap-1 py-2 text-xs font-medium transition-colors ${
+            className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
               pathname.startsWith("/admin") ? "text-amber-600" : "text-amber-500"
             }`}
           >
             <AdminIcon className="w-5 h-5" />
-            <span className="truncate">Admin</span>
+            <span>Admin</span>
           </Link>
         )}
-        <button
-          onClick={() => signOut({ callbackUrl: "/" })}
-          className="flex flex-1 flex-col items-center gap-1 py-2 text-xs font-medium text-zinc-500 transition-colors"
-        >
-          <LogoutIcon className="w-5 h-5" />
-          <span className="truncate">Sign Out</span>
-        </button>
       </nav>
     </>
   );

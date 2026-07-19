@@ -10,10 +10,11 @@ interface NavUser {
 
 const adminNavItems = [
   { href: "/admin/members", label: "Members", icon: MembersIcon },
+  { href: "/admin/history", label: "History", icon: HistoryIcon },
   { href: "/admin/users", label: "Users & Roles", icon: UsersIcon },
-  { href: "/admin/check-in", label: "Check-In", icon: CheckInIcon },
-  { href: "/admin/showcase-winners", label: "Showcase Winners", icon: TrophyIcon },
-  { href: "/admin/facebook", label: "Facebook Publishing", icon: ShareIcon },
+  { href: "/admin/check-in", label: "QR Scan", icon: CheckInIcon },
+  { href: "/admin/showcase-winners", label: "Winners", icon: TrophyIcon },
+  { href: "/admin/facebook", label: "Facebook", icon: ShareIcon },
 ];
 
 export function AdminNavigation({ user }: { user: NavUser }) {
@@ -24,7 +25,7 @@ export function AdminNavigation({ user }: { user: NavUser }) {
       {/* Desktop sidebar */}
       <aside className="hidden md:flex md:w-64 md:flex-col border-r border-zinc-200 bg-white">
         <div className="p-4 border-b border-zinc-200">
-          <img src="/logo.png" alt="Penthouse Drift" className="h-8 w-auto mb-3" />
+          <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-8 w-8 mb-3" />
           <div className="flex items-center gap-3">
           {user.image ? (
             <img
@@ -76,7 +77,7 @@ export function AdminNavigation({ user }: { user: NavUser }) {
       </aside>
 
       {/* Mobile bottom tab bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden border-t border-zinc-200 bg-zinc-900/95 backdrop-blur-sm">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden border-t border-zinc-200 bg-white/95 backdrop-blur-sm">
         {adminNavItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
@@ -149,6 +150,14 @@ function UsersIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+    </svg>
+  );
+}
+
+function HistoryIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
     </svg>
   );
 }

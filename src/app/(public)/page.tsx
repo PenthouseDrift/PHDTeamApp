@@ -14,7 +14,7 @@ export default async function HomePage() {
     <div className="min-h-dvh bg-white">
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4 max-w-6xl mx-auto">
-        <img src="/logo.png" alt="Penthouse Drift" className="h-10 w-auto" />
+        <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-10 w-10" />
         <Link
           href="/auth/signin"
           className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800"

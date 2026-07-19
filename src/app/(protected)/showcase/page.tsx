@@ -44,7 +44,7 @@ function ShellCard({
   const isOwnEntry = entry.userId === userId;
 
   return (
-    <div className="group relative overflow-hidden rounded-xl bg-white transition-colors hover:bg-zinc-100">
+    <div className="group relative overflow-hidden rounded-xl bg-white border border-zinc-200 shadow-sm transition-shadow hover:shadow-md">
       {isWinner && (
         <div className="absolute top-2 left-2 z-10 rounded-md bg-amber-500/90 px-2 py-0.5 text-[10px] font-bold text-black">
           🏆 {winnerLabel}
@@ -63,7 +63,7 @@ function ShellCard({
             {entry.description}
           </p>
         )}
-        <div className="flex items-center justify-between text-xs text-zinc-400">
+        <div className="flex items-center justify-between text-xs text-zinc-500">
           <span className="truncate max-w-[120px]">{authorName}</span>
           <span>{formatDate(entry.createdAt)}</span>
         </div>
@@ -126,7 +126,7 @@ export default async function ShowcasePage({ searchParams }: ShowcasePageProps) 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-zinc-900">Shell Showcase</h1>
-            <p className="text-sm text-zinc-400">
+            <p className="text-sm text-zinc-500">
               Check out custom shell designs from the community
             </p>
           </div>
@@ -139,13 +139,13 @@ export default async function ShowcasePage({ searchParams }: ShowcasePageProps) 
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 rounded-lg bg-white p-1">
+        <div className="flex gap-1 rounded-lg bg-zinc-100 p-1">
           <Link
             href="/showcase?view=gallery"
             className={`flex-1 rounded-md px-4 py-2 text-center text-sm font-medium transition-colors ${
               view === "gallery"
-                ? "bg-zinc-700 text-zinc-900"
-                : "text-zinc-500 hover:text-zinc-200"
+                ? "bg-white text-zinc-900 shadow-sm"
+                : "text-zinc-600 hover:text-zinc-900"
             }`}
           >
             Gallery
@@ -154,8 +154,8 @@ export default async function ShowcasePage({ searchParams }: ShowcasePageProps) 
             href="/showcase?view=leaderboard"
             className={`flex-1 rounded-md px-4 py-2 text-center text-sm font-medium transition-colors ${
               view === "leaderboard"
-                ? "bg-zinc-700 text-zinc-900"
-                : "text-zinc-500 hover:text-zinc-200"
+                ? "bg-white text-zinc-900 shadow-sm"
+                : "text-zinc-600 hover:text-zinc-900"
             }`}
           >
             Leaderboard
@@ -164,13 +164,13 @@ export default async function ShowcasePage({ searchParams }: ShowcasePageProps) 
 
         {/* Grid */}
         {entries.length === 0 ? (
-          <div className="rounded-xl bg-white p-12 text-center">
-            <p className="text-zinc-400">
+          <div className="rounded-xl bg-white border border-zinc-200 p-12 text-center">
+            <p className="text-zinc-500">
               No shells submitted yet. Be the first!
             </p>
             <Link
               href="/showcase/submit"
-              className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-amber-400 transition-colors hover:text-amber-300"
+              className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-amber-600 transition-colors hover:text-amber-500"
             >
               Submit a shell
               <svg

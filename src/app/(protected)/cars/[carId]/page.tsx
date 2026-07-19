@@ -80,7 +80,7 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-zinc-400">No photos uploaded.</p>
+            <p className="text-sm text-zinc-500">No photos uploaded.</p>
           )}
         </section>
 
@@ -128,8 +128,8 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
                   d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75"
                 />
               </svg>
-              <p className="text-sm text-zinc-400">No calibrations yet</p>
-              <p className="mt-1 text-xs text-zinc-400">
+              <p className="text-sm text-zinc-500">No calibrations yet</p>
+              <p className="mt-1 text-xs text-zinc-500">
                 Add a calibration setup to track your car&apos;s settings.
               </p>
             </div>
@@ -145,11 +145,11 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
                     <h3 className="text-sm font-medium text-zinc-900">
                       {cal.name}
                     </h3>
-                    <span className="text-xs text-zinc-400">
+                    <span className="text-xs text-zinc-500">
                       {new Date(cal.createdAt).toLocaleDateString()}
                     </span>
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-3 text-xs text-zinc-400">
+                  <div className="mt-2 flex flex-wrap gap-3 text-xs text-zinc-500">
                     <span>F.Camber: {cal.frontCamber}°</span>
                     <span>R.Camber: {cal.rearCamber}°</span>
                     <span>Gyro: {cal.gyroGain}%</span>

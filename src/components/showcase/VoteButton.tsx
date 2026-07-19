@@ -67,7 +67,7 @@ export function VoteButton({
     >
       <svg
         className={`h-3.5 w-3.5 transition-colors ${
-          voted ? "text-amber-400" : "text-zinc-500 hover:text-amber-300"
+          voted ? "text-amber-500" : "text-zinc-400 hover:text-amber-500"
         }`}
         fill={voted ? "currentColor" : "none"}
         stroke="currentColor"
@@ -77,7 +77,7 @@ export function VoteButton({
       >
         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
       </svg>
-      <span className={voted ? "text-amber-400" : "text-zinc-500"}>
+      <span className={voted ? "text-amber-600 font-medium" : "text-zinc-500"}>
         {count}
       </span>
     </button>

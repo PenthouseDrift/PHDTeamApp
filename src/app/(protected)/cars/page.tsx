@@ -57,7 +57,7 @@ export default async function CarsPage() {
               />
             </svg>
             <h2 className="text-lg font-semibold text-zinc-900">No cars yet</h2>
-            <p className="mt-1 text-sm text-zinc-400">
+            <p className="mt-1 text-sm text-zinc-500">
               Add your first RC car to start tracking setups and calibrations.
             </p>
             <Link
@@ -110,7 +110,7 @@ export default async function CarsPage() {
                       <h3 className="font-semibold text-zinc-900 truncate">
                         {car.name}
                       </h3>
-                      <p className="mt-1 text-sm text-zinc-400">
+                      <p className="mt-1 text-sm text-zinc-500">
                         {calibrationCount}{" "}
                         {calibrationCount === 1 ? "calibration" : "calibrations"}
                       </p>
