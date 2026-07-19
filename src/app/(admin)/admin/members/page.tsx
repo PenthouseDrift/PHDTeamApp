@@ -3,6 +3,8 @@ import { getTodayCheckIns } from "@/actions/admin/checkins";
 import { MemberList } from "@/components/admin/MemberList";
 import { TodayCheckIns } from "@/components/admin/TodayCheckIns";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminMembersPage() {
   const members = await getAllMembers();
   const todayCheckIns = await getTodayCheckIns();

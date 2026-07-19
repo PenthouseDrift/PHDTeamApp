@@ -6,6 +6,8 @@ import { getWeeklyWinners } from "@/actions/admin/showcase";
 import { VoteButton } from "@/components/showcase/VoteButton";
 import type { ShellEntry } from "@/types";
 
+export const dynamic = "force-dynamic";
+
 interface ShowcasePageProps {
   searchParams: Promise<{ view?: string }>;
 }

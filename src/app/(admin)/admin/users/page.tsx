@@ -2,6 +2,8 @@ import { auth } from "@/lib/auth";
 import { getAllUsers } from "@/actions/admin/users";
 import { UserRoleToggle } from "./UserRoleToggle";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminUsersPage() {
   const session = await auth();
   const users = await getAllUsers();

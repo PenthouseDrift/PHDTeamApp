@@ -7,6 +7,8 @@ import { getOrCreateQRCode } from "@/actions/qr";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { QRToggleButton } from "./QRToggleButton";
 
+export const dynamic = "force-dynamic";
+
 const quickLinks = [
   {
     title: "My Cars",

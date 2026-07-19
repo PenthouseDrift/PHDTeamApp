@@ -2,6 +2,8 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { getMemberCars, getCarCalibrationCount } from "@/actions/cars";
 
+export const dynamic = "force-dynamic";
+
 export default async function CarsPage() {
   const session = await auth();
   if (!session?.user) return null;

@@ -3,6 +3,8 @@ import { getShowcaseEntries } from "@/actions/showcase";
 import { getCurrentWeek, getWeeklyWinners } from "@/actions/admin/showcase";
 import { SelectWinnerButton } from "@/components/admin/SelectWinnerButton";
 
+export const dynamic = "force-dynamic";
+
 function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString("en-AU", {
     day: "numeric",

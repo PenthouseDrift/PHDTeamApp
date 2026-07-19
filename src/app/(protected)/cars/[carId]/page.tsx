@@ -5,6 +5,8 @@ import { getCar } from "@/actions/cars";
 import { getCarCalibrations } from "@/actions/calibration";
 import { DeleteCarButton } from "./DeleteCarButton";
 
+export const dynamic = "force-dynamic";
+
 interface CarDetailPageProps {
   params: Promise<{ carId: string }>;
 }

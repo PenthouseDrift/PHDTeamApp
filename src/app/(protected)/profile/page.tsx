@@ -6,6 +6,8 @@ import { ProfileQRError } from "./ProfileQRError";
 import { ProfileAvatarUpload } from "./ProfileAvatarUpload";
 import { SignOutSection } from "./SignOutSection";
 
+export const dynamic = "force-dynamic";
+
 function getInitials(name: string | null | undefined): string {
   if (!name) return "?";
   const parts = name.trim().split(/\s+/);

@@ -1,6 +1,8 @@
 import { getCheckInsByDate } from "@/actions/admin/checkins";
 import { CheckInHistory } from "@/components/admin/CheckInHistory";
 
+export const dynamic = "force-dynamic";
+
 export default async function CheckInHistoryPage({
   searchParams,
 }: {
