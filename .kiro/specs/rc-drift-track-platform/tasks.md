@@ -30,7 +30,7 @@ Implementation plan for the Penthouse Drift RC track community platform. This is
   - [ ] 4.4. Create src/app/(admin)/layout.tsx with admin navigation extending protected layout: admin links (Members, Check-In, Showcase Winners, Facebook Publishing)
   - [ ] 4.5. Create shared UI components in src/components/ui/: StatusBadge (green active/red expired indicators), LoadingSpinner, ErrorMessage with retry button, ConfirmDialog modal
 - [ ] 5. PWA Configuration
-  - [ ] 5.1. Create src/app/manifest.ts returning Web App Manifest with name "Penthouse Drift", short_name "PH Drift", start_url "/dashboard", display "standalone", theme_color "#1a1a2e", background_color "#1a1a2e", and icons at 192x192 and 512x512
+  - [ ] 5.1. Create src/app/manifest.ts returning Web App Manifest with name "Penthouse Drift", short_name "PHD", start_url "/dashboard", display "standalone", theme_color "#1a1a2e", background_color "#1a1a2e", and icons at 192x192 and 512x512
   - [ ] 5.2. Create placeholder PWA icon files in public/icons/ (icon-192.png, icon-512.png)
   - [ ] 5.3. Configure service worker caching via next-pwa: CacheFirst for blob-images (vercel-storage.com), NetworkFirst for API calls, precache app shell assets
   - [ ] 5.4. Create offline fallback component displaying cached app shell with offline indicator when network is unavailable
