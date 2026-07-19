@@ -3,7 +3,7 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Penthouse Drift",
-    short_name: "PH Drift",
+    short_name: "PHD",
     description: "RC Drift Track Community Platform — memberships, car setups, and more",
     id: "/",
     start_url: "/dashboard",
