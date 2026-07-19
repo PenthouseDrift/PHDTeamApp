@@ -27,6 +27,8 @@ export const calibrationSchema = z.object({
   frontDroop: z.number().min(0).max(10).optional().default(0),
   rearDroop: z.number().min(0).max(10).optional().default(0),
   // Drivetrain & Electronics
+  motorTurns: z.number().min(0).max(30).optional().default(0),
+  motorTiming: z.number().int().min(0).max(60).optional().default(0),
   gyroGain: z.number().int().min(0).max(100).optional().default(0),
   throttleEPA: z.number().int().min(0).max(100).optional().default(100),
   steeringEPA: z.number().int().min(0).max(100).optional().default(100),
