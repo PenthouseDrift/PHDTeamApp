@@ -24,26 +24,26 @@ export function AdminNavigation({ user }: { user: NavUser }) {
     <>
       {/* Desktop sidebar */}
       <aside className="hidden md:flex md:w-64 md:flex-col border-r border-zinc-200 bg-white">
-        <div className="p-4 border-b border-zinc-200">
-          <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-8 w-8 mb-3" />
-          <div className="flex items-center gap-3">
-          {user.image ? (
-            <img
-              src={user.image}
-              alt={user.name ?? "Admin"}
-              className="w-10 h-10 rounded-full object-cover ring-1 ring-zinc-200"
-            />
-          ) : (
-            <div className="w-10 h-10 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-sm">
-              {user.name ? user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() : "?"}
+        <div className="flex items-center justify-between p-4 border-b border-zinc-200">
+          <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-8 w-8" />
+          <div className="flex items-center gap-2">
+            <div className="flex flex-col items-end min-w-0">
+              <span className="text-sm font-medium text-zinc-700 truncate max-w-[120px]">
+                {user.name ?? "Admin"}
+              </span>
+              <span className="text-[10px] text-amber-600 font-medium">Admin</span>
             </div>
-          )}
-          <div className="flex flex-col min-w-0">
-            <span className="text-sm font-medium text-zinc-900 truncate">
-              {user.name ?? "Admin"}
-            </span>
-            <span className="text-xs text-zinc-500">Admin Panel</span>
-          </div>
+            {user.image ? (
+              <img
+                src={user.image}
+                alt={user.name ?? "Admin"}
+                className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-200"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-xs">
+                {user.name ? user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() : "?"}
+              </div>
+            )}
           </div>
         </div>
         <nav className="flex-1 p-3 space-y-1">
