@@ -42,6 +42,7 @@ export default function ImageUploader({
   const [errors, setErrors] = useState<FileError[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const maxSizeBytes = maxSizeMB * 1024 * 1024;
 
@@ -244,7 +245,7 @@ export default function ImageUploader({
           />
         </svg>
         <p className="text-sm text-gray-600 dark:text-gray-400">
-          <span className="font-medium">Take a photo</span> or choose from gallery
+          <span className="font-medium">Choose from gallery</span> or drag and drop
         </p>
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-500">
           JPEG, PNG, or WebP (max {maxSizeMB}MB)
@@ -259,6 +260,30 @@ export default function ImageUploader({
           aria-hidden="true"
         />
       </div>
+
+      {/* Camera button - separate for mobile */}
+      <button
+        type="button"
+        onClick={() => cameraInputRef.current?.click()}
+        className={`w-full flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 p-4 text-sm font-medium text-gray-600 dark:text-gray-400 hover:border-gray-400 transition-colors ${
+          uploadedFiles.length >= maxFiles ? "opacity-50 pointer-events-none" : ""
+        }`}
+      >
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Z" />
+        </svg>
+        Take a Photo
+      </button>
+      <input
+        ref={cameraInputRef}
+        type="file"
+        className="hidden"
+        accept="image/*"
+        capture="environment"
+        onChange={handleInputChange}
+        aria-hidden="true"
+      />
 
       {/* Errors */}
       {errors.length > 0 && (
