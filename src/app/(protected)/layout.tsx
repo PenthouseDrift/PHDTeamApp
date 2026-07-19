@@ -2,8 +2,11 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import { ProtectedNavigation } from "@/components/ProtectedNavigation";
+import { cache } from "react";
 
-export const dynamic = "force-dynamic";
+const getCustomAvatar = cache(async (userId: string) => {
+  return await redis.hget(`member:${userId}`, "customAvatar") as string | null;
+});
 
 export default async function ProtectedLayout({
   children,
@@ -16,8 +19,7 @@ export default async function ProtectedLayout({
     redirect("/auth/signin");
   }
 
-  // Get custom avatar from Redis
-  const customAvatar = await redis.hget(`member:${session.user.id}`, "customAvatar") as string | null;
+  const customAvatar = await getCustomAvatar(session.user.id);
   const userWithAvatar = {
     ...session.user,
     image: customAvatar || session.user.image || null,

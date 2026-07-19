@@ -2,8 +2,11 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import { AdminNavigation } from "@/components/AdminNavigation";
+import { cache } from "react";
 
-export const dynamic = "force-dynamic";
+const getCustomAvatar = cache(async (userId: string) => {
+  return await redis.hget(`member:${userId}`, "customAvatar") as string | null;
+});
 
 export default async function AdminLayout({
   children,
@@ -20,8 +23,7 @@ export default async function AdminLayout({
     redirect("/dashboard");
   }
 
-  // Get custom avatar from Redis
-  const customAvatar = await redis.hget(`member:${session.user.id}`, "customAvatar") as string | null;
+  const customAvatar = await getCustomAvatar(session.user.id);
   const userWithAvatar = {
     ...session.user,
     image: customAvatar || session.user.image || null,
@@ -30,7 +32,7 @@ export default async function AdminLayout({
   return (
     <div className="flex h-dvh bg-zinc-50">
       <AdminNavigation user={userWithAvatar} />
-      <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
+      <main className="flex-1 overflow-y-auto pt-14 pb-16 md:pt-0 md:pb-0">
         {children}
       </main>
     </div>
