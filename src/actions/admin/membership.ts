@@ -7,21 +7,27 @@ import type { ActionResult } from "@/types";
 const TWENTY_EIGHT_DAYS = 28 * 24 * 60 * 60 * 1000;
 
 export async function activateMembership(
-  memberId: string
+  memberId: string,
+  customExpiryDate?: string
 ): Promise<ActionResult<{ expiresAt: number }>> {
   try {
     const now = Date.now();
 
-    // Check if member has an active membership to extend
-    const existing = await redis.hgetall(`membership:${memberId}`);
     let newExpiresAt: number;
 
-    if (existing && Number(existing.expiresAt) > now) {
-      // Extend from current expiry
-      newExpiresAt = Number(existing.expiresAt) + TWENTY_EIGHT_DAYS;
+    if (customExpiryDate) {
+      // Admin override — use the custom date
+      newExpiresAt = new Date(customExpiryDate + "T23:59:59").getTime();
     } else {
-      // New or expired: start from now
-      newExpiresAt = now + TWENTY_EIGHT_DAYS;
+      // Check if member has an active membership to extend
+      const existing = await redis.hgetall(`membership:${memberId}`);
+      if (existing && Number(existing.expiresAt) > now) {
+        // Extend from current expiry
+        newExpiresAt = Number(existing.expiresAt) + TWENTY_EIGHT_DAYS;
+      } else {
+        // New or expired: start from now
+        newExpiresAt = now + TWENTY_EIGHT_DAYS;
+      }
     }
 
     await redis.hset(`membership:${memberId}`, {
