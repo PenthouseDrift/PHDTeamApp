@@ -3,7 +3,8 @@ import { redis } from "@/lib/redis";
 import { auth } from "@/lib/auth";
 import { getShowcaseEntries, getLeaderboard, hasUserVoted } from "@/actions/showcase";
 import { getWeeklyWinners } from "@/actions/admin/showcase";
-import { VoteButton } from "@/components/showcase/VoteButton";
+import { getCommentCount } from "@/actions/comments";
+import { ShellCardWrapper } from "@/components/showcase/ShellCardWrapper";
 import type { ShellEntry } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -18,67 +19,6 @@ async function getAuthorName(userId: string): Promise<string> {
     return member.name as string;
   }
   return "Unknown";
-}
-
-function formatDate(timestamp: number): string {
-  return new Date(timestamp).toLocaleDateString("en-AU", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function ShellCard({
-  entry,
-  authorName,
-  userId,
-  hasVoted,
-  isWinner,
-  winnerLabel,
-}: {
-  entry: ShellEntry;
-  authorName: string;
-  userId: string;
-  hasVoted: boolean;
-  isWinner: boolean;
-  winnerLabel: string | null;
-}) {
-  const isOwnEntry = entry.userId === userId;
-
-  return (
-    <div className="group relative overflow-hidden rounded-xl bg-white border border-zinc-200 shadow-sm transition-shadow hover:shadow-md">
-      {isWinner && (
-        <div className="absolute top-2 left-2 z-10 rounded-md bg-amber-500/90 px-2 py-0.5 text-[10px] font-bold text-black">
-          🏆 {winnerLabel}
-        </div>
-      )}
-      <div className="relative aspect-square overflow-hidden">
-        <img
-          src={entry.imageUrl}
-          alt={entry.description || "Shell design"}
-          className="h-full w-full object-cover transition-transform group-hover:scale-105"
-        />
-      </div>
-      <div className="space-y-2 p-4">
-        {entry.description && (
-          <p className="line-clamp-2 text-sm text-zinc-600">
-            {entry.description}
-          </p>
-        )}
-        <div className="flex items-center justify-between text-xs text-zinc-500">
-          <span className="truncate max-w-[120px]">{authorName}</span>
-          <span>{formatDate(entry.createdAt)}</span>
-        </div>
-        <VoteButton
-          shellId={entry.shellId}
-          userId={userId}
-          initialVoted={hasVoted}
-          initialCount={entry.voteCount}
-          isOwnEntry={isOwnEntry}
-        />
-      </div>
-    </div>
-  );
 }
 
 export default async function ShowcasePage({ searchParams }: ShowcasePageProps) {
@@ -120,6 +60,15 @@ export default async function ShowcasePage({ searchParams }: ShowcasePageProps) 
   for (const w of winners) {
     winnerMap.set(w.shellId, `Week ${w.week}, ${w.year}`);
   }
+
+  // Fetch comment counts
+  const commentCountMap = new Map<string, number>();
+  await Promise.all(
+    entries.map(async (entry) => {
+      const count = await getCommentCount(entry.shellId);
+      commentCountMap.set(entry.shellId, count);
+    })
+  );
 
   return (
     <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
@@ -194,7 +143,7 @@ export default async function ShowcasePage({ searchParams }: ShowcasePageProps) 
         ) : (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {entries.map((entry) => (
-              <ShellCard
+              <ShellCardWrapper
                 key={entry.shellId}
                 entry={entry}
                 authorName={authorNames.get(entry.userId) || "Unknown"}
@@ -202,6 +151,7 @@ export default async function ShowcasePage({ searchParams }: ShowcasePageProps) 
                 hasVoted={votedMap.get(entry.shellId) || false}
                 isWinner={winnerMap.has(entry.shellId)}
                 winnerLabel={winnerMap.get(entry.shellId) || null}
+                commentCount={commentCountMap.get(entry.shellId) || 0}
               />
             ))}
           </div>
