@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getMembership } from "@/actions/membership";
 
+export const dynamic = "force-dynamic";
+
 export default async function MembershipSuccessPage() {
   const session = await auth();
 

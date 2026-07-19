@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import type { CalibrationSetup } from "@/types";
 
+export const dynamic = "force-dynamic";
+
 interface SharePageProps {
   params: Promise<{ shareId: string }>;
 }
