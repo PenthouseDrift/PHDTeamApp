@@ -7,7 +7,7 @@ import { getRemainingDays } from "@/lib/membership-utils";
 
 export const dynamic = "force-dynamic";
 
-const MEMBERSHIP_PRICE = 10.0;
+const MEMBERSHIP_PRICE = 40.0;
 const MEMBERSHIP_CURRENCY = "GBP";
 const MEMBERSHIP_DURATION_DAYS = 28;
 
