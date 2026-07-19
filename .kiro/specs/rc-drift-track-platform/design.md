@@ -650,7 +650,7 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Penthouse Drift",
-    short_name: "PH Drift",
+    short_name: "PHD",
     start_url: "/dashboard",
     display: "standalone",
     theme_color: "#1a1a2e",
