@@ -3,7 +3,9 @@ import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import { getMembership } from "@/actions/membership";
 import { getRemainingDays } from "@/lib/membership-utils";
+import { getOrCreateQRCode } from "@/actions/qr";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { QRToggleButton } from "./QRToggleButton";
 
 const quickLinks = [
   {
@@ -107,6 +109,12 @@ export default async function DashboardPage() {
     : "?";
   const remainingDays = membership && isActive ? getRemainingDays(membership) : 0;
 
+  // Get QR code
+  const qrResult = await getOrCreateQRCode(session.user.id);
+
+  // Check if user has checked in today
+  const isCheckedInToday = !!(await redis.get(`checkin:dedup:${session.user.id}`));
+
   return (
     <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl space-y-6">
@@ -168,34 +176,58 @@ export default async function DashboardPage() {
         </section>
         )}
 
-        {/* QR Code Section */}
-        <section className="rounded-xl bg-white p-6">
-          <h2 className="mb-4 text-lg font-semibold text-zinc-900">
-            QR Code
-          </h2>
-          <p className="text-sm text-zinc-500">
-            Use your QR code to check in at the track.
+        {/* Check-In Status */}
+        {isCheckedInToday && (
+          <div className="rounded-xl bg-green-50 border border-green-200 p-4 flex items-center gap-3">
+            <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
+            <div>
+              <p className="text-sm font-semibold text-green-800">Checked In Today</p>
+              <p className="text-xs text-green-600">You're on the track — enjoy your session!</p>
+            </div>
+          </div>
+        )}
+
+        {/* QR Code — always visible on mobile, toggle on desktop */}
+        <section className="rounded-xl bg-white border border-zinc-200 p-6">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-lg font-semibold text-zinc-900">
+              Check-In QR Code
+            </h2>
+            {qrResult.success && <QRToggleButton />}
+          </div>
+          <p className="text-sm text-zinc-500 mb-4">
+            Show this to an admin to check in at the track.
           </p>
-          <Link
-            href="/profile"
-            className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-amber-400 transition-colors hover:text-amber-300"
-          >
-            View your QR code
-            <svg
-              className="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 5l7 7-7 7"
-              />
-            </svg>
-          </Link>
+          {qrResult.success ? (
+            <div className="flex justify-center md:hidden" id="qr-mobile">
+              <div className="rounded-xl border border-zinc-200 bg-white p-3">
+                <img
+                  src={qrResult.data}
+                  alt="Your QR Code"
+                  width={220}
+                  height={220}
+                  className="h-auto w-full max-w-[220px]"
+                />
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-red-600 text-center">Unable to load QR code. Visit your profile to retry.</p>
+          )}
+          {qrResult.success && (
+            <div className="hidden" id="qr-desktop">
+              <div className="flex justify-center">
+                <div className="rounded-xl border border-zinc-200 bg-white p-3">
+                  <img
+                    src={qrResult.data}
+                    alt="Your QR Code"
+                    width={220}
+                    height={220}
+                    className="h-auto w-full max-w-[220px]"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Quick Links */}
