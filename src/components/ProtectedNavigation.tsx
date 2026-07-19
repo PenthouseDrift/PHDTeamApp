@@ -48,7 +48,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
         <div className="flex items-center justify-between p-4 border-b border-zinc-200">
           <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-8 w-8" />
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-zinc-700 truncate max-w-[120px]">
+            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200 truncate max-w-[120px]">
               {user.name ?? "Member"}
             </span>
             {user.image ? (
@@ -75,8 +75,8 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
                 href={item.href}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
-                    ? "bg-zinc-100 text-zinc-900"
-                    : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"
+                    ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
+                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                 }`}
               >
                 <item.icon className="w-5 h-5" />
@@ -88,8 +88,8 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
             href="/notifications"
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
               pathname.startsWith("/notifications")
-                ? "bg-zinc-100 text-zinc-900"
-                : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"
+                ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
+                : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             }`}
           >
             <BellIcon className="w-5 h-5" />
@@ -104,8 +104,8 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
             href="/profile"
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
               pathname.startsWith("/profile")
-                ? "bg-zinc-100 text-zinc-900"
-                : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"
+                ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
+                : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             }`}
           >
             <ProfileIcon className="w-5 h-5" />
@@ -130,7 +130,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
         <div className="p-3 border-t border-zinc-200">
           <button
             onClick={() => signOut({ callbackUrl: "/" })}
-            className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition-colors"
+            className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
           >
             <LogoutIcon className="w-5 h-5" />
             Sign Out
@@ -143,7 +143,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
         <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-7 w-7" />
         <div className="flex items-center gap-3">
           <Link href="/notifications" className="relative">
-            <svg className="w-6 h-6 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+            <svg className="w-6 h-6 text-zinc-600 dark:text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
             </svg>
             {unreadNotifications > 0 && (
@@ -177,7 +177,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
               key={item.href}
               href={item.href}
               className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
-                isActive ? "text-zinc-900" : "text-zinc-400"
+                isActive ? "text-zinc-900 dark:text-zinc-100" : "text-zinc-400 dark:text-zinc-500"
               }`}
             >
               <item.icon className="w-5 h-5" />
