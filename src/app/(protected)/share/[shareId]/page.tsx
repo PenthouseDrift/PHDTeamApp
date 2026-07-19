@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import type { CalibrationSetup } from "@/types";
+import { SaveCalibrationButton } from "./SaveCalibrationButton";
 
 export const dynamic = "force-dynamic";
 
@@ -225,6 +226,11 @@ export default async function SharePage({ params }: SharePageProps) {
               ))}
             </dl>
           </div>
+        )}
+
+        {/* Save to my car — only show if viewing someone else's calibration */}
+        {calibration.userId !== session.user.id && (
+          <SaveCalibrationButton calibration={calibration} />
         )}
       </div>
     </div>
