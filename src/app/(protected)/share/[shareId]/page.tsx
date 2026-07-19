@@ -21,7 +21,7 @@ export default async function SharePage({ params }: SharePageProps) {
   // Look up share data
   const shareData = await redis.hgetall(`share:${shareId}`);
 
-  if (!shareData || shareData.active !== "true") {
+  if (!shareData || String(shareData.active) === "false") {
     return (
       <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl">
