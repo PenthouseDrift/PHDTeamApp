@@ -3,6 +3,7 @@
 import { redis } from "@/lib/redis";
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/types";
+import { createNotification } from "./notifications";
 
 export interface Comment {
   commentId: string;
@@ -12,13 +13,15 @@ export interface Comment {
   userImage: string | null;
   text: string;
   likes: number;
+  replyTo?: string;
   createdAt: number;
 }
 
 export async function addComment(
   shellId: string,
   userId: string,
-  text: string
+  text: string,
+  replyTo?: string
 ): Promise<ActionResult<Comment>> {
   if (!text.trim() || text.trim().length > 500) {
     return { success: false, error: "Comment must be between 1 and 500 characters" };
@@ -38,11 +41,62 @@ export async function addComment(
     userImage,
     text: text.trim(),
     likes: 0,
+    replyTo: replyTo || "",
     createdAt: Date.now(),
   };
 
   await redis.hset(`comment:${commentId}`, comment as unknown as Record<string, unknown>);
   await redis.rpush(`shell:${shellId}:comments`, commentId);
+
+  // Notifications
+  const shellData = await redis.hgetall(`shell:${shellId}`);
+  const shellOwnerId = shellData?.userId as string;
+
+  if (replyTo) {
+    // Notify the person being replied to
+    const replyToComment = await redis.hgetall(`comment:${replyTo}`);
+    if (replyToComment?.userId) {
+      await createNotification({
+        userId: replyToComment.userId as string,
+        type: "reply",
+        fromUserId: userId,
+        fromUserName: userName,
+        shellId,
+        message: `${userName} replied: "${text.trim().slice(0, 80)}"`,
+      });
+    }
+  }
+
+  // Notify the shell owner about the comment
+  if (shellOwnerId) {
+    await createNotification({
+      userId: shellOwnerId,
+      type: "comment",
+      fromUserId: userId,
+      fromUserName: userName,
+      shellId,
+      message: `${userName} commented: "${text.trim().slice(0, 80)}"`,
+    });
+  }
+
+  // Notify other commenters on this shell (they might want to follow the conversation)
+  const allCommentIds = await redis.lrange(`shell:${shellId}:comments`, 0, -1);
+  const notifiedUsers = new Set([userId, shellOwnerId]);
+  for (const cId of allCommentIds) {
+    if (cId === commentId) continue;
+    const cData = await redis.hgetall(`comment:${cId as string}`);
+    if (cData?.userId && !notifiedUsers.has(cData.userId as string)) {
+      notifiedUsers.add(cData.userId as string);
+      await createNotification({
+        userId: cData.userId as string,
+        type: "comment",
+        fromUserId: userId,
+        fromUserName: userName,
+        shellId,
+        message: `${userName} also commented on a shell you interacted with`,
+      });
+    }
+  }
 
   revalidatePath("/showcase");
   return { success: true, data: comment };
@@ -94,6 +148,18 @@ export async function toggleCommentLike(
       await redis.sadd(likesKey, userId);
       newCount = Number(commentData.likes) + 1;
       liked = true;
+
+      // Notify comment author
+      const member = await redis.hgetall(`member:${userId}`);
+      const userName = (member?.name as string) || "Someone";
+      await createNotification({
+        userId: commentData.userId as string,
+        type: "comment_like",
+        fromUserId: userId,
+        fromUserName: userName,
+        shellId: (commentData.shellId as string) || "",
+        message: `${userName} liked your comment`,
+      });
     }
 
     await redis.hset(`comment:${commentId}`, { likes: newCount });

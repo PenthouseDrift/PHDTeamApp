@@ -10,6 +10,11 @@ interface NavUser {
   role?: "admin" | "member";
 }
 
+interface ProtectedNavigationProps {
+  user: NavUser;
+  unreadNotifications?: number;
+}
+
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
   { href: "/cars", label: "My Cars", icon: CarIcon },
@@ -32,7 +37,7 @@ function getInitials(name: string | null | undefined): string {
   return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 }
 
-export function ProtectedNavigation({ user }: { user: NavUser }) {
+export function ProtectedNavigation({ user, unreadNotifications = 0 }: ProtectedNavigationProps) {
   const pathname = usePathname();
 
   return (
@@ -80,6 +85,22 @@ export function ProtectedNavigation({ user }: { user: NavUser }) {
             );
           })}
           <Link
+            href="/notifications"
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              pathname.startsWith("/notifications")
+                ? "bg-zinc-100 text-zinc-900"
+                : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"
+            }`}
+          >
+            <BellIcon className="w-5 h-5" />
+            Notifications
+            {unreadNotifications > 0 && (
+              <span className="ml-auto w-5 h-5 rounded-full bg-red-500 text-[10px] font-bold text-white flex items-center justify-center">
+                {unreadNotifications > 9 ? "9+" : unreadNotifications}
+              </span>
+            )}
+          </Link>
+          <Link
             href="/profile"
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
               pathname.startsWith("/profile")
@@ -120,19 +141,31 @@ export function ProtectedNavigation({ user }: { user: NavUser }) {
       {/* Mobile top header */}
       <header className="fixed top-0 left-0 right-0 z-40 flex md:hidden items-center justify-between px-4 py-3 border-b border-zinc-200 bg-white/95 backdrop-blur-sm">
         <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-7 w-7" />
-        <Link href="/profile">
-          {user.image ? (
-            <img
-              src={user.image}
-              alt={user.name ?? "User"}
-              className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-200"
-            />
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-xs">
-              {getInitials(user.name)}
-            </div>
-          )}
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/notifications" className="relative">
+            <svg className="w-6 h-6 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
+            </svg>
+            {unreadNotifications > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-[10px] font-bold text-white flex items-center justify-center">
+                {unreadNotifications > 9 ? "9+" : unreadNotifications}
+              </span>
+            )}
+          </Link>
+          <Link href="/profile">
+            {user.image ? (
+              <img
+                src={user.image}
+                alt={user.name ?? "User"}
+                className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-200"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-xs">
+                {getInitials(user.name)}
+              </div>
+            )}
+          </Link>
+        </div>
       </header>
 
       {/* Mobile bottom tab bar */}
@@ -229,6 +262,14 @@ function LogoutIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
+    </svg>
+  );
+}
+
+function BellIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
     </svg>
   );
 }

@@ -2,11 +2,11 @@
 
 import { redis } from "@/lib/redis";
 import { shellSubmissionSchema } from "@/lib/validators";
+import { createNotification } from "./notifications";
 import type { ShellEntry, ActionResult } from "@/types";
 
 export async function toggleVote(shellId: string, userId: string): Promise<ActionResult<{ voted: boolean; newCount: number }>> {
   try {
-    // Check if it's the user's own entry
     const shellData = await redis.hgetall(`shell:${shellId}`);
     if (!shellData || Object.keys(shellData).length === 0) {
       return { success: false, error: "Shell entry not found" };
@@ -22,18 +22,27 @@ export async function toggleVote(shellId: string, userId: string): Promise<Actio
     let voted: boolean;
 
     if (isMember) {
-      // Remove vote
       await redis.srem(votersKey, userId);
       newCount = Math.max(0, Number(shellData.voteCount) - 1);
       voted = false;
     } else {
-      // Add vote
       await redis.sadd(votersKey, userId);
       newCount = Number(shellData.voteCount) + 1;
       voted = true;
+
+      // Notify shell owner
+      const member = await redis.hgetall(`member:${userId}`);
+      const userName = (member?.name as string) || "Someone";
+      await createNotification({
+        userId: shellData.userId as string,
+        type: "like",
+        fromUserId: userId,
+        fromUserName: userName,
+        shellId,
+        message: `${userName} liked your shell`,
+      });
     }
 
-    // Update vote count in shell hash and leaderboard
     await redis.hset(`shell:${shellId}`, { voteCount: newCount });
     await redis.zadd("shells:leaderboard", { score: newCount, member: shellId });
 
