@@ -20,30 +20,35 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     async jwt({ token, user, account }) {
       if (user && account) {
-        // Use the provider's account ID as stable identifier
         const stableId = account.providerAccountId;
         token.sub = stableId;
-        token.role = ADMIN_EMAILS.includes(user.email ?? "")
-          ? "admin"
-          : "member";
 
-        // Only write to Redis if this member doesn't exist yet, or update name/image
+        // Check if member already exists in Redis
         const existing = await redis.hgetall(`member:${stableId}`);
+
         if (!existing || Object.keys(existing).length === 0) {
+          // New user — assign role from ADMIN_EMAILS
+          const role = ADMIN_EMAILS.includes(user.email ?? "")
+            ? "admin"
+            : "member";
+          token.role = role;
+
           await redis.hset(`member:${stableId}`, {
             id: stableId,
             email: user.email,
             name: user.name,
             image: user.image ?? "",
-            role: token.role,
+            role,
             createdAt: Date.now(),
           });
         } else {
-          // Update name/image in case they changed, but don't overwrite createdAt
+          // Existing user — use the role from Redis (respects admin toggle)
+          token.role = (existing.role as string) || "member";
+
+          // Update name/image only (don't touch role)
           await redis.hset(`member:${stableId}`, {
             name: user.name,
             image: user.image ?? "",
-            role: token.role,
           });
         }
       }
