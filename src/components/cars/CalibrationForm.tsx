@@ -183,19 +183,31 @@ export default function CalibrationForm({ onSubmit, initialData }: CalibrationFo
                   {field.unit && <span className="text-zinc-600 ml-1">({field.unit})</span>}
                 </label>
                 {field.type === "range" ? (
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     <input
                       type="range"
                       min={field.min}
                       max={field.max}
-                      step={field.step}
-                      value={values[field.key] as number}
+                      step={1}
+                      value={Number(values[field.key]) || 0}
                       onChange={(e) => updateValue(field.key, Number(e.target.value))}
                       className="flex-1 accent-amber-500"
                     />
-                    <span className="text-sm text-zinc-900 w-8 text-right">
-                      {values[field.key]}
-                    </span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={values[field.key]}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "") {
+                          updateValue(field.key, 0);
+                        } else {
+                          const num = parseInt(val, 10);
+                          if (!isNaN(num)) updateValue(field.key, num);
+                        }
+                      }}
+                      className="w-14 text-center rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm font-medium text-zinc-900 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
                   </div>
                 ) : field.type === "text" ? (
                   <input
