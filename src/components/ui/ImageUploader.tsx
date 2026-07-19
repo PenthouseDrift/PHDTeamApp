@@ -244,7 +244,7 @@ export default function ImageUploader({
           />
         </svg>
         <p className="text-sm text-gray-600 dark:text-gray-400">
-          <span className="font-medium">Click to upload</span> or drag and drop
+          <span className="font-medium">Take a photo</span> or choose from gallery
         </p>
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-500">
           JPEG, PNG, or WebP (max {maxSizeMB}MB)
@@ -253,7 +253,7 @@ export default function ImageUploader({
           ref={fileInputRef}
           type="file"
           className="hidden"
-          accept={acceptString}
+          accept="image/*"
           multiple={maxFiles > 1}
           onChange={handleInputChange}
           aria-hidden="true"
