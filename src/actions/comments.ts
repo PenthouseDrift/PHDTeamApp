@@ -48,14 +48,14 @@ export async function addComment(
   await redis.hset(`comment:${commentId}`, comment as unknown as Record<string, unknown>);
   await redis.rpush(`shell:${shellId}:comments`, commentId);
 
-  // Notifications
+  // Notifications — skip if interacting with own shell
   const shellData = await redis.hgetall(`shell:${shellId}`);
   const shellOwnerId = shellData?.userId as string;
 
   if (replyTo) {
-    // Notify the person being replied to
+    // Notify the person being replied to (skip if replying to yourself)
     const replyToComment = await redis.hgetall(`comment:${replyTo}`);
-    if (replyToComment?.userId) {
+    if (replyToComment?.userId && replyToComment.userId !== userId) {
       await createNotification({
         userId: replyToComment.userId as string,
         type: "reply",
@@ -67,8 +67,8 @@ export async function addComment(
     }
   }
 
-  // Notify the shell owner about the comment
-  if (shellOwnerId) {
+  // Notify the shell owner about the comment (skip if it's your own shell)
+  if (shellOwnerId && shellOwnerId !== userId) {
     await createNotification({
       userId: shellOwnerId,
       type: "comment",
@@ -79,7 +79,7 @@ export async function addComment(
     });
   }
 
-  // Notify other commenters on this shell (they might want to follow the conversation)
+  // Notify other commenters on this shell (skip yourself and shell owner who was already notified)
   const allCommentIds = await redis.lrange(`shell:${shellId}:comments`, 0, -1);
   const notifiedUsers = new Set([userId, shellOwnerId]);
   for (const cId of allCommentIds) {
