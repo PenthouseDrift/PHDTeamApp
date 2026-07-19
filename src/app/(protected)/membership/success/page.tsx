@@ -26,7 +26,7 @@ export default async function MembershipSuccessPage() {
     : null;
 
   return (
-    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-lg space-y-6">
         {isActive ? (
           <div className="rounded-xl bg-white p-6 text-center space-y-4">
@@ -46,14 +46,14 @@ export default async function MembershipSuccessPage() {
                 />
               </svg>
             </div>
-            <h1 className="text-2xl font-bold text-zinc-900">
+            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
               Payment Successful!
             </h1>
-            <p className="text-zinc-600">
+            <p className="text-zinc-600 dark:text-zinc-300">
               Your membership is now active. Enjoy the track!
             </p>
             <div className="rounded-lg bg-zinc-100 p-4">
-              <p className="text-sm text-zinc-500">Membership valid until</p>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">Membership valid until</p>
               <p className="text-lg font-semibold text-amber-400">
                 {expiryDate}
               </p>
@@ -83,14 +83,14 @@ export default async function MembershipSuccessPage() {
                 />
               </svg>
             </div>
-            <h1 className="text-2xl font-bold text-zinc-900">
+            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
               Payment Processing
             </h1>
-            <p className="text-zinc-600">
+            <p className="text-zinc-600 dark:text-zinc-300">
               Your payment is being processed. Your membership will be
               activated shortly.
             </p>
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
               This usually takes a few seconds. Refresh the page to check.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">

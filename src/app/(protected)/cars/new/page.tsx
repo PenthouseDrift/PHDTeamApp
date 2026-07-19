@@ -62,12 +62,12 @@ export default function NewCarPage() {
   };
 
   return (
-    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-2xl space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900">Add New Car</h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Add New Car</h1>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
             Add your RC car with photos to track calibrations and setups.
           </p>
         </div>
@@ -97,7 +97,7 @@ export default function NewCarPage() {
             {fieldError && (
               <p className="mt-1.5 text-sm text-red-400">{fieldError}</p>
             )}
-            <p className="mt-1.5 text-xs text-zinc-500">
+            <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
               {name.length}/50 characters
             </p>
           </div>

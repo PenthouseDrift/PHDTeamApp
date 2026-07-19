@@ -96,12 +96,12 @@ export default async function NewsfeedPage() {
   const { posts, stale } = await getFeed();
 
   return (
-    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900">Newsfeed</h1>
-          <p className="text-sm text-zinc-500">
+          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Newsfeed</h1>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
             Latest updates from Penthouse Drift
           </p>
         </div>
@@ -136,7 +136,7 @@ export default async function NewsfeedPage() {
               {post.message && (
                 <div className="mt-2">
                   {post.message.length > 500 ? (
-                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-600">
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
                       {post.message.slice(0, 500)}...{" "}
                       <a
                         href={`https://facebook.com/${post.id}`}
@@ -148,7 +148,7 @@ export default async function NewsfeedPage() {
                       </a>
                     </p>
                   ) : (
-                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-600">
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
                       {post.message}
                     </p>
                   )}
@@ -179,7 +179,7 @@ export default async function NewsfeedPage() {
               {/* Unsupported content notice */}
               {post.hasUnsupportedContent && (
                 <div className="mt-3 rounded-md border border-zinc-300 bg-zinc-100/50 px-3 py-2">
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
                     Additional content available on{" "}
                     <a
                       href={`https://facebook.com/${post.id}`}
@@ -199,7 +199,7 @@ export default async function NewsfeedPage() {
         {/* Empty state */}
         {posts.length === 0 && !stale && (
           <div className="py-12 text-center">
-            <p className="text-zinc-500">No posts to display.</p>
+            <p className="text-zinc-500 dark:text-zinc-400">No posts to display.</p>
           </div>
         )}
       </div>

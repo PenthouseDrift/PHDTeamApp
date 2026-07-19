@@ -118,7 +118,7 @@ export default async function DashboardPage() {
   const isCheckedInToday = !!(await redis.get(`checkin:dedup:${session.user.id}`));
 
   return (
-    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl space-y-6">
         {/* Header */}
         <div className="flex items-center gap-4">
@@ -134,17 +134,17 @@ export default async function DashboardPage() {
             </div>
           )}
           <div>
-            <h1 className="text-2xl font-bold text-zinc-900">
+            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
               Welcome back, {session.user.name?.split(" ")[0] ?? "Member"}
             </h1>
-            <p className="text-sm text-zinc-500">Member Dashboard</p>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">Member Dashboard</p>
           </div>
         </div>
 
         {/* Membership Status - only show for non-admins */}
         {session.user.role !== "admin" && (
-        <section className="rounded-xl bg-white border border-zinc-200 p-6">
-          <h2 className="mb-4 text-lg font-semibold text-zinc-900">
+        <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6">
+          <h2 className="mb-4 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             Membership Status
           </h2>
           {membership && isActive ? (
@@ -161,7 +161,7 @@ export default async function DashboardPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <StatusBadge status="expired" size="lg" />
-                <span className="text-zinc-600">
+                <span className="text-zinc-600 dark:text-zinc-300">
                   {membership
                     ? "Membership expired"
                     : "No active membership"}
@@ -190,9 +190,9 @@ export default async function DashboardPage() {
         )}
 
         {/* QR Code — always visible on mobile, toggle on desktop */}
-        <section className="rounded-xl bg-white border border-zinc-200 p-6">
+        <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-lg font-semibold text-zinc-900">
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
               Check-In QR Code
             </h2>
             {qrResult.success && <QRToggleButton />}
@@ -234,7 +234,7 @@ export default async function DashboardPage() {
 
         {/* Quick Links */}
         <section>
-          <h2 className="mb-4 text-lg font-semibold text-zinc-900">
+          <h2 className="mb-4 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             Quick Links
           </h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

@@ -72,14 +72,14 @@ export default function EditCarPage() {
 
   if (loading) {
     return (
-      <div className="min-h-full bg-zinc-50 px-4 py-6 flex items-center justify-center">
-        <p className="text-zinc-500">Loading...</p>
+      <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 flex items-center justify-center">
+        <p className="text-zinc-500 dark:text-zinc-400">Loading...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-2xl space-y-6">
         <Link
           href={`/cars/${carId}`}
@@ -92,8 +92,8 @@ export default function EditCarPage() {
         </Link>
 
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900">Edit Car</h1>
-          <p className="mt-1 text-sm text-zinc-500">Update your car's name and photos.</p>
+          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Edit Car</h1>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Update your car's name and photos.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">

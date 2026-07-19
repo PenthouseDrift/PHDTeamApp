@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SessionProvider } from "@/components/SessionProvider";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import { OfflineIndicator } from "@/components/ui/OfflineIndicator";
 import { PushNotificationSubscriber } from "@/components/PushNotificationSubscriber";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
@@ -46,12 +47,14 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-zinc-50">
+      <body className="min-h-full flex flex-col bg-zinc-50 dark:bg-zinc-950">
         <SessionProvider>
-          <ServiceWorkerRegister />
-          <OfflineIndicator />
-          <PushNotificationSubscriber />
-          {children}
+          <ThemeProvider>
+            <ServiceWorkerRegister />
+            <OfflineIndicator />
+            <PushNotificationSubscriber />
+            {children}
+          </ThemeProvider>
         </SessionProvider>
       </body>
     </html>

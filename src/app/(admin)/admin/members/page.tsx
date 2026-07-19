@@ -19,7 +19,7 @@ export default async function AdminMembersPage() {
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-900">Members & Check-In</h1>
+        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Members & Check-In</h1>
         <p className="text-sm text-zinc-500 mt-1">
           {members.length} registered member{members.length !== 1 ? "s" : ""} • {todayCheckIns.length} checked in today
         </p>
@@ -33,7 +33,7 @@ export default async function AdminMembersPage() {
         <h2 className="text-lg font-semibold text-zinc-900 mb-3">
           All Members
           {notCheckedInMembers.length > 0 && (
-            <span className="ml-2 text-sm font-normal text-zinc-500">
+            <span className="ml-2 text-sm font-normal text-zinc-500 dark:text-zinc-400">
               ({notCheckedInMembers.length} not checked in)
             </span>
           )}

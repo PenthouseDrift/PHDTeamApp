@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function MembershipCancelledPage() {
   return (
-    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-lg space-y-6">
         <div className="rounded-xl bg-white p-6 text-center space-y-4">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-zinc-700/50">
@@ -21,8 +21,8 @@ export default function MembershipCancelledPage() {
               />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-zinc-900">Payment Cancelled</h1>
-          <p className="text-zinc-600">
+          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Payment Cancelled</h1>
+          <p className="text-zinc-600 dark:text-zinc-300">
             Your payment was cancelled. No charge has been made.
           </p>
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">

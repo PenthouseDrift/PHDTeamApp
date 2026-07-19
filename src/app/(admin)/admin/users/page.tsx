@@ -11,21 +11,21 @@ export default async function AdminUsersPage() {
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-zinc-900">User Management</h1>
+        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">User Management</h1>
         <p className="text-sm text-zinc-500 mt-1">
           {users.length} registered user{users.length !== 1 ? "s" : ""} — manage admin access
         </p>
       </div>
 
       {users.length === 0 ? (
-        <div className="rounded-xl bg-white border border-zinc-200 p-8 text-center">
-          <p className="text-zinc-500">No users registered yet.</p>
+        <div className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-8 text-center">
+          <p className="text-zinc-500 dark:text-zinc-400">No users registered yet.</p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white">
           <table className="w-full text-sm">
             <thead className="bg-zinc-50 border-b border-zinc-200">
-              <tr className="text-left text-zinc-600">
+              <tr className="text-left text-zinc-600 dark:text-zinc-300">
                 <th className="px-4 py-3 font-medium">Name</th>
                 <th className="px-4 py-3 font-medium hidden sm:table-cell">Email</th>
                 <th className="px-4 py-3 font-medium">Role</th>

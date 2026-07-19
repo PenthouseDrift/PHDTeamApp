@@ -43,7 +43,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex md:w-64 md:flex-col border-r border-zinc-200 bg-white">
+      <aside className="hidden md:flex md:w-64 md:flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
         {/* Header: logo + user on same line */}
         <div className="flex items-center justify-between p-4 border-b border-zinc-200">
           <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-8 w-8" />
@@ -139,7 +139,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
       </aside>
 
       {/* Mobile top header */}
-      <header className="fixed top-0 left-0 right-0 z-40 flex md:hidden items-center justify-between px-4 py-3 border-b border-zinc-200 bg-white/95 backdrop-blur-sm">
+      <header className="fixed top-0 left-0 right-0 z-40 flex md:hidden items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/95 backdrop-blur-sm">
         <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-7 w-7" />
         <div className="flex items-center gap-3">
           <Link href="/notifications" className="relative">
@@ -169,7 +169,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
       </header>
 
       {/* Mobile bottom tab bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden border-t border-zinc-200 bg-white/95 backdrop-blur-sm">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/95 backdrop-blur-sm">
         {mobileNavItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (
