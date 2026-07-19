@@ -104,3 +104,38 @@ export async function addNonMemberCheckIn(
     };
   }
 }
+
+export async function removeCheckIn(
+  index: number
+): Promise<ActionResult<null>> {
+  try {
+    const today = new Date().toISOString().split("T")[0];
+    const key = `checkins:${today}`;
+
+    // Get all entries, remove the one at index, rewrite the list
+    const entries = await redis.lrange(key, 0, -1);
+    if (index < 0 || index >= entries.length) {
+      return { success: false, error: "Check-in not found" };
+    }
+
+    // Remove by setting to a placeholder then removing it
+    const placeholder = "__REMOVED__";
+    await redis.lset(key, index, placeholder);
+    await redis.lrem(key, 1, placeholder);
+
+    // Also clear the dedup key if it was a real user
+    const entry = entries[index];
+    const parsed = typeof entry === "string" ? JSON.parse(entry) : entry;
+    if (parsed?.userId && !parsed.userId.startsWith("guest_")) {
+      await redis.del(`checkin:dedup:${parsed.userId}`);
+    }
+
+    revalidatePath("/admin/members");
+    return { success: true, data: null };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to remove check-in",
+    };
+  }
+}
