@@ -6,9 +6,8 @@ import type { Member, ActionResult } from "@/types";
 
 export async function getAllUsers(): Promise<Member[]> {
   try {
-    // Scan for all member keys
+    const membersMap = new Map<string, Member>();
     let cursor = 0;
-    const members: Member[] = [];
 
     do {
       const [newCursor, keys] = await redis.scan(cursor, {
@@ -18,13 +17,20 @@ export async function getAllUsers(): Promise<Member[]> {
       cursor = Number(newCursor);
 
       for (const key of keys) {
-        const data = await redis.hgetall(key);
+        const keyStr = key as string;
+        // Skip sub-keys like member:userId:cars
+        if (keyStr.split(":").length > 2) continue;
+
+        const userId = keyStr.replace("member:", "");
+        if (membersMap.has(userId)) continue;
+
+        const data = await redis.hgetall(keyStr);
         if (data && Object.keys(data).length > 0 && data.email) {
-          members.push({
-            id: (data.id as string) || "",
+          membersMap.set(userId, {
+            id: userId,
             email: (data.email as string) || "",
             name: (data.name as string) || "Unknown",
-            image: (data.image as string) || null,
+            image: (data.customAvatar as string) || (data.image as string) || null,
             role: (data.role as "admin" | "member") || "member",
             qrCode: null,
             createdAt: Number(data.createdAt) || 0,
@@ -33,7 +39,7 @@ export async function getAllUsers(): Promise<Member[]> {
       }
     } while (cursor !== 0);
 
-    // Sort by name
+    const members = Array.from(membersMap.values());
     members.sort((a, b) => a.name.localeCompare(b.name));
     return members;
   } catch (error) {

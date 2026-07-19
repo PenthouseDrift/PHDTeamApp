@@ -101,7 +101,7 @@ export default async function NewsfeedPage() {
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">Newsfeed</h1>
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-zinc-500">
             Latest updates from Penthouse Drift
           </p>
         </div>
@@ -127,7 +127,7 @@ export default async function NewsfeedPage() {
               {/* Date */}
               <time
                 dateTime={post.createdTime}
-                className="text-xs font-medium text-zinc-400"
+                className="text-xs font-medium text-zinc-500"
               >
                 {formatDate(post.createdTime)}
               </time>
@@ -179,7 +179,7 @@ export default async function NewsfeedPage() {
               {/* Unsupported content notice */}
               {post.hasUnsupportedContent && (
                 <div className="mt-3 rounded-md border border-zinc-300 bg-zinc-100/50 px-3 py-2">
-                  <p className="text-xs text-zinc-400">
+                  <p className="text-xs text-zinc-500">
                     Additional content available on{" "}
                     <a
                       href={`https://facebook.com/${post.id}`}
@@ -199,7 +199,7 @@ export default async function NewsfeedPage() {
         {/* Empty state */}
         {posts.length === 0 && !stale && (
           <div className="py-12 text-center">
-            <p className="text-zinc-400">No posts to display.</p>
+            <p className="text-zinc-500">No posts to display.</p>
           </div>
         )}
       </div>

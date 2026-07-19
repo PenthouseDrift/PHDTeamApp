@@ -65,7 +65,7 @@ export default async function AdminShowcaseWinnersPage() {
       <h2 className="text-lg font-semibold text-zinc-900 mb-3">All Entries</h2>
       {entries.length === 0 ? (
         <div className="rounded-xl bg-white p-8 text-center">
-          <p className="text-zinc-400">No shell entries to display.</p>
+          <p className="text-zinc-500">No shell entries to display.</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -89,7 +89,7 @@ export default async function AdminShowcaseWinnersPage() {
                   <p className="text-sm font-medium text-zinc-900 truncate">
                     {entry.description || "Untitled shell"}
                   </p>
-                  <p className="text-xs text-zinc-400">
+                  <p className="text-xs text-zinc-500">
                     by {authorNames.get(entry.userId) || "Unknown"} •{" "}
                     {formatDate(entry.createdAt)} • {entry.voteCount} vote
                     {entry.voteCount !== 1 ? "s" : ""}

@@ -82,7 +82,7 @@ export function ProfileAvatarUpload({ currentAvatar, userId, initials }: Profile
         <label
           className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium cursor-pointer transition-colors ${
             uploading
-              ? "bg-zinc-100 text-zinc-400 cursor-not-allowed"
+              ? "bg-zinc-100 text-zinc-500 cursor-not-allowed"
               : "bg-zinc-900 text-white hover:bg-zinc-800"
           }`}
         >
@@ -96,7 +96,7 @@ export function ProfileAvatarUpload({ currentAvatar, userId, initials }: Profile
             className="hidden"
           />
         </label>
-        <p className="text-xs text-zinc-400">JPEG, PNG, or WebP. Max 5MB.</p>
+        <p className="text-xs text-zinc-500">JPEG, PNG, or WebP. Max 5MB.</p>
         {error && <p className="text-xs text-red-500">{error}</p>}
         {success && <p className="text-xs text-green-600">Profile picture updated!</p>}
       </div>

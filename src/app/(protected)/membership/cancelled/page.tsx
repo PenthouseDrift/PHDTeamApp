@@ -7,7 +7,7 @@ export default function MembershipCancelledPage() {
         <div className="rounded-xl bg-white p-6 text-center space-y-4">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-zinc-700/50">
             <svg
-              className="h-8 w-8 text-zinc-400"
+              className="h-8 w-8 text-zinc-500"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"

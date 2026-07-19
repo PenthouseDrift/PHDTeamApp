@@ -9,7 +9,7 @@ export default function SignInPage({
     <div className="min-h-screen flex items-center justify-center bg-zinc-50">
       <div className="bg-white rounded-2xl p-8 w-full max-w-md shadow-lg border border-zinc-200">
         <div className="flex justify-center mb-6">
-          <img src="/logo.png" alt="Penthouse Drift" className="h-12 w-auto" />
+          <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-12 w-12" />
         </div>
         <p className="text-zinc-500 text-center mb-8">
           Sign in to access the track

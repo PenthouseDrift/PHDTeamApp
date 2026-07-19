@@ -60,7 +60,7 @@ export default function NewCalibrationPage() {
           <h1 className="text-2xl font-bold text-zinc-900">
             New Calibration Setup
           </h1>
-          <p className="mt-1 text-sm text-zinc-400">
+          <p className="mt-1 text-sm text-zinc-500">
             Record your suspension and power settings for this car.
           </p>
         </div>

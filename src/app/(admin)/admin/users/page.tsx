@@ -16,48 +16,48 @@ export default async function AdminUsersPage() {
       </div>
 
       {users.length === 0 ? (
-        <div className="rounded-xl bg-white p-8 text-center">
-          <p className="text-zinc-400">No users registered yet.</p>
+        <div className="rounded-xl bg-white border border-zinc-200 p-8 text-center">
+          <p className="text-zinc-500">No users registered yet.</p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-zinc-200">
+        <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white">
           <table className="w-full text-sm">
-            <thead className="bg-zinc-900/50">
-              <tr className="text-left text-zinc-400">
+            <thead className="bg-zinc-50 border-b border-zinc-200">
+              <tr className="text-left text-zinc-600">
                 <th className="px-4 py-3 font-medium">Name</th>
                 <th className="px-4 py-3 font-medium hidden sm:table-cell">Email</th>
                 <th className="px-4 py-3 font-medium">Role</th>
                 <th className="px-4 py-3 font-medium text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-800">
+            <tbody className="divide-y divide-zinc-100">
               {users.map((user) => (
-                <tr key={user.id} className="hover:bg-zinc-900/30 transition-colors">
+                <tr key={user.id} className="hover:bg-zinc-50 transition-colors">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       {user.image ? (
                         <img
                           src={user.image}
                           alt=""
-                          className="h-8 w-8 rounded-full"
+                          className="h-8 w-8 rounded-full object-cover"
                         />
                       ) : (
-                        <div className="h-8 w-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs text-zinc-900 font-medium">
-                          {user.name[0]}
+                        <div className="h-8 w-8 rounded-full bg-amber-500 flex items-center justify-center text-xs text-white font-bold">
+                          {user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
                         </div>
                       )}
                       <span className="text-zinc-900 font-medium">{user.name}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-zinc-500 hidden sm:table-cell">
+                  <td className="px-4 py-3 text-zinc-600 hidden sm:table-cell">
                     {user.email}
                   </td>
                   <td className="px-4 py-3">
                     <span
                       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                         user.role === "admin"
-                          ? "bg-amber-500/10 text-amber-400"
-                          : "bg-zinc-700 text-zinc-600"
+                          ? "bg-purple-50 text-purple-700"
+                          : "bg-zinc-100 text-zinc-600"
                       }`}
                     >
                       {user.role}

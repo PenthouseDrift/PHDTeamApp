@@ -19,10 +19,17 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Penthouse Drift",
   description: "RC Drift Track Community Platform",
+  icons: {
+    icon: [
+      { url: "/favicon.png", type: "image/png", sizes: "32x32" },
+      { url: "/favicon-48.png", type: "image/png", sizes: "48x48" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "PH Drift",
+    title: "PHD",
   },
   other: {
     "mobile-web-app-capable": "yes",

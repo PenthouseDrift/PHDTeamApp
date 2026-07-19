@@ -51,7 +51,7 @@ export default async function MembershipSuccessPage() {
               Your membership is now active. Enjoy the track!
             </p>
             <div className="rounded-lg bg-zinc-100 p-4">
-              <p className="text-sm text-zinc-400">Membership valid until</p>
+              <p className="text-sm text-zinc-500">Membership valid until</p>
               <p className="text-lg font-semibold text-amber-400">
                 {expiryDate}
               </p>
@@ -88,7 +88,7 @@ export default async function MembershipSuccessPage() {
               Your payment is being processed. Your membership will be
               activated shortly.
             </p>
-            <p className="text-sm text-zinc-400">
+            <p className="text-sm text-zinc-500">
               This usually takes a few seconds. Refresh the page to check.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">

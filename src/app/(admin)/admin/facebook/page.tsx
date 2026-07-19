@@ -114,7 +114,7 @@ export default function AdminFacebookPage() {
                   className={`mt-1 text-xs ${
                     charCount > MAX_MESSAGE_LENGTH
                       ? "text-red-400"
-                      : "text-zinc-400"
+                      : "text-zinc-500"
                   }`}
                 >
                   {charCount.toLocaleString()} / {MAX_MESSAGE_LENGTH.toLocaleString()} characters
@@ -157,7 +157,7 @@ export default function AdminFacebookPage() {
                         <p className="text-sm font-medium text-zinc-900">
                           Penthouse Drift
                         </p>
-                        <p className="text-xs text-zinc-400">Just now</p>
+                        <p className="text-xs text-zinc-500">Just now</p>
                       </div>
                     </div>
                     {message && (

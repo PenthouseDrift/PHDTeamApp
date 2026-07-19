@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
+import { redis } from "@/lib/redis";
 import { getMembership } from "@/actions/membership";
 import { getRemainingDays } from "@/lib/membership-utils";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -60,7 +61,7 @@ const quickLinks = [
           strokeLinecap="round"
           strokeLinejoin="round"
           strokeWidth={1.5}
-          d="M15.75 15.75V18m-7.5-6.75h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25v-.008Zm2.25-4.5h.008v.008H10.5v-.008Zm0 2.25h.008v.008H10.5v-.008Zm0 2.25h.008v.008H10.5v-.008Zm2.25-4.5h.008v.008H12.75v-.008Zm0 2.25h.008v.008H12.75v-.008Zm2.25-4.5h.008v.008H15v-.008Zm0 2.25h.008v.008H15v-.008ZM3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
+          d="M15.75 15.75V18m-7.5-6.75h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25V13.5Zm0 2.25h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25V18Zm2.498-6.75h.007v.008h-.007v-.008Zm0 2.25h.007v.008h-.007V13.5Zm0 2.25h.007v.008h-.007v-.008Zm0 2.25h.007v.008h-.007V18Zm2.504-6.75h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V13.5Zm0 2.25h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V18Zm2.498-6.75h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V13.5ZM8.25 6h7.5v2.25h-7.5V6ZM12 2.25c-1.892 0-3.758.11-5.593.322C5.307 2.7 4.5 3.65 4.5 4.757V19.5a2.25 2.25 0 0 0 2.25 2.25h10.5a2.25 2.25 0 0 0 2.25-2.25V4.757c0-1.108-.806-2.057-1.907-2.185A48.507 48.507 0 0 0 12 2.25Z"
         />
       </svg>
     ),
@@ -97,6 +98,13 @@ export default async function DashboardPage() {
   const result = await getMembership(session.user.id);
   const membership = result.success ? result.data : null;
   const isActive = membership?.status === "active";
+
+  // Get custom avatar
+  const customAvatar = await redis.hget(`member:${session.user.id}`, "customAvatar") as string | null;
+  const avatarUrl = customAvatar || session.user.image || null;
+  const initials = session.user.name
+    ? session.user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
+    : "?";
   const remainingDays = membership && isActive ? getRemainingDays(membership) : 0;
 
   return (
@@ -104,23 +112,28 @@ export default async function DashboardPage() {
       <div className="mx-auto max-w-4xl space-y-6">
         {/* Header */}
         <div className="flex items-center gap-4">
-          {session.user.image && (
+          {avatarUrl ? (
             <img
-              src={session.user.image}
+              src={avatarUrl}
               alt=""
-              className="h-14 w-14 rounded-full ring-2 ring-zinc-700"
+              className="h-14 w-14 rounded-full object-cover ring-2 ring-zinc-200"
             />
+          ) : (
+            <div className="h-14 w-14 rounded-full bg-amber-500 flex items-center justify-center text-xl font-bold text-white">
+              {initials}
+            </div>
           )}
           <div>
             <h1 className="text-2xl font-bold text-zinc-900">
               Welcome back, {session.user.name?.split(" ")[0] ?? "Member"}
             </h1>
-            <p className="text-sm text-zinc-400">Member Dashboard</p>
+            <p className="text-sm text-zinc-500">Member Dashboard</p>
           </div>
         </div>
 
-        {/* Membership Status */}
-        <section className="rounded-xl bg-white p-6">
+        {/* Membership Status - only show for non-admins */}
+        {session.user.role !== "admin" && (
+        <section className="rounded-xl bg-white border border-zinc-200 p-6">
           <h2 className="mb-4 text-lg font-semibold text-zinc-900">
             Membership Status
           </h2>
@@ -128,7 +141,7 @@ export default async function DashboardPage() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <StatusBadge status="active" size="lg" />
-                <span className="text-zinc-600">
+                <span className="text-zinc-700">
                   {remainingDays} {remainingDays === 1 ? "day" : "days"}{" "}
                   remaining
                 </span>
@@ -138,7 +151,7 @@ export default async function DashboardPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <StatusBadge status="expired" size="lg" />
-                <span className="text-zinc-400">
+                <span className="text-zinc-600">
                   {membership
                     ? "Membership expired"
                     : "No active membership"}
@@ -153,13 +166,14 @@ export default async function DashboardPage() {
             </div>
           )}
         </section>
+        )}
 
         {/* QR Code Section */}
         <section className="rounded-xl bg-white p-6">
           <h2 className="mb-4 text-lg font-semibold text-zinc-900">
             QR Code
           </h2>
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-zinc-500">
             Use your QR code to check in at the track.
           </p>
           <Link

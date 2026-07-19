@@ -26,7 +26,7 @@ export default async function ProtectedLayout({
   return (
     <div className="flex h-dvh bg-zinc-50">
       <ProtectedNavigation user={userWithAvatar} />
-      <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
+      <main className="flex-1 overflow-y-auto pt-14 pb-16 md:pt-0 md:pb-0">
         {children}
       </main>
     </div>

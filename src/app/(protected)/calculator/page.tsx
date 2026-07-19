@@ -96,7 +96,7 @@ export default function CalculatorPage() {
           <h1 className="text-2xl font-bold text-zinc-900">
             Gear Ratio Calculator
           </h1>
-          <p className="mt-1 text-sm text-zinc-400">
+          <p className="mt-1 text-sm text-zinc-500">
             Calculate and save gear ratios for your car profiles.
           </p>
         </div>
@@ -162,7 +162,7 @@ export default function CalculatorPage() {
             <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-4 text-center">
               <p className="text-sm text-amber-300">Gear Ratio</p>
               <p className="text-4xl font-bold text-amber-400">{ratio}</p>
-              <p className="mt-1 text-xs text-zinc-400">
+              <p className="mt-1 text-xs text-zinc-500">
                 {spur}T spur / {pinion}T pinion
               </p>
             </div>
@@ -176,10 +176,10 @@ export default function CalculatorPage() {
           </h2>
 
           {carsLoading ? (
-            <p className="text-sm text-zinc-400">Loading car profiles...</p>
+            <p className="text-sm text-zinc-500">Loading car profiles...</p>
           ) : cars.length === 0 ? (
             <div className="rounded-lg bg-zinc-100 p-4 text-center">
-              <p className="text-sm text-zinc-400">
+              <p className="text-sm text-zinc-500">
                 Create a car profile first to save gear ratios.
               </p>
               <Link
