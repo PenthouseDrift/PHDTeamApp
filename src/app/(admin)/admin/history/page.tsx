@@ -15,7 +15,7 @@ export default async function CheckInHistoryPage({
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-900">Check-In History</h1>
+        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Check-In History</h1>
         <p className="text-sm text-zinc-500 mt-1">
           View who attended on previous days
         </p>

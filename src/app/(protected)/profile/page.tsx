@@ -5,6 +5,7 @@ import { QRDownloadButton } from "@/components/QRDownloadButton";
 import { ProfileQRError } from "./ProfileQRError";
 import { ProfileAvatarUpload } from "./ProfileAvatarUpload";
 import { SignOutSection } from "./SignOutSection";
+import { ThemeToggle } from "./ThemeToggle";
 
 export const dynamic = "force-dynamic";
 
@@ -32,13 +33,13 @@ export default async function ProfilePage() {
   const avatarUrl = customAvatar || user.image || null;
 
   return (
-    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-2xl space-y-6">
         {/* Header */}
-        <h1 className="text-2xl font-bold text-zinc-900">My Profile</h1>
+        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">My Profile</h1>
 
         {/* Profile Info */}
-        <section className="rounded-xl bg-white border border-zinc-200 p-6">
+        <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6">
           <div className="flex items-center gap-4">
             {avatarUrl ? (
               <img
@@ -52,10 +53,10 @@ export default async function ProfilePage() {
               </div>
             )}
             <div>
-              <h2 className="text-lg font-semibold text-zinc-900">
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
                 {user.name ?? "Member"}
               </h2>
-              <p className="text-sm text-zinc-500">{user.email}</p>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">{user.email}</p>
               <span className="mt-1 inline-block rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600 capitalize">
                 {user.role}
               </span>
@@ -64,28 +65,28 @@ export default async function ProfilePage() {
         </section>
 
         {/* Profile Picture Upload */}
-        <section className="rounded-xl bg-white border border-zinc-200 p-6">
-          <h2 className="mb-4 text-lg font-semibold text-zinc-900">
+        <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6">
+          <h2 className="mb-4 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             Profile Picture
           </h2>
-          <p className="mb-4 text-sm text-zinc-500">
+          <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
             Upload a custom profile picture to replace your Google avatar.
           </p>
           <ProfileAvatarUpload currentAvatar={avatarUrl} userId={user.id} initials={getInitials(user.name)} />
         </section>
 
         {/* QR Code */}
-        <section className="rounded-xl bg-white border border-zinc-200 p-6">
-          <h2 className="mb-4 text-lg font-semibold text-zinc-900">
+        <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6">
+          <h2 className="mb-4 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             Check-in QR Code
           </h2>
-          <p className="mb-6 text-sm text-zinc-500">
+          <p className="mb-6 text-sm text-zinc-500 dark:text-zinc-400">
             Present this QR code at the track to check in quickly.
           </p>
 
           {qrResult.success ? (
             <div className="flex flex-col items-center gap-6">
-              <div className="rounded-xl bg-white border border-zinc-200 p-4">
+              <div className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4">
                 <img
                   src={qrResult.data}
                   alt="Member QR Code"
@@ -102,6 +103,7 @@ export default async function ProfilePage() {
         </section>
 
         {/* Sign Out */}
+        <ThemeToggle />
         <SignOutSection />
       </div>
     </div>

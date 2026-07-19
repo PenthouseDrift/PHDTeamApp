@@ -26,7 +26,7 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
   const calibrations = await getCarCalibrations(carId);
 
   return (
-    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl space-y-6">
         {/* Back link */}
         <Link
@@ -52,7 +52,7 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
 
         {/* Header */}
         <div className="flex items-start justify-between">
-          <h1 className="text-2xl font-bold text-zinc-900">{car.name}</h1>
+          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{car.name}</h1>
           <div className="flex gap-2">
             <Link
               href={`/cars/${carId}/edit`}
@@ -66,7 +66,7 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
 
         {/* Image Gallery */}
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold text-zinc-900">Photos</h2>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Photos</h2>
           {car.images.length > 0 ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {car.images.map((imageUrl, index) => (
@@ -83,14 +83,14 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-zinc-500">No photos uploaded.</p>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">No photos uploaded.</p>
           )}
         </section>
 
         {/* Calibrations */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-zinc-900">
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
               Calibration Setups
             </h2>
             <Link
@@ -131,8 +131,8 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
                   d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75"
                 />
               </svg>
-              <p className="text-sm text-zinc-500">No calibrations yet</p>
-              <p className="mt-1 text-xs text-zinc-500">
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">No calibrations yet</p>
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                 Add a calibration setup to track your car&apos;s settings.
               </p>
             </div>

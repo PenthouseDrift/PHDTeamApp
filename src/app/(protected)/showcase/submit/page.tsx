@@ -51,12 +51,12 @@ export default function SubmitShellPage() {
   };
 
   return (
-    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-2xl space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900">Submit Your Shell</h1>
-          <p className="text-sm text-zinc-500">
+          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Submit Your Shell</h1>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
             Share your custom shell design with the community
           </p>
         </div>
@@ -65,7 +65,7 @@ export default function SubmitShellPage() {
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Image Upload */}
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-zinc-600">
+            <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-300">
               Shell Image
             </label>
             <ImageUploader
@@ -82,7 +82,7 @@ export default function SubmitShellPage() {
               className="block text-sm font-medium text-zinc-600"
             >
               Description{" "}
-              <span className="text-zinc-500">(optional)</span>
+              <span className="text-zinc-500 dark:text-zinc-400">(optional)</span>
             </label>
             <textarea
               id="description"
@@ -97,7 +97,7 @@ export default function SubmitShellPage() {
               className="w-full resize-none rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder-zinc-400 transition-colors focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
               maxLength={MAX_DESCRIPTION_LENGTH}
             />
-            <p className="text-right text-xs text-zinc-500">
+            <p className="text-right text-xs text-zinc-500 dark:text-zinc-400">
               {description.length}/{MAX_DESCRIPTION_LENGTH}
             </p>
           </div>

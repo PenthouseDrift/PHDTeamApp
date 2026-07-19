@@ -90,13 +90,13 @@ export default function CalculatorPage() {
   }
 
   return (
-    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-2xl space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900">
+          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
             Gear Ratio Calculator
           </h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
             Calculate and save gear ratios for your car profiles.
           </p>
         </div>
@@ -162,7 +162,7 @@ export default function CalculatorPage() {
             <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-4 text-center">
               <p className="text-sm text-amber-300">Gear Ratio</p>
               <p className="text-4xl font-bold text-amber-400">{ratio}</p>
-              <p className="mt-1 text-xs text-zinc-500">
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                 {spur}T spur / {pinion}T pinion
               </p>
             </div>
@@ -171,15 +171,15 @@ export default function CalculatorPage() {
 
         {/* Save to Car Profile Section */}
         <section className="rounded-xl bg-white p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-zinc-900">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             Save to Car Profile
           </h2>
 
           {carsLoading ? (
-            <p className="text-sm text-zinc-500">Loading car profiles...</p>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading car profiles...</p>
           ) : cars.length === 0 ? (
             <div className="rounded-lg bg-zinc-100 p-4 text-center">
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">
                 Create a car profile first to save gear ratios.
               </p>
               <Link

@@ -31,7 +31,7 @@ export default function NewCalibrationPage() {
   }
 
   return (
-    <div className="min-h-full bg-zinc-50 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-2xl space-y-6">
         {/* Back link */}
         <Link
@@ -57,10 +57,10 @@ export default function NewCalibrationPage() {
 
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900">
+          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
             New Calibration Setup
           </h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
             Record your suspension and power settings for this car.
           </p>
         </div>

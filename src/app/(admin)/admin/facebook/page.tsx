@@ -58,7 +58,7 @@ export default function AdminFacebookPage() {
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-zinc-900">Publish to Facebook</h1>
+        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Publish to Facebook</h1>
         <p className="text-sm text-zinc-500 mt-1">
           Compose and publish a post to the Penthouse Drift Facebook page.
         </p>
@@ -154,10 +154,10 @@ export default function AdminFacebookPage() {
                     <div className="flex items-center gap-2">
                       <div className="h-8 w-8 rounded-full bg-zinc-700" />
                       <div>
-                        <p className="text-sm font-medium text-zinc-900">
+                        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                           Penthouse Drift
                         </p>
-                        <p className="text-xs text-zinc-500">Just now</p>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">Just now</p>
                       </div>
                     </div>
                     {message && (

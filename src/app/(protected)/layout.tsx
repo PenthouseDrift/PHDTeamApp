@@ -28,7 +28,7 @@ export default async function ProtectedLayout({
   };
 
   return (
-    <div className="flex h-dvh bg-zinc-50">
+    <div className="flex h-dvh bg-zinc-50 dark:bg-zinc-950">
       <ProtectedNavigation user={userWithAvatar} unreadNotifications={unreadCount} />
       <main className="flex-1 overflow-y-auto pt-14 pb-16 md:pt-0 md:pb-0">
         {children}
