@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { getCar } from "@/actions/cars";
 import { getCarCalibrations } from "@/actions/calibration";
 import { DeleteCarButton } from "./DeleteCarButton";
-import { ShareCalibrationButton } from "@/components/cars/ShareCalibrationButton";
+import { CalibrationCard } from "@/components/cars/CalibrationCard";
 
 export const dynamic = "force-dynamic";
 
@@ -139,31 +139,7 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
           ) : (
             <div className="space-y-2">
               {calibrations.map((cal) => (
-                <div
-                  key={cal.calibrationId}
-                  className="rounded-xl bg-white border border-zinc-200 p-4"
-                >
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-medium text-zinc-900">
-                      {cal.name}
-                    </h3>
-                    <div className="flex items-center gap-2">
-                      <ShareCalibrationButton calibrationId={cal.calibrationId} />
-                      <span className="text-xs text-zinc-500">
-                        {new Date(cal.createdAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-3 text-xs text-zinc-500">
-                    <span>F.Camber: {cal.frontCamber}°</span>
-                    <span>R.Camber: {cal.rearCamber}°</span>
-                    <span>Gyro: {cal.gyroGain}%</span>
-                    <span>Boost: {cal.boost}%</span>
-                    {cal.customParams.length > 0 && (
-                      <span>+{cal.customParams.length} custom</span>
-                    )}
-                  </div>
-                </div>
+                <CalibrationCard key={cal.calibrationId} cal={cal} />
               ))}
             </div>
           )}
