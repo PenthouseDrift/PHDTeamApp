@@ -206,22 +206,32 @@ export default function CalibrationForm({ onSubmit, initialData }: CalibrationFo
                     className="w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                   />
                 ) : (
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={values[field.key]}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === "" || val === "-" || val === "-.") {
-                        updateValue(field.key, val as unknown as number);
-                      } else {
-                        const num = parseFloat(val);
-                        if (!isNaN(num)) updateValue(field.key, num);
-                      }
-                    }}
-                    placeholder={`${field.min} to ${field.max}`}
-                    className="w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min={field.min}
+                      max={field.max}
+                      step={field.step}
+                      value={Number(values[field.key]) || 0}
+                      onChange={(e) => updateValue(field.key, Number(e.target.value))}
+                      className="flex-1 accent-amber-500"
+                    />
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={values[field.key]}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "" || val === "-" || val === "-." || val === ".") {
+                          updateValue(field.key, val as unknown as number);
+                        } else {
+                          const num = parseFloat(val);
+                          if (!isNaN(num)) updateValue(field.key, num);
+                        }
+                      }}
+                      className="w-16 text-center rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm font-medium text-zinc-900 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    />
+                  </div>
                 )}
               </div>
             ))}
