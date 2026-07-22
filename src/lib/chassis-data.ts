@@ -70,6 +70,10 @@ export const chassisPresets: ChassisPreset[] = [
   // Sakura / 3Racing
   { brand: "3Racing", model: "Sakura D5", internalRatio: 1.9, notes: "Belt drive" },
   { brand: "3Racing", model: "Sakura D5S", internalRatio: 1.9, notes: "Belt drive" },
+  { brand: "3Racing", model: "Sakura D5MR", internalRatio: 2.6, notes: "Gear drive" },
+  { brand: "3Racing", model: "Sakura D6 (Idler 2.6)", internalRatio: 2.6, notes: "Idler gear drive — large track" },
+  { brand: "3Racing", model: "Sakura D6 (Belt 2.71)", internalRatio: 2.71, notes: "Belt drive — medium track" },
+  { brand: "3Racing", model: "Sakura D6 (D5 Bevel 3.0)", internalRatio: 3.0, notes: "Bevel gear — small/slippy track" },
   { brand: "3Racing", model: "Sakura XI Sport", internalRatio: 2.0, notes: "Belt drive 4WD" },
 
   // R31 House
