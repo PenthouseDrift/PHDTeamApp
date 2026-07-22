@@ -14,11 +14,19 @@ export default async function ProtectedLayout({
     redirect("/auth/signin");
   }
 
-  // Fetch avatar and unread count in parallel
-  const [customAvatar, unreadCount] = await Promise.all([
-    redis.hget(`member:${session.user.id}`, "customAvatar") as Promise<string | null>,
-    redis.get(`notifications:${session.user.id}:unread`).then(v => Number(v) || 0),
-  ]);
+  // Fetch avatar and unread count in parallel (with error handling)
+  let customAvatar: string | null = null;
+  let unreadCount = 0;
+  try {
+    const [avatar, unread] = await Promise.all([
+      redis.hget(`member:${session.user.id}`, "customAvatar") as Promise<string | null>,
+      redis.get(`notifications:${session.user.id}:unread`).then(v => Number(v) || 0),
+    ]);
+    customAvatar = avatar;
+    unreadCount = unread;
+  } catch {
+    // Silently fail — don't break the app for notification errors
+  }
 
   const userWithAvatar = {
     ...session.user,
