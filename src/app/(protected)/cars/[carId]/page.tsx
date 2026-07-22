@@ -6,6 +6,7 @@ import { getCar } from "@/actions/cars";
 import { getCarCalibrations } from "@/actions/calibration";
 import { DeleteCarButton } from "./DeleteCarButton";
 import { CalibrationCard } from "@/components/cars/CalibrationCard";
+import { GearRatioTable } from "@/components/cars/GearRatioTable";
 import type { GearRatio } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -187,31 +188,7 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
             </div>
           ) : (
             <div className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-200 dark:border-zinc-700">
-                  <tr className="text-left text-zinc-600 dark:text-zinc-400">
-                    <th className="px-4 py-2.5 font-medium">Spur</th>
-                    <th className="px-4 py-2.5 font-medium">Pinion</th>
-                    <th className="px-4 py-2.5 font-medium">Ratio</th>
-                    <th className="px-4 py-2.5 font-medium text-blue-600 dark:text-blue-400">FDR*</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                  {gearRatios.map((r, i) => (
-                    <tr key={i} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
-                      <td className="px-4 py-2.5 text-zinc-900 dark:text-zinc-100 font-medium">{r.spur}T</td>
-                      <td className="px-4 py-2.5 text-zinc-900 dark:text-zinc-100 font-medium">{r.pinion}T</td>
-                      <td className="px-4 py-2.5 text-amber-600 dark:text-amber-400 font-bold">{r.ratio}</td>
-                      <td className="px-4 py-2.5 text-blue-600 dark:text-blue-400 font-bold">
-                        {r.fdr ? r.fdr : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="px-4 py-2 text-[10px] text-zinc-400 dark:text-zinc-500 border-t border-zinc-100 dark:border-zinc-800">
-                * FDR (Final Drive Ratio) shown if chassis internal ratio was set in calculator
-              </p>
+              <GearRatioTable carId={carId} ratios={gearRatios} />
             </div>
           )}
         </section>

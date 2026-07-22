@@ -71,3 +71,34 @@ export async function getMemberCarsForSelect(
     };
   }
 }
+
+export async function removeGearRatio(
+  carId: string,
+  userId: string,
+  index: number
+): Promise<ActionResult<null>> {
+  try {
+    const car = await redis.hgetall(`car:${carId}`);
+    if (!car || car.userId !== userId) {
+      return { success: false, error: "Car not found or access denied" };
+    }
+
+    const entries = await redis.lrange(`car:${carId}:ratios`, 0, -1);
+    if (index < 0 || index >= entries.length) {
+      return { success: false, error: "Gear ratio not found" };
+    }
+
+    const placeholder = "__REMOVED__";
+    await redis.lset(`car:${carId}:ratios`, index, placeholder);
+    await redis.lrem(`car:${carId}:ratios`, 1, placeholder);
+
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath(`/cars/${carId}`);
+    return { success: true, data: null };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to remove gear ratio",
+    };
+  }
+}
