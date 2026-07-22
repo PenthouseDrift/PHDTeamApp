@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { OfflineIndicator } from "@/components/ui/OfflineIndicator";
 import { PushNotificationSubscriber } from "@/components/PushNotificationSubscriber";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { InstallBanner } from "@/components/InstallBanner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -50,6 +51,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-zinc-50 dark:bg-zinc-950">
         <SessionProvider>
           <ThemeProvider>
+            <InstallBanner />
             <ServiceWorkerRegister />
             <OfflineIndicator />
             <PushNotificationSubscriber />

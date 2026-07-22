@@ -12,6 +12,7 @@ export function QRScanner() {
   const [result, setResult] = useState<ScanResult | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [lastScannedId, setLastScannedId] = useState<string>("");
   const scannerRef = useRef<unknown>(null);
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -53,6 +54,7 @@ export function QRScanner() {
     }
 
     try {
+      setLastScannedId(memberId);
       const response = await fetch("/api/checkin/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -91,11 +93,14 @@ export function QRScanner() {
       if (!containerRef.current) return;
 
       const scannerId = "qr-reader";
-      // Ensure the container div exists
+      // Clean up any existing reader div
       let readerDiv = document.getElementById(scannerId);
-      if (!readerDiv) {
+      if (readerDiv) {
+        readerDiv.innerHTML = "";
+      } else {
         readerDiv = document.createElement("div");
         readerDiv.id = scannerId;
+        containerRef.current.innerHTML = "";
         containerRef.current.appendChild(readerDiv);
       }
 
@@ -139,7 +144,7 @@ export function QRScanner() {
       dismissTimerRef.current = setTimeout(() => {
         setResult(null);
         startScanner();
-      }, 5000);
+      }, 15000);
     }
 
     return () => {
@@ -171,9 +176,36 @@ export function QRScanner() {
           )}
           <p className="text-4xl font-black text-zinc-900">{result.message}</p>
           <StatusIcon status={result.status} />
-          <p className="text-sm text-zinc-900/70 mt-8">
-            Returning to scanner in 5 seconds...
+          <p className="text-sm text-white/70 mt-8">
+            Returning to scanner in 15 seconds...
           </p>
+
+          {/* Override button for expired members */}
+          {result.status === "expired" && result.member && (
+            <button
+              onClick={async () => {
+                // Force check-in override for expired member
+                try {
+                  const res = await fetch("/api/checkin/scan", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ memberId: lastScannedId, override: true }),
+                  });
+                  if (res.ok) {
+                    setResult({
+                      status: "active",
+                      member: result.member,
+                      message: "Override — Checked In",
+                    });
+                  }
+                } catch { /* ignore */ }
+              }}
+              className="mt-4 px-6 py-3 bg-white text-red-700 font-semibold rounded-lg transition-colors hover:bg-white/90"
+            >
+              Override — Check In Anyway
+            </button>
+          )}
+
           <button
             onClick={() => {
               setResult(null);

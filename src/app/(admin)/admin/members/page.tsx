@@ -2,6 +2,7 @@ import { getAllMembers } from "@/actions/admin/members";
 import { getTodayCheckIns } from "@/actions/admin/checkins";
 import { MemberList } from "@/components/admin/MemberList";
 import { TodayCheckIns } from "@/components/admin/TodayCheckIns";
+import { AutoRefresh } from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ export default async function AdminMembersPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8">
+      <AutoRefresh interval={5000} />
       <div>
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Members & Check-In</h1>
         <p className="text-sm text-zinc-500 mt-1">

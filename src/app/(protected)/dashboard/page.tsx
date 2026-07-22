@@ -99,23 +99,22 @@ export default async function DashboardPage() {
     return null;
   }
 
-  const result = await getMembership(session.user.id);
+  // Fetch all dashboard data in parallel
+  const [result, customAvatar, qrResult, checkedInRaw] = await Promise.all([
+    getMembership(session.user.id),
+    redis.hget(`member:${session.user.id}`, "customAvatar") as Promise<string | null>,
+    getOrCreateQRCode(session.user.id),
+    redis.get(`checkin:dedup:${session.user.id}`),
+  ]);
+
   const membership = result.success ? result.data : null;
   const isActive = membership?.status === "active";
-
-  // Get custom avatar
-  const customAvatar = await redis.hget(`member:${session.user.id}`, "customAvatar") as string | null;
   const avatarUrl = customAvatar || session.user.image || null;
   const initials = session.user.name
     ? session.user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
     : "?";
   const remainingDays = membership && isActive ? getRemainingDays(membership) : 0;
-
-  // Get QR code
-  const qrResult = await getOrCreateQRCode(session.user.id);
-
-  // Check if user has checked in today
-  const isCheckedInToday = !!(await redis.get(`checkin:dedup:${session.user.id}`));
+  const isCheckedInToday = !!checkedInRaw;
 
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">

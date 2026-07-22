@@ -2,12 +2,6 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import { ProtectedNavigation } from "@/components/ProtectedNavigation";
-import { getUnreadCount } from "@/actions/notifications";
-import { cache } from "react";
-
-const getCustomAvatar = cache(async (userId: string) => {
-  return await redis.hget(`member:${userId}`, "customAvatar") as string | null;
-});
 
 export default async function ProtectedLayout({
   children,
@@ -20,8 +14,12 @@ export default async function ProtectedLayout({
     redirect("/auth/signin");
   }
 
-  const customAvatar = await getCustomAvatar(session.user.id);
-  const unreadCount = await getUnreadCount(session.user.id);
+  // Fetch avatar and unread count in parallel
+  const [customAvatar, unreadCount] = await Promise.all([
+    redis.hget(`member:${session.user.id}`, "customAvatar") as Promise<string | null>,
+    redis.get(`notifications:${session.user.id}:unread`).then(v => Number(v) || 0),
+  ]);
+
   const userWithAvatar = {
     ...session.user,
     image: customAvatar || session.user.image || null,
