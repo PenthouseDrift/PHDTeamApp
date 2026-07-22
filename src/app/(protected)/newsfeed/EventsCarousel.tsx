@@ -29,24 +29,35 @@ export function EventsCarousel({ events }: EventsCarouselProps) {
             <button
               key={event.eventId}
               onClick={() => setSelectedEvent(event)}
-              className={`shrink-0 w-48 rounded-xl p-4 text-left border transition-shadow hover:shadow-md ${
+              className={`shrink-0 w-52 rounded-xl text-left border transition-shadow hover:shadow-md overflow-hidden ${
                 event.status === "cancelled"
                   ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
                   : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800"
               }`}
             >
-              <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                {formatDate(event.date)}
-              </p>
-              <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100 line-clamp-2">
-                {event.title}
-              </p>
-              <p className="mt-0.5 text-xs text-zinc-500">{event.time}</p>
-              {event.status === "cancelled" && (
-                <span className="mt-2 inline-block rounded bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 text-[10px] font-bold text-red-700 dark:text-red-400 uppercase">
-                  Cancelled
-                </span>
+              {event.imageUrl && (
+                <div className="w-full h-28 overflow-hidden">
+                  <img
+                    src={event.imageUrl}
+                    alt={event.title}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
               )}
+              <div className="p-3">
+                <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                  {formatDate(event.date)}
+                </p>
+                <p className="mt-0.5 text-sm font-semibold text-zinc-900 dark:text-zinc-100 line-clamp-2">
+                  {event.title}
+                </p>
+                <p className="mt-0.5 text-xs text-zinc-500">{event.time}</p>
+                {event.status === "cancelled" && (
+                  <span className="mt-2 inline-block rounded bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 text-[10px] font-bold text-red-700 dark:text-red-400 uppercase">
+                    Cancelled
+                  </span>
+                )}
+              </div>
             </button>
           ))}
         </div>
