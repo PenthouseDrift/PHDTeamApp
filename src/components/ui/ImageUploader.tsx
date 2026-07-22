@@ -27,15 +27,69 @@ interface ImageUploaderProps {
   maxSizeMB?: number;
   acceptedTypes?: string[];
   onUploadComplete?: (urls: string[]) => void;
+  maxWidth?: number;
+  quality?: number;
 }
 
 const DEFAULT_ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+// Compress image client-side before upload
+async function compressImage(file: File, maxWidth: number, quality: number): Promise<File> {
+  // Skip if already small enough (under 500KB)
+  if (file.size < 500 * 1024) return file;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      let { width, height } = img;
+
+      // Scale down if too wide
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(file);
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob(
+        (blob) => {
+          if (blob && blob.size < file.size) {
+            // Only use compressed version if it's actually smaller
+            const compressed = new File([blob], file.name, {
+              type: "image/webp",
+              lastModified: Date.now(),
+            });
+            resolve(compressed);
+          } else {
+            resolve(file);
+          }
+        },
+        "image/webp",
+        quality
+      );
+    };
+    img.onerror = () => resolve(file);
+    img.src = URL.createObjectURL(file);
+  });
+}
 
 export default function ImageUploader({
   maxFiles = 1,
   maxSizeMB = 5,
   acceptedTypes = DEFAULT_ACCEPTED_TYPES,
   onUploadComplete,
+  maxWidth = 1920,
+  quality = 0.82,
 }: ImageUploaderProps) {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState<FileProgress[]>([]);
@@ -119,7 +173,9 @@ export default function ImageUploader({
         });
 
         try {
-          const blob = await upload(file.name, file, {
+          // Compress image before uploading
+          const optimizedFile = await compressImage(file, maxWidth, quality);
+          const blob = await upload(optimizedFile.name, optimizedFile, {
             access: "public",
             handleUploadUrl: "/api/upload",
           });
