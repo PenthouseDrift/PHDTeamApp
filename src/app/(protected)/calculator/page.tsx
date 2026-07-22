@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { computeGearRatio, validateGearInput } from "@/lib/calculator";
 import { saveGearRatio, getMemberCarsForSelect } from "@/actions/calculator";
+import { chassisPresets, brands } from "@/lib/chassis-data";
 
 interface CarOption {
   carId: string;
@@ -18,12 +19,24 @@ export default function CalculatorPage() {
   const [pinion, setPinion] = useState<string>("25");
   const [ratio, setRatio] = useState<number | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
+  const [selectedBrand, setSelectedBrand] = useState<string>("");
+  const [selectedChassis, setSelectedChassis] = useState<string>("");
+  const [internalRatio, setInternalRatio] = useState<number>(2.6);
 
   const [cars, setCars] = useState<CarOption[]>([]);
   const [carsLoading, setCarsLoading] = useState(true);
   const [selectedCarId, setSelectedCarId] = useState<string>("");
   const [saveStatus, setSaveStatus] = useState<string>("");
   const [saving, setSaving] = useState(false);
+
+  // Handle chassis selection
+  function handleChassisChange(value: string) {
+    setSelectedChassis(value);
+    const preset = chassisPresets.find(c => `${c.brand} ${c.model}` === value);
+    if (preset) {
+      setInternalRatio(preset.internalRatio);
+    }
+  }
 
   // Fetch car profiles on mount
   useEffect(() => {
@@ -101,6 +114,66 @@ export default function CalculatorPage() {
           </p>
         </div>
 
+        {/* Chassis Preset Selector */}
+        <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            Chassis Internal Ratio
+          </h2>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            Select your chassis to auto-fill the internal gear ratio, or enter it manually.
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">Brand</label>
+              <select
+                value={selectedBrand}
+                onChange={(e) => {
+                  setSelectedBrand(e.target.value);
+                  setSelectedChassis("");
+                }}
+                className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              >
+                <option value="">All brands</option>
+                {brands.map((brand) => (
+                  <option key={brand} value={brand}>{brand}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">Chassis</label>
+              <select
+                value={selectedChassis}
+                onChange={(e) => handleChassisChange(e.target.value)}
+                className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              >
+                <option value="">Select chassis...</option>
+                {chassisPresets
+                  .filter(c => !selectedBrand || c.brand === selectedBrand)
+                  .map((c) => (
+                    <option key={`${c.brand} ${c.model}`} value={`${c.brand} ${c.model}`}>
+                      {c.brand} {c.model} ({c.internalRatio}:1)
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
+              Internal Ratio (or enter manually)
+            </label>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={internalRatio}
+              onChange={(e) => {
+                const num = parseFloat(e.target.value);
+                if (!isNaN(num) && num > 0) setInternalRatio(num);
+              }}
+              className="w-32 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            />
+          </div>
+        </section>
+
         {/* Calculator Section */}
         <section className="rounded-xl bg-white p-6 space-y-5">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -159,12 +232,25 @@ export default function CalculatorPage() {
 
           {/* Computed Ratio */}
           {ratio !== null && (
-            <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-4 text-center">
-              <p className="text-sm text-amber-300">Gear Ratio</p>
-              <p className="text-4xl font-bold text-amber-400">{ratio}</p>
-              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                {spur}T spur / {pinion}T pinion
-              </p>
+            <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-4">
+              <div className="grid grid-cols-2 gap-4 text-center">
+                <div>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Gear Ratio (Spur/Pinion)</p>
+                  <p className="text-3xl font-bold text-amber-600 dark:text-amber-400">{ratio}</p>
+                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                    {spur}T / {pinion}T
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Final Drive Ratio (FDR)</p>
+                  <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">
+                    {(ratio * internalRatio).toFixed(2)}
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                    {ratio} × {internalRatio} internal
+                  </p>
+                </div>
+              </div>
             </div>
           )}
         </section>
