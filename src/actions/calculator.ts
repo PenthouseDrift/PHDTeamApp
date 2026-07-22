@@ -7,7 +7,7 @@ import type { ActionResult, CarProfile } from "@/types";
 export async function saveGearRatio(
   carId: string,
   userId: string,
-  data: { spur: number; pinion: number; ratio: number }
+  data: { spur: number; pinion: number; ratio: number; fdr?: number; internalRatio?: number }
 ): Promise<ActionResult<boolean>> {
   
   try {
@@ -24,7 +24,13 @@ export async function saveGearRatio(
 
     await redis.rpush(
       `car:${carId}:ratios`,
-      JSON.stringify({ spur: data.spur, pinion: data.pinion, ratio: data.ratio })
+      JSON.stringify({
+        spur: data.spur,
+        pinion: data.pinion,
+        ratio: data.ratio,
+        fdr: data.fdr,
+        internalRatio: data.internalRatio,
+      })
     );
 
     return { success: true, data: true };
