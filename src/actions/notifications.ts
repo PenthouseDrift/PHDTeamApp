@@ -23,30 +23,36 @@ export async function createNotification(params: {
   shellId: string;
   message: string;
 }): Promise<void> {
-  // Don't notify yourself
-  if (params.userId === params.fromUserId) return;
+  try {
+    // Don't notify yourself
+    if (params.userId === params.fromUserId) return;
+    if (!params.userId) return;
 
-  const notificationId = crypto.randomUUID();
-  const notification: AppNotification = {
-    notificationId,
-    ...params,
-    read: false,
-    createdAt: Date.now(),
-  };
+    const notificationId = crypto.randomUUID();
+    const notification: AppNotification = {
+      notificationId,
+      ...params,
+      read: false,
+      createdAt: Date.now(),
+    };
 
-  // Store notification
-  await redis.hset(`notification:${notificationId}`, notification as unknown as Record<string, unknown>);
-  // Add to user's notification list (newest first)
-  await redis.lpush(`notifications:${params.userId}`, notificationId);
-  // Increment unread count
-  await redis.incr(`notifications:${params.userId}:unread`);
+    // Store notification
+    await redis.hset(`notification:${notificationId}`, notification as unknown as Record<string, unknown>);
+    // Add to user's notification list (newest first)
+    await redis.lpush(`notifications:${params.userId}`, notificationId);
+    // Increment unread count
+    await redis.incr(`notifications:${params.userId}:unread`);
 
-  // Send push notification
-  await sendPushToUser(params.userId, {
-    title: getNotificationTitle(params.type),
-    body: params.message,
-    url: `/showcase?open=${params.shellId}`,
-  });
+    // Send push notification (don't await — fire and forget)
+    sendPushToUser(params.userId, {
+      title: getNotificationTitle(params.type),
+      body: params.message,
+      url: `/showcase?open=${params.shellId}`,
+    }).catch(() => {});
+  } catch (error) {
+    console.error("Notification error:", error);
+    // Never throw — notifications failing should not break the app
+  }
 }
 
 async function sendPushToUser(userId: string, payload: { title: string; body: string; url: string }) {
@@ -76,41 +82,54 @@ function getNotificationTitle(type: AppNotification["type"]): string {
 }
 
 export async function getNotifications(userId: string, limit = 30): Promise<AppNotification[]> {
-  const ids = await redis.lrange(`notifications:${userId}`, 0, limit - 1);
-  if (!ids || ids.length === 0) return [];
+  try {
+    const ids = await redis.lrange(`notifications:${userId}`, 0, limit - 1);
+    if (!ids || ids.length === 0) return [];
 
-  const notifications: AppNotification[] = [];
-  for (const id of ids) {
-    const data = await redis.hgetall(`notification:${id as string}`);
-    if (data && Object.keys(data).length > 0) {
-      notifications.push({
-        notificationId: (data.notificationId as string) || (id as string),
-        userId: data.userId as string,
-        type: data.type as AppNotification["type"],
-        fromUserId: data.fromUserId as string,
-        fromUserName: (data.fromUserName as string) || "Someone",
-        shellId: data.shellId as string,
-        message: (data.message as string) || "",
-        read: String(data.read) === "true",
-        createdAt: Number(data.createdAt),
-      });
+    const notifications: AppNotification[] = [];
+    for (const id of ids) {
+      const data = await redis.hgetall(`notification:${id as string}`);
+      if (data && Object.keys(data).length > 0) {
+        notifications.push({
+          notificationId: (data.notificationId as string) || (id as string),
+          userId: data.userId as string,
+          type: data.type as AppNotification["type"],
+          fromUserId: (data.fromUserId as string) || "",
+          fromUserName: (data.fromUserName as string) || "Someone",
+          shellId: (data.shellId as string) || "",
+          message: (data.message as string) || "",
+          read: String(data.read) === "true",
+          createdAt: Number(data.createdAt),
+        });
+      }
     }
-  }
 
-  return notifications;
+    return notifications;
+  } catch (error) {
+    console.error("getNotifications error:", error);
+    return [];
+  }
 }
 
 export async function getUnreadCount(userId: string): Promise<number> {
-  const count = await redis.get(`notifications:${userId}:unread`);
-  return Number(count) || 0;
+  try {
+    const count = await redis.get(`notifications:${userId}:unread`);
+    return Number(count) || 0;
+  } catch {
+    return 0;
+  }
 }
 
 export async function markAllRead(userId: string): Promise<void> {
-  const { revalidatePath } = await import("next/cache");
-  const ids = await redis.lrange(`notifications:${userId}`, 0, 29);
-  for (const id of ids) {
-    await redis.hset(`notification:${id as string}`, { read: "true" });
+  try {
+    const { revalidatePath } = await import("next/cache");
+    const ids = await redis.lrange(`notifications:${userId}`, 0, 29);
+    for (const id of ids) {
+      await redis.hset(`notification:${id as string}`, { read: "true" });
+    }
+    await redis.set(`notifications:${userId}:unread`, 0);
+    revalidatePath("/");
+  } catch (error) {
+    console.error("markAllRead error:", error);
   }
-  await redis.set(`notifications:${userId}:unread`, 0);
-  revalidatePath("/");
 }
