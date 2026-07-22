@@ -106,9 +106,11 @@ export async function getUnreadCount(userId: string): Promise<number> {
 }
 
 export async function markAllRead(userId: string): Promise<void> {
+  const { revalidatePath } = await import("next/cache");
   const ids = await redis.lrange(`notifications:${userId}`, 0, 29);
   for (const id of ids) {
     await redis.hset(`notification:${id as string}`, { read: "true" });
   }
   await redis.set(`notifications:${userId}:unread`, 0);
+  revalidatePath("/");
 }

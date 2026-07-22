@@ -9,7 +9,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { memberId } = await request.json();
+    const { memberId, override } = await request.json();
 
     if (!memberId) {
       return NextResponse.json({ error: "Invalid QR code data" }, { status: 400 });
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     const isActive =
       membershipData && Number(membershipData.expiresAt) > Date.now();
 
-    if (!isActive) {
+    if (!isActive && !override) {
       return NextResponse.json({
         status: "expired",
         member: { name: memberData.name, image: memberData.image },

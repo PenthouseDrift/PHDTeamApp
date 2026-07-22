@@ -2,11 +2,6 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import { AdminNavigation } from "@/components/AdminNavigation";
-import { cache } from "react";
-
-const getCustomAvatar = cache(async (userId: string) => {
-  return await redis.hget(`member:${userId}`, "customAvatar") as string | null;
-});
 
 export default async function AdminLayout({
   children,
@@ -23,7 +18,7 @@ export default async function AdminLayout({
     redirect("/dashboard");
   }
 
-  const customAvatar = await getCustomAvatar(session.user.id);
+  const customAvatar = await redis.hget(`member:${session.user.id}`, "customAvatar") as string | null;
   const userWithAvatar = {
     ...session.user,
     image: customAvatar || session.user.image || null,

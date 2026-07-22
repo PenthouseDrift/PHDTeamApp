@@ -33,42 +33,38 @@ export default async function ShowcasePage({ searchParams }: ShowcasePageProps) 
       ? await getLeaderboard()
       : await getShowcaseEntries();
 
-  // Fetch author names for all entries
-  const authorNames = new Map<string, string>();
+  // Fetch all supplementary data in parallel
   const uniqueUserIds = [...new Set(entries.map((e) => e.userId))];
-  await Promise.all(
-    uniqueUserIds.map(async (uid) => {
+
+  const [authorNamesArr, votesArr, winners, commentCountsArr] = await Promise.all([
+    // Author names
+    Promise.all(uniqueUserIds.map(async (uid) => {
       const name = await getAuthorName(uid);
-      authorNames.set(uid, name);
-    })
-  );
+      return [uid, name] as [string, string];
+    })),
+    // Votes
+    userId
+      ? Promise.all(entries.map(async (entry) => {
+          const voted = await hasUserVoted(entry.shellId, userId);
+          return [entry.shellId, voted] as [string, boolean];
+        }))
+      : Promise.resolve([] as [string, boolean][]),
+    // Winners
+    getWeeklyWinners(50),
+    // Comment counts
+    Promise.all(entries.map(async (entry) => {
+      const count = await getCommentCount(entry.shellId);
+      return [entry.shellId, count] as [string, number];
+    })),
+  ]);
 
-  // Check which entries the current user has voted on
-  const votedMap = new Map<string, boolean>();
-  if (userId) {
-    await Promise.all(
-      entries.map(async (entry) => {
-        const voted = await hasUserVoted(entry.shellId, userId);
-        votedMap.set(entry.shellId, voted);
-      })
-    );
-  }
-
-  // Fetch weekly winners for badge display
-  const winners = await getWeeklyWinners(50);
+  const authorNames = new Map(authorNamesArr);
+  const votedMap = new Map(votesArr);
   const winnerMap = new Map<string, string>();
   for (const w of winners) {
     winnerMap.set(w.shellId, `Week ${w.week}, ${w.year}`);
   }
-
-  // Fetch comment counts
-  const commentCountMap = new Map<string, number>();
-  await Promise.all(
-    entries.map(async (entry) => {
-      const count = await getCommentCount(entry.shellId);
-      commentCountMap.set(entry.shellId, count);
-    })
-  );
+  const commentCountMap = new Map(commentCountsArr);
 
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
