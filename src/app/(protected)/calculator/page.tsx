@@ -92,6 +92,8 @@ export default function CalculatorPage() {
       spur: Number(spur),
       pinion: Number(pinion),
       ratio,
+      fdr: Math.round(ratio * internalRatio * 100) / 100,
+      internalRatio,
     });
 
     if (result.success) {

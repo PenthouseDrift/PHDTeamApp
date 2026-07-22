@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
+import { redis } from "@/lib/redis";
 import { getCar } from "@/actions/cars";
 import { getCarCalibrations } from "@/actions/calibration";
 import { DeleteCarButton } from "./DeleteCarButton";
 import { CalibrationCard } from "@/components/cars/CalibrationCard";
+import type { GearRatio } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +25,19 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
   }
 
   const car = result.data;
-  const calibrations = await getCarCalibrations(carId);
+
+  // Fetch calibrations and gear ratios in parallel
+  const [calibrations, gearRatioRaw] = await Promise.all([
+    getCarCalibrations(carId),
+    redis.lrange(`car:${carId}:ratios`, 0, -1),
+  ]);
+
+  const gearRatios: Array<GearRatio & { fdr?: number; internalRatio?: number }> = (gearRatioRaw || []).map((r) => {
+    if (typeof r === "string") {
+      try { return JSON.parse(r); } catch { return null; }
+    }
+    return r as unknown;
+  }).filter(Boolean) as Array<GearRatio & { fdr?: number; internalRatio?: number }>;
 
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
@@ -141,6 +155,63 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
               {calibrations.map((cal) => (
                 <CalibrationCard key={cal.calibrationId} cal={cal} />
               ))}
+            </div>
+          )}
+        </section>
+
+        {/* Gear Ratios */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+              Saved Gear Ratios
+            </h2>
+            <Link
+              href="/calculator"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-600 hover:text-amber-700 transition-colors"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              Calculator
+            </Link>
+          </div>
+          {gearRatios.length === 0 ? (
+            <div className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 text-center">
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">No gear ratios saved yet.</p>
+              <Link
+                href="/calculator"
+                className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-amber-600 hover:text-amber-700"
+              >
+                Open Calculator →
+              </Link>
+            </div>
+          ) : (
+            <div className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-200 dark:border-zinc-700">
+                  <tr className="text-left text-zinc-600 dark:text-zinc-400">
+                    <th className="px-4 py-2.5 font-medium">Spur</th>
+                    <th className="px-4 py-2.5 font-medium">Pinion</th>
+                    <th className="px-4 py-2.5 font-medium">Ratio</th>
+                    <th className="px-4 py-2.5 font-medium text-blue-600 dark:text-blue-400">FDR*</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                  {gearRatios.map((r, i) => (
+                    <tr key={i} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
+                      <td className="px-4 py-2.5 text-zinc-900 dark:text-zinc-100 font-medium">{r.spur}T</td>
+                      <td className="px-4 py-2.5 text-zinc-900 dark:text-zinc-100 font-medium">{r.pinion}T</td>
+                      <td className="px-4 py-2.5 text-amber-600 dark:text-amber-400 font-bold">{r.ratio}</td>
+                      <td className="px-4 py-2.5 text-blue-600 dark:text-blue-400 font-bold">
+                        {r.fdr ? r.fdr : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="px-4 py-2 text-[10px] text-zinc-400 dark:text-zinc-500 border-t border-zinc-100 dark:border-zinc-800">
+                * FDR (Final Drive Ratio) shown if chassis internal ratio was set in calculator
+              </p>
             </div>
           )}
         </section>

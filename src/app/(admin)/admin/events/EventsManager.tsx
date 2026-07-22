@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useSession } from "next-auth/react";
 import { createEvent, cancelEvent, uncancelEvent, deleteEvent, type TrackEvent } from "@/actions/events";
+import ImageUploader from "@/components/ui/ImageUploader";
 
 interface EventsManagerProps {
   events: TrackEvent[];
@@ -16,6 +17,7 @@ export function EventsManager({ events }: EventsManagerProps) {
   const [description, setDescription] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
 
   function handleCreate(e: React.FormEvent) {
@@ -23,12 +25,13 @@ export function EventsManager({ events }: EventsManagerProps) {
     if (!session?.user?.id) return;
 
     startTransition(async () => {
-      const result = await createEvent({ title, description, date, time }, session.user.id);
+      const result = await createEvent({ title, description, date, time, imageUrl: imageUrl || undefined }, session.user.id);
       if (result.success) {
         setTitle("");
         setDescription("");
         setDate("");
         setTime("");
+        setImageUrl("");
         setShowForm(false);
         setFeedback("Event created!");
         setTimeout(() => setFeedback(null), 3000);
@@ -98,6 +101,16 @@ export function EventsManager({ events }: EventsManagerProps) {
               className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
             />
           </div>
+          <div>
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
+              Event Image (optional)
+            </label>
+            <ImageUploader
+              maxFiles={1}
+              maxSizeMB={5}
+              onUploadComplete={(urls) => setImageUrl(urls[0] || "")}
+            />
+          </div>
           <div className="flex gap-2">
             <button type="button" onClick={() => setShowForm(false)} className="flex-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
               Cancel
@@ -123,11 +136,15 @@ export function EventsManager({ events }: EventsManagerProps) {
                   : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800"
               }`}
             >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-medium text-amber-600">{event.date} • {event.time}</p>
-                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mt-0.5">{event.title}</h3>
-                  {event.description && (
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex gap-3 min-w-0">
+                  {event.imageUrl && (
+                    <img src={event.imageUrl} alt="" className="w-16 h-16 rounded-lg object-cover shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-amber-600">{event.date} • {event.time}</p>
+                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mt-0.5">{event.title}</h3>
+                    {event.description && (
                     <p className="text-xs text-zinc-500 mt-1 line-clamp-2">{event.description}</p>
                   )}
                   {event.status === "cancelled" && (
@@ -135,6 +152,7 @@ export function EventsManager({ events }: EventsManagerProps) {
                       Cancelled
                     </span>
                   )}
+                  </div>
                 </div>
                 <div className="flex gap-2 shrink-0">
                   {event.status === "upcoming" ? (
