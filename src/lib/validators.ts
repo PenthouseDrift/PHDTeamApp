@@ -18,8 +18,8 @@ export const calibrationSchema = z.object({
   // Suspension
   frontRideHeight: z.number().min(0).max(20).optional().default(0),
   rearRideHeight: z.number().min(0).max(20).optional().default(0),
-  frontSpringRate: z.string().max(20).optional().default(""),
-  rearSpringRate: z.string().max(20).optional().default(""),
+  frontSpringRate: z.string().max(50).optional().default(""),
+  rearSpringRate: z.string().max(50).optional().default(""),
   frontDamping: z.number().int().min(0).max(10).optional().default(0),
   rearDamping: z.number().int().min(0).max(10).optional().default(0),
   frontRebound: z.number().int().min(0).max(10).optional().default(0),
@@ -39,7 +39,7 @@ export const calibrationSchema = z.object({
   rearTrackWidth: z.number().min(0).max(250).optional().default(0),
   wheelbase: z.number().min(0).max(300).optional().default(0),
   // Weight
-  batteryPosition: z.string().max(30).optional().default(""),
+  batteryPosition: z.string().max(50).optional().default(""),
   totalWeight: z.number().min(0).max(5000).optional().default(0),
   // Tyres
   frontTyres: z.string().max(50).optional().default(""),
