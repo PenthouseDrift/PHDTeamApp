@@ -27,6 +27,7 @@ interface FieldDef {
   step?: number;
   unit?: string;
   placeholder?: string;
+  maxLength?: number;
 }
 
 const sections: { title: string; fields: FieldDef[] }[] = [
@@ -217,6 +218,7 @@ export default function CalibrationForm({ onSubmit, initialData }: CalibrationFo
                     value={values[field.key] as string}
                     onChange={(e) => updateValue(field.key, e.target.value)}
                     placeholder={field.placeholder}
+                    maxLength={field.maxLength ?? 50}
                     className="w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                   />
                 ) : (
