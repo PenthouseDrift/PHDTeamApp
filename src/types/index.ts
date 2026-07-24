@@ -93,6 +93,9 @@ export interface CalibrationSetup {
   motorTurns: number;
   motorTiming: number;
   motorPlacement: string;
+  spurGear?: number;
+  pinionGear?: number;
+  finalDriveRatio?: number;
   gyroGain: number;
   throttleEPA?: number;
   steeringEPA?: number;
