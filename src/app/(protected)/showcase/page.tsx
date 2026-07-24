@@ -21,6 +21,11 @@ async function getAuthorName(userId: string): Promise<string> {
   return "Unknown";
 }
 
+function isSubmittedThisWeek(timestamp: number): boolean {
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+  return Date.now() - timestamp <= SEVEN_DAYS_MS;
+}
+
 export default async function ShowcasePage({ searchParams }: ShowcasePageProps) {
   const params = await searchParams;
   const view = params.view === "leaderboard" ? "leaderboard" : "gallery";
@@ -66,9 +71,13 @@ export default async function ShowcasePage({ searchParams }: ShowcasePageProps) 
   }
   const commentCountMap = new Map(commentCountsArr);
 
+  // Categorize entries: This Week vs Earlier
+  const thisWeekEntries = entries.filter((e) => isSubmittedThisWeek(e.createdAt));
+  const earlierEntries = entries.filter((e) => !isSubmittedThisWeek(e.createdAt));
+
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl space-y-6">
+      <div className="mx-auto max-w-6xl space-y-8">
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -86,13 +95,13 @@ export default async function ShowcasePage({ searchParams }: ShowcasePageProps) 
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 rounded-lg bg-zinc-100 p-1">
+        <div className="flex gap-1 rounded-lg bg-zinc-100 dark:bg-zinc-900 p-1">
           <Link
             href="/showcase?view=gallery"
             className={`flex-1 rounded-md px-4 py-2 text-center text-sm font-medium transition-colors ${
               view === "gallery"
-                ? "bg-white text-zinc-900 shadow-sm"
-                : "text-zinc-600 hover:text-zinc-900"
+                ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm font-bold"
+                : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
             }`}
           >
             Gallery
@@ -101,15 +110,15 @@ export default async function ShowcasePage({ searchParams }: ShowcasePageProps) 
             href="/showcase?view=leaderboard"
             className={`flex-1 rounded-md px-4 py-2 text-center text-sm font-medium transition-colors ${
               view === "leaderboard"
-                ? "bg-white text-zinc-900 shadow-sm"
-                : "text-zinc-600 hover:text-zinc-900"
+                ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm font-bold"
+                : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
             }`}
           >
-            Leaderboard
+            Leaderboard 🏆
           </Link>
         </div>
 
-        {/* Grid */}
+        {/* Grid Display Categorized */}
         {entries.length === 0 ? (
           <div className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-12 text-center">
             <p className="text-zinc-500 dark:text-zinc-400">
@@ -119,37 +128,68 @@ export default async function ShowcasePage({ searchParams }: ShowcasePageProps) 
               href="/showcase/submit"
               className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-amber-600 transition-colors hover:text-amber-500"
             >
-              Submit a shell
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 5l7 7-7 7"
-                />
-              </svg>
+              Submit a shell →
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {entries.map((entry) => (
-              <ShellCardWrapper
-                key={entry.shellId}
-                entry={entry}
-                authorName={authorNames.get(entry.userId) || "Unknown"}
-                userId={userId}
-                hasVoted={votedMap.get(entry.shellId) || false}
-                isWinner={winnerMap.has(entry.shellId)}
-                winnerLabel={winnerMap.get(entry.shellId) || null}
-                commentCount={commentCountMap.get(entry.shellId) || 0}
-              />
-            ))}
+          <div className="space-y-8">
+            {/* Section 1: This Week's Entries */}
+            {thisWeekEntries.length > 0 && (
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-3">
+                  <h2 className="text-lg font-extrabold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                    <span>🔥</span> This Week&apos;s Submissions
+                  </h2>
+                  <span className="rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold px-2.5 py-0.5">
+                    {thisWeekEntries.length} {thisWeekEntries.length === 1 ? "entry" : "entries"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+                  {thisWeekEntries.map((entry) => (
+                    <ShellCardWrapper
+                      key={entry.shellId}
+                      entry={entry}
+                      authorName={authorNames.get(entry.userId) || "Unknown"}
+                      userId={userId}
+                      hasVoted={votedMap.get(entry.shellId) || false}
+                      isWinner={winnerMap.has(entry.shellId)}
+                      winnerLabel={winnerMap.get(entry.shellId) || null}
+                      commentCount={commentCountMap.get(entry.shellId) || 0}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Section 2: Earlier Showcase Submissions */}
+            {earlierEntries.length > 0 && (
+              <section className="space-y-4">
+                <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-3">
+                  <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                    <span>📦</span> Earlier Showcase Submissions
+                  </h2>
+                  <span className="rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 text-xs font-medium px-2.5 py-0.5">
+                    {earlierEntries.length} {earlierEntries.length === 1 ? "entry" : "entries"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+                  {earlierEntries.map((entry) => (
+                    <ShellCardWrapper
+                      key={entry.shellId}
+                      entry={entry}
+                      authorName={authorNames.get(entry.userId) || "Unknown"}
+                      userId={userId}
+                      hasVoted={votedMap.get(entry.shellId) || false}
+                      isWinner={winnerMap.has(entry.shellId)}
+                      winnerLabel={winnerMap.get(entry.shellId) || null}
+                      commentCount={commentCountMap.get(entry.shellId) || 0}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         )}
       </div>

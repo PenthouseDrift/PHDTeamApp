@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useTransition } from "react";
+import { usePathname } from "next/navigation";
 import { checkInWithDayPass, checkInWithRental } from "@/actions/admin/checkins";
 
 interface ScanResult {
@@ -17,6 +18,7 @@ interface ScanResult {
 }
 
 export function QRScanner() {
+  const pathname = usePathname();
   const [result, setResult] = useState<ScanResult | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -28,20 +30,50 @@ export function QRScanner() {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const scanIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Async session & mounting guards to prevent lingering camera hardware access
+  const isMountedRef = useRef(true);
+  const currentSessionIdRef = useRef<number>(0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const html5QrCodeRef = useRef<any>(null);
 
   const stopCamera = useCallback(() => {
+    // Invalidate any in-flight getUserMedia requests
+    currentSessionIdRef.current = 0;
+
     if (scanIntervalRef.current) {
       clearInterval(scanIntervalRef.current);
       scanIntervalRef.current = null;
     }
+
+    if (html5QrCodeRef.current) {
+      try {
+        html5QrCodeRef.current.clear();
+      } catch { /* ignore */ }
+      html5QrCodeRef.current = null;
+    }
+
+    // 1. Release tracks from mediaStreamRef
     if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current.getTracks().forEach((track) => {
+        track.stop();
+        track.enabled = false;
+      });
       mediaStreamRef.current = null;
     }
+
+    // 2. Release tracks from video element srcObject
     if (videoRef.current) {
+      if (videoRef.current.srcObject instanceof MediaStream) {
+        videoRef.current.srcObject.getTracks().forEach((track) => {
+          track.stop();
+          track.enabled = false;
+        });
+      }
+      videoRef.current.pause();
       videoRef.current.srcObject = null;
     }
+
     setIsScanning(false);
   }, []);
 
@@ -100,6 +132,9 @@ export function QRScanner() {
     stopCamera();
     setCameraError(null);
 
+    const sessionId = Date.now();
+    currentSessionIdRef.current = sessionId;
+
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error("Camera API is not supported in this browser");
@@ -113,11 +148,26 @@ export function QRScanner() {
         },
       });
 
+      // RACE CONDITION GUARD: If component unmounted or session stopped while getUserMedia was pending
+      if (!isMountedRef.current || currentSessionIdRef.current !== sessionId) {
+        stream.getTracks().forEach((track) => {
+          track.stop();
+          track.enabled = false;
+        });
+        return;
+      }
+
       mediaStreamRef.current = stream;
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+        await videoRef.current.play().catch(() => {});
+      }
+
+      // Check again after video play
+      if (!isMountedRef.current || currentSessionIdRef.current !== sessionId) {
+        stopCamera();
+        return;
       }
 
       setIsScanning(true);
@@ -125,10 +175,8 @@ export function QRScanner() {
       // Start continuous scanning using native BarcodeDetector or html5-qrcode
       const { Html5Qrcode } = await import("html5-qrcode");
 
-      let html5QrCodeInstance: InstanceType<typeof Html5Qrcode> | null = null;
       let tempDivId = "temp-qr-scanner";
 
-      // If BarcodeDetector is not natively supported, fallback to Html5Qrcode instance
       if (typeof window !== "undefined" && !("BarcodeDetector" in window)) {
         let tempDiv = document.getElementById(tempDivId);
         if (!tempDiv) {
@@ -137,10 +185,15 @@ export function QRScanner() {
           tempDiv.style.display = "none";
           document.body.appendChild(tempDiv);
         }
-        html5QrCodeInstance = new Html5Qrcode(tempDivId);
+        html5QrCodeRef.current = new Html5Qrcode(tempDivId);
       }
 
       scanIntervalRef.current = setInterval(async () => {
+        if (!isMountedRef.current || currentSessionIdRef.current !== sessionId) {
+          stopCamera();
+          return;
+        }
+
         if (!videoRef.current || videoRef.current.readyState < 2) return;
 
         // 1. Try Native Browser BarcodeDetector (iOS Safari 17+, Chrome Android)
@@ -159,7 +212,7 @@ export function QRScanner() {
         }
 
         // 2. Fallback to Canvas snapshot + Html5Qrcode
-        if (html5QrCodeInstance && videoRef.current) {
+        if (html5QrCodeRef.current && videoRef.current) {
           try {
             const canvas = document.createElement("canvas");
             canvas.width = videoRef.current.videoWidth || 640;
@@ -168,10 +221,10 @@ export function QRScanner() {
             if (ctx) {
               ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
               canvas.toBlob(async (blob) => {
-                if (blob && html5QrCodeInstance) {
+                if (blob && html5QrCodeRef.current) {
                   try {
                     const file = new File([blob], "frame.png", { type: "image/png" });
-                    const decoded = await html5QrCodeInstance.scanFile(file, false);
+                    const decoded = await html5QrCodeRef.current.scanFile(file, false);
                     if (decoded) {
                       handleScan(decoded);
                     }
@@ -187,6 +240,8 @@ export function QRScanner() {
         }
       }, 300);
     } catch (err) {
+      if (!isMountedRef.current || currentSessionIdRef.current !== sessionId) return;
+
       console.error("Camera access error:", err);
       const message = err instanceof Error ? err.message : "Failed to access camera";
       if (message.includes("NotAllowedError") || message.includes("Permission")) {
@@ -199,29 +254,40 @@ export function QRScanner() {
     }
   }, [handleScan, stopCamera]);
 
-  // File upload scan handler
-  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Guarantee camera closure on component unmount, route navigation, tab switch, or page hide
+  useEffect(() => {
+    isMountedRef.current = true;
+    startCamera();
 
-    try {
-      const { Html5Qrcode } = await import("html5-qrcode");
-      let tempDiv = document.getElementById("temp-qr-file");
-      if (!tempDiv) {
-        tempDiv = document.createElement("div");
-        tempDiv.id = "temp-qr-file";
-        tempDiv.style.display = "none";
-        document.body.appendChild(tempDiv);
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopCamera();
       }
-      const instance = new Html5Qrcode("temp-qr-file");
-      const decoded = await instance.scanFile(file, true);
-      if (decoded) {
-        handleScan(decoded);
-      }
-    } catch {
-      alert("Could not detect a valid QR code in that image. Please try another picture.");
-    }
-  }
+    };
+
+    const handlePageHide = () => {
+      stopCamera();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("beforeunload", handlePageHide);
+
+    return () => {
+      isMountedRef.current = false;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("beforeunload", handlePageHide);
+      stopCamera();
+    };
+  }, [startCamera, stopCamera]);
+
+  // Cleanup on route navigation change
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, [pathname, stopCamera]);
 
   // Auto-dismiss result overlay after 15 seconds
   useEffect(() => {
@@ -238,15 +304,6 @@ export function QRScanner() {
       }
     };
   }, [result, startCamera]);
-
-  // Start camera on component mount
-  useEffect(() => {
-    startCamera();
-    return () => {
-      stopCamera();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   function handleActionComplete(message: string) {
     setResult((prev) => (prev ? { ...prev, status: "active", message } : null));
@@ -470,32 +527,6 @@ export function QRScanner() {
             </button>
           </div>
         )}
-      </div>
-
-      {/* Camera Controls & Status */}
-      <div className="w-full max-w-md mt-4 flex items-center justify-between gap-2">
-        <button
-          onClick={startCamera}
-          className="text-xs font-bold px-4 py-2 rounded-xl bg-zinc-200 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors"
-        >
-          📷 Tap to Start / Enable Camera
-        </button>
-
-        {/* Snap / Select QR Image file fallback */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handleFileUpload}
-          className="hidden"
-        />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="text-xs font-bold px-4 py-2 rounded-xl bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 hover:bg-amber-200 transition-colors"
-        >
-          🖼️ Snap Photo of QR
-        </button>
       </div>
 
       {cameraError && (

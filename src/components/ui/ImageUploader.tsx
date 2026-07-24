@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { upload } from "@vercel/blob/client";
 
 interface UploadedFile {
@@ -26,6 +26,7 @@ interface ImageUploaderProps {
   maxFiles?: number;
   maxSizeMB?: number;
   acceptedTypes?: string[];
+  initialUrls?: string[];
   onUploadComplete?: (urls: string[]) => void;
   maxWidth?: number;
   quality?: number;
@@ -87,16 +88,41 @@ export default function ImageUploader({
   maxFiles = 1,
   maxSizeMB = 5,
   acceptedTypes = DEFAULT_ACCEPTED_TYPES,
+  initialUrls = [],
   onUploadComplete,
   maxWidth = 1920,
   quality = 0.82,
 }: ImageUploaderProps) {
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>(() =>
+    initialUrls.map((url) => ({
+      id: url,
+      url,
+      name: "Image",
+      previewUrl: url,
+    }))
+  );
   const [uploading, setUploading] = useState<FileProgress[]>([]);
   const [errors, setErrors] = useState<FileError[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync initialUrls when updated externally (e.g. loading a template)
+  const initialKey = initialUrls.join(",");
+  useEffect(() => {
+    if (initialUrls.length > 0) {
+      setUploadedFiles(
+        initialUrls.map((url) => ({
+          id: url,
+          url,
+          name: "Image",
+          previewUrl: url,
+        }))
+      );
+    } else {
+      setUploadedFiles([]);
+    }
+  }, [initialKey]);
 
   const maxSizeBytes = maxSizeMB * 1024 * 1024;
 

@@ -91,22 +91,23 @@ export async function getShowcaseEntries(limit = 50): Promise<ShellEntry[]> {
 
   if (!shellIds || shellIds.length === 0) return [];
 
-  const entries: ShellEntry[] = [];
-  for (const shellId of shellIds) {
+  const promises = shellIds.map(async (shellId) => {
     const data = await redis.hgetall(`shell:${shellId as string}`);
     if (data && Object.keys(data).length > 0) {
-      entries.push({
+      return {
         shellId: data.shellId as string,
         userId: data.userId as string,
         imageUrl: data.imageUrl as string,
         description: (data.description as string) || "",
         voteCount: Number(data.voteCount) || 0,
         createdAt: Number(data.createdAt),
-      });
+      };
     }
-  }
+    return null;
+  });
 
-  return entries;
+  const results = await Promise.all(promises);
+  return results.filter((e): e is ShellEntry => e !== null);
 }
 
 export async function getLeaderboard(limit = 50): Promise<ShellEntry[]> {
@@ -115,20 +116,23 @@ export async function getLeaderboard(limit = 50): Promise<ShellEntry[]> {
 
   if (!shellIds || shellIds.length === 0) return [];
 
-  const entries: ShellEntry[] = [];
-  for (const shellId of shellIds) {
+  const promises = shellIds.map(async (shellId) => {
     const data = await redis.hgetall(`shell:${shellId as string}`);
     if (data && Object.keys(data).length > 0) {
-      entries.push({
+      return {
         shellId: data.shellId as string,
         userId: data.userId as string,
         imageUrl: data.imageUrl as string,
         description: (data.description as string) || "",
         voteCount: Number(data.voteCount) || 0,
         createdAt: Number(data.createdAt),
-      });
+      };
     }
-  }
+    return null;
+  });
+
+  const results = await Promise.all(promises);
+  const entries = results.filter((e): e is ShellEntry => e !== null);
 
   // Secondary sort for ties: highest votes first, then earlier submission
   entries.sort((a, b) => {

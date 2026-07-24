@@ -106,11 +106,10 @@ export async function getComments(shellId: string): Promise<Comment[]> {
   const commentIds = await redis.lrange(`shell:${shellId}:comments`, 0, -1);
   if (!commentIds || commentIds.length === 0) return [];
 
-  const comments: Comment[] = [];
-  for (const id of commentIds) {
+  const promises = commentIds.map(async (id) => {
     const data = await redis.hgetall(`comment:${id as string}`);
     if (data && Object.keys(data).length > 0) {
-      comments.push({
+      return {
         commentId: (data.commentId as string) || (id as string),
         shellId: (data.shellId as string) || shellId,
         userId: data.userId as string,
@@ -119,11 +118,13 @@ export async function getComments(shellId: string): Promise<Comment[]> {
         text: (data.text as string) || "",
         likes: Number(data.likes) || 0,
         createdAt: Number(data.createdAt),
-      });
+      };
     }
-  }
+    return null;
+  });
 
-  return comments;
+  const results = await Promise.all(promises);
+  return results.filter((c): c is Comment => c !== null);
 }
 
 export async function toggleCommentLike(

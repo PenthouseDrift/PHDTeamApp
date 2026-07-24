@@ -2,11 +2,12 @@
 
 import { redis } from "@/lib/redis";
 import { sendPushNotification, type PushSubscriptionData } from "@/lib/push";
+import type { ActionResult } from "@/types";
 
 export interface AppNotification {
   notificationId: string;
   userId: string;
-  type: "like" | "comment" | "reply" | "comment_like";
+  type: "like" | "comment" | "reply" | "comment_like" | "global" | "event_reminder";
   fromUserId: string;
   fromUserName: string;
   shellId: string;
@@ -15,6 +16,22 @@ export interface AppNotification {
   createdAt: number;
 }
 
+export interface GlobalNotificationEntry {
+  id: string;
+  title: string;
+  message: string;
+  url: string;
+  adminId: string;
+  recipientCount: number;
+  createdAt: number;
+}
+
+/**
+ * Creates an in-app notification and sends a push notification to a specific user.
+ * Strictly enforces:
+ * 1. No self-notifications (fromUserId === userId)
+ * 2. Deduplication check (only notifies ONCE per distinct user action)
+ */
 export async function createNotification(params: {
   userId: string;
   type: AppNotification["type"];
@@ -22,36 +39,234 @@ export async function createNotification(params: {
   fromUserName: string;
   shellId: string;
   message: string;
-}): Promise<void> {
+  dedupKey?: string;
+}): Promise<boolean> {
   try {
-    // Don't notify yourself
-    if (params.userId === params.fromUserId) return;
-    if (!params.userId) return;
+    // 1. Strict self-notification guard: NEVER notify yourself
+    if (!params.userId || params.userId === params.fromUserId) {
+      return false;
+    }
+
+    // 2. Action deduplication check: Ensure only 1 notification per unique action
+    const dedupKey = params.dedupKey || `notification:dedup:${params.type}:${params.fromUserId}:${params.shellId}:${params.userId}`;
+    const alreadyNotified = await redis.get(dedupKey);
+
+    if (alreadyNotified) {
+      return false; // Skip duplicate notification
+    }
+
+    // Mark action as notified for 7 days
+    await redis.set(dedupKey, "1", { ex: 7 * 86400 });
 
     const notificationId = crypto.randomUUID();
     const notification: AppNotification = {
       notificationId,
-      ...params,
+      userId: params.userId,
+      type: params.type,
+      fromUserId: params.fromUserId,
+      fromUserName: params.fromUserName,
+      shellId: params.shellId,
+      message: params.message,
       read: false,
       createdAt: Date.now(),
     };
 
-    // Store notification
+    // Store in-app notification in Redis
     await redis.hset(`notification:${notificationId}`, notification as unknown as Record<string, unknown>);
-    // Add to user's notification list (newest first)
     await redis.lpush(`notifications:${params.userId}`, notificationId);
-    // Increment unread count
     await redis.incr(`notifications:${params.userId}:unread`);
 
-    // Send push notification (don't await — fire and forget)
+    // Send Web Push Notification (fire and forget)
     sendPushToUser(params.userId, {
       title: getNotificationTitle(params.type),
       body: params.message,
-      url: `/showcase?open=${params.shellId}`,
+      url: params.shellId ? `/showcase?open=${params.shellId}` : "/notifications",
     }).catch(() => {});
+
+    return true;
   } catch (error) {
     console.error("Notification error:", error);
-    // Never throw — notifications failing should not break the app
+    return false;
+  }
+}
+
+/**
+ * Send a Global Notification to ALL members in the system.
+ * Triggered via the Admin Area.
+ */
+export async function sendGlobalNotification(
+  params: { title: string; message: string; url?: string },
+  adminId: string
+): Promise<ActionResult<{ count: number }>> {
+  try {
+    if (!params.title.trim() || !params.message.trim()) {
+      return { success: false, error: "Title and message are required" };
+    }
+
+    // Scan all member:* keys
+    let cursor = 0;
+    const memberIds = new Set<string>();
+
+    do {
+      const [newCursor, keys] = await redis.scan(cursor, {
+        match: "member:*",
+        count: 200,
+      });
+      cursor = Number(newCursor);
+
+      for (const key of keys) {
+        const keyStr = key as string;
+        const parts = keyStr.split(":");
+        if (parts.length === 2 && parts[1]) {
+          memberIds.add(parts[1]);
+        }
+      }
+    } while (cursor !== 0);
+
+    const targetUserIds = Array.from(memberIds);
+    if (targetUserIds.length === 0) {
+      return { success: false, error: "No members found to notify" };
+    }
+
+    const adminMember = await redis.hgetall(`member:${adminId}`);
+    const adminName = (adminMember?.nickname as string)?.trim() || (adminMember?.name as string) || "Track Admin";
+    const targetUrl = params.url?.trim() || "/notifications";
+
+    // Send notifications to all target users in parallel
+    const sendPromises = targetUserIds.map(async (uid) => {
+      const notificationId = crypto.randomUUID();
+      const notification: AppNotification = {
+        notificationId,
+        userId: uid,
+        type: "global",
+        fromUserId: adminId,
+        fromUserName: adminName,
+        shellId: "",
+        message: `${params.title.trim()}: ${params.message.trim()}`,
+        read: false,
+        createdAt: Date.now(),
+      };
+
+      await redis.hset(`notification:${notificationId}`, notification as unknown as Record<string, unknown>);
+      await redis.lpush(`notifications:${uid}`, notificationId);
+      await redis.incr(`notifications:${uid}:unread`);
+
+      await sendPushToUser(uid, {
+        title: `📢 ${params.title.trim()}`,
+        body: params.message.trim(),
+        url: targetUrl,
+      });
+    });
+
+    await Promise.all(sendPromises);
+
+    // Save global notification audit record
+    const recordId = crypto.randomUUID();
+    const globalRecord: GlobalNotificationEntry = {
+      id: recordId,
+      title: params.title.trim(),
+      message: params.message.trim(),
+      url: targetUrl,
+      adminId,
+      recipientCount: targetUserIds.length,
+      createdAt: Date.now(),
+    };
+
+    await redis.hset(`global:notification:${recordId}`, globalRecord as unknown as Record<string, unknown>);
+    await redis.lpush("global:notifications", recordId);
+
+    return { success: true, data: { count: targetUserIds.length } };
+  } catch (error) {
+    console.error("sendGlobalNotification error:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Failed to send global notification" };
+  }
+}
+
+/**
+ * Get history of Global Notifications sent by admins.
+ */
+export async function getGlobalNotificationsHistory(limit = 20): Promise<GlobalNotificationEntry[]> {
+  try {
+    const ids = await redis.lrange("global:notifications", 0, limit - 1);
+    if (!ids || ids.length === 0) return [];
+
+    const promises = ids.map(async (id) => {
+      const data = await redis.hgetall(`global:notification:${id as string}`);
+      if (data && Object.keys(data).length > 0) {
+        return {
+          id: (data.id as string) || (id as string),
+          title: (data.title as string) || "",
+          message: (data.message as string) || "",
+          url: (data.url as string) || "",
+          adminId: (data.adminId as string) || "",
+          recipientCount: Number(data.recipientCount) || 0,
+          createdAt: Number(data.createdAt),
+        };
+      }
+      return null;
+    });
+
+    const results = await Promise.all(promises);
+    return results.filter((g): g is GlobalNotificationEntry => g !== null);
+  } catch (error) {
+    console.error("getGlobalNotificationsHistory error:", error);
+    return [];
+  }
+}
+
+/**
+ * Daily Upcoming Track Event Push Reminders.
+ * Notifies all members once per day for any event occurring today or tomorrow.
+ */
+export async function sendDailyEventReminders(): Promise<{ sentCount: number }> {
+  try {
+    const todayStr = new Date().toISOString().split("T")[0];
+    const eventIds = await redis.lrange("events:all", 0, -1);
+
+    if (!eventIds || eventIds.length === 0) {
+      return { sentCount: 0 };
+    }
+
+    let sentTotal = 0;
+
+    for (const eventId of eventIds) {
+      const eventData = await redis.hgetall(`event:${eventId as string}`);
+      if (!eventData || eventData.status === "cancelled") continue;
+
+      const eventDate = (eventData.date as string) || "";
+      const eventTitle = (eventData.title as string) || "Track Event";
+
+      // Check if event is today or tomorrow
+      if (eventDate !== todayStr) continue;
+
+      // Deduplication check: Send only ONCE per event per day
+      const reminderDedupKey = `event:reminder:sent:${eventId}:${todayStr}`;
+      const alreadySentToday = await redis.get(reminderDedupKey);
+
+      if (alreadySentToday) continue;
+
+      // Mark event reminder as sent for today (24 hours)
+      await redis.set(reminderDedupKey, "1", { ex: 86400 });
+
+      // Send to all members
+      const globalRes = await sendGlobalNotification(
+        {
+          title: "🏎️ Upcoming Track Event Today!",
+          message: `Join us today for ${eventTitle} at ${eventData.time || "the track"}!`,
+          url: "/newsfeed",
+        },
+        "system"
+      );
+
+      if (globalRes.success) {
+        sentTotal += globalRes.data.count;
+      }
+    }
+
+    return { sentCount: sentTotal };
+  } catch (error) {
+    console.error("sendDailyEventReminders error:", error);
+    return { sentCount: 0 };
   }
 }
 
@@ -77,6 +292,8 @@ function getNotificationTitle(type: AppNotification["type"]): string {
     case "comment": return "💬 New Comment";
     case "reply": return "↩️ New Reply";
     case "comment_like": return "👍 Comment Liked";
+    case "global": return "📢 Track Announcement";
+    case "event_reminder": return "🏎️ Event Reminder";
     default: return "🔔 Notification";
   }
 }
@@ -86,11 +303,10 @@ export async function getNotifications(userId: string, limit = 30): Promise<AppN
     const ids = await redis.lrange(`notifications:${userId}`, 0, limit - 1);
     if (!ids || ids.length === 0) return [];
 
-    const notifications: AppNotification[] = [];
-    for (const id of ids) {
+    const promises = ids.map(async (id) => {
       const data = await redis.hgetall(`notification:${id as string}`);
       if (data && Object.keys(data).length > 0) {
-        notifications.push({
+        return {
           notificationId: (data.notificationId as string) || (id as string),
           userId: data.userId as string,
           type: data.type as AppNotification["type"],
@@ -100,11 +316,13 @@ export async function getNotifications(userId: string, limit = 30): Promise<AppN
           message: (data.message as string) || "",
           read: String(data.read) === "true",
           createdAt: Number(data.createdAt),
-        });
+        };
       }
-    }
+      return null;
+    });
 
-    return notifications;
+    const results = await Promise.all(promises);
+    return results.filter((n): n is AppNotification => n !== null);
   } catch (error) {
     console.error("getNotifications error:", error);
     return [];
@@ -124,8 +342,10 @@ export async function markAllRead(userId: string): Promise<void> {
   try {
     const { revalidatePath } = await import("next/cache");
     const ids = await redis.lrange(`notifications:${userId}`, 0, 29);
-    for (const id of ids) {
-      await redis.hset(`notification:${id as string}`, { read: "true" });
+    if (ids && ids.length > 0) {
+      await Promise.all(
+        ids.map((id) => redis.hset(`notification:${id as string}`, { read: "true" }))
+      );
     }
     await redis.set(`notifications:${userId}:unread`, 0);
     revalidatePath("/");
