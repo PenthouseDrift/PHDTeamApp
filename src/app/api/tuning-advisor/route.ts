@@ -1,0 +1,198 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import type { CalibrationSetup } from "@/types";
+
+export const runtime = "nodejs";
+
+interface TuningRequest {
+  calibration: CalibrationSetup;
+  carName: string;
+  goals: string[];
+}
+
+interface TuningChange {
+  section: string;
+  field: string;
+  label: string;
+  currentValue: string;
+  recommendedValue: string;
+  reason: string;
+  priority: "high" | "medium" | "low";
+  direction: "increase" | "decrease" | "change" | "info";
+}
+
+interface GeminiResponse {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string }>;
+    };
+  }>;
+}
+
+function buildCalibrationSummary(cal: CalibrationSetup): string {
+  return `
+Calibration Name: ${cal.name}
+Car: attached
+
+SUSPENSION & SHOCKS:
+- Front Ride Height: ${cal.frontRideHeight}mm
+- Rear Ride Height: ${cal.rearRideHeight}mm
+- Front Spring: ${cal.frontSpringRate || "not set"}
+- Rear Spring: ${cal.rearSpringRate || "not set"}
+- Front Oil Weight: ${cal.frontOilWeight || "not set"}
+- Rear Oil Weight: ${cal.rearOilWeight || "not set"}
+- Front Oil Brand: ${cal.frontOilBrand || "not set"}
+- Rear Oil Brand: ${cal.rearOilBrand || "not set"}
+- Front Piston Holes: ${cal.frontPistonHoles || "not set"}
+- Rear Piston Holes: ${cal.rearPistonHoles || "not set"}
+- Front Piston Hole Size: ${cal.frontPistonHoleSize || "not set"}
+- Rear Piston Hole Size: ${cal.rearPistonHoleSize || "not set"}
+- Front Shock Length: ${cal.frontShockLength ? `${cal.frontShockLength}mm` : "not set"}
+- Rear Shock Length: ${cal.rearShockLength ? `${cal.rearShockLength}mm` : "not set"}
+- Front Shock Brand: ${cal.frontShockBrand || "not set"}
+- Rear Shock Brand: ${cal.rearShockBrand || "not set"}
+- Front O-Rings: ${cal.frontORings || "not set"}
+- Rear O-Rings: ${cal.rearORings || "not set"}
+- Front Droop: ${cal.frontDroop}mm
+- Rear Droop: ${cal.rearDroop}mm
+
+STEERING & ALIGNMENT:
+- Front Camber: ${cal.frontCamber}°
+- Rear Camber: ${cal.rearCamber}°
+- Front Toe: ${cal.frontToe}°
+- Rear Toe: ${cal.rearToe}°
+- Front Caster: ${cal.frontCaster}°
+- Ackermann: ${cal.ackermann}%
+- Steering Angle: ${cal.steeringAngle}°
+
+ELECTRONICS & DRIVETRAIN:
+- Motor Turns: ${cal.motorTurns}T
+- Motor Timing: ${cal.motorTiming}°
+- Motor Placement: ${cal.motorPlacement || "not set"}
+- Gyro Gain: ${cal.gyroGain}%
+- Throttle Expo: ${cal.throttleExpo}%
+- Steering Expo: ${cal.steeringExpo}%
+- Boost: ${cal.boost}%
+- Turbo: ${cal.turbo}%
+
+GEOMETRY & TYRES:
+- Front Track Width: ${cal.frontTrackWidth ? `${cal.frontTrackWidth}mm` : "not set"}
+- Rear Track Width: ${cal.rearTrackWidth ? `${cal.rearTrackWidth}mm` : "not set"}
+- Wheelbase: ${cal.wheelbase ? `${cal.wheelbase}mm` : "not set"}
+- Total Weight: ${cal.totalWeight ? `${cal.totalWeight}g` : "not set"}
+- Battery Position: ${cal.batteryPosition || "not set"}
+- Front Tyres: ${cal.frontTyres || "not set"}
+- Rear Tyres: ${cal.rearTyres || "not set"}
+`.trim();
+}
+
+export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: "Gemini API key not configured" }, { status: 500 });
+  }
+
+  let body: TuningRequest;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+
+  const { calibration, carName, goals } = body;
+
+  const prompt = `You are an expert RC drift car tuning advisor. Analyse the following calibration setup and provide specific, actionable tuning changes to achieve the user's goals.
+
+Car: ${carName}
+${buildCalibrationSummary(calibration)}
+
+TUNING GOALS:
+${goals.map((g, i) => `${i + 1}. ${g}`).join("\n")}
+
+Respond ONLY with a valid JSON array (no markdown, no explanation, just the raw JSON) containing tuning change objects. Each object must have these exact fields:
+- "section": one of "Suspension & Shocks", "Steering & Alignment", "Electronics & Drivetrain", "Geometry & Tyres"
+- "field": the exact parameter name from the calibration (e.g. "frontOilWeight", "gyroGain", "frontCamber")
+- "label": human-readable name (e.g. "Front Oil Weight", "Gyro Gain")
+- "currentValue": the current value as a string (include units)
+- "recommendedValue": your recommended value as a string (include units)
+- "reason": 1-2 sentence explanation of WHY this change helps achieve the goals
+- "priority": "high", "medium", or "low"
+- "direction": "increase", "decrease", "change", or "info"
+
+Focus on the most impactful changes only (typically 4-10 changes). Only suggest changes for parameters that are actually set in the calibration (not "not set"). Consider how the changes interact with each other. For RC drift cars specifically, take into account the relationship between oil weight, piston holes, droop, camber, and gyro for drift performance.`;
+
+  // Model cascade: try in order, skip on 503 (overloaded) or 404 (unavailable)
+  const MODELS = [
+    "gemini-3.5-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-2.0-flash-001",
+    "gemini-2.0-flash-lite",
+  ];
+
+  let response: Response | null = null;
+  let lastErrText = "";
+
+  for (const model of MODELS) {
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.4,
+            topP: 0.9,
+            maxOutputTokens: 2048,
+          },
+        }),
+      }
+    );
+
+    if (r.ok) {
+      response = r;
+      break;
+    }
+
+    lastErrText = await r.text();
+    console.warn(`[Gemini] Model ${model} failed (${r.status}): ${lastErrText.slice(0, 120)}`);
+
+    // Only continue cascade on overload (503) or model-not-found (404)
+    if (r.status !== 503 && r.status !== 404) {
+      return NextResponse.json({ error: "AI service error", details: lastErrText }, { status: 502 });
+    }
+  }
+
+  if (!response) {
+    return NextResponse.json(
+      { error: "All AI models are currently busy. Please try again in a moment.", details: lastErrText },
+      { status: 503 }
+    );
+  }
+
+  const geminiData = (await response.json()) as GeminiResponse;
+  const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+
+  // Strip markdown code fences if present
+  const cleaned = rawText
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+  let changes: TuningChange[];
+  try {
+    changes = JSON.parse(cleaned);
+    if (!Array.isArray(changes)) throw new Error("Not an array");
+  } catch {
+    console.error("[Gemini] Parse error, raw:", rawText);
+    return NextResponse.json({ error: "Failed to parse AI response", raw: rawText }, { status: 500 });
+  }
+
+  return NextResponse.json({ changes });
+}
