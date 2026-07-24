@@ -46,7 +46,7 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
         {/* Back link */}
         <Link
           href="/cars"
-          className="inline-flex items-center gap-1 text-sm text-zinc-500 transition-colors hover:text-zinc-900"
+          className="inline-flex items-center gap-1 text-sm text-zinc-500 transition-colors hover:text-zinc-900 dark:hover:text-zinc-100"
         >
           <svg
             className="h-4 w-4"
@@ -66,14 +66,21 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
         </Link>
 
         {/* Header */}
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{car.name}</h1>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/tuning-advisor"
+              className="rounded-xl bg-purple-500/15 border border-purple-500/30 px-3.5 py-2 text-xs font-bold text-purple-600 dark:text-purple-400 transition-colors hover:bg-purple-500/25 flex items-center gap-1.5"
+            >
+              <TuningIcon className="w-4 h-4" />
+              <span>AI Tune Setup</span>
+            </Link>
             <Link
               href={`/cars/${carId}/edit`}
-              className="rounded-lg bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-200"
+              className="rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-4 py-2 text-xs font-bold text-zinc-700 dark:text-zinc-300 transition-colors hover:bg-zinc-200 dark:hover:bg-zinc-700"
             >
-              Edit
+              Edit Car
             </Link>
             <DeleteCarButton carId={carId} carName={car.name} />
           </div>
@@ -81,13 +88,13 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
 
         {/* Image Gallery */}
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Photos</h2>
+          <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">Photos</h2>
           {car.images.length > 0 ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {car.images.map((imageUrl, index) => (
                 <div
                   key={index}
-                  className="aspect-square overflow-hidden rounded-lg bg-zinc-100"
+                  className="aspect-square overflow-hidden rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-800"
                 >
                   <img
                     src={imageUrl}
@@ -98,42 +105,50 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">No photos uploaded.</p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">No photos uploaded for this car.</p>
           )}
         </section>
 
         {/* Calibrations */}
         <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
               Calibration Setups
             </h2>
-            <Link
-              href={`/cars/${carId}/calibrations/new`}
-              className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-medium text-black transition-colors hover:bg-amber-400"
-            >
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href={`/cars/${carId}/calibrations/beginner-ai`}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500/15 to-orange-500/15 border border-amber-500/30 px-3 py-1.5 text-xs font-bold text-amber-700 dark:text-amber-400 hover:bg-amber-500/25 transition-colors shadow-sm"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4.5v15m7.5-7.5h-15"
-                />
-              </svg>
-              Add Calibration
-            </Link>
+                <span>✨</span> Generate Beginner Setup with AI
+              </Link>
+              <Link
+                href={`/cars/${carId}/calibrations/new`}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-3 py-1.5 text-xs font-bold text-black transition-colors hover:bg-amber-400 shadow-sm"
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 4.5v15m7.5-7.5h-15"
+                  />
+                </svg>
+                Add Manual Calibration
+              </Link>
+            </div>
           </div>
 
           {calibrations.length === 0 ? (
-            <div className="rounded-xl bg-white p-8 text-center">
+            <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-8 text-center shadow-sm">
               <svg
-                className="mx-auto mb-3 h-12 w-12 text-zinc-600"
+                className="mx-auto mb-3 h-12 w-12 text-zinc-400"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -146,9 +161,9 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
                   d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75"
                 />
               </svg>
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">No calibrations yet</p>
+              <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">No calibrations logged yet</p>
               <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                Add a calibration setup to track your car&apos;s settings.
+                Log damper oil, spring rates, toe, camber & ESC settings or ask Gemini AI for recommendations.
               </p>
             </div>
           ) : (
@@ -163,36 +178,45 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
         {/* Gear Ratios */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
               Saved Gear Ratios
             </h2>
             <Link
               href="/calculator"
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-600 hover:text-amber-700 transition-colors"
+              className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 dark:text-amber-500 hover:text-amber-700 transition-colors"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
               </svg>
-              Calculator
+              FDR Calculator
             </Link>
           </div>
           {gearRatios.length === 0 ? (
-            <div className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 text-center">
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">No gear ratios saved yet.</p>
+            <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 text-center shadow-sm">
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">No gear ratios saved for this car yet.</p>
               <Link
                 href="/calculator"
-                className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-amber-600 hover:text-amber-700"
+                className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-amber-600 dark:text-amber-500 hover:text-amber-700"
               >
-                Open Calculator →
+                Open FDR Calculator →
               </Link>
             </div>
           ) : (
-            <div className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+            <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
               <GearRatioTable carId={carId} ratios={gearRatios} />
             </div>
           )}
         </section>
       </div>
     </div>
+  );
+}
+
+function TuningIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+    </svg>
   );
 }

@@ -30,6 +30,13 @@ export function CalibrationCard({ cal }: CalibrationCardProps) {
       <div className="flex items-center justify-between px-4 pt-4 pb-0">
         <h3 className="text-sm font-medium text-zinc-900">{cal.name}</h3>
         <div className="flex items-center gap-2">
+          <Link
+            href={`/tuning-advisor?carId=${cal.carId}&calibrationId=${cal.calibrationId}`}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-purple-500/10 border border-purple-500/30 px-2.5 py-1 text-[11px] font-bold text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 transition-colors"
+          >
+            <TuningIcon className="w-3.5 h-3.5" />
+            <span>AI Tune</span>
+          </Link>
           <ShareCalibrationButton calibrationId={cal.calibrationId} calibrationName={cal.name} />
           <button
             onClick={() => setShowDeleteConfirm(true)}
@@ -188,8 +195,8 @@ export function CalibrationCard({ cal }: CalibrationCardProps) {
             </div>
           )}
 
-          {/* Edit link */}
-          <div className="pt-2 border-t border-zinc-200">
+          {/* Edit link & AI Tune links */}
+          <div className="pt-2 border-t border-zinc-200 flex flex-wrap items-center justify-between gap-2">
             <Link
               href={`/cars/${cal.carId}/calibrations/${cal.calibrationId}/edit`}
               className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-600 hover:text-amber-700"
@@ -199,6 +206,22 @@ export function CalibrationCard({ cal }: CalibrationCardProps) {
               </svg>
               Edit Calibration
             </Link>
+
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/cars/${cal.carId}/calibrations/beginner-ai`}
+                className="inline-flex items-center gap-1 rounded-lg bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 text-xs font-bold text-amber-700 dark:text-amber-400 hover:bg-amber-500/20 transition-colors"
+              >
+                <span>✨ Beginner Setup Wizard</span>
+              </Link>
+              <Link
+                href={`/tuning-advisor?carId=${cal.carId}&calibrationId=${cal.calibrationId}`}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-purple-500/15 border border-purple-500/30 px-3 py-1 text-xs font-bold text-purple-600 dark:text-purple-400 hover:bg-purple-500/25 transition-colors"
+              >
+                <TuningIcon className="w-3.5 h-3.5" />
+                <span>Ask AI Tuning Advisor</span>
+              </Link>
+            </div>
           </div>
         </div>
       )}
@@ -212,5 +235,14 @@ function Param({ label, value }: { label: string; value: string }) {
       <p className="text-[10px] text-zinc-400">{label}</p>
       <p className="font-medium text-zinc-900">{value}</p>
     </div>
+  );
+}
+
+function TuningIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+    </svg>
   );
 }

@@ -9,6 +9,7 @@ interface TuningRequest {
   carName: string;
   goals: string[];
   surface: string;
+  isBeginnerMode?: boolean;
 }
 
 interface TuningChange {
@@ -108,9 +109,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { calibration, carName, goals, surface } = body;
+  const { calibration, carName, goals, surface, isBeginnerMode } = body;
 
-  const prompt = `You are an expert RC drift car tuning advisor. Analyse the following calibration setup and provide specific, actionable tuning changes to achieve the user's goals.
+  const prompt = isBeginnerMode
+    ? `You are an expert RC drift car tuning advisor. Generate a complete, beginner-friendly baseline calibration setup from scratch for a driver setting up their RC drift car for the first time.
+
+Car Model: ${carName}
+Track Surface: ${surface}
+GOALS: ${goals.join(", ")}
+
+Respond ONLY with a valid JSON array (no markdown, no explanation, just the raw JSON) containing tuning change objects for a complete starting setup. Each object must have these exact fields:
+- "section": one of "Suspension & Shocks", "Steering & Alignment", "Electronics & Drivetrain", "Geometry & Tyres"
+- "field": the exact parameter name from the calibration (e.g. "frontCamber", "rearCamber", "gyroGain", "frontOilWeight", "rearSpringRate", "frontRideHeight", "finalDriveRatio", "boost")
+- "label": human-readable name (e.g. "Front Camber", "Gyro Gain", "Front Oil Weight")
+- "currentValue": "Unset / Factory Default"
+- "recommendedValue": your recommended starting value for beginners as a string (include units, e.g. "6°", "65%", "150cSt", "6.5mm")
+- "reason": 1-2 sentence explanation of WHY this baseline value is ideal for a beginner on ${surface}
+- "priority": "high", "medium", or "low"
+- "direction": "change"
+
+Generate 6-10 essential starting parameter values that give a stable, easy-to-drift baseline setup for beginners on ${surface}.`
+    : `You are an expert RC drift car tuning advisor. Analyse the following calibration setup and provide specific, actionable tuning changes to achieve the user's goals.
 
 Car: ${carName}
 Track Surface: ${surface}
