@@ -36,54 +36,54 @@ Calibration Name: ${cal.name}
 Car: attached
 
 SUSPENSION & SHOCKS:
-- Front Ride Height: ${cal.frontRideHeight}mm
-- Rear Ride Height: ${cal.rearRideHeight}mm
-- Front Spring: ${cal.frontSpringRate || "not set"}
-- Rear Spring: ${cal.rearSpringRate || "not set"}
-- Front Oil Weight: ${cal.frontOilWeight || "not set"}
-- Rear Oil Weight: ${cal.rearOilWeight || "not set"}
-- Front Oil Brand: ${cal.frontOilBrand || "not set"}
-- Rear Oil Brand: ${cal.rearOilBrand || "not set"}
-- Front Piston Holes: ${cal.frontPistonHoles || "not set"}
-- Rear Piston Holes: ${cal.rearPistonHoles || "not set"}
-- Front Piston Hole Size: ${cal.frontPistonHoleSize || "not set"}
-- Rear Piston Hole Size: ${cal.rearPistonHoleSize || "not set"}
-- Front Shock Length: ${cal.frontShockLength ? `${cal.frontShockLength}mm` : "not set"}
-- Rear Shock Length: ${cal.rearShockLength ? `${cal.rearShockLength}mm` : "not set"}
-- Front Shock Brand: ${cal.frontShockBrand || "not set"}
-- Rear Shock Brand: ${cal.rearShockBrand || "not set"}
-- Front O-Rings: ${cal.frontORings || "not set"}
-- Rear O-Rings: ${cal.rearORings || "not set"}
-- Front Droop: ${cal.frontDroop}mm
-- Rear Droop: ${cal.rearDroop}mm
+- Front Ride Height: ${cal.frontRideHeight ?? 0}mm
+- Rear Ride Height: ${cal.rearRideHeight ?? 0}mm
+- Front Spring: ${cal.frontSpringRate || "Not set"}
+- Rear Spring: ${cal.rearSpringRate || "Not set"}
+- Front Oil Weight: ${cal.frontOilWeight || "Not set"}
+- Rear Oil Weight: ${cal.rearOilWeight || "Not set"}
+- Front Oil Brand: ${cal.frontOilBrand || "Not set"}
+- Rear Oil Brand: ${cal.rearOilBrand || "Not set"}
+- Front Piston Holes: ${cal.frontPistonHoles ?? 0}
+- Rear Piston Holes: ${cal.rearPistonHoles ?? 0}
+- Front Piston Hole Size: ${cal.frontPistonHoleSize || "Not set"}
+- Rear Piston Hole Size: ${cal.rearPistonHoleSize || "Not set"}
+- Front Shock Length: ${cal.frontShockLength ?? 0}mm
+- Rear Shock Length: ${cal.rearShockLength ?? 0}mm
+- Front Shock Brand: ${cal.frontShockBrand || "Not set"}
+- Rear Shock Brand: ${cal.rearShockBrand || "Not set"}
+- Front O-Rings: ${cal.frontORings || "Not set"}
+- Rear O-Rings: ${cal.rearORings || "Not set"}
+- Front Droop: ${cal.frontDroop ?? 0}mm
+- Rear Droop: ${cal.rearDroop ?? 0}mm
 
 STEERING & ALIGNMENT:
-- Front Camber: ${cal.frontCamber}°
-- Rear Camber: ${cal.rearCamber}°
-- Front Toe: ${cal.frontToe}°
-- Rear Toe: ${cal.rearToe}°
-- Front Caster: ${cal.frontCaster}°
-- Ackermann: ${cal.ackermann}%
-- Steering Angle: ${cal.steeringAngle}°
+- Front Camber: ${cal.frontCamber ?? 0}°
+- Rear Camber: ${cal.rearCamber ?? 0}°
+- Front Toe: ${cal.frontToe ?? 0}°
+- Rear Toe: ${cal.rearToe ?? 0}°
+- Front Caster: ${cal.frontCaster ?? 0}°
+- Ackermann: ${cal.ackermann ?? 0}%
+- Steering Angle: ${cal.steeringAngle ?? 0}°
 
 ELECTRONICS & DRIVETRAIN:
-- Motor Turns: ${cal.motorTurns}T
-- Motor Timing: ${cal.motorTiming}°
-- Motor Placement: ${cal.motorPlacement || "not set"}
-- Gyro Gain: ${cal.gyroGain}%
-- Throttle Expo: ${cal.throttleExpo}%
-- Steering Expo: ${cal.steeringExpo}%
-- Boost: ${cal.boost}%
-- Turbo: ${cal.turbo}%
+- Motor Turns: ${cal.motorTurns ?? 0}T
+- Motor Timing: ${cal.motorTiming ?? 0}°
+- Motor Placement: ${cal.motorPlacement || "Not set"}
+- Gyro Gain: ${cal.gyroGain ?? 0}%
+- Throttle Expo: ${cal.throttleExpo ?? 0}%
+- Steering Expo: ${cal.steeringExpo ?? 0}%
+- Boost: ${cal.boost ?? 0}%
+- Turbo: ${cal.turbo ?? 0}%
 
 GEOMETRY & TYRES:
-- Front Track Width: ${cal.frontTrackWidth ? `${cal.frontTrackWidth}mm` : "not set"}
-- Rear Track Width: ${cal.rearTrackWidth ? `${cal.rearTrackWidth}mm` : "not set"}
-- Wheelbase: ${cal.wheelbase ? `${cal.wheelbase}mm` : "not set"}
-- Total Weight: ${cal.totalWeight ? `${cal.totalWeight}g` : "not set"}
-- Battery Position: ${cal.batteryPosition || "not set"}
-- Front Tyres: ${cal.frontTyres || "not set"}
-- Rear Tyres: ${cal.rearTyres || "not set"}
+- Front Track Width: ${cal.frontTrackWidth ?? 0}mm
+- Rear Track Width: ${cal.rearTrackWidth ?? 0}mm
+- Wheelbase: ${cal.wheelbase ?? 0}mm
+- Total Weight: ${cal.totalWeight ?? 0}g
+- Battery Position: ${cal.batteryPosition || "Not set"}
+- Front Tyres: ${cal.frontTyres || "Not set"}
+- Rear Tyres: ${cal.rearTyres || "Not set"}
 `.trim();
 }
 
@@ -137,7 +137,7 @@ Respond ONLY with a valid JSON array (no markdown, no explanation, just the raw 
 - "priority": "high", "medium", or "low"
 - "direction": "increase", "decrease", "change", or "info"
 
-Focus on the most impactful changes only (typically 4-10 changes). Only suggest changes for parameters that are actually set in the calibration (not "not set"). Consider how the changes interact with each other AND how the surface type affects the optimal values. For RC drift cars specifically, take into account the relationship between oil weight, piston holes, droop, camber, and gyro for drift performance on ${surface}.`;
+Focus on the most impactful changes (typically 4-10 changes). You can suggest changes for ANY parameters (including parameters currently set to 0, 0mm, 0°, etc., or default/un-modified values) whenever adjusting them will help achieve the user's goals. Consider how the changes interact with each other AND how the surface type affects the optimal values. For RC drift cars specifically, take into account the relationship between oil weight, piston holes, droop, camber, and gyro for drift performance on ${surface}.`;
 
   // Model cascade: try in order, skip on 503 (overloaded) or 404 (unavailable)
   const MODELS = [
