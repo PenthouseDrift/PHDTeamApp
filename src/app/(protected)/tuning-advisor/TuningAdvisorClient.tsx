@@ -243,10 +243,10 @@ export default function TuningAdvisorClient() {
 
   if (cars.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[300px] text-center p-8 rounded-2xl bg-zinc-900 border border-zinc-800">
+      <div className="flex flex-col items-center justify-center min-h-[300px] text-center p-8 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
         <div className="text-5xl mb-4">🏎️</div>
-        <h2 className="text-lg font-bold text-zinc-100">No Cars Found</h2>
-        <p className="text-sm text-zinc-400 mt-2">Add a car with calibrations to use the Tuning Advisor.</p>
+        <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">No Cars Found</h2>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2">Add a car with calibrations to use the Tuning Advisor.</p>
       </div>
     );
   }
@@ -254,7 +254,7 @@ export default function TuningAdvisorClient() {
   return (
     <div className="space-y-6">
       {/* ── Step 1: Car + Calibration ──────────────────────────────────────── */}
-      <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5 space-y-5">
+      <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 space-y-5">
         <StepHeader n={1} title="Select Car & Calibration" sub="Choose which setup you want advice on" />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -263,7 +263,7 @@ export default function TuningAdvisorClient() {
             <select
               value={selectedCarId}
               onChange={(e) => setSelectedCarId(e.target.value)}
-              className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              className="w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
             >
               <option value="">— Select a car —</option>
               {cars.map((car) => (
@@ -274,7 +274,7 @@ export default function TuningAdvisorClient() {
           <div>
             <label className="block text-xs font-medium text-zinc-400 mb-1.5">Calibration Setup</label>
             {loadingCals ? (
-              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700">
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700">
                 <div className="w-4 h-4 rounded-full border border-amber-500 border-t-transparent animate-spin" />
                 <span className="text-sm text-zinc-500">Loading...</span>
               </div>
@@ -283,7 +283,7 @@ export default function TuningAdvisorClient() {
                 value={selectedCalibrationId}
                 onChange={(e) => setSelectedCalibrationId(e.target.value)}
                 disabled={!selectedCarId || calibrations.length === 0}
-                className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2.5 text-sm text-zinc-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 disabled:opacity-50"
+                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 px-3 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 disabled:opacity-50"
               >
                 {calibrations.length === 0 ? (
                   <option value="">No calibrations found</option>
@@ -298,8 +298,8 @@ export default function TuningAdvisorClient() {
         </div>
 
         {selectedCalibration && (
-          <div className="rounded-xl bg-zinc-800/60 border border-zinc-700/50 p-4">
-            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">Current Setup Snapshot</p>
+          <div className="rounded-xl bg-zinc-100/80 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/50 p-4">
+            <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-3">Current Setup Snapshot</p>
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-xs">
               {[
                 { label: "F.Camber", value: `${selectedCalibration.frontCamber}°` },
@@ -309,9 +309,9 @@ export default function TuningAdvisorClient() {
                 { label: "F.Droop", value: `${selectedCalibration.frontDroop}mm` },
                 { label: "R.Droop", value: `${selectedCalibration.rearDroop}mm` },
               ].map((p) => (
-                <div key={p.label} className="rounded-lg bg-zinc-900 px-2 py-1.5 text-center">
+                <div key={p.label} className="rounded-lg bg-white dark:bg-zinc-900 px-2 py-1.5 text-center border border-zinc-200 dark:border-zinc-800">
                   <p className="text-[10px] text-zinc-500">{p.label}</p>
-                  <p className="font-semibold text-zinc-200">{p.value}</p>
+                  <p className="font-semibold text-zinc-700 dark:text-zinc-200">{p.value}</p>
                 </div>
               ))}
             </div>
@@ -320,7 +320,7 @@ export default function TuningAdvisorClient() {
       </div>
 
       {/* ── Step 2: Surface Type ───────────────────────────────────────────── */}
-      <div className={`rounded-2xl bg-zinc-900 border border-zinc-800 p-5 space-y-4 transition-opacity ${!selectedCalibrationId ? "opacity-40 pointer-events-none" : ""}`}>
+      <div className={`rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 space-y-4 transition-opacity ${!selectedCalibrationId ? "opacity-40 pointer-events-none" : ""}`}>
         <StepHeader n={2} title="Track Surface" sub="Surface type significantly affects the optimal setup" />
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -337,7 +337,7 @@ export default function TuningAdvisorClient() {
                     ? "border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/20 shadow-lg shadow-amber-500/10"
                     : isFeatured
                     ? "border-amber-500/40 bg-gradient-to-br from-amber-500/10 to-orange-500/5 hover:border-amber-500/70"
-                    : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600"
+                    : "border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 hover:border-zinc-300 dark:hover:border-zinc-600"
                 }`}
               >
                 {isFeatured && !isActive && (
@@ -353,8 +353,8 @@ export default function TuningAdvisorClient() {
                   </div>
                 )}
                 <span className="text-lg mb-1 block">{s.icon}</span>
-                <p className={`text-xs font-bold leading-tight ${isActive || isFeatured ? "text-zinc-100" : "text-zinc-300"}`}>{s.label}</p>
-                <p className={`text-[10px] mt-0.5 leading-tight ${isActive ? "text-zinc-400" : isFeatured ? "text-amber-500/70" : "text-zinc-500"}`}>{s.desc}</p>
+                <p className={`text-xs font-bold leading-tight ${isActive ? "text-zinc-100" : isFeatured ? "text-zinc-900 dark:text-zinc-100" : "text-zinc-700 dark:text-zinc-300"}`}>{s.label}</p>
+                <p className={`text-[10px] mt-0.5 leading-tight ${isActive ? "text-zinc-400" : isFeatured ? "text-amber-600 dark:text-amber-500/70" : "text-zinc-500"}`}>{s.desc}</p>
               </button>
             );
           })}
@@ -362,7 +362,7 @@ export default function TuningAdvisorClient() {
       </div>
 
       {/* ── Step 3: Goals ─────────────────────────────────────────────────── */}
-      <div className={`rounded-2xl bg-zinc-900 border border-zinc-800 p-5 space-y-4 transition-opacity ${(!selectedCalibrationId || !selectedSurface) ? "opacity-40 pointer-events-none" : ""}`}>
+      <div className={`rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 space-y-4 transition-opacity ${(!selectedCalibrationId || !selectedSurface) ? "opacity-40 pointer-events-none" : ""}`}>
         <StepHeader n={3} title="What Do You Want to Achieve?" sub="Select one or more tuning goals" />
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -376,7 +376,7 @@ export default function TuningAdvisorClient() {
                 className={`relative rounded-xl border-2 p-3 text-left transition-all duration-200 ${
                   isActive
                     ? `border-amber-500 bg-gradient-to-br ${goal.color} ring-1 ring-amber-500/30 shadow-lg shadow-amber-500/10`
-                    : `border-zinc-700 bg-zinc-800/50 hover:border-zinc-600`
+                    : `border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 hover:border-zinc-300 dark:hover:border-zinc-600`
                 }`}
               >
                 {isActive && (
@@ -387,7 +387,7 @@ export default function TuningAdvisorClient() {
                   </div>
                 )}
                 <span className="text-xl mb-1.5 block">{goal.icon}</span>
-                <p className={`text-xs font-bold leading-tight ${isActive ? "text-zinc-100" : "text-zinc-300"}`}>{goal.label}</p>
+                <p className={`text-xs font-bold leading-tight ${isActive ? "text-zinc-100" : "text-zinc-700 dark:text-zinc-300"}`}>{goal.label}</p>
                 <p className={`text-[10px] mt-0.5 leading-tight ${isActive ? "text-zinc-400" : "text-zinc-500"}`}>{goal.description}</p>
               </button>
             );
@@ -446,12 +446,12 @@ export default function TuningAdvisorClient() {
 
       {/* ── Step 4: Results ───────────────────────────────────────────────── */}
       {changes.length > 0 && (
-        <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5 space-y-5">
+        <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 space-y-5">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="flex items-center justify-center w-7 h-7 rounded-full bg-green-500 text-black font-bold text-xs shrink-0">✓</div>
               <div>
-                <h2 className="text-sm font-bold text-zinc-100">Tuning Recommendations</h2>
+                <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Tuning Recommendations</h2>
                 <p className="text-xs text-zinc-500">
                   {selectedCar?.name} · {selectedCalibration?.name} · {selectedSurfaceInfo?.icon} {selectedSurfaceInfo?.label} · {changes.length} changes
                 </p>
@@ -459,7 +459,7 @@ export default function TuningAdvisorClient() {
             </div>
             <button
               onClick={reset}
-              className="shrink-0 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors"
+              className="shrink-0 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 hover:border-zinc-300 dark:hover:border-zinc-600 transition-colors"
             >
               Start Over
             </button>
@@ -468,7 +468,7 @@ export default function TuningAdvisorClient() {
           {/* Tags */}
           <div className="flex flex-wrap gap-2">
             {selectedSurfaceInfo && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-zinc-700/50 border border-zinc-600/50 text-zinc-300 px-2.5 py-1 text-xs font-medium">
+              <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200 dark:border-zinc-600/50 text-zinc-600 dark:text-zinc-300 px-2.5 py-1 text-xs font-medium">
                 {selectedSurfaceInfo.icon} {selectedSurfaceInfo.label}
               </span>
             )}
@@ -491,32 +491,32 @@ export default function TuningAdvisorClient() {
                   {[...sectionChanges]
                     .sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.priority] - { high: 0, medium: 1, low: 2 }[b.priority]))
                     .map((change, i) => (
-                      <div key={i} className="rounded-xl border border-zinc-700/60 bg-zinc-800/40 p-4 space-y-2">
+                      <div key={i} className="rounded-xl border border-zinc-200 dark:border-zinc-700/60 bg-zinc-50 dark:bg-zinc-800/40 p-4 space-y-2">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-2 min-w-0">
                             <span className={`text-base font-bold ${DIRECTION_COLOR[change.direction]}`}>
                               {DIRECTION_ICON[change.direction]}
                             </span>
-                            <span className="text-sm font-semibold text-zinc-100 truncate">{change.label}</span>
+                            <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">{change.label}</span>
                           </div>
                           <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${PRIORITY_CONFIG[change.priority].color}`}>
                             {PRIORITY_CONFIG[change.priority].label}
                           </span>
                         </div>
                         <div className="flex items-center gap-3 text-xs">
-                          <div className="flex-1 rounded-lg bg-zinc-900 px-3 py-2 border border-zinc-700">
+                          <div className="flex-1 rounded-lg bg-white dark:bg-zinc-900 px-3 py-2 border border-zinc-200 dark:border-zinc-700">
                             <p className="text-[10px] text-zinc-500 mb-0.5">Current</p>
-                            <p className="font-mono font-semibold text-zinc-300">{change.currentValue}</p>
+                            <p className="font-mono font-semibold text-zinc-600 dark:text-zinc-300">{change.currentValue}</p>
                           </div>
-                          <svg className="w-4 h-4 text-zinc-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <svg className="w-4 h-4 text-zinc-400 dark:text-zinc-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
                           </svg>
                           <div className="flex-1 rounded-lg bg-amber-500/10 px-3 py-2 border border-amber-500/30">
-                            <p className="text-[10px] text-amber-500/80 mb-0.5">Recommended</p>
-                            <p className="font-mono font-semibold text-amber-300">{change.recommendedValue}</p>
+                            <p className="text-[10px] text-amber-600 dark:text-amber-500/80 mb-0.5">Recommended</p>
+                            <p className="font-mono font-semibold text-amber-600 dark:text-amber-300">{change.recommendedValue}</p>
                           </div>
                         </div>
-                        <p className="text-xs text-zinc-400 leading-relaxed">{change.reason}</p>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">{change.reason}</p>
                       </div>
                     ))}
                 </div>
@@ -542,18 +542,18 @@ export default function TuningAdvisorClient() {
           {/* Save panel */}
           {showSavePanel && (
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
-              <p className="text-xs font-semibold text-amber-400">Save Advised Calibration to My Cars</p>
+              <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">Save Advised Calibration to My Cars</p>
               <p className="text-xs text-zinc-500">
-                A new calibration will be created on <span className="text-zinc-300">{selectedCar?.name}</span> with the recommended changes applied. Your original calibration is untouched.
+                A new calibration will be created on <span className="text-zinc-700 dark:text-zinc-300">{selectedCar?.name}</span> with the recommended changes applied. Your original calibration is untouched.
               </p>
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">Calibration Name</label>
+                <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">Calibration Name</label>
                 <input
                   type="text"
                   value={saveName}
                   onChange={(e) => setSaveName(e.target.value)}
                   placeholder="e.g. Carpet Setup (Advised)"
-                  className="w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  className="w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-600 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 />
               </div>
               {saveError && <p className="text-xs text-red-400">{saveError}</p>}
@@ -569,7 +569,7 @@ export default function TuningAdvisorClient() {
                 </button>
                 <button
                   onClick={() => setShowSavePanel(false)}
-                  className="rounded-xl border border-zinc-700 px-4 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
+                  className="rounded-xl border border-zinc-200 dark:border-zinc-700 px-4 py-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors"
                 >
                   Cancel
                 </button>
@@ -595,7 +595,7 @@ export default function TuningAdvisorClient() {
             </div>
           )}
 
-          <p className="text-[10px] text-zinc-600 leading-relaxed">
+          <p className="text-[10px] text-zinc-400 dark:text-zinc-600 leading-relaxed">
             ⚠️ AI-generated suggestions based on your calibration data. Always test changes incrementally and in a safe environment. Individual car behaviour varies.
           </p>
         </div>
@@ -611,7 +611,7 @@ function StepHeader({ n, title, sub }: { n: number; title: string; sub: string }
     <div className="flex items-center gap-3">
       <div className="flex items-center justify-center w-7 h-7 rounded-full bg-amber-500 text-black font-bold text-xs shrink-0">{n}</div>
       <div>
-        <h2 className="text-sm font-bold text-zinc-100">{title}</h2>
+        <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{title}</h2>
         <p className="text-xs text-zinc-500">{sub}</p>
       </div>
     </div>
@@ -663,7 +663,7 @@ function CopyButton({
     <button
       type="button"
       onClick={copyText}
-      className="flex items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-xs font-medium text-zinc-300 hover:text-zinc-100 hover:border-zinc-600 transition-colors"
+      className="flex items-center gap-2 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 px-4 py-2.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:border-zinc-300 dark:hover:border-zinc-600 transition-colors"
     >
       {copied ? (
         <>
