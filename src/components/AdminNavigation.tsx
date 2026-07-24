@@ -6,22 +6,26 @@ import { usePathname } from "next/navigation";
 interface NavUser {
   name?: string | null;
   image?: string | null;
+  role?: "admin" | "moderator" | "member";
 }
 
 const adminNavItems = [
   { href: "/admin", label: "Admin Home", icon: HomeIcon, exact: true },
   { href: "/admin/check-in", label: "QR Scan", icon: CheckInIcon },
   { href: "/admin/members", label: "Members", icon: MembersIcon },
-  { href: "/admin/notifications", label: "Global Alerts", icon: BellIcon },
+  { href: "/admin/users", label: "Users & Roles", icon: UsersIcon, adminOnly: true },
   { href: "/admin/events", label: "Events", icon: EventsIcon },
+  { href: "/admin/notifications", label: "Global Alerts", icon: BellIcon, adminOnly: true },
   { href: "/admin/history", label: "History", icon: HistoryIcon },
-  { href: "/admin/users", label: "Users & Roles", icon: UsersIcon },
-  { href: "/admin/showcase-winners", label: "Winners", icon: TrophyIcon },
-  { href: "/admin/facebook", label: "Facebook", icon: ShareIcon },
+  { href: "/admin/showcase-winners", label: "Winners", icon: TrophyIcon, adminOnly: true },
+  { href: "/admin/facebook", label: "Facebook", icon: ShareIcon, adminOnly: true },
 ];
 
 export function AdminNavigation({ user }: { user: NavUser }) {
   const pathname = usePathname();
+  const isModerator = user.role === "moderator";
+  const roleLabel = user.role === "moderator" ? "Moderator" : user.role === "admin" ? "Admin" : "Staff";
+  const visibleItems = adminNavItems.filter((item) => !isModerator || !item.adminOnly);
 
   return (
     <>
@@ -30,19 +34,21 @@ export function AdminNavigation({ user }: { user: NavUser }) {
         <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800">
           <Link href="/admin" className="flex items-center gap-2">
             <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-8 w-8" />
-            <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100">Admin Portal</span>
+            <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
+              {isModerator ? "Mod Portal" : "Admin Portal"}
+            </span>
           </Link>
           <div className="flex items-center gap-2">
             <div className="flex flex-col items-end min-w-0">
               <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300 truncate max-w-[100px]">
-                {user.name ?? "Admin"}
+                {user.name ?? roleLabel}
               </span>
-              <span className="text-[10px] text-amber-600 dark:text-amber-500 font-medium">Admin</span>
+              <span className="text-[10px] text-amber-600 dark:text-amber-500 font-medium">{roleLabel}</span>
             </div>
             {user.image ? (
               <img
                 src={user.image}
-                alt={user.name ?? "Admin"}
+                alt={user.name ?? roleLabel}
                 className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-200 dark:ring-zinc-700"
               />
             ) : (
@@ -53,7 +59,7 @@ export function AdminNavigation({ user }: { user: NavUser }) {
           </div>
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {adminNavItems.map((item) => {
+          {visibleItems.map((item) => {
             const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href);
             const isSundayWinnerItem = item.href === "/admin/showcase-winners" && new Date().getDay() === 0;
             return (
@@ -91,25 +97,30 @@ export function AdminNavigation({ user }: { user: NavUser }) {
       </aside>
 
       {/* Mobile bottom tab bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden border-t border-zinc-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-sm overflow-x-auto">
-        {adminNavItems.slice(0, 5).map((item) => {
-          const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex flex-1 flex-col items-center gap-1 py-2 text-[10px] font-medium transition-colors min-w-[60px] ${
-                isActive ? "text-amber-500 font-bold" : "text-zinc-500 dark:text-zinc-400"
-              }`}
-            >
-              <item.icon className="w-5 h-5" />
-              <span className="truncate">{item.label}</span>
-            </Link>
-          );
-        })}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden border-t border-zinc-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md h-14">
+        {/* Scrollable nav items list */}
+        <div className="flex-1 flex items-center overflow-x-auto no-scrollbar">
+          {visibleItems.map((item) => {
+            const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex flex-shrink-0 flex-col items-center justify-center gap-1 py-2 px-3 text-[10px] font-medium transition-colors min-w-[64px] ${
+                  isActive ? "text-amber-500 font-bold" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+                }`}
+              >
+                <item.icon className="w-5 h-5" />
+                <span className="truncate max-w-[68px] text-center">{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Fixed Right-Side Exit/Back Button */}
         <Link
           href="/dashboard"
-          className="flex flex-1 flex-col items-center gap-1 py-2 text-[10px] font-bold text-amber-600 dark:text-amber-500 transition-colors min-w-[60px]"
+          className="flex flex-shrink-0 flex-col items-center justify-center gap-1 py-2 px-3 text-[10px] font-bold text-amber-600 dark:text-amber-500 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 min-w-[64px] z-10 shadow-[-4px_0_10px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_10px_rgba(0,0,0,0.4)]"
         >
           <BackIcon className="w-5 h-5" />
           <span className="truncate">Exit</span>

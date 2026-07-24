@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { getAllUsers } from "@/actions/admin/users";
 import { UserRoleToggle } from "./UserRoleToggle";
 
@@ -6,6 +7,9 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminUsersPage() {
   const session = await auth();
+  if (!session?.user || session.user.role !== "admin") {
+    redirect("/admin/members");
+  }
   const users = await getAllUsers();
 
   return (

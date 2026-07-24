@@ -134,8 +134,8 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Daily Track Check-In Status Banner (Non-Admin only) */}
-        {session.user.role !== "admin" && (
+        {/* Daily Track Check-In Status Banner (Regular Members only) */}
+        {session.user.role !== "admin" && session.user.role !== "moderator" && (
           isCheckedInToday ? (
             <div className="rounded-xl bg-gradient-to-r from-green-500/10 via-emerald-500/10 to-green-500/10 border border-green-500/30 p-4 flex items-center justify-between gap-3 shadow-sm">
               <div className="flex items-center gap-3">
@@ -185,6 +185,13 @@ export default async function DashboardPage() {
                 <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-purple-100 dark:bg-purple-950/80 border border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs font-black uppercase tracking-wider">
                   <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
                   Admin Access (Unlimited Track Access)
+                </span>
+              </div>
+            ) : session.user.role === "moderator" ? (
+              <div className="flex items-center gap-3">
+                <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-100 dark:bg-blue-950/80 border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-black uppercase tracking-wider">
+                  <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                  Moderator Access (Unlimited Track Access)
                 </span>
               </div>
             ) : membership && isActive ? (

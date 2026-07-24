@@ -31,7 +31,7 @@ export async function getAllUsers(): Promise<Member[]> {
             email: (data.email as string) || "",
             name: (data.name as string) || "Unknown",
             image: (data.customAvatar as string) || (data.image as string) || null,
-            role: (data.role as "admin" | "member") || "member",
+            role: (data.role as "admin" | "moderator" | "member") || "member",
             qrCode: null,
             createdAt: Number(data.createdAt) || 0,
           });
@@ -48,14 +48,20 @@ export async function getAllUsers(): Promise<Member[]> {
   }
 }
 
-export async function toggleAdminRole(
+export async function setUserRole(
   userId: string,
-  makeAdmin: boolean
-): Promise<ActionResult<{ role: "admin" | "member" }>> {
+  newRole: "admin" | "moderator" | "member"
+): Promise<ActionResult<{ role: "admin" | "moderator" | "member" }>> {
   try {
-    const newRole = makeAdmin ? "admin" : "member";
+    const { auth } = await import("@/lib/auth");
+    const session = await auth();
+    if (!session?.user || session.user.role !== "admin") {
+      return { success: false, error: "Unauthorized" };
+    }
+
     await redis.hset(`member:${userId}`, { role: newRole });
     revalidatePath("/admin/users");
+    revalidatePath("/admin/members");
     return { success: true, data: { role: newRole } };
   } catch (error) {
     return {
@@ -63,4 +69,11 @@ export async function toggleAdminRole(
       error: error instanceof Error ? error.message : "Failed to update role",
     };
   }
+}
+
+export async function toggleAdminRole(
+  userId: string,
+  makeAdmin: boolean
+): Promise<ActionResult<{ role: "admin" | "moderator" | "member" }>> {
+  return setUserRole(userId, makeAdmin ? "admin" : "member");
 }

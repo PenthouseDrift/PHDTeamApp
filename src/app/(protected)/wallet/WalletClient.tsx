@@ -8,7 +8,7 @@ import { createWalletCheckout } from "@/actions/wallet";
 interface WalletClientProps {
   userId: string;
   userName: string;
-  userRole?: "admin" | "member";
+  userRole?: "admin" | "moderator" | "member";
   wallet: Wallet;
   membership: Membership | null;
   membershipQrUrl: string;
@@ -72,28 +72,18 @@ export function WalletClient({
           </p>
         </div>
 
-        {/* Membership Banner (Moved to top of Wallet Section) */}
+        {/* Membership Banner — members only */}
+        {userRole !== "admin" && userRole !== "moderator" && (
         <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
           <div className="space-y-1">
             <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
               28-Day Membership Status
             </p>
-            {userRole === "admin" ? (
-              <div className="flex items-center gap-2">
-                <span className="text-base font-black text-purple-600 dark:text-purple-400">
-                  Admin Access (Unlimited Track Access)
-                </span>
-                <span className="inline-block rounded-full bg-purple-100 dark:bg-purple-950/80 border border-purple-300 dark:border-purple-800 px-2.5 py-0.5 text-xs font-bold text-purple-700 dark:text-purple-300">
-                  ADMIN
-                </span>
-              </div>
-            ) : (
-              <p className={`text-base font-black ${isMembershipActive ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`}>
-                {isMembershipActive ? "Active Track Member" : "No Active Membership"}
-              </p>
-            )}
+            <p className={`text-base font-black ${isMembershipActive ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`}>
+              {isMembershipActive ? "Active Track Member" : "No Active Membership"}
+            </p>
           </div>
-          {userRole !== "admin" && !isMembershipActive && (
+          {!isMembershipActive && (
             <a
               href="/membership/purchase"
               className="w-full sm:w-auto px-4 py-2 rounded-xl bg-amber-500 text-black text-xs font-extrabold hover:bg-amber-400 transition-colors text-center shadow-sm"
@@ -102,6 +92,7 @@ export function WalletClient({
             </a>
           )}
         </div>
+        )}
 
         {/* Your Track Pass QR Code Section */}
         <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-5 text-center shadow-sm">

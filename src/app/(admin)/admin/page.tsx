@@ -10,7 +10,9 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage() {
   const session = await auth();
-  if (!session?.user || session.user.role !== "admin") return null;
+  if (!session?.user || (session.user.role !== "admin" && session.user.role !== "moderator")) return null;
+
+  const isModerator = session.user.role === "moderator";
 
   // Check Sunday status & current week winner
   const isSunday = new Date().getDay() === 0;
@@ -29,20 +31,38 @@ export default async function AdminDashboardPage() {
   const activeMemberships = members.filter((m) => m.membership?.status === "active").length;
   const avatarUrl = customAvatar || session.user.image || null;
 
-  const adminQuickTiles = [
+  const allQuickTiles = [
     {
       title: "QR Scanner",
       description: "Scan member QR codes for daily track check-in",
       href: "/admin/check-in",
       icon: "📱",
       color: "from-amber-500/20 to-orange-500/10 border-amber-500/40 text-amber-600 dark:text-amber-400",
+      adminOnly: false,
     },
     {
       title: "Member Management",
-      description: "View, search, and manage all track members & passes",
+      description: "View, search, and check in track members",
       href: "/admin/members",
       icon: "👥",
       color: "from-blue-500/20 to-cyan-500/10 border-blue-500/40 text-blue-600 dark:text-blue-400",
+      adminOnly: false,
+    },
+    {
+      title: "Track Events",
+      description: "View and manage upcoming track events",
+      href: "/admin/events",
+      icon: "📅",
+      color: "from-emerald-500/20 to-green-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
+      adminOnly: false,
+    },
+    {
+      title: "Check-In History",
+      description: "Review complete track check-in logs & dates",
+      href: "/admin/history",
+      icon: "📜",
+      color: "from-indigo-500/20 to-blue-500/10 border-indigo-500/40 text-indigo-600 dark:text-indigo-400",
+      adminOnly: false,
     },
     {
       title: "Global Notifications",
@@ -50,13 +70,7 @@ export default async function AdminDashboardPage() {
       href: "/admin/notifications",
       icon: "📢",
       color: "from-purple-500/20 to-pink-500/10 border-purple-500/40 text-purple-600 dark:text-purple-400",
-    },
-    {
-      title: "Track Events",
-      description: "Schedule and publish upcoming track events",
-      href: "/admin/events",
-      icon: "📅",
-      color: "from-emerald-500/20 to-green-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
+      adminOnly: true,
     },
     {
       title: "Weekly Shell Winners",
@@ -71,13 +85,7 @@ export default async function AdminDashboardPage() {
       color: isSunday && !winnerChosenThisWeek
         ? "from-amber-500/40 to-yellow-500/30 border-amber-500 text-amber-500"
         : "from-yellow-500/20 to-amber-500/10 border-yellow-500/40 text-yellow-600 dark:text-yellow-400",
-    },
-    {
-      title: "Check-In History",
-      description: "Review complete track check-in logs & dates",
-      href: "/admin/history",
-      icon: "📜",
-      color: "from-indigo-500/20 to-blue-500/10 border-indigo-500/40 text-indigo-600 dark:text-indigo-400",
+      adminOnly: true,
     },
     {
       title: "Users & Roles",
@@ -85,6 +93,7 @@ export default async function AdminDashboardPage() {
       href: "/admin/users",
       icon: "🔑",
       color: "from-rose-500/20 to-red-500/10 border-rose-500/40 text-rose-600 dark:text-rose-400",
+      adminOnly: true,
     },
     {
       title: "Facebook Sync",
@@ -92,8 +101,11 @@ export default async function AdminDashboardPage() {
       href: "/admin/facebook",
       icon: "📲",
       color: "from-sky-500/20 to-blue-500/10 border-sky-500/40 text-sky-600 dark:text-sky-400",
+      adminOnly: true,
     },
   ];
+
+  const quickTiles = allQuickTiles.filter((t) => !isModerator || !t.adminOnly);
 
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8 space-y-8">
@@ -109,16 +121,16 @@ export default async function AdminDashboardPage() {
               />
             ) : (
               <div className="h-14 w-14 rounded-2xl bg-amber-500 flex items-center justify-center text-xl font-black text-black shadow-md">
-                AD
+                {isModerator ? "MOD" : "AD"}
               </div>
             )}
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-black text-zinc-900 dark:text-zinc-100 tracking-tight">
-                  Admin Command Center
+                  {isModerator ? "Moderator Command Center" : "Admin Command Center"}
                 </h1>
                 <span className="rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-600 dark:text-purple-400 text-[10px] font-black px-2.5 py-0.5 uppercase tracking-wider">
-                  Admin
+                  {isModerator ? "Moderator" : "Admin"}
                 </span>
               </div>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
@@ -138,8 +150,8 @@ export default async function AdminDashboardPage() {
           </Link>
         </div>
 
-        {/* High Priority Sunday Winner Highlight Banner */}
-        {isSunday && (
+        {/* High Priority Sunday Winner Highlight Banner (Admin only) */}
+        {!isModerator && isSunday && (
           <div
             className={`rounded-2xl border p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg transition-all ${
               winnerChosenThisWeek
@@ -182,15 +194,17 @@ export default async function AdminDashboardPage() {
         )}
 
         {/* Live Track Metrics Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className={`grid gap-4 ${isModerator ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-2 sm:grid-cols-4"}`}>
           <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 shadow-sm space-y-1">
             <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Total Members</p>
             <p className="text-3xl font-extrabold text-zinc-900 dark:text-zinc-100">{members.length}</p>
           </div>
-          <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 shadow-sm space-y-1">
-            <p className="text-[11px] font-semibold text-green-600 dark:text-green-400 uppercase tracking-wider">Active Memberships</p>
-            <p className="text-3xl font-extrabold text-green-600 dark:text-green-400">{activeMemberships}</p>
-          </div>
+          {!isModerator && (
+            <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 shadow-sm space-y-1">
+              <p className="text-[11px] font-semibold text-green-600 dark:text-green-400 uppercase tracking-wider">Active Memberships</p>
+              <p className="text-3xl font-extrabold text-green-600 dark:text-green-400">{activeMemberships}</p>
+            </div>
+          )}
           <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 shadow-sm space-y-1">
             <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-500 uppercase tracking-wider">Today&apos;s Check-Ins</p>
             <p className="text-3xl font-extrabold text-amber-500">{todayCheckins.length}</p>
@@ -205,11 +219,11 @@ export default async function AdminDashboardPage() {
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Quick Navigation Tiles</h2>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">8 Admin Controls</span>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">{quickTiles.length} Controls</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {adminQuickTiles.map((tile) => (
+            {quickTiles.map((tile) => (
               <Link
                 key={tile.href}
                 href={tile.href}

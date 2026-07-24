@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import { redeemDayPass, redeemRentalHour } from "@/actions/wallet";
-import { createRentalSession } from "@/actions/admin/rentals";
+import { createOrExtendRentalSession } from "@/actions/admin/rentals";
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user || session.user.role !== "admin") {
+  if (!session?.user || (session.user.role !== "admin" && session.user.role !== "moderator")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -153,23 +153,27 @@ export async function POST(request: Request) {
         await redis.del(`qr:nonce:rental:${memberId}`);
       }
 
-      await createRentalSession(memberId, formattedAdminName);
+      const rentalResult = await createOrExtendRentalSession(memberId, formattedAdminName);
+      const isExtension = rentalResult.success && rentalResult.data.isExtension;
 
       const entry = JSON.stringify({
         userId: memberId,
         adminId: session.user.id,
         timestamp: now,
         method: "rental",
-        memberName: formattedAdminName,
+        memberName: isExtension ? `${formattedAdminName} (Extended +1 Hr)` : formattedAdminName,
       });
 
       await redis.rpush(`checkins:${today}`, entry);
+      await redis.set(`checkin:dedup:${memberId}`, "1", { ex: 86400 });
 
       return NextResponse.json({
         status: "active",
         scanType,
         member: { ...memberDetails, rentalHours: redeemRes.data.remaining },
-        message: `${formattedAdminName} — Car Rental Started! (${redeemRes.data.remaining} hrs remaining)`,
+        message: isExtension
+          ? `${formattedAdminName} — Car Rental Extended +1 Hour! 🏎️`
+          : `${formattedAdminName} — Car Rental Started! (${redeemRes.data.remaining} hrs remaining)`,
       });
     }
 
@@ -200,6 +204,7 @@ export async function POST(request: Request) {
       });
 
       await redis.rpush(`checkins:${today}`, entry);
+      await redis.set(`checkin:dedup:${memberId}`, "1", { ex: 86400 });
 
       return NextResponse.json({
         status: "active",
@@ -209,20 +214,50 @@ export async function POST(request: Request) {
       });
     }
 
-    // Default Membership QR Check
-    if (!isMembershipActive && !body.override) {
-      return NextResponse.json({
-        status: "expired",
-        scanType: "membership",
-        member: memberDetails,
-        message: `${formattedAdminName} — Membership Expired`,
-      });
+    // -------------------------------------------------------------
+    // Default Member Profile QR Check
+    // -------------------------------------------------------------
+
+    // 1. Check if user has already checked in today (via Day Pass, Rental, 28-Day Membership, or Manual)
+    const dedupKey = `checkin:dedup:${memberId}`;
+    const [alreadyCheckedIn, todayEntries] = await Promise.all([
+      redis.get(dedupKey),
+      redis.lrange(`checkins:${today}`, 0, -1),
+    ]);
+
+    let todayCheckInMethod: string | null = null;
+    if (todayEntries && todayEntries.length > 0) {
+      for (const e of todayEntries) {
+        try {
+          const parsed = typeof e === "string" ? JSON.parse(e) : e;
+          if (parsed.userId === memberId) {
+            todayCheckInMethod = parsed.method || "qr";
+            break;
+          }
+        } catch { /* ignore */ }
+      }
     }
 
-    // Check dedup (1-hour window or already checked in today)
-    const dedupKey = `checkin:dedup:${memberId}`;
-    const alreadyCheckedIn = await redis.get(dedupKey);
-    if (alreadyCheckedIn) {
+    // If user has already checked in today:
+    if (alreadyCheckedIn || todayCheckInMethod) {
+      if (todayCheckInMethod === "day_pass") {
+        return NextResponse.json({
+          status: "active",
+          scanType: "membership",
+          member: memberDetails,
+          message: `${formattedAdminName} — Checked In Today via Day Pass 🎫`,
+        });
+      }
+
+      if (todayCheckInMethod === "rental") {
+        return NextResponse.json({
+          status: "active",
+          scanType: "membership",
+          member: memberDetails,
+          message: `${formattedAdminName} — Checked In Today via Car Rental 🏎️`,
+        });
+      }
+
       return NextResponse.json({
         status: "duplicate",
         scanType: "membership",
@@ -231,7 +266,17 @@ export async function POST(request: Request) {
       });
     }
 
-    // Record check-in
+    // 2. If NOT checked in today, verify 28-Day Membership status
+    if (!isMembershipActive && !body.override) {
+      return NextResponse.json({
+        status: "expired",
+        scanType: "membership",
+        member: memberDetails,
+        message: `${formattedAdminName} — Membership Expired / None`,
+      });
+    }
+
+    // 3. Record 28-Day Membership Check-In
     const entry = JSON.stringify({
       userId: memberId,
       adminId: session.user.id,
@@ -241,7 +286,7 @@ export async function POST(request: Request) {
     });
 
     await redis.rpush(`checkins:${today}`, entry);
-    await redis.set(dedupKey, "1", { ex: 3600 });
+    await redis.set(dedupKey, "1", { ex: 86400 });
 
     return NextResponse.json({
       status: "active",

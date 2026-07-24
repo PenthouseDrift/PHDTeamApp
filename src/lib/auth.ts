@@ -42,8 +42,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             createdAt: Date.now(),
           });
         } else {
-          // Existing user — use the role from Redis (respects admin toggle)
-          token.role = (existing.role as string) || "member";
+          // Existing user — use the role from Redis (respects admin/moderator toggle)
+          token.role = (existing.role as "admin" | "moderator" | "member") || "member";
 
           // Update name/image only (don't touch role)
           await redis.hset(`member:${stableId}`, {
@@ -56,7 +56,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async session({ session, token }) {
       session.user.id = token.sub!;
-      session.user.role = token.role as "admin" | "member";
+      session.user.role = (token.role as "admin" | "moderator" | "member") || "member";
       return session;
     },
   },

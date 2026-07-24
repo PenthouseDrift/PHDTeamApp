@@ -1,21 +1,21 @@
 "use client";
 
 import { useTransition, useState } from "react";
-import { toggleAdminRole } from "@/actions/admin/users";
+import { setUserRole } from "@/actions/admin/users";
 
 interface UserRoleToggleProps {
   userId: string;
-  currentRole: "admin" | "member";
+  currentRole: "admin" | "moderator" | "member";
 }
 
 export function UserRoleToggle({ userId, currentRole }: UserRoleToggleProps) {
   const [role, setRole] = useState(currentRole);
   const [isPending, startTransition] = useTransition();
 
-  function handleToggle() {
-    const newIsAdmin = role !== "admin";
+  function handleChange(newRole: "admin" | "moderator" | "member") {
+    if (newRole === role) return;
     startTransition(async () => {
-      const result = await toggleAdminRole(userId, newIsAdmin);
+      const result = await setUserRole(userId, newRole);
       if (result.success) {
         setRole(result.data.role);
       }
@@ -23,20 +23,15 @@ export function UserRoleToggle({ userId, currentRole }: UserRoleToggleProps) {
   }
 
   return (
-    <button
-      onClick={handleToggle}
+    <select
+      value={role}
       disabled={isPending}
-      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors disabled:opacity-50 ${
-        role === "admin"
-          ? "bg-red-50 text-red-700 hover:bg-red-100"
-          : "bg-purple-50 text-purple-700 hover:bg-purple-100"
-      }`}
+      onChange={(e) => handleChange(e.target.value as "admin" | "moderator" | "member")}
+      className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2.5 py-1 text-xs font-bold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer disabled:opacity-50"
     >
-      {isPending
-        ? "Updating..."
-        : role === "admin"
-        ? "Remove Admin"
-        : "Make Admin"}
-    </button>
+      <option value="member">👤 Member</option>
+      <option value="moderator">🛡️ Moderator</option>
+      <option value="admin">⚡ Admin</option>
+    </select>
   );
 }

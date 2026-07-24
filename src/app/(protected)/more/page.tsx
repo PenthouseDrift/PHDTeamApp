@@ -105,13 +105,13 @@ export default async function MorePage() {
             </div>
           </div>
 
-          {session.user.role === "admin" && (
+          {(session.user.role === "admin" || session.user.role === "moderator") && (
             <Link
               href="/admin"
               className="rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold px-3.5 py-2 hover:bg-amber-500/20 transition-colors flex items-center gap-1.5"
             >
               <AdminIcon className="w-4 h-4" />
-              <span>Admin Panel</span>
+              <span>{session.user.role === "moderator" ? "Mod Panel" : "Admin Panel"}</span>
             </Link>
           )}
         </div>

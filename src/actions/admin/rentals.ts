@@ -40,6 +40,138 @@ export async function createRentalSession(
   }
 }
 
+export async function createOrExtendRentalSession(
+  userId: string,
+  memberName: string
+): Promise<ActionResult<{ session: RentalSession; isExtension: boolean }>> {
+  try {
+    const activeIds = await redis.smembers("rentals:active");
+    let existingRentalId: string | null = null;
+    let existingData: Record<string, unknown> | null = null;
+
+    if (activeIds && activeIds.length > 0) {
+      for (const id of activeIds) {
+        const data = await redis.hgetall(`rental:${id}`);
+        if (data && data.userId === userId && data.status !== "completed") {
+          existingRentalId = id as string;
+          existingData = data as Record<string, unknown>;
+          break;
+        }
+      }
+    }
+
+    // If an active session already exists for this member, extend it by +1 hour!
+    if (existingRentalId && existingData) {
+      const now = Date.now();
+      const currentEndsAt = Number(existingData.sessionEndsAt) || Number(existingData.graceEndsAt) || now;
+      const baseTime = Math.max(now, currentEndsAt);
+      const newEndsAt = baseTime + ONE_HOUR;
+      const timerStartedAt = existingData.timerStartedAt ? Number(existingData.timerStartedAt) : now;
+
+      const updatedSession: RentalSession = {
+        rentalId: existingRentalId,
+        userId,
+        memberName: (existingData.memberName as string) || memberName,
+        scannedAt: Number(existingData.scannedAt) || now,
+        graceEndsAt: Number(existingData.graceEndsAt) || now,
+        timerStartedAt,
+        sessionEndsAt: newEndsAt,
+        status: "active",
+      };
+
+      await redis.hset(`rental:${existingRentalId}`, {
+        status: "active",
+        timerStartedAt,
+        sessionEndsAt: newEndsAt,
+      });
+
+      revalidatePath("/admin/check-in");
+      revalidatePath("/admin/members");
+      return { success: true, data: { session: updatedSession, isExtension: true } };
+    }
+
+    // Otherwise create a fresh rental session
+    const createRes = await createRentalSession(userId, memberName);
+    if (!createRes.success) return { success: false, error: createRes.error };
+
+    return { success: true, data: { session: createRes.data, isExtension: false } };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to create or extend rental session",
+    };
+  }
+}
+
+export async function extendRentalSessionManual(
+  rentalId: string,
+  method: "cash" | "wallet"
+): Promise<ActionResult<RentalSession>> {
+  try {
+    const existing = await redis.hgetall(`rental:${rentalId}`);
+    if (!existing || Object.keys(existing).length === 0) {
+      return { success: false, error: "Rental session not found" };
+    }
+
+    const userId = existing.userId as string;
+    const memberName = (existing.memberName as string) || "Member";
+
+    if (method === "wallet") {
+      const { redeemRentalHour } = await import("@/actions/wallet");
+      const redeemRes = await redeemRentalHour(userId);
+      if (!redeemRes.success) {
+        return { success: false, error: redeemRes.error };
+      }
+    }
+
+    const now = Date.now();
+    const today = new Date().toISOString().split("T")[0];
+    const currentEndsAt = Number(existing.sessionEndsAt) || Number(existing.graceEndsAt) || now;
+    const baseTime = Math.max(now, currentEndsAt);
+    const newEndsAt = baseTime + ONE_HOUR;
+    const timerStartedAt = existing.timerStartedAt ? Number(existing.timerStartedAt) : now;
+
+    const updatedSession: RentalSession = {
+      rentalId,
+      userId,
+      memberName,
+      scannedAt: Number(existing.scannedAt) || now,
+      graceEndsAt: Number(existing.graceEndsAt) || now,
+      timerStartedAt,
+      sessionEndsAt: newEndsAt,
+      status: "active",
+    };
+
+    await redis.hset(`rental:${rentalId}`, {
+      status: "active",
+      timerStartedAt,
+      sessionEndsAt: newEndsAt,
+    });
+
+    // Record check-in / extension log entry
+    const entry = JSON.stringify({
+      userId,
+      adminId: "admin",
+      timestamp: now,
+      method: "rental",
+      memberName: `${memberName} (Extended +1 Hr - ${method === "cash" ? "Paid Cash/Card" : "Wallet Pass"})`,
+    });
+
+    await redis.rpush(`checkins:${today}`, entry);
+    await redis.set(`checkin:dedup:${userId}`, "1", { ex: 86400 });
+
+    revalidatePath("/admin/check-in");
+    revalidatePath("/admin/members");
+    revalidatePath("/dashboard");
+    return { success: true, data: updatedSession };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to extend rental session",
+    };
+  }
+}
+
 export async function getActiveRentals(): Promise<RentalSession[]> {
   try {
     const ids = await redis.smembers("rentals:active");
