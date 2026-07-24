@@ -8,6 +8,7 @@ interface TuningRequest {
   calibration: CalibrationSetup;
   carName: string;
   goals: string[];
+  surface: string;
 }
 
 interface TuningChange {
@@ -104,15 +105,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { calibration, carName, goals } = body;
+  const { calibration, carName, goals, surface } = body;
 
   const prompt = `You are an expert RC drift car tuning advisor. Analyse the following calibration setup and provide specific, actionable tuning changes to achieve the user's goals.
 
 Car: ${carName}
+Track Surface: ${surface}
 ${buildCalibrationSummary(calibration)}
 
 TUNING GOALS:
 ${goals.map((g, i) => `${i + 1}. ${g}`).join("\n")}
+
+SURFACE CONTEXT for "${surface}":
+- Polished Concrete: Very low grip, smooth — softer oil, higher droop, more gyro gain, aggressive camber
+- Carpet: High grip, consistent — stiffer setup, less gyro, more toe, tighter geometry
+- Asphalt/Tarmac: Medium grip, outdoor — balanced setup, moderate gyro, watch temperature sensitivity
+- Polished Tiles/Marble: Extremely low grip — very soft oil, maximum droop, high gyro, minimal steering expo
+- Gym Floor/Hardwood: Low-medium grip, variable — soft-medium oil, medium gyro, flexible setup
+- Foam/EVA Tiles: High grip, soft surface — stiffer shock, less droop, lower gyro
+- RCP (Racing Combination Products): Very high grip plastic — stiffer oil, minimal droop, low gyro
+- Painted Concrete: Low grip, inconsistent — soft oil, higher gyro, careful with camber
 
 Respond ONLY with a valid JSON array (no markdown, no explanation, just the raw JSON) containing tuning change objects. Each object must have these exact fields:
 - "section": one of "Suspension & Shocks", "Steering & Alignment", "Electronics & Drivetrain", "Geometry & Tyres"
@@ -120,11 +132,11 @@ Respond ONLY with a valid JSON array (no markdown, no explanation, just the raw 
 - "label": human-readable name (e.g. "Front Oil Weight", "Gyro Gain")
 - "currentValue": the current value as a string (include units)
 - "recommendedValue": your recommended value as a string (include units)
-- "reason": 1-2 sentence explanation of WHY this change helps achieve the goals
+- "reason": 1-2 sentence explanation of WHY this change helps achieve the goals ON THIS SPECIFIC SURFACE
 - "priority": "high", "medium", or "low"
 - "direction": "increase", "decrease", "change", or "info"
 
-Focus on the most impactful changes only (typically 4-10 changes). Only suggest changes for parameters that are actually set in the calibration (not "not set"). Consider how the changes interact with each other. For RC drift cars specifically, take into account the relationship between oil weight, piston holes, droop, camber, and gyro for drift performance.`;
+Focus on the most impactful changes only (typically 4-10 changes). Only suggest changes for parameters that are actually set in the calibration (not "not set"). Consider how the changes interact with each other AND how the surface type affects the optimal values. For RC drift cars specifically, take into account the relationship between oil weight, piston holes, droop, camber, and gyro for drift performance on ${surface}.`;
 
   // Model cascade: try in order, skip on 503 (overloaded) or 404 (unavailable)
   const MODELS = [
