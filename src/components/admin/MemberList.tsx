@@ -15,7 +15,9 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [selectedMember, setSelectedMember] = useState<MemberWithMembership | null>(null);
 
-  const filtered = search
+  const checkedInIds = new Set(checkedInMembers.map((m) => m.member.id));
+
+  const allFiltered = search
     ? members.filter((m) => {
         const query = search.toLowerCase();
         return (
@@ -26,6 +28,9 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
       })
     : members;
 
+  const regularMembers = allFiltered.filter((m) => m.member.role !== "admin");
+  const adminMembers = allFiltered.filter((m) => m.member.role === "admin");
+
   function formatDate(timestamp: number): string {
     return new Date(timestamp).toLocaleDateString("en-GB", {
       day: "numeric",
@@ -34,8 +39,52 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
     });
   }
 
+  function MemberRow({ m }: { m: MemberWithMembership }) {
+    const isCheckedIn = checkedInIds.has(m.member.id);
+    return (
+      <tr
+        className={`transition-colors cursor-pointer group ${isCheckedIn ? "bg-green-50/60 hover:bg-green-50" : "hover:bg-amber-50/50"}`}
+        onClick={() => setSelectedMember(m)}
+      >
+        <td className="px-4 py-3 font-medium">
+          <span className="inline-flex items-center gap-2">
+            {isCheckedIn && (
+              <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" title="Checked in today" />
+            )}
+            <span className={isCheckedIn ? "text-green-700" : "text-zinc-900"}>{m.member.name}</span>
+          </span>
+          {m.member.nickname && (
+            <span className="ml-1.5 inline-block text-xs font-bold text-amber-600">
+              (&quot;{m.member.nickname}&quot;)
+            </span>
+          )}
+        </td>
+        <td className="px-4 py-3 text-zinc-600 hidden sm:table-cell">
+          {m.member.email}
+        </td>
+        <td className="px-4 py-3">
+          {m.member.role === "admin" ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1 bg-purple-50 text-purple-700 border border-purple-100">
+              Admin
+            </span>
+          ) : (
+            <StatusBadge status={m.membership?.status ?? "expired"} size="sm" />
+          )}
+        </td>
+        <td className="px-4 py-3 text-zinc-600 hidden md:table-cell">
+          {m.membership ? formatDate(m.membership.expiresAt) : "—"}
+        </td>
+        <td className="px-4 py-3 text-right">
+          <span className="text-xs font-medium text-zinc-400 group-hover:text-amber-500 transition-colors whitespace-nowrap">
+            View details →
+          </span>
+        </td>
+      </tr>
+    );
+  }
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Search */}
       <div className="relative">
         <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -63,77 +112,60 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
         </div>
       )}
 
-      {/* Checked in today section */}
-      {checkedInMembers.length > 0 && !search && (
-        <div className="rounded-lg border border-green-200 bg-green-50 p-3">
-          <p className="text-xs font-medium text-green-700 mb-2">Already checked in today:</p>
-          <div className="flex flex-wrap gap-2">
-            {checkedInMembers.map((m) => (
-              <span key={m.member.id} className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                {m.member.name}{m.member.nickname ? ` ("${m.member.nickname}")` : ""}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {/* Member list */}
-      {filtered.length === 0 ? (
-        <div className="text-center py-8 text-zinc-500 text-sm">
-          {search ? "No members found" : "No members to show"}
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white">
-          <table className="w-full text-sm">
-            <thead className="bg-zinc-50 border-b border-zinc-200">
-              <tr className="text-left text-zinc-600">
-                <th className="px-4 py-3 font-medium">Name</th>
-                <th className="px-4 py-3 font-medium hidden sm:table-cell">Email</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium hidden md:table-cell">Expires</th>
-                <th className="px-4 py-3 font-medium text-right"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100">
-              {filtered.map((m) => (
-                <tr
-                  key={m.member.id}
-                  className="hover:bg-amber-50/50 transition-colors cursor-pointer group"
-                  onClick={() => setSelectedMember(m)}
-                >
-                  <td className="px-4 py-3 text-zinc-900 font-medium">
-                    <span>{m.member.name}</span>
-                    {m.member.nickname && (
-                      <span className="ml-1.5 inline-block text-xs font-bold text-amber-600">
-                        (&quot;{m.member.nickname}&quot;)
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-zinc-600 hidden sm:table-cell">
-                    {m.member.email}
-                  </td>
-                  <td className="px-4 py-3">
-                    {m.member.role === "admin" ? (
-                      <span className="inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1 bg-purple-50 text-purple-700">
-                        Admin
-                      </span>
-                    ) : (
-                      <StatusBadge status={m.membership?.status ?? "expired"} size="sm" />
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-zinc-600 hidden md:table-cell">
-                    {m.membership ? formatDate(m.membership.expiresAt) : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className="text-xs font-medium text-zinc-400 group-hover:text-amber-500 transition-colors whitespace-nowrap">
-                      View details →
-                    </span>
-                  </td>
+      {/* Members table */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+          Members
+          <span className="ml-2 text-xs font-normal text-zinc-400">({regularMembers.length})</span>
+        </h3>
+        {regularMembers.length === 0 ? (
+          <div className="text-center py-8 text-zinc-500 text-sm border border-zinc-200 rounded-lg bg-white">
+            {search ? "No members found" : "No members to show"}
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-zinc-50 border-b border-zinc-200">
+                <tr className="text-left text-zinc-600">
+                  <th className="px-4 py-3 font-medium">Name</th>
+                  <th className="px-4 py-3 font-medium hidden sm:table-cell">Email</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium hidden md:table-cell">Expires</th>
+                  <th className="px-4 py-3 font-medium text-right"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {regularMembers.map((m) => <MemberRow key={m.member.id} m={m} />)}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Admins table */}
+      {adminMembers.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+            Admins
+            <span className="ml-2 text-xs font-normal text-zinc-400">({adminMembers.length})</span>
+          </h3>
+          <div className="overflow-x-auto rounded-lg border border-purple-100 bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-purple-50/60 border-b border-purple-100">
+                <tr className="text-left text-zinc-600">
+                  <th className="px-4 py-3 font-medium">Name</th>
+                  <th className="px-4 py-3 font-medium hidden sm:table-cell">Email</th>
+                  <th className="px-4 py-3 font-medium">Role</th>
+                  <th className="px-4 py-3 font-medium hidden md:table-cell"></th>
+                  <th className="px-4 py-3 font-medium text-right"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-purple-50">
+                {adminMembers.map((m) => <MemberRow key={m.member.id} m={m} />)}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

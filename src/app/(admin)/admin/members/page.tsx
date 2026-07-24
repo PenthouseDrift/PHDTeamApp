@@ -15,12 +15,8 @@ export default async function AdminMembersPage() {
     getActiveRentals(),
   ]);
 
-  // Get unique checked-in user IDs
   const checkedInIds = new Set(todayCheckIns.map((c) => c.userId));
-
-  // Split members into checked-in today and not checked in
   const checkedInMembers = members.filter((m) => checkedInIds.has(m.member.id));
-  const notCheckedInMembers = members.filter((m) => !checkedInIds.has(m.member.id));
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8">
@@ -38,17 +34,10 @@ export default async function AdminMembersPage() {
       {/* Today's Check-Ins */}
       <TodayCheckIns checkIns={todayCheckIns} />
 
-      {/* All Members - Not Checked In */}
+      {/* All Members */}
       <div>
-        <h2 className="text-lg font-semibold text-zinc-900 mb-3">
-          All Members
-          {notCheckedInMembers.length > 0 && (
-            <span className="ml-2 text-sm font-normal text-zinc-500 dark:text-zinc-400">
-              ({notCheckedInMembers.length} not checked in)
-            </span>
-          )}
-        </h2>
-        <MemberList members={notCheckedInMembers} checkedInMembers={checkedInMembers} />
+        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-3">All Members</h2>
+        <MemberList members={members} checkedInMembers={checkedInMembers} />
       </div>
     </div>
   );

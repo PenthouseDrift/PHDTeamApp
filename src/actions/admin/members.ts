@@ -83,13 +83,8 @@ export async function getAllMembers(): Promise<MemberWithMembership[]> {
 
     const members = Array.from(membersMap.values());
 
-    // Sort: active first, then expired, then no membership
-    members.sort((a, b) => {
-      const aStatus = a.membership?.status === "active" ? 0 : a.membership ? 1 : 2;
-      const bStatus = b.membership?.status === "active" ? 0 : b.membership ? 1 : 2;
-      if (aStatus !== bStatus) return aStatus - bStatus;
-      return a.member.name.localeCompare(b.member.name);
-    });
+    // Sort alphabetically by name
+    members.sort((a, b) => a.member.name.localeCompare(b.member.name));
 
     return members;
   } catch (error) {

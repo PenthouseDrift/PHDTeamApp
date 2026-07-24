@@ -4,7 +4,20 @@ import { redis } from "@/lib/redis";
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/types";
 
-const TWENTY_EIGHT_DAYS = 28 * 24 * 60 * 60 * 1000;
+/** Returns 23:59:59.999 UTC on the day that is 28 days after `fromDate` */
+function endOfDay28(fromDate: Date): number {
+  const target = new Date(fromDate);
+  target.setUTCDate(target.getUTCDate() + 28);
+  target.setUTCHours(23, 59, 59, 999);
+  return target.getTime();
+}
+
+/** Snaps an admin-chosen date string (YYYY-MM-DD) to end of that UTC day */
+function endOfChosenDay(dateStr: string): number {
+  const d = new Date(dateStr + "T00:00:00.000Z");
+  d.setUTCHours(23, 59, 59, 999);
+  return d.getTime();
+}
 
 export async function activateMembership(
   memberId: string,
@@ -16,17 +29,17 @@ export async function activateMembership(
     let newExpiresAt: number;
 
     if (customExpiryDate) {
-      // Admin override — use the custom date
-      newExpiresAt = new Date(customExpiryDate + "T23:59:59").getTime();
+      // Admin override — snap to end of the chosen day
+      newExpiresAt = endOfChosenDay(customExpiryDate);
     } else {
       // Check if member has an active membership to extend
       const existing = await redis.hgetall(`membership:${memberId}`);
       if (existing && Number(existing.expiresAt) > now) {
-        // Extend from current expiry
-        newExpiresAt = Number(existing.expiresAt) + TWENTY_EIGHT_DAYS;
+        // Extend 28 days from current expiry end-of-day
+        newExpiresAt = endOfDay28(new Date(Number(existing.expiresAt)));
       } else {
-        // New or expired: start from now
-        newExpiresAt = now + TWENTY_EIGHT_DAYS;
+        // New or expired: 28 days from today, end of day
+        newExpiresAt = endOfDay28(new Date(now));
       }
     }
 

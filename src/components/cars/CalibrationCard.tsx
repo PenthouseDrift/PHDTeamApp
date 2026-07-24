@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { ShareCalibrationButton } from "./ShareCalibrationButton";
+import { deleteCalibration } from "@/actions/calibration";
+import { useSession } from "next-auth/react";
 import type { CalibrationSetup } from "@/types";
 
 interface CalibrationCardProps {
@@ -11,19 +13,66 @@ interface CalibrationCardProps {
 
 export function CalibrationCard({ cal }: CalibrationCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, startDeleteTransition] = useTransition();
+  const { data: session } = useSession();
+
+  function handleDelete() {
+    if (!session?.user?.id) return;
+    startDeleteTransition(async () => {
+      await deleteCalibration(cal.calibrationId, session.user.id);
+    });
+  }
 
   return (
     <div className="rounded-xl bg-white border border-zinc-200 overflow-hidden">
-      {/* Header row — share button + date on right */}
+      {/* Header row — share button + delete + date */}
       <div className="flex items-center justify-between px-4 pt-4 pb-0">
         <h3 className="text-sm font-medium text-zinc-900">{cal.name}</h3>
         <div className="flex items-center gap-2">
           <ShareCalibrationButton calibrationId={cal.calibrationId} calibrationName={cal.name} />
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="p-1 text-zinc-400 hover:text-red-500 transition-colors"
+            title="Delete calibration"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+            </svg>
+          </button>
           <span className="text-xs text-zinc-400">
             {new Date(cal.createdAt).toLocaleDateString()}
           </span>
         </div>
       </div>
+
+      {/* Delete confirmation modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl space-y-4" onClick={(e) => e.stopPropagation()}>
+            <h4 className="text-base font-bold text-zinc-900">Delete Calibration?</h4>
+            <p className="text-xs text-zinc-500">
+              Are you sure you want to delete <strong>"{cal.name}"</strong>? This action cannot be undone.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 rounded-lg bg-zinc-100 px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="flex-1 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                {isDeleting ? "Deleting..." : "Confirm Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tappable area to expand */}
       <button
@@ -70,16 +119,26 @@ export function CalibrationCard({ cal }: CalibrationCardProps) {
 
           {/* Suspension */}
           <div>
-            <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2">Suspension</p>
+            <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2">Suspension & Shocks</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
               <Param label="Front Ride Height" value={`${cal.frontRideHeight}mm`} />
               <Param label="Rear Ride Height" value={`${cal.rearRideHeight}mm`} />
               {cal.frontSpringRate && <Param label="Front Spring" value={cal.frontSpringRate} />}
               {cal.rearSpringRate && <Param label="Rear Spring" value={cal.rearSpringRate} />}
-              <Param label="Front Damping" value={`${cal.frontDamping}/10`} />
-              <Param label="Rear Damping" value={`${cal.rearDamping}/10`} />
-              <Param label="Front Rebound" value={`${cal.frontRebound}/10`} />
-              <Param label="Rear Rebound" value={`${cal.rearRebound}/10`} />
+              {cal.frontOilWeight && <Param label="Front Oil Weight" value={cal.frontOilWeight} />}
+              {cal.rearOilWeight && <Param label="Rear Oil Weight" value={cal.rearOilWeight} />}
+              {cal.frontOilBrand && <Param label="Front Oil Brand" value={cal.frontOilBrand} />}
+              {cal.rearOilBrand && <Param label="Rear Oil Brand" value={cal.rearOilBrand} />}
+              {cal.frontPistonHoles > 0 && <Param label="Front Piston Holes" value={`${cal.frontPistonHoles}`} />}
+              {cal.rearPistonHoles > 0 && <Param label="Rear Piston Holes" value={`${cal.rearPistonHoles}`} />}
+              {cal.frontPistonHoleSize && <Param label="Front Piston Hole Size" value={cal.frontPistonHoleSize} />}
+              {cal.rearPistonHoleSize && <Param label="Rear Piston Hole Size" value={cal.rearPistonHoleSize} />}
+              {cal.frontShockLength > 0 && <Param label="Front Shock Length" value={`${cal.frontShockLength}mm`} />}
+              {cal.rearShockLength > 0 && <Param label="Rear Shock Length" value={`${cal.rearShockLength}mm`} />}
+              {cal.frontShockBrand && <Param label="Front Shock Brand" value={cal.frontShockBrand} />}
+              {cal.rearShockBrand && <Param label="Rear Shock Brand" value={cal.rearShockBrand} />}
+              {cal.frontORings && <Param label="Front O-Rings" value={cal.frontORings} />}
+              {cal.rearORings && <Param label="Rear O-Rings" value={cal.rearORings} />}
               <Param label="Front Droop" value={`${cal.frontDroop}mm`} />
               <Param label="Rear Droop" value={`${cal.rearDroop}mm`} />
             </div>
@@ -87,13 +146,16 @@ export function CalibrationCard({ cal }: CalibrationCardProps) {
 
           {/* Electronics */}
           <div>
-            <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2">Electronics</p>
+            <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2">Electronics & Drivetrain</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <Param label="Motor Turns" value={`${cal.motorTurns}T`} />
+              <Param label="Motor Timing" value={`${cal.motorTiming}°`} />
+              {cal.motorPlacement && <Param label="Motor Placement" value={cal.motorPlacement} />}
               <Param label="Gyro Gain" value={`${cal.gyroGain}%`} />
+              <Param label="Throttle Expo" value={`${cal.throttleExpo}%`} />
+              <Param label="Steering Expo" value={`${cal.steeringExpo}%`} />
               <Param label="Boost" value={`${cal.boost}%`} />
               <Param label="Turbo" value={`${cal.turbo}%`} />
-              <Param label="Throttle EPA" value={`${cal.throttleEPA}%`} />
-              <Param label="Steering EPA" value={`${cal.steeringEPA}%`} />
             </div>
           </div>
 
