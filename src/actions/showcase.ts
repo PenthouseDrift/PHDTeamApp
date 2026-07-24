@@ -110,8 +110,8 @@ export async function getShowcaseEntries(limit = 50): Promise<ShellEntry[]> {
 }
 
 export async function getLeaderboard(limit = 50): Promise<ShellEntry[]> {
-  // Get from leaderboard sorted set (highest score = most votes)
-  const shellIds = await redis.zrange("shells:leaderboard", 0, limit - 1, { rev: true });
+  // Get winner shell IDs (only winners are shown on the leaderboard)
+  const shellIds = await redis.zrange("shells:winners", 0, limit - 1, { rev: true });
 
   if (!shellIds || shellIds.length === 0) return [];
 
@@ -130,7 +130,7 @@ export async function getLeaderboard(limit = 50): Promise<ShellEntry[]> {
     }
   }
 
-  // Secondary sort for ties: earlier submission ranks higher
+  // Secondary sort for ties: highest votes first, then earlier submission
   entries.sort((a, b) => {
     if (b.voteCount !== a.voteCount) return b.voteCount - a.voteCount;
     return a.createdAt - b.createdAt;

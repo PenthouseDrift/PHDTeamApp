@@ -1,6 +1,12 @@
 import { redis } from "@/lib/redis";
 
-const TWENTY_EIGHT_DAYS = 28 * 24 * 60 * 60 * 1000;
+/** Returns 23:59:59.999 UTC on the day that is 28 days after `fromDate` */
+function endOfDay28(fromDate: Date): number {
+  const target = new Date(fromDate);
+  target.setUTCDate(target.getUTCDate() + 28);
+  target.setUTCHours(23, 59, 59, 999);
+  return target.getTime();
+}
 
 export async function processSuccessfulMembershipPayment(
   memberId: string,
@@ -19,10 +25,10 @@ export async function processSuccessfulMembershipPayment(
 
   if (currentExpiry && Number(currentExpiry) > now) {
     // Renewal: extend from current expiry date
-    newExpiresAt = Number(currentExpiry) + TWENTY_EIGHT_DAYS;
+    newExpiresAt = endOfDay28(new Date(Number(currentExpiry)));
   } else {
-    // New or expired: start from now
-    newExpiresAt = now + TWENTY_EIGHT_DAYS;
+    // New or expired: start from today
+    newExpiresAt = endOfDay28(new Date(now));
   }
 
   await redis.hset(`membership:${memberId}`, {

@@ -89,17 +89,28 @@ export default async function SharePage({ params }: SharePageProps) {
     rearRideHeight: Number(calData.rearRideHeight) || 0,
     frontSpringRate: (calData.frontSpringRate as string) || "",
     rearSpringRate: (calData.rearSpringRate as string) || "",
-    frontDamping: Number(calData.frontDamping) || 0,
-    rearDamping: Number(calData.rearDamping) || 0,
-    frontRebound: Number(calData.frontRebound) || 0,
-    rearRebound: Number(calData.rearRebound) || 0,
+    frontOilWeight: (calData.frontOilWeight as string) || "",
+    rearOilWeight: (calData.rearOilWeight as string) || "",
+    frontOilBrand: (calData.frontOilBrand as string) || "",
+    rearOilBrand: (calData.rearOilBrand as string) || "",
+    frontPistonHoles: Number(calData.frontPistonHoles) || 0,
+    rearPistonHoles: Number(calData.rearPistonHoles) || 0,
+    frontPistonHoleSize: (calData.frontPistonHoleSize as string) || "",
+    rearPistonHoleSize: (calData.rearPistonHoleSize as string) || "",
+    frontShockLength: Number(calData.frontShockLength) || 0,
+    rearShockLength: Number(calData.rearShockLength) || 0,
+    frontShockBrand: (calData.frontShockBrand as string) || "",
+    rearShockBrand: (calData.rearShockBrand as string) || "",
+    frontORings: (calData.frontORings as string) || "",
+    rearORings: (calData.rearORings as string) || "",
     frontDroop: Number(calData.frontDroop) || 0,
     rearDroop: Number(calData.rearDroop) || 0,
     gyroGain: Number(calData.gyroGain) || 0,
     motorTurns: Number(calData.motorTurns) || 0,
     motorTiming: Number(calData.motorTiming) || 0,
-    throttleEPA: Number(calData.throttleEPA) || 100,
-    steeringEPA: Number(calData.steeringEPA) || 100,
+    motorPlacement: (calData.motorPlacement as string) || "",
+    throttleExpo: Number(calData.throttleExpo) || 0,
+    steeringExpo: Number(calData.steeringExpo) || 0,
     boost: Number(calData.boost) || 0,
     turbo: Number(calData.turbo) || 0,
     frontTrackWidth: Number(calData.frontTrackWidth) || 0,
@@ -164,30 +175,45 @@ export default async function SharePage({ params }: SharePageProps) {
 
         <div className="rounded-xl bg-white p-4">
           <h2 className="mb-3 text-sm font-semibold text-zinc-600 dark:text-zinc-300">
-            Suspension
+            Suspension & Shocks
           </h2>
           <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
             <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Front Ride Height</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.frontRideHeight}mm</dd></div>
             <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Rear Ride Height</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.rearRideHeight}mm</dd></div>
             {calibration.frontSpringRate && <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Front Spring</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.frontSpringRate}</dd></div>}
             {calibration.rearSpringRate && <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Rear Spring</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.rearSpringRate}</dd></div>}
-            <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Front Damping</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.frontDamping}/10</dd></div>
-            <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Rear Damping</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.rearDamping}/10</dd></div>
-            <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Front Rebound</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.frontRebound}/10</dd></div>
-            <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Rear Rebound</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.rearRebound}/10</dd></div>
+            {calibration.frontOilWeight && <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Front Oil Weight</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.frontOilWeight}</dd></div>}
+            {calibration.rearOilWeight && <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Rear Oil Weight</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.rearOilWeight}</dd></div>}
+            {calibration.frontOilBrand && <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Front Oil Brand</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.frontOilBrand}</dd></div>}
+            {calibration.rearOilBrand && <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Rear Oil Brand</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.rearOilBrand}</dd></div>}
+            {calibration.frontPistonHoles > 0 && <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Front Piston Holes</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.frontPistonHoles}</dd></div>}
+            {calibration.rearPistonHoles > 0 && <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Rear Piston Holes</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.rearPistonHoles}</dd></div>}
+            {calibration.frontPistonHoleSize && <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Front Hole Size</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.frontPistonHoleSize}</dd></div>}
+            {calibration.rearPistonHoleSize && <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Rear Hole Size</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.rearPistonHoleSize}</dd></div>}
+            {calibration.frontShockLength > 0 && <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Front Shock Length</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.frontShockLength}mm</dd></div>}
+            {calibration.rearShockLength > 0 && <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Rear Shock Length</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.rearShockLength}mm</dd></div>}
+            {calibration.frontShockBrand && <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Front Shock Brand</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.frontShockBrand}</dd></div>}
+            {calibration.rearShockBrand && <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Rear Shock Brand</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.rearShockBrand}</dd></div>}
+            {calibration.frontORings && <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Front O-Rings</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.frontORings}</dd></div>}
+            {calibration.rearORings && <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Rear O-Rings</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.rearORings}</dd></div>}
+            <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Front Droop</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.frontDroop}mm</dd></div>
+            <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Rear Droop</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.rearDroop}mm</dd></div>
           </dl>
         </div>
 
         <div className="rounded-xl bg-white p-4">
           <h2 className="mb-3 text-sm font-semibold text-zinc-600 dark:text-zinc-300">
-            Electronics
+            Electronics & Drivetrain
           </h2>
           <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-sm">
+            <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Motor Turns</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.motorTurns}T</dd></div>
+            <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Motor Timing</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.motorTiming}°</dd></div>
+            {calibration.motorPlacement && <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Motor Placement</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.motorPlacement}</dd></div>}
             <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Gyro Gain</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.gyroGain}%</dd></div>
+            <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Throttle Expo</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.throttleExpo}%</dd></div>
+            <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Steering Expo</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.steeringExpo}%</dd></div>
             <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Boost</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.boost}%</dd></div>
             <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Turbo</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.turbo}%</dd></div>
-            <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Throttle EPA</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.throttleEPA}%</dd></div>
-            <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Steering EPA</dt><dd className="font-medium text-zinc-900 dark:text-zinc-100">{calibration.steeringEPA}%</dd></div>
           </dl>
         </div>
 
