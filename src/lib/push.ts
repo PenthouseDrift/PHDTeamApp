@@ -16,7 +16,7 @@ export interface PushSubscriptionData {
 
 export async function sendPushNotification(
   subscription: PushSubscriptionData,
-  payload: { title: string; body: string; url?: string }
+  payload: { title: string; body: string; url?: string; icon?: string; badge?: string }
 ): Promise<boolean> {
   try {
     await webPush.sendNotification(
@@ -24,7 +24,10 @@ export async function sendPushNotification(
         endpoint: subscription.endpoint,
         keys: subscription.keys,
       },
-      JSON.stringify(payload)
+      JSON.stringify({
+        icon: "/logo.png",
+        ...payload,
+      })
     );
     return true;
   } catch (error) {
@@ -34,7 +37,7 @@ export async function sendPushNotification(
 }
 
 export async function sendToAllAdmins(
-  payload: { title: string; body: string; url?: string }
+  payload: { title: string; body: string; url?: string; icon?: string; badge?: string }
 ): Promise<number> {
   const { redis } = await import("./redis");
 
