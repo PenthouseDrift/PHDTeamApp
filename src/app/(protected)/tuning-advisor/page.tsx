@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import TuningAdvisorClient from "./TuningAdvisorClient";
@@ -30,7 +31,9 @@ export default async function TuningAdvisorPage() {
           </div>
         </div>
 
-        <TuningAdvisorClient />
+        <Suspense fallback={<div className="p-8 text-center text-xs text-zinc-500">Loading AI Tuning Advisor...</div>}>
+          <TuningAdvisorClient />
+        </Suspense>
       </div>
     </div>
   );

@@ -19,19 +19,20 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
   { href: "/wallet", label: "Wallet & Passes", icon: WalletIcon },
   { href: "/cars", label: "My Cars", icon: CarIcon },
+  { href: "/newsfeed", label: "Newsfeed", icon: NewsfeedIcon },
   { href: "/tuning-advisor", label: "Tuning Advisor", icon: TuningIcon },
   { href: "/showcase", label: "Showcase", icon: ShowcaseIcon },
   { href: "/calculator", label: "Calculator", icon: CalculatorIcon },
-  { href: "/newsfeed", label: "Newsfeed", icon: NewsfeedIcon },
+  { href: "/more", label: "More Features", icon: MoreIcon },
 ];
 
-// Mobile tab items
+// Mobile tab items (5 main tabs)
 const mobileNavItems = [
   { href: "/dashboard", label: "Home", icon: DashboardIcon },
   { href: "/wallet", label: "Wallet", icon: WalletIcon },
   { href: "/cars", label: "Cars", icon: CarIcon },
-  { href: "/tuning-advisor", label: "Tuning", icon: TuningIcon },
-  { href: "/showcase", label: "Showcase", icon: ShowcaseIcon },
+  { href: "/newsfeed", label: "Newsfeed", icon: NewsfeedIcon },
+  { href: "/more", label: "More", icon: MoreIcon },
 ];
 
 function getInitials(name: string | null | undefined): string {
@@ -289,6 +290,14 @@ function BellIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
+    </svg>
+  );
+}
+
+function MoreIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
     </svg>
   );
 }
