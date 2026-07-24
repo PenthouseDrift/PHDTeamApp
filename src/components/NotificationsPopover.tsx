@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { getNotifications, markAllRead, type AppNotification } from "@/actions/notifications";
 
@@ -36,36 +35,35 @@ function formatTime(timestamp: number): string {
 
 export function NotificationsPopover({ userId, initialUnreadCount = 0 }: NotificationsPopoverProps) {
   const router = useRouter();
-  const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(false);
-  const popoverRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setUnreadCount(initialUnreadCount);
   }, [initialUnreadCount]);
 
-  // Handle open & mark all as read immediately
-  async function handleOpen() {
-    if (isOpen) {
-      setIsOpen(false);
-      return;
+  // Close on outside click
+  useEffect(() => {
+    if (!isOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
     }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [isOpen]);
 
+  async function handleOpen() {
+    if (isOpen) { setIsOpen(false); return; }
     setIsOpen(true);
-
-    // Auto mark all read immediately upon opening
     if (unreadCount > 0) {
       setUnreadCount(0);
       void markAllRead(userId);
     }
-
     setLoading(true);
     try {
       const list = await getNotifications(userId);
@@ -88,9 +86,70 @@ export function NotificationsPopover({ userId, initialUnreadCount = 0 }: Notific
     }
   }
 
+  const panelContent = (
+    <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Notifications</h3>
+          <span className="text-[10px] font-bold text-zinc-400 bg-zinc-200 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
+            7-Day
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsOpen(false)}
+          className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 text-sm font-bold"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* List */}
+      <div className="max-h-[350px] overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800/60">
+        {loading ? (
+          <div className="p-8 text-center space-y-2">
+            <div className="w-5 h-5 rounded-full border-2 border-amber-500 border-t-transparent animate-spin mx-auto" />
+            <p className="text-xs text-zinc-400">Loading...</p>
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="p-8 text-center space-y-1">
+            <div className="text-3xl mb-2">🔔</div>
+            <p className="text-xs font-bold text-zinc-700 dark:text-zinc-300">No Notifications</p>
+            <p className="text-[11px] text-zinc-400">Nothing in the past 7 days.</p>
+          </div>
+        ) : (
+          notifications.map((n) => (
+            <button
+              key={n.notificationId}
+              type="button"
+              onClick={() => handleNotificationClick(n)}
+              className="w-full text-left p-3.5 flex items-start gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors"
+            >
+              <span className="text-xl shrink-0 mt-0.5">{getIcon(n.type)}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 leading-snug line-clamp-2">
+                  {n.message}
+                </p>
+                <p className="text-[10px] text-zinc-400 mt-1 font-medium">
+                  {formatTime(n.createdAt)}
+                </p>
+              </div>
+            </button>
+          ))
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="px-4 py-2.5 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900/80 text-center">
+        <p className="text-[10px] text-zinc-400">Notifications expire after 7 days.</p>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="relative inline-block" ref={popoverRef}>
-      {/* Bell Trigger Button */}
+    <div className="relative inline-block" ref={wrapperRef}>
+      {/* Bell Button */}
       <button
         type="button"
         onClick={handleOpen}
@@ -100,8 +159,6 @@ export function NotificationsPopover({ userId, initialUnreadCount = 0 }: Notific
         <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
         </svg>
-
-        {/* Red Unread Badge */}
         {unreadCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center shadow-md animate-pulse">
             {unreadCount > 9 ? "9+" : unreadCount}
@@ -109,78 +166,19 @@ export function NotificationsPopover({ userId, initialUnreadCount = 0 }: Notific
         )}
       </button>
 
-      {/* Popover Modal Overlay via Portal */}
-      {isOpen && mounted &&
-        createPortal(
-          <div className="fixed inset-0 z-[9999] flex flex-col justify-end md:justify-start items-center md:items-start p-3 pb-20 md:pb-0">
-            {/* Backdrop click to close */}
-            <div
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999]"
-              onClick={() => setIsOpen(false)}
-            />
+      {isOpen && (
+        <>
+          {/* Mobile: fixed panel drops down from the top header bar */}
+          <div className="fixed top-14 left-0 right-0 z-[9999] px-3 pt-1 md:hidden">
+            {panelContent}
+          </div>
 
-            {/* Floating Dropdown / Card */}
-            <div className="relative z-[10000] w-full max-w-sm md:fixed md:top-14 md:left-64 md:ml-3 md:w-96 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200">
-              {/* Popover Header */}
-              <div className="flex items-center justify-between px-4 py-3.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Notifications</h3>
-                  <span className="text-[10px] font-bold text-zinc-400 bg-zinc-200 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
-                    7-Day Retention
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsOpen(false)}
-                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 text-sm font-bold"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* Notifications List */}
-              <div className="max-h-[350px] overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800/60">
-                {loading ? (
-                  <div className="p-8 text-center space-y-2">
-                    <div className="w-5 h-5 rounded-full border-2 border-amber-500 border-t-transparent animate-spin mx-auto" />
-                    <p className="text-xs text-zinc-400">Loading notifications...</p>
-                  </div>
-                ) : notifications.length === 0 ? (
-                  <div className="p-8 text-center space-y-1">
-                    <div className="text-3xl mb-2">🔔</div>
-                    <p className="text-xs font-bold text-zinc-700 dark:text-zinc-300">No Notifications</p>
-                    <p className="text-[11px] text-zinc-400">You have no notifications in the past 7 days.</p>
-                  </div>
-                ) : (
-                  notifications.map((n) => (
-                    <button
-                      key={n.notificationId}
-                      type="button"
-                      onClick={() => handleNotificationClick(n)}
-                      className="w-full text-left p-3.5 flex items-start gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors"
-                    >
-                      <span className="text-xl shrink-0 mt-0.5">{getIcon(n.type)}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 leading-snug line-clamp-2">
-                          {n.message}
-                        </p>
-                        <p className="text-[10px] text-zinc-400 mt-1 font-medium">
-                          {formatTime(n.createdAt)}
-                        </p>
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-
-              {/* Footer */}
-              <div className="px-4 py-2.5 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900/80 text-center">
-                <p className="text-[10px] text-zinc-400">Notifications automatically expire after 7 days.</p>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
+          {/* Desktop: compact dropdown anchored to bell, no overlay */}
+          <div className="hidden md:block absolute left-0 top-full mt-2 w-96 z-[9999]">
+            {panelContent}
+          </div>
+        </>
+      )}
     </div>
   );
 }
