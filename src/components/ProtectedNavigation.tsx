@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { NotificationsPopover } from "@/components/NotificationsPopover";
 
 interface NavUser {
+  id: string;
   name?: string | null;
   image?: string | null;
   role?: "admin" | "member";
@@ -47,11 +49,12 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
     <>
       {/* Desktop sidebar */}
       <aside className="hidden md:flex md:w-64 md:flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-        {/* Header: logo + user on same line */}
-        <div className="flex items-center justify-between p-4 border-b border-zinc-200">
+        {/* Header: logo + user + notifications */}
+        <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800">
           <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-8 w-8" />
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200 truncate max-w-[120px]">
+            <NotificationsPopover userId={user.id} initialUnreadCount={unreadNotifications} />
+            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200 truncate max-w-[100px]">
               {user.name ?? "Member"}
             </span>
             {user.image ? (
@@ -87,22 +90,6 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
               </Link>
             );
           })}
-          <Link
-            href="/notifications"
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-              pathname.startsWith("/notifications")
-                ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
-                : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-            }`}
-          >
-            <BellIcon className="w-5 h-5" />
-            Notifications
-            {unreadNotifications > 0 && (
-              <span className="ml-auto w-5 h-5 rounded-full bg-red-500 text-[10px] font-bold text-white flex items-center justify-center">
-                {unreadNotifications > 9 ? "9+" : unreadNotifications}
-              </span>
-            )}
-          </Link>
           <Link
             href="/profile"
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
@@ -145,16 +132,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
       <header className="fixed top-0 left-0 right-0 z-40 flex md:hidden items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/95 backdrop-blur-sm">
         <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-7 w-7" />
         <div className="flex items-center gap-3">
-          <Link href="/notifications" className="relative">
-            <svg className="w-6 h-6 text-zinc-600 dark:text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
-            </svg>
-            {unreadNotifications > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-[10px] font-bold text-white flex items-center justify-center">
-                {unreadNotifications > 9 ? "9+" : unreadNotifications}
-              </span>
-            )}
-          </Link>
+          <NotificationsPopover userId={user.id} initialUnreadCount={unreadNotifications} />
           <Link href="/profile">
             {user.image ? (
               <img

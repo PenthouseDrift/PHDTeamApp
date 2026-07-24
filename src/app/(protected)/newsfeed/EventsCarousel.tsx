@@ -29,11 +29,10 @@ export function EventsCarousel({ events }: EventsCarouselProps) {
             <button
               key={event.eventId}
               onClick={() => setSelectedEvent(event)}
-              className={`shrink-0 w-52 rounded-xl text-left border transition-shadow hover:shadow-md overflow-hidden ${
-                event.status === "cancelled"
+              className={`shrink-0 w-52 rounded-xl text-left border transition-shadow hover:shadow-md overflow-hidden ${event.status === "cancelled"
                   ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
                   : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800"
-              }`}
+                }`}
             >
               {event.imageUrl && (
                 <div className="w-full h-28 overflow-hidden">
@@ -65,10 +64,10 @@ export function EventsCarousel({ events }: EventsCarouselProps) {
 
       {/* Event Detail Modal */}
       {selectedEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setSelectedEvent(null)}>
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto" onClick={() => setSelectedEvent(null)}>
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-md" />
           <div
-            className="relative w-full max-w-md rounded-2xl bg-white dark:bg-zinc-900 p-6 shadow-xl space-y-4"
+            className="relative w-full max-w-md my-auto max-h-[85dvh] overflow-y-auto rounded-2xl bg-white dark:bg-zinc-900 p-5 sm:p-6 shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             {selectedEvent.status === "cancelled" && (
@@ -93,7 +92,7 @@ export function EventsCarousel({ events }: EventsCarouselProps) {
               <img
                 src={selectedEvent.imageUrl}
                 alt={selectedEvent.title}
-                className="w-full rounded-lg object-cover max-h-64"
+                className="w-full rounded-lg object-cover"
               />
             )}
             <button

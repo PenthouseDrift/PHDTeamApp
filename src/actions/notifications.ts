@@ -71,9 +71,11 @@ export async function createNotification(params: {
       createdAt: Date.now(),
     };
 
-    // Store in-app notification in Redis
+    // Store in-app notification in Redis with 7 day retention TTL
     await redis.hset(`notification:${notificationId}`, notification as unknown as Record<string, unknown>);
+    await redis.expire(`notification:${notificationId}`, 7 * 86400);
     await redis.lpush(`notifications:${params.userId}`, notificationId);
+    await redis.ltrim(`notifications:${params.userId}`, 0, 99);
     await redis.incr(`notifications:${params.userId}:unread`);
 
     // Send Web Push Notification (fire and forget)
@@ -148,7 +150,9 @@ export async function sendGlobalNotification(
       };
 
       await redis.hset(`notification:${notificationId}`, notification as unknown as Record<string, unknown>);
+      await redis.expire(`notification:${notificationId}`, 7 * 86400);
       await redis.lpush(`notifications:${uid}`, notificationId);
+      await redis.ltrim(`notifications:${uid}`, 0, 99);
       await redis.incr(`notifications:${uid}:unread`);
     });
 
@@ -357,7 +361,8 @@ export async function getNotifications(userId: string, limit = 30): Promise<AppN
     });
 
     const results = await Promise.all(promises);
-    return results.filter((n): n is AppNotification => n !== null);
+    const sevenDaysAgo = Date.now() - 7 * 86400 * 1000;
+    return results.filter((n): n is AppNotification => n !== null && n.createdAt >= sevenDaysAgo);
   } catch (error) {
     console.error("getNotifications error:", error);
     return [];

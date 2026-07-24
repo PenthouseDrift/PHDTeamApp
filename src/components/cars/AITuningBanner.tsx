@@ -46,7 +46,7 @@ export function AITuningBanner() {
             Need AI Tuning Setup Recommendations?
           </h3>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Use our Gemini AI Tuning Advisor to tailor suspension, gearing & electronics for PHD P-Tile track dynamics.
+            Use our AI Tuning Advisor to tailor suspension, gearing & electronics for PHD P-Tile track dynamics.
           </p>
         </div>
       </div>
