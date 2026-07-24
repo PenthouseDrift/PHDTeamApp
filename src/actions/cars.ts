@@ -187,19 +187,22 @@ export async function getMemberCars(
       return { success: true, data: [] };
     }
 
-    const cars: CarProfile[] = [];
-    for (const carId of carIds) {
+    const carPromises = carIds.map(async (carId) => {
       const carData = await redis.hgetall(`car:${carId}`);
       if (carData && Object.keys(carData).length > 0) {
-        cars.push({
+        return {
           carId: carData.carId as string,
           userId: carData.userId as string,
           name: carData.name as string,
           images: parseImages(carData.images),
           createdAt: Number(carData.createdAt),
-        });
+        };
       }
-    }
+      return null;
+    });
+
+    const results = await Promise.all(carPromises);
+    const cars = results.filter((c): c is CarProfile => c !== null);
 
     // Sort by newest first
     cars.sort((a, b) => b.createdAt - a.createdAt);

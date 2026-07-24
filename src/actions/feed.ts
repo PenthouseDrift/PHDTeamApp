@@ -71,8 +71,7 @@ export async function getFeedPosts(limit = 30): Promise<FeedPost[]> {
   const postIds = await redis.lrange("feed:posts", 0, limit - 1);
   if (!postIds || postIds.length === 0) return [];
 
-  const posts: FeedPost[] = [];
-  for (const id of postIds) {
+  const postPromises = postIds.map(async (id) => {
     const data = await redis.hgetall(`feed:post:${id as string}`);
     if (data && Object.keys(data).length > 0) {
       const images = Array.isArray(data.images)
@@ -80,7 +79,7 @@ export async function getFeedPosts(limit = 30): Promise<FeedPost[]> {
         : typeof data.images === "string"
         ? JSON.parse(data.images || "[]")
         : [];
-      posts.push({
+      return {
         postId: (data.postId as string) || (id as string),
         userId: data.userId as string,
         userName: (data.userName as string) || "Unknown",
@@ -90,11 +89,13 @@ export async function getFeedPosts(limit = 30): Promise<FeedPost[]> {
         likes: Number(data.likes) || 0,
         commentCount: Number(data.commentCount) || 0,
         createdAt: Number(data.createdAt),
-      });
+      };
     }
-  }
+    return null;
+  });
 
-  return posts;
+  const results = await Promise.all(postPromises);
+  return results.filter((p): p is FeedPost => p !== null);
 }
 
 export async function togglePostLike(
@@ -197,11 +198,10 @@ export async function getFeedComments(postId: string): Promise<FeedComment[]> {
   const ids = await redis.lrange(`feed:post:${postId}:comments`, 0, -1);
   if (!ids || ids.length === 0) return [];
 
-  const comments: FeedComment[] = [];
-  for (const id of ids) {
+  const commentPromises = ids.map(async (id) => {
     const data = await redis.hgetall(`feed:comment:${id as string}`);
     if (data && Object.keys(data).length > 0) {
-      comments.push({
+      return {
         commentId: (data.commentId as string) || (id as string),
         postId: (data.postId as string) || postId,
         userId: data.userId as string,
@@ -210,10 +210,13 @@ export async function getFeedComments(postId: string): Promise<FeedComment[]> {
         text: (data.text as string) || "",
         likes: Number(data.likes) || 0,
         createdAt: Number(data.createdAt),
-      });
+      };
     }
-  }
-  return comments;
+    return null;
+  });
+
+  const results = await Promise.all(commentPromises);
+  return results.filter((c): c is FeedComment => c !== null);
 }
 
 export async function deletePost(postId: string, userId: string, isAdmin: boolean): Promise<ActionResult<null>> {

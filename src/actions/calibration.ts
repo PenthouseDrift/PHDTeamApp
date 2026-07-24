@@ -206,11 +206,10 @@ export async function getCarCalibrations(
   const ids = await redis.smembers(`car:${carId}:calibrations`);
   if (ids.length === 0) return [];
 
-  const calibrations: CalibrationSetup[] = [];
-  for (const id of ids) {
+  const calPromises = ids.map(async (id): Promise<CalibrationSetup | null> => {
     const data = await redis.hgetall(`calibration:${id}`);
     if (data && Object.keys(data).length > 0) {
-      calibrations.push({
+      return {
         calibrationId: (data.calibrationId as string) || (id as string),
         carId: (data.carId as string) || carId,
         userId: data.userId as string,
@@ -262,9 +261,13 @@ export async function getCarCalibrations(
         rearTyres: (data.rearTyres as string) || "",
         customParams: parseCustomParams(data.customParams),
         createdAt: Number(data.createdAt),
-      });
+      };
     }
-  }
+    return null;
+  });
+
+  const results = await Promise.all(calPromises);
+  const calibrations = results.filter((c): c is CalibrationSetup => c !== null);
 
   return calibrations.sort((a, b) => b.createdAt - a.createdAt);
 }

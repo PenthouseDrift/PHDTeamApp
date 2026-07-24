@@ -9,11 +9,13 @@ interface NavUser {
 }
 
 const adminNavItems = [
-  { href: "/admin/members", label: "Members", icon: MembersIcon },
-  { href: "/admin/history", label: "History", icon: HistoryIcon },
-  { href: "/admin/events", label: "Events", icon: EventsIcon },
-  { href: "/admin/users", label: "Users & Roles", icon: UsersIcon },
+  { href: "/admin", label: "Admin Home", icon: HomeIcon, exact: true },
   { href: "/admin/check-in", label: "QR Scan", icon: CheckInIcon },
+  { href: "/admin/members", label: "Members", icon: MembersIcon },
+  { href: "/admin/notifications", label: "Global Alerts", icon: BellIcon },
+  { href: "/admin/events", label: "Events", icon: EventsIcon },
+  { href: "/admin/history", label: "History", icon: HistoryIcon },
+  { href: "/admin/users", label: "Users & Roles", icon: UsersIcon },
   { href: "/admin/showcase-winners", label: "Winners", icon: TrophyIcon },
   { href: "/admin/facebook", label: "Facebook", icon: ShareIcon },
 ];
@@ -24,21 +26,24 @@ export function AdminNavigation({ user }: { user: NavUser }) {
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex md:w-64 md:flex-col border-r border-zinc-200 bg-white">
-        <div className="flex items-center justify-between p-4 border-b border-zinc-200">
-          <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-8 w-8" />
+      <aside className="hidden md:flex md:w-64 md:flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+        <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800">
+          <Link href="/admin" className="flex items-center gap-2">
+            <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-8 w-8" />
+            <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100">Admin Portal</span>
+          </Link>
           <div className="flex items-center gap-2">
             <div className="flex flex-col items-end min-w-0">
-              <span className="text-sm font-medium text-zinc-700 truncate max-w-[120px]">
+              <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300 truncate max-w-[100px]">
                 {user.name ?? "Admin"}
               </span>
-              <span className="text-[10px] text-amber-600 font-medium">Admin</span>
+              <span className="text-[10px] text-amber-600 dark:text-amber-500 font-medium">Admin</span>
             </div>
             {user.image ? (
               <img
                 src={user.image}
                 alt={user.name ?? "Admin"}
-                className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-200"
+                className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-200 dark:ring-zinc-700"
               />
             ) : (
               <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-xs">
@@ -47,29 +52,37 @@ export function AdminNavigation({ user }: { user: NavUser }) {
             )}
           </div>
         </div>
-        <nav className="flex-1 p-3 space-y-1">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {adminNavItems.map((item) => {
-            const isActive = pathname.startsWith(item.href);
+            const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href);
+            const isSundayWinnerItem = item.href === "/admin/showcase-winners" && new Date().getDay() === 0;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
-                    ? "bg-zinc-100 text-zinc-900"
-                    : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100/50"
+                    ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold"
+                    : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50"
                 }`}
               >
-                <item.icon className="w-5 h-5" />
-                {item.label}
+                <div className="flex items-center gap-3">
+                  <item.icon className="w-5 h-5" />
+                  <span>{item.label}</span>
+                </div>
+                {isSundayWinnerItem && (
+                  <span className="rounded-md bg-amber-500 text-black text-[9px] font-black px-1.5 py-0.5 uppercase tracking-wider animate-pulse">
+                    Sunday
+                  </span>
+                )}
               </Link>
             );
           })}
         </nav>
-        <div className="p-3 border-t border-zinc-200">
+        <div className="p-3 border-t border-zinc-200 dark:border-zinc-800">
           <Link
             href="/dashboard"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100/50 transition-colors"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-amber-600 dark:text-amber-500 hover:bg-amber-500/10 transition-colors"
           >
             <BackIcon className="w-5 h-5" />
             Back to Member Area
@@ -78,15 +91,15 @@ export function AdminNavigation({ user }: { user: NavUser }) {
       </aside>
 
       {/* Mobile bottom tab bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden border-t border-zinc-200 bg-white/95 backdrop-blur-sm">
-        {adminNavItems.map((item) => {
-          const isActive = pathname.startsWith(item.href);
+      <nav className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden border-t border-zinc-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-sm overflow-x-auto">
+        {adminNavItems.slice(0, 5).map((item) => {
+          const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-1 flex-col items-center gap-1 py-2 text-xs font-medium transition-colors ${
-                isActive ? "text-zinc-900" : "text-zinc-500"
+              className={`flex flex-1 flex-col items-center gap-1 py-2 text-[10px] font-medium transition-colors min-w-[60px] ${
+                isActive ? "text-amber-500 font-bold" : "text-zinc-500 dark:text-zinc-400"
               }`}
             >
               <item.icon className="w-5 h-5" />
@@ -96,10 +109,10 @@ export function AdminNavigation({ user }: { user: NavUser }) {
         })}
         <Link
           href="/dashboard"
-          className="flex flex-1 flex-col items-center gap-1 py-2 text-xs font-medium text-zinc-500 transition-colors"
+          className="flex flex-1 flex-col items-center gap-1 py-2 text-[10px] font-bold text-amber-600 dark:text-amber-500 transition-colors min-w-[60px]"
         >
           <BackIcon className="w-5 h-5" />
-          <span className="truncate">Back</span>
+          <span className="truncate">Exit</span>
         </Link>
       </nav>
     </>
@@ -167,6 +180,22 @@ function EventsIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+    </svg>
+  );
+}
+
+function HomeIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+    </svg>
+  );
+}
+
+function BellIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
     </svg>
   );
 }
