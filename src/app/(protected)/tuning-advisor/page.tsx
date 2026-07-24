@@ -9,7 +9,7 @@ export default async function TuningAdvisorPage() {
   if (!session?.user) redirect("/auth/signin");
 
   return (
-    <div className="min-h-full bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl space-y-6">
         {/* Header */}
         <div className="space-y-1">
@@ -20,7 +20,7 @@ export default async function TuningAdvisorPage() {
               </svg>
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-zinc-100">Tuning Advisor</h1>
+              <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Tuning Advisor</h1>
               <p className="text-sm text-zinc-500">AI-powered calibration recommendations</p>
             </div>
           </div>
