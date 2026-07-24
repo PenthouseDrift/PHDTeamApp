@@ -5,6 +5,7 @@ import { getMembership } from "@/actions/membership";
 import { getWallet } from "@/actions/wallet";
 import { getRemainingDays } from "@/lib/membership-utils";
 import { getOrCreateQRCode } from "@/actions/qr";
+import { isUserCheckedInToday } from "@/actions/admin/checkins";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
 export const dynamic = "force-dynamic";
@@ -89,12 +90,12 @@ export default async function DashboardPage() {
   }
 
   // Fetch all dashboard data in parallel
-  const [result, walletRes, memberData, qrResult, checkedInRaw] = await Promise.all([
+  const [result, walletRes, memberData, qrResult, isCheckedInToday] = await Promise.all([
     getMembership(session.user.id),
     getWallet(session.user.id),
     redis.hgetall(`member:${session.user.id}`),
     getOrCreateQRCode(session.user.id),
-    redis.get(`checkin:dedup:${session.user.id}`),
+    isUserCheckedInToday(session.user.id),
   ]);
 
   const membership = result.success ? result.data : null;
@@ -108,7 +109,6 @@ export default async function DashboardPage() {
     ? displayName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
     : "?";
   const remainingDays = membership && isActive ? getRemainingDays(membership) : 0;
-  const isCheckedInToday = !!checkedInRaw;
 
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
@@ -134,41 +134,43 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Daily Track Check-In Status Banner */}
-        {isCheckedInToday ? (
-          <div className="rounded-xl bg-gradient-to-r from-green-500/10 via-emerald-500/10 to-green-500/10 border border-green-500/30 p-4 flex items-center justify-between gap-3 shadow-sm">
-            <div className="flex items-center gap-3">
-              <span className="flex h-3 w-3 relative flex-shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
+        {/* Daily Track Check-In Status Banner (Non-Admin only) */}
+        {session.user.role !== "admin" && (
+          isCheckedInToday ? (
+            <div className="rounded-xl bg-gradient-to-r from-green-500/10 via-emerald-500/10 to-green-500/10 border border-green-500/30 p-4 flex items-center justify-between gap-3 shadow-sm">
+              <div className="flex items-center gap-3">
+                <span className="flex h-3 w-3 relative flex-shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
+                </span>
+                <div>
+                  <p className="text-sm font-bold text-green-900 dark:text-green-200">
+                    Checked In Today
+                  </p>
+                  <p className="text-xs text-green-700 dark:text-green-400">
+                    Your track check-in is active for today. Have a great session!
+                  </p>
+                </div>
+              </div>
+              <span className="hidden sm:inline-block rounded-full bg-green-500/20 border border-green-500/30 px-3 py-1 text-xs font-black text-green-700 dark:text-green-300 uppercase tracking-wider">
+                Verified On Track
               </span>
-              <div>
-                <p className="text-sm font-bold text-green-900 dark:text-green-200">
-                  Checked In Today
-                </p>
-                <p className="text-xs text-green-700 dark:text-green-400">
-                  Your track check-in is active for today. Have a great session!
-                </p>
+            </div>
+          ) : (
+            <div className="rounded-xl bg-zinc-100 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 p-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="h-2.5 w-2.5 rounded-full bg-zinc-400 dark:bg-zinc-600 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                    Daily Track Check-In
+                  </p>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    Not checked in yet today. Show your QR code below to an admin at the track.
+                  </p>
+                </div>
               </div>
             </div>
-            <span className="hidden sm:inline-block rounded-full bg-green-500/20 border border-green-500/30 px-3 py-1 text-xs font-black text-green-700 dark:text-green-300 uppercase tracking-wider">
-              Verified On Track
-            </span>
-          </div>
-        ) : (
-          <div className="rounded-xl bg-zinc-100 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 p-4 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="h-2.5 w-2.5 rounded-full bg-zinc-400 dark:bg-zinc-600 flex-shrink-0" />
-              <div>
-                <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                  Daily Track Check-In
-                </p>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                  Not checked in yet today. Show your QR code below to an admin at the track.
-                </p>
-              </div>
-            </div>
-          </div>
+          )
         )}
 
         {/* Combined Membership Status & Check-In QR Section (Top of Dashboard) */}

@@ -39,6 +39,34 @@ export async function getCheckInsByDate(date: string): Promise<CheckInEntry[]> {
   });
 }
 
+export async function isUserCheckedInToday(userId: string): Promise<boolean> {
+  try {
+    const today = new Date().toISOString().split("T")[0];
+    const [dedup, entries] = await Promise.all([
+      redis.get(`checkin:dedup:${userId}`),
+      redis.lrange(`checkins:${today}`, 0, -1),
+    ]);
+
+    if (dedup) return true;
+
+    if (entries && entries.length > 0) {
+      return entries.some((entry) => {
+        try {
+          const parsed = typeof entry === "string" ? JSON.parse(entry) : entry;
+          return parsed.userId === userId;
+        } catch {
+          return false;
+        }
+      });
+    }
+
+    return false;
+  } catch (error) {
+    console.error("isUserCheckedInToday error:", error);
+    return false;
+  }
+}
+
 export async function quickCheckIn(
   memberId: string,
   memberName: string,
@@ -51,7 +79,7 @@ export async function quickCheckIn(
 
     // Check dedup
     const dedupKey = `checkin:dedup:${memberId}`;
-    const alreadyCheckedIn = await redis.get(dedupKey);
+    const alreadyCheckedIn = await isUserCheckedInToday(memberId);
     if (alreadyCheckedIn) {
       return { success: false, error: `${memberName} is already checked in today` };
     }
@@ -65,9 +93,10 @@ export async function quickCheckIn(
     });
 
     await redis.rpush(`checkins:${today}`, entry);
-    await redis.set(dedupKey, "1", { ex: 3600 });
+    await redis.set(dedupKey, "1", { ex: 86400 });
 
     revalidatePath("/admin/members");
+    revalidatePath("/dashboard");
     return { success: true, data: { checkedIn: true } };
   } catch (error) {
     return {
@@ -167,9 +196,11 @@ export async function checkInWithDayPass(
     });
 
     await redis.rpush(`checkins:${today}`, entry);
+    await redis.set(`checkin:dedup:${memberId}`, "1", { ex: 86400 });
 
     revalidatePath("/admin/members");
     revalidatePath("/admin/check-in");
+    revalidatePath("/dashboard");
     return { success: true, data: { checkedIn: true } };
   } catch (error) {
     return {
@@ -210,9 +241,11 @@ export async function checkInWithRental(
     });
 
     await redis.rpush(`checkins:${today}`, entry);
+    await redis.set(`checkin:dedup:${memberId}`, "1", { ex: 86400 });
 
     revalidatePath("/admin/members");
     revalidatePath("/admin/check-in");
+    revalidatePath("/dashboard");
     return { success: true, data: { checkedIn: true } };
   } catch (error) {
     return {
