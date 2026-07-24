@@ -107,13 +107,13 @@ export function CalibrationCard({ cal }: CalibrationCardProps) {
           <div>
             <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2">Steering & Alignment</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-              <Param label="Front Camber" value={`${cal.frontCamber}°`} />
-              <Param label="Rear Camber" value={`${cal.rearCamber}°`} />
-              <Param label="Front Toe" value={`${cal.frontToe}°`} />
-              <Param label="Rear Toe" value={`${cal.rearToe}°`} />
-              <Param label="Caster" value={`${cal.frontCaster}°`} />
-              <Param label="Ackermann" value={`${cal.ackermann}%`} />
-              <Param label="Steering Angle" value={`${cal.steeringAngle}°`} />
+              <Param label="Front Camber" value={`${cal.frontCamber ?? 0}°`} />
+              <Param label="Rear Camber" value={`${cal.rearCamber ?? 0}°`} />
+              <Param label="Front Toe" value={`${cal.frontToe ?? 0}°`} />
+              <Param label="Rear Toe" value={`${cal.rearToe ?? 0}°`} />
+              <Param label="Front Caster" value={`${cal.frontCaster ?? 0}°`} />
+              <Param label="Ackermann" value={`${cal.ackermann ?? 0}%`} />
+              <Param label="Steering Angle" value={`${cal.steeringAngle ?? 0}°`} />
             </div>
           </div>
 
@@ -121,26 +121,26 @@ export function CalibrationCard({ cal }: CalibrationCardProps) {
           <div>
             <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2">Suspension & Shocks</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-              <Param label="Front Ride Height" value={`${cal.frontRideHeight}mm`} />
-              <Param label="Rear Ride Height" value={`${cal.rearRideHeight}mm`} />
-              {cal.frontSpringRate && <Param label="Front Spring" value={cal.frontSpringRate} />}
-              {cal.rearSpringRate && <Param label="Rear Spring" value={cal.rearSpringRate} />}
-              {cal.frontOilWeight && <Param label="Front Oil Weight" value={cal.frontOilWeight} />}
-              {cal.rearOilWeight && <Param label="Rear Oil Weight" value={cal.rearOilWeight} />}
-              {cal.frontOilBrand && <Param label="Front Oil Brand" value={cal.frontOilBrand} />}
-              {cal.rearOilBrand && <Param label="Rear Oil Brand" value={cal.rearOilBrand} />}
-              {cal.frontPistonHoles > 0 && <Param label="Front Piston Holes" value={`${cal.frontPistonHoles}`} />}
-              {cal.rearPistonHoles > 0 && <Param label="Rear Piston Holes" value={`${cal.rearPistonHoles}`} />}
-              {cal.frontPistonHoleSize && <Param label="Front Piston Hole Size" value={cal.frontPistonHoleSize} />}
-              {cal.rearPistonHoleSize && <Param label="Rear Piston Hole Size" value={cal.rearPistonHoleSize} />}
-              {cal.frontShockLength > 0 && <Param label="Front Shock Length" value={`${cal.frontShockLength}mm`} />}
-              {cal.rearShockLength > 0 && <Param label="Rear Shock Length" value={`${cal.rearShockLength}mm`} />}
-              {cal.frontShockBrand && <Param label="Front Shock Brand" value={cal.frontShockBrand} />}
-              {cal.rearShockBrand && <Param label="Rear Shock Brand" value={cal.rearShockBrand} />}
-              {cal.frontORings && <Param label="Front O-Rings" value={cal.frontORings} />}
-              {cal.rearORings && <Param label="Rear O-Rings" value={cal.rearORings} />}
-              <Param label="Front Droop" value={`${cal.frontDroop}mm`} />
-              <Param label="Rear Droop" value={`${cal.rearDroop}mm`} />
+              <Param label="Front Ride Height" value={`${cal.frontRideHeight ?? 0}mm`} />
+              <Param label="Rear Ride Height" value={`${cal.rearRideHeight ?? 0}mm`} />
+              <Param label="Front Spring" value={cal.frontSpringRate || "Not set"} />
+              <Param label="Rear Spring" value={cal.rearSpringRate || "Not set"} />
+              <Param label="Front Oil Weight" value={cal.frontOilWeight || "Not set"} />
+              <Param label="Rear Oil Weight" value={cal.rearOilWeight || "Not set"} />
+              <Param label="Front Oil Brand" value={cal.frontOilBrand || "Not set"} />
+              <Param label="Rear Oil Brand" value={cal.rearOilBrand || "Not set"} />
+              <Param label="Front Piston Holes" value={`${cal.frontPistonHoles ?? 0}`} />
+              <Param label="Rear Piston Holes" value={`${cal.rearPistonHoles ?? 0}`} />
+              <Param label="Front Piston Hole Size" value={cal.frontPistonHoleSize || "Not set"} />
+              <Param label="Rear Piston Hole Size" value={cal.rearPistonHoleSize || "Not set"} />
+              <Param label="Front Shock Length" value={`${cal.frontShockLength ?? 0}mm`} />
+              <Param label="Rear Shock Length" value={`${cal.rearShockLength ?? 0}mm`} />
+              <Param label="Front Shock Brand" value={cal.frontShockBrand || "Not set"} />
+              <Param label="Rear Shock Brand" value={cal.rearShockBrand || "Not set"} />
+              <Param label="Front O-Rings" value={cal.frontORings || "Not set"} />
+              <Param label="Rear O-Rings" value={cal.rearORings || "Not set"} />
+              <Param label="Front Droop" value={`${cal.frontDroop ?? 0}mm`} />
+              <Param label="Rear Droop" value={`${cal.rearDroop ?? 0}mm`} />
             </div>
           </div>
 
@@ -148,32 +148,30 @@ export function CalibrationCard({ cal }: CalibrationCardProps) {
           <div>
             <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2">Electronics & Drivetrain</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-              <Param label="Motor Turns" value={`${cal.motorTurns}T`} />
-              <Param label="Motor Timing" value={`${cal.motorTiming}°`} />
-              {cal.motorPlacement && <Param label="Motor Placement" value={cal.motorPlacement} />}
-              <Param label="Gyro Gain" value={`${cal.gyroGain}%`} />
-              <Param label="Throttle Expo" value={`${cal.throttleExpo}%`} />
-              <Param label="Steering Expo" value={`${cal.steeringExpo}%`} />
-              <Param label="Boost" value={`${cal.boost}%`} />
-              <Param label="Turbo" value={`${cal.turbo}%`} />
+              <Param label="Motor Turns" value={`${cal.motorTurns ?? 0}T`} />
+              <Param label="Motor Timing" value={`${cal.motorTiming ?? 0}°`} />
+              <Param label="Motor Placement" value={cal.motorPlacement || "Not set"} />
+              <Param label="Gyro Gain" value={`${cal.gyroGain ?? 0}%`} />
+              <Param label="Throttle Expo" value={`${cal.throttleExpo ?? 0}%`} />
+              <Param label="Steering Expo" value={`${cal.steeringExpo ?? 0}%`} />
+              <Param label="Boost" value={`${cal.boost ?? 0}%`} />
+              <Param label="Turbo" value={`${cal.turbo ?? 0}%`} />
             </div>
           </div>
 
-          {/* Geometry */}
-          {(cal.frontTrackWidth > 0 || cal.wheelbase > 0 || cal.totalWeight > 0 || cal.frontTyres) && (
-            <div>
-              <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2">Geometry & Tyres</p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                {cal.frontTrackWidth > 0 && <Param label="Front Track" value={`${cal.frontTrackWidth}mm`} />}
-                {cal.rearTrackWidth > 0 && <Param label="Rear Track" value={`${cal.rearTrackWidth}mm`} />}
-                {cal.wheelbase > 0 && <Param label="Wheelbase" value={`${cal.wheelbase}mm`} />}
-                {cal.totalWeight > 0 && <Param label="Weight" value={`${cal.totalWeight}g`} />}
-                {cal.batteryPosition && <Param label="Battery" value={cal.batteryPosition} />}
-                {cal.frontTyres && <Param label="Front Tyres" value={cal.frontTyres} />}
-                {cal.rearTyres && <Param label="Rear Tyres" value={cal.rearTyres} />}
-              </div>
+          {/* Geometry & Tyres */}
+          <div>
+            <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2">Geometry & Tyres</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <Param label="Front Track" value={`${cal.frontTrackWidth ?? 0}mm`} />
+              <Param label="Rear Track" value={`${cal.rearTrackWidth ?? 0}mm`} />
+              <Param label="Wheelbase" value={`${cal.wheelbase ?? 0}mm`} />
+              <Param label="Weight" value={`${cal.totalWeight ?? 0}g`} />
+              <Param label="Battery" value={cal.batteryPosition || "Not set"} />
+              <Param label="Front Tyres" value={cal.frontTyres || "Not set"} />
+              <Param label="Rear Tyres" value={cal.rearTyres || "Not set"} />
             </div>
-          )}
+          </div>
 
           {/* Custom params */}
           {cal.customParams.length > 0 && (
