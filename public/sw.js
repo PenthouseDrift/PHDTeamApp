@@ -56,11 +56,14 @@ self.addEventListener("push", (event) => {
   const data = event.data.json();
   const options = {
     body: data.body,
-    icon: "/icons/icon-192.png",
-    badge: "/icons/icon-192.png",
+    icon: data.icon || "/logo.png",
     data: { url: data.url || "/" },
     vibrate: [200, 100, 200],
   };
+
+  if (data.badge) {
+    options.badge = data.badge;
+  }
 
   event.waitUntil(self.registration.showNotification(data.title, options));
 });
