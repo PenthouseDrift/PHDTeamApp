@@ -115,7 +115,7 @@ function applyChanges(base: CalibrationSetup, changes: TuningChange[]): Calibrat
 export function BeginnerAIWizard({ car, userId }: BeginnerAIWizardProps) {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [setupName, setSetupName] = useState(`${car.name} — Beginner PHD Track Baseline`);
+  const [setupName, setSetupName] = useState(`${car.name} — AI Baseline Setup`);
   const [selectedSurface, setSelectedSurface] = useState("PHD Track (P-Tile)");
   const [generating, setGenerating] = useState(false);
   const [changes, setChanges] = useState<TuningChange[]>([]);
@@ -133,7 +133,7 @@ export function BeginnerAIWizard({ car, userId }: BeginnerAIWizardProps) {
         body: JSON.stringify({
           calibration: { ...DEFAULT_BEGINNER_SETUP, carId: car.carId },
           carName: car.name,
-          goals: ["Beginner Baseline Setup", "Easy Handling & Drift Control"],
+          goals: ["AI Setup Calibration", "Easy Handling & Drift Control"],
           surface: selectedSurface,
           isBeginnerMode: true,
         }),
@@ -178,23 +178,25 @@ export function BeginnerAIWizard({ car, userId }: BeginnerAIWizardProps) {
     }
   }
 
+  const steps = [
+    { n: 1, label: "Name Setup" },
+    { n: 2, label: "Track Surface" },
+    { n: 3, label: "AI Recommendations" },
+  ];
+
   return (
     <div className="space-y-6">
-      {/* Step Indicators */}
-      <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
-        {[
-          { n: 1, label: "Name Setup" },
-          { n: 2, label: "Track Surface" },
-          { n: 3, label: "Review & Save" },
-        ].map((s) => {
+      {/* Progress Steps */}
+      <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4">
+        {steps.map((s) => {
           const isActive = step === s.n;
           const isDone = step > s.n;
           return (
             <div key={s.n} className="flex items-center gap-2">
               <span
-                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold transition-all ${
                   isActive
-                    ? "bg-amber-500 text-black shadow-sm"
+                    ? "bg-purple-600 text-white shadow-md shadow-purple-500/20"
                     : isDone
                     ? "bg-green-500 text-white"
                     : "bg-zinc-200 dark:bg-zinc-800 text-zinc-500"
@@ -230,7 +232,7 @@ export function BeginnerAIWizard({ car, userId }: BeginnerAIWizardProps) {
         <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-5 shadow-sm">
           <div className="space-y-1">
             <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-              1. Name Your New Calibration Setup
+              1. Name Your New AI Setup Calibration
             </h2>
             <p className="text-xs text-zinc-500">
               Give your new setup a clear name so you can identify it in your car's garage.
@@ -256,7 +258,7 @@ export function BeginnerAIWizard({ car, userId }: BeginnerAIWizardProps) {
               onChange={(e) => setSetupName(e.target.value)}
               placeholder="e.g. My First PHD Track Setup"
               required
-              className="w-full rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 px-4 py-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100 focus:border-amber-500 focus:outline-none"
+              className="w-full rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 px-4 py-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100 focus:border-purple-500 focus:outline-none"
             />
           </div>
 
@@ -264,7 +266,7 @@ export function BeginnerAIWizard({ car, userId }: BeginnerAIWizardProps) {
             type="button"
             onClick={() => setStep(2)}
             disabled={!setupName.trim()}
-            className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-extrabold transition-colors shadow-md disabled:opacity-50"
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-extrabold transition-all shadow-md shadow-purple-500/20 disabled:opacity-50"
           >
             Next: Select Track Surface →
           </button>
@@ -293,16 +295,16 @@ export function BeginnerAIWizard({ car, userId }: BeginnerAIWizardProps) {
                   onClick={() => setSelectedSurface(s.id)}
                   className={`rounded-xl border-2 p-3.5 text-left transition-all ${
                     isActive
-                      ? "border-amber-500 bg-amber-500/20 dark:bg-amber-500/25 ring-2 ring-amber-500/40 shadow-md"
+                      ? "border-purple-500 bg-purple-500/15 dark:bg-purple-500/20 ring-2 ring-purple-500/30 shadow-md"
                       : s.featured
-                      ? "border-amber-500/40 bg-gradient-to-br from-amber-500/10 to-orange-500/5 hover:border-amber-500"
+                      ? "border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-indigo-500/5 hover:border-purple-500/60"
                       : "border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 hover:border-zinc-300"
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-lg">{s.icon}</span>
                     {s.featured && (
-                      <span className="text-[9px] font-bold text-amber-500 bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 rounded-full">
+                      <span className="text-[9px] font-bold text-purple-600 dark:text-purple-400 bg-purple-500/15 border border-purple-500/30 px-1.5 py-0.5 rounded-full">
                         CLUB TRACK
                       </span>
                     )}
@@ -328,17 +330,17 @@ export function BeginnerAIWizard({ car, userId }: BeginnerAIWizardProps) {
               type="button"
               onClick={handleGenerate}
               disabled={generating}
-              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-black text-xs font-extrabold hover:from-amber-400 hover:to-orange-400 shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-extrabold hover:from-purple-500 hover:to-indigo-500 shadow-md shadow-purple-500/20 flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {generating ? (
                 <>
-                  <div className="w-4 h-4 rounded-full border-2 border-black border-t-transparent animate-spin" />
-                  <span>Generating AI Baseline Setup...</span>
+                  <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  <span>Generating AI Calibration Setup...</span>
                 </>
               ) : (
                 <>
-                  <span>⚡</span>
-                  <span>Generate Baseline Setup with AI</span>
+                  <span>✨</span>
+                  <span>Generate AI Calibration Setup</span>
                 </>
               )}
             </button>
@@ -349,9 +351,9 @@ export function BeginnerAIWizard({ car, userId }: BeginnerAIWizardProps) {
       {/* Step 3: Review Generated Setup & Save */}
       {step === 3 && changes.length > 0 && (
         <div className="space-y-6">
-          <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 p-5 space-y-2">
-            <h3 className="text-sm font-bold text-amber-600 dark:text-amber-400 flex items-center gap-2">
-              <span>🔰</span> AI Beginner Setup Summary
+          <div className="rounded-2xl bg-purple-500/10 border border-purple-500/30 p-5 space-y-2">
+            <h3 className="text-sm font-bold text-purple-600 dark:text-purple-400 flex items-center gap-2">
+              <span>✨</span> AI Setup Calibration Summary
             </h3>
             <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
               Below is the starting baseline setup generated for <strong>{car.name}</strong> on <strong>{selectedSurface}</strong>. These settings provide maximum stability and smooth drift control to help you start practicing right away!
@@ -360,7 +362,7 @@ export function BeginnerAIWizard({ car, userId }: BeginnerAIWizardProps) {
 
           {/* Parameters list */}
           <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 space-y-4 shadow-sm">
-            <h3 className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 border-b border-zinc-200 dark:border-zinc-800 pb-2">
+            <h3 className="text-xs font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 border-b border-zinc-200 dark:border-zinc-800 pb-2">
               Recommended Starting Settings
             </h3>
 
@@ -393,7 +395,7 @@ export function BeginnerAIWizard({ car, userId }: BeginnerAIWizardProps) {
               type="button"
               onClick={handleSave}
               disabled={saving}
-              className="flex-1 py-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-extrabold transition-colors shadow-lg shadow-amber-500/20 text-center"
+              className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-extrabold transition-all shadow-lg shadow-purple-500/20 text-center"
             >
               {saving ? "Saving Setup..." : "💾 Save Calibration to Car Garage"}
             </button>

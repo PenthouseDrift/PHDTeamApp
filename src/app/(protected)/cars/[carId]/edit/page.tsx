@@ -46,11 +46,6 @@ export default function EditCarPage() {
       return;
     }
 
-    if (images.length === 0) {
-      setError("At least one image is required");
-      return;
-    }
-
     setSubmitting(true);
     try {
       const result = await updateCar(carId, session.user.id, {
@@ -115,7 +110,7 @@ export default function EditCarPage() {
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                Photos
+                Photos (Optional)
               </label>
               <span className="text-xs text-zinc-400">{images.length}/10 photos</span>
             </div>

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
-import { getUnreadCount } from "@/actions/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -9,10 +8,7 @@ export default async function MorePage() {
   const session = await auth();
   if (!session?.user) return null;
 
-  const [unreadCount, memberData] = await Promise.all([
-    getUnreadCount(session.user.id),
-    redis.hgetall(`member:${session.user.id}`),
-  ]);
+  const memberData = await redis.hgetall(`member:${session.user.id}`);
 
   const customAvatar = (memberData?.customAvatar as string) || null;
   const nickname = (memberData?.nickname as string) || "";
@@ -67,14 +63,6 @@ export default async function MorePage() {
       icon: NewsfeedIcon,
       badge: "Feed",
       iconColor: "text-sky-500 bg-sky-500/10 border-sky-500/20",
-    },
-    {
-      title: "Notifications",
-      description: "Track announcements, likes, comments, and global alerts",
-      href: "/notifications",
-      icon: BellIcon,
-      badge: unreadCount > 0 ? `${unreadCount} new` : null,
-      iconColor: "text-yellow-500 bg-yellow-500/10 border-yellow-500/20",
     },
     {
       title: "Profile & Account",

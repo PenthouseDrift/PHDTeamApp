@@ -128,6 +128,7 @@ export async function POST(request: Request) {
       if (isUsed) {
         return NextResponse.json({
           status: "invalid",
+          scanType,
           member: memberDetails,
           message: `${formattedAdminName} — This ${scanType === "day_pass" ? "Day Pass" : "Car Rental"} QR code has already been used!`,
         });
@@ -140,6 +141,7 @@ export async function POST(request: Request) {
       if (!redeemRes.success) {
         return NextResponse.json({
           status: "expired",
+          scanType,
           member: memberDetails,
           message: `${formattedAdminName} — No Car Rental Hours left in wallet`,
         });
@@ -165,6 +167,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         status: "active",
+        scanType,
         member: { ...memberDetails, rentalHours: redeemRes.data.remaining },
         message: `${formattedAdminName} — Car Rental Started! (${redeemRes.data.remaining} hrs remaining)`,
       });
@@ -176,6 +179,7 @@ export async function POST(request: Request) {
       if (!redeemRes.success) {
         return NextResponse.json({
           status: "expired",
+          scanType,
           member: memberDetails,
           message: `${formattedAdminName} — No Day Passes left in wallet`,
         });
@@ -199,6 +203,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         status: "active",
+        scanType,
         member: { ...memberDetails, dayPasses: redeemRes.data.remaining },
         message: `${formattedAdminName} — Day Pass Redeemed! (${redeemRes.data.remaining} passes remaining)`,
       });
@@ -208,6 +213,7 @@ export async function POST(request: Request) {
     if (!isMembershipActive && !body.override) {
       return NextResponse.json({
         status: "expired",
+        scanType: "membership",
         member: memberDetails,
         message: `${formattedAdminName} — Membership Expired`,
       });
@@ -219,6 +225,7 @@ export async function POST(request: Request) {
     if (alreadyCheckedIn) {
       return NextResponse.json({
         status: "duplicate",
+        scanType: "membership",
         member: memberDetails,
         message: `${formattedAdminName} — Already checked in today!`,
       });
@@ -238,6 +245,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       status: "active",
+      scanType: "membership",
       member: memberDetails,
       message: `${formattedAdminName} — Active 28-Day Membership - Allowed on Track`,
     });
