@@ -132,7 +132,7 @@ export async function sendGlobalNotification(
     const adminName = (adminMember?.nickname as string)?.trim() || (adminMember?.name as string) || "Track Admin";
     const targetUrl = params.url?.trim() || "/notifications";
 
-    // Send notifications to all target users in parallel
+    // Send in-app notifications to all target users in parallel
     const sendPromises = targetUserIds.map(async (uid) => {
       const notificationId = crypto.randomUUID();
       const notification: AppNotification = {
@@ -150,15 +150,44 @@ export async function sendGlobalNotification(
       await redis.hset(`notification:${notificationId}`, notification as unknown as Record<string, unknown>);
       await redis.lpush(`notifications:${uid}`, notificationId);
       await redis.incr(`notifications:${uid}:unread`);
-
-      await sendPushToUser(uid, {
-        title: `📢 ${params.title.trim()}`,
-        body: params.message.trim(),
-        url: targetUrl,
-      });
     });
 
     await Promise.all(sendPromises);
+
+    // Deliver Web Push: Deduplicate subscription endpoints across ALL members & global set
+    // so each browser device endpoint receives EXACTLY 1 Web Push notification!
+    const uniqueSubIds = new Set<string>();
+    for (const uid of targetUserIds) {
+      const subIds = await redis.smembers(`push:user:${uid}:subscriptions`);
+      for (const sId of subIds) {
+        uniqueSubIds.add(sId);
+      }
+    }
+
+    const globalSubIds = await redis.smembers("push:all:subscriptions");
+    for (const sId of globalSubIds) {
+      uniqueSubIds.add(sId);
+    }
+
+    const sentEndpoints = new Set<string>();
+    const pushPromises = Array.from(uniqueSubIds).map(async (subId) => {
+      const subData = await redis.get(`push:subscription:${subId}`);
+      if (!subData) return;
+
+      const subscription: PushSubscriptionData =
+        typeof subData === "string" ? JSON.parse(subData) : (subData as unknown as PushSubscriptionData);
+
+      if (subscription?.endpoint && !sentEndpoints.has(subscription.endpoint)) {
+        sentEndpoints.add(subscription.endpoint);
+        await sendPushNotification(subscription, {
+          title: `📢 ${params.title.trim()}`,
+          body: params.message.trim(),
+          url: targetUrl,
+        });
+      }
+    });
+
+    await Promise.all(pushPromises);
 
     // Save global notification audit record
     const recordId = crypto.randomUUID();
@@ -273,11 +302,17 @@ export async function sendDailyEventReminders(): Promise<{ sentCount: number }> 
 async function sendPushToUser(userId: string, payload: { title: string; body: string; url: string }) {
   try {
     const subIds = await redis.smembers(`push:user:${userId}:subscriptions`);
+    const sentEndpoints = new Set<string>();
+
     for (const subId of subIds) {
       const subData = await redis.get(`push:subscription:${subId}`);
-      if (subData) {
-        const subscription: PushSubscriptionData =
-          typeof subData === "string" ? JSON.parse(subData) : subData as unknown as PushSubscriptionData;
+      if (!subData) continue;
+
+      const subscription: PushSubscriptionData =
+        typeof subData === "string" ? JSON.parse(subData) : (subData as unknown as PushSubscriptionData);
+
+      if (subscription?.endpoint && !sentEndpoints.has(subscription.endpoint)) {
+        sentEndpoints.add(subscription.endpoint);
         await sendPushNotification(subscription, payload);
       }
     }

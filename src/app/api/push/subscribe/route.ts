@@ -25,6 +25,9 @@ export async function POST(request: Request) {
       await redis.sadd("push:admin:subscriptions", subId);
     }
 
+    // Track in global subscriptions set
+    await redis.sadd("push:all:subscriptions", subId);
+
     // Also track per-user
     await redis.sadd(`push:user:${session.user.id}:subscriptions`, subId);
 
