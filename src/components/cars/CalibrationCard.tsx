@@ -144,13 +144,16 @@ export function CalibrationCard({ cal }: CalibrationCardProps) {
             </div>
           </div>
 
-          {/* Electronics */}
+          {/* Electronics & Drivetrain */}
           <div>
             <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-2">Electronics & Drivetrain</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
               <Param label="Motor Turns" value={`${cal.motorTurns ?? 0}T`} />
               <Param label="Motor Timing" value={`${cal.motorTiming ?? 0}°`} />
               <Param label="Motor Placement" value={cal.motorPlacement || "Not set"} />
+              <Param label="Spur Gear" value={`${cal.spurGear ?? 0}T`} />
+              <Param label="Pinion Gear" value={`${cal.pinionGear ?? 0}T`} />
+              <Param label="FDR" value={`${cal.finalDriveRatio ?? 0}`} />
               <Param label="Gyro Gain" value={`${cal.gyroGain ?? 0}%`} />
               <Param label="Throttle Expo" value={`${cal.throttleExpo ?? 0}%`} />
               <Param label="Steering Expo" value={`${cal.steeringExpo ?? 0}%`} />

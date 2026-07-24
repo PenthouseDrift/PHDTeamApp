@@ -70,6 +70,9 @@ ELECTRONICS & DRIVETRAIN:
 - Motor Turns: ${cal.motorTurns ?? 0}T
 - Motor Timing: ${cal.motorTiming ?? 0}°
 - Motor Placement: ${cal.motorPlacement || "Not set"}
+- Spur Gear: ${cal.spurGear ?? 0}T
+- Pinion Gear: ${cal.pinionGear ?? 0}T
+- Final Drive Ratio (FDR): ${cal.finalDriveRatio ?? 0}
 - Gyro Gain: ${cal.gyroGain ?? 0}%
 - Throttle Expo: ${cal.throttleExpo ?? 0}%
 - Steering Expo: ${cal.steeringExpo ?? 0}%

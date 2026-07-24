@@ -315,14 +315,16 @@ export default function TuningAdvisorClient() {
         {selectedCalibration && (
           <div className="rounded-xl bg-zinc-100/80 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/50 p-4">
             <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wide mb-3">Current Setup Snapshot</p>
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-xs">
+            <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 text-xs">
               {[
-                { label: "F.Camber", value: `${selectedCalibration.frontCamber}°` },
-                { label: "R.Camber", value: `${selectedCalibration.rearCamber}°` },
-                { label: "Gyro", value: `${selectedCalibration.gyroGain}%` },
-                { label: "Boost", value: `${selectedCalibration.boost}%` },
-                { label: "F.Droop", value: `${selectedCalibration.frontDroop}mm` },
-                { label: "R.Droop", value: `${selectedCalibration.rearDroop}mm` },
+                { label: "F.Camber", value: `${selectedCalibration.frontCamber ?? 0}°` },
+                { label: "R.Camber", value: `${selectedCalibration.rearCamber ?? 0}°` },
+                { label: "Gyro", value: `${selectedCalibration.gyroGain ?? 0}%` },
+                { label: "Spur/Pinion", value: selectedCalibration.spurGear && selectedCalibration.pinionGear ? `${selectedCalibration.spurGear}T/${selectedCalibration.pinionGear}T` : "Not set" },
+                { label: "FDR", value: selectedCalibration.finalDriveRatio ? `${selectedCalibration.finalDriveRatio}` : "Not set" },
+                { label: "Boost", value: `${selectedCalibration.boost ?? 0}%` },
+                { label: "F.Droop", value: `${selectedCalibration.frontDroop ?? 0}mm` },
+                { label: "R.Droop", value: `${selectedCalibration.rearDroop ?? 0}mm` },
               ].map((p) => (
                 <div key={p.label} className="rounded-lg bg-white dark:bg-zinc-900 px-2 py-1.5 text-center border border-zinc-200 dark:border-zinc-800">
                   <p className="text-[10px] text-zinc-500">{p.label}</p>
