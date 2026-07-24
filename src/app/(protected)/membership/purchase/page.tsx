@@ -134,13 +134,12 @@ export default async function PurchaseMembershipPage() {
             </div>
           )}
 
-          <form action={handlePurchase}>
-            <PurchaseButton
-              isActive={isActive}
-              price={MEMBERSHIP_PRICE}
-              durationDays={MEMBERSHIP_DURATION_DAYS}
-            />
-          </form>
+          <PurchaseButton
+            userId={session.user.id}
+            isActive={isActive}
+            price={MEMBERSHIP_PRICE}
+            durationDays={MEMBERSHIP_DURATION_DAYS}
+          />
 
           <div className="flex items-center justify-center gap-2 pt-1 text-xs text-zinc-500 dark:text-zinc-400">
             <svg className="h-4 w-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import type { Wallet, Membership } from "@/types";
+import { createWalletCheckout } from "@/actions/wallet";
 
 interface WalletClientProps {
   userId: string;
@@ -13,7 +14,7 @@ interface WalletClientProps {
   membershipQrUrl: string;
   dayPassQrUrl: string;
   rentalQrUrl: string;
-  onPurchaseItem: (itemType: "daypass" | "rental", quantity: number) => Promise<void>;
+  onPurchaseItem?: (itemType: "daypass" | "rental", quantity: number) => Promise<void>;
   onTestAddBalance?: (itemType: "daypass" | "rental", quantity: number) => Promise<void>;
 }
 
@@ -38,7 +39,14 @@ export function WalletClient({
   async function handleBuy(itemType: "daypass" | "rental", qty: number) {
     setIsSubmitting(true);
     try {
-      await onPurchaseItem(itemType, qty);
+      const res = await createWalletCheckout(userId, itemType, qty);
+      if (res.success) {
+        window.location.href = res.data.url;
+      } else {
+        alert(res.error || "Payment checkout failed");
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Payment checkout error");
     } finally {
       setIsSubmitting(false);
     }

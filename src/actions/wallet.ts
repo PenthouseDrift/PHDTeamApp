@@ -148,3 +148,50 @@ export async function redeemRentalHour(userId: string): Promise<ActionResult<{ r
     };
   }
 }
+
+export async function createWalletCheckout(
+  userId: string,
+  itemType: "daypass" | "rental",
+  quantity: number
+): Promise<ActionResult<{ url: string }>> {
+  try {
+    const { createCheckout } = await import("@/lib/sumup");
+    const unitPrice = 10.0;
+    const totalAmount = quantity * unitPrice;
+    const description =
+      itemType === "daypass"
+        ? `Penthouse Drift - ${quantity}x Day Pass`
+        : `Penthouse Drift - ${quantity}x Car Rental Hour`;
+
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+    const checkout = await createCheckout({
+      memberId: `${itemType}_${userId}_${quantity}`,
+      amount: totalAmount,
+      currency: "GBP",
+      description,
+      returnUrl: `${baseUrl}/wallet`,
+    });
+
+    await redis.set(
+      `checkout:${checkout.id}`,
+      JSON.stringify({
+        memberId: userId,
+        itemType,
+        quantity,
+        checkoutReference: checkout.checkout_reference,
+        createdAt: Date.now(),
+      }),
+      { ex: 3600 }
+    );
+
+    const redirectUrl = checkout.hosted_checkout_url || `https://pay.sumup.com/b2c/Q${checkout.id}`;
+    return { success: true, data: { url: redirectUrl } };
+  } catch (error) {
+    console.error("createWalletCheckout error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to initialize payment checkout",
+    };
+  }
+}

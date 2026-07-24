@@ -32,3 +32,43 @@ export async function getMembership(
     };
   }
 }
+
+export async function createMembershipCheckout(
+  userId: string
+): Promise<ActionResult<{ url: string }>> {
+  try {
+    const { createCheckout } = await import("@/lib/sumup");
+    const MEMBERSHIP_PRICE = 40.0;
+    const MEMBERSHIP_CURRENCY = "GBP";
+    const MEMBERSHIP_DURATION_DAYS = 28;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+    const checkout = await createCheckout({
+      memberId: userId,
+      amount: MEMBERSHIP_PRICE,
+      currency: MEMBERSHIP_CURRENCY,
+      description: `Penthouse Drift - ${MEMBERSHIP_DURATION_DAYS}-Day Membership`,
+      returnUrl: `${baseUrl}/membership/success`,
+    });
+
+    await redis.set(
+      `checkout:${checkout.id}`,
+      JSON.stringify({
+        memberId: userId,
+        checkoutReference: checkout.checkout_reference,
+        createdAt: Date.now(),
+      }),
+      { ex: 3600 }
+    );
+    await redis.set(`pending_checkout:${userId}`, checkout.id, { ex: 3600 });
+
+    const redirectUrl = checkout.hosted_checkout_url || `https://pay.sumup.com/b2c/Q${checkout.id}`;
+    return { success: true, data: { url: redirectUrl } };
+  } catch (error) {
+    console.error("createMembershipCheckout error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to initialize membership checkout",
+    };
+  }
+}
