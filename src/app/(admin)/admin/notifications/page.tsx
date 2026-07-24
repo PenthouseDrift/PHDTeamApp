@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { getGlobalNotificationsHistory } from "@/actions/notifications";
 import { GlobalNotificationForm } from "./GlobalNotificationForm";
 
@@ -6,7 +7,9 @@ export const dynamic = "force-dynamic";
 
 export default async function GlobalNotificationsPage() {
   const session = await auth();
-  if (!session?.user || session.user.role !== "admin") return null;
+  if (!session?.user || session.user.role !== "admin") {
+    redirect("/admin/members");
+  }
 
   const history = await getGlobalNotificationsHistory(30);
 

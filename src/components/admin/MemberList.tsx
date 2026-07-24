@@ -8,14 +8,16 @@ import type { MemberWithMembership } from "@/actions/admin/members";
 interface MemberListProps {
   members: MemberWithMembership[];
   checkedInMembers: MemberWithMembership[];
+  userRole?: "admin" | "moderator" | "member";
 }
 
-export function MemberList({ members, checkedInMembers }: MemberListProps) {
+export function MemberList({ members, checkedInMembers, userRole }: MemberListProps) {
   const [search, setSearch] = useState("");
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [selectedMember, setSelectedMember] = useState<MemberWithMembership | null>(null);
 
   const checkedInIds = new Set(checkedInMembers.map((m) => m.member.id));
+  const isModerator = userRole === "moderator";
 
   const allFiltered = search
     ? members.filter((m) => {
@@ -28,8 +30,10 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
       })
     : members;
 
-  const regularMembers = allFiltered.filter((m) => m.member.role !== "admin");
-  const adminMembers = allFiltered.filter((m) => m.member.role === "admin");
+  const regularMembers = allFiltered.filter((m) =>
+    isModerator ? m.member.role !== "admin" && m.member.role !== "moderator" : m.member.role !== "admin"
+  );
+  const adminMembers = isModerator ? [] : allFiltered.filter((m) => m.member.role === "admin");
 
   function formatDate(timestamp: number): string {
     return new Date(timestamp).toLocaleDateString("en-GB", {
@@ -67,13 +71,23 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
             <span className="inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1 bg-purple-50 text-purple-700 border border-purple-100">
               Admin
             </span>
+          ) : m.member.role === "moderator" ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-100">
+              Moderator
+            </span>
+          ) : isModerator ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1 bg-zinc-100 text-zinc-700 border border-zinc-200">
+              Member
+            </span>
           ) : (
             <StatusBadge status={m.membership?.status ?? "expired"} size="sm" />
           )}
         </td>
-        <td className="px-4 py-3 text-zinc-600 hidden md:table-cell">
-          {m.membership ? formatDate(m.membership.expiresAt) : "—"}
-        </td>
+        {!isModerator && (
+          <td className="px-4 py-3 text-zinc-600 hidden md:table-cell">
+            {m.membership ? formatDate(m.membership.expiresAt) : "—"}
+          </td>
+        )}
         <td className="px-4 py-3 text-right">
           <span className="text-xs font-medium text-zinc-400 group-hover:text-amber-500 transition-colors whitespace-nowrap">
             View details →
@@ -112,7 +126,6 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
         </div>
       )}
 
-
       {/* Members table */}
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
@@ -130,8 +143,8 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
                 <tr className="text-left text-zinc-600">
                   <th className="px-4 py-3 font-medium">Name</th>
                   <th className="px-4 py-3 font-medium hidden sm:table-cell">Email</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium hidden md:table-cell">Expires</th>
+                  <th className="px-4 py-3 font-medium">{isModerator ? "Role" : "Status"}</th>
+                  {!isModerator && <th className="px-4 py-3 font-medium hidden md:table-cell">Expires</th>}
                   <th className="px-4 py-3 font-medium text-right"></th>
                 </tr>
               </thead>

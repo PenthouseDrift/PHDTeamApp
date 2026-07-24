@@ -4,7 +4,7 @@ export interface Member {
   name: string;
   nickname?: string | null;
   image: string | null;
-  role: "admin" | "member";
+  role: "admin" | "moderator" | "member";
   qrCode: string | null;
   createdAt: number;
 }

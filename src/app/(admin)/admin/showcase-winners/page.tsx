@@ -1,3 +1,5 @@
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { redis } from "@/lib/redis";
 import { getShowcaseEntries } from "@/actions/showcase";
 import { getCurrentWeek, getWeeklyWinners } from "@/actions/admin/showcase";
@@ -19,6 +21,10 @@ function isSubmittedThisWeek(timestamp: number): boolean {
 }
 
 export default async function AdminShowcaseWinnersPage() {
+  const session = await auth();
+  if (!session?.user || session.user.role !== "admin") {
+    redirect("/admin/members");
+  }
   const entries = await getShowcaseEntries();
   const { year, week } = await getCurrentWeek();
   const currentWinnerKey = `shells:winner:${year}:${week}`;

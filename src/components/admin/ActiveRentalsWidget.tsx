@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { startRentalTimer, completeRental } from "@/actions/admin/rentals";
+import { startRentalTimer, completeRental, extendRentalSessionManual } from "@/actions/admin/rentals";
 import type { RentalSession } from "@/types";
 
 interface ActiveRentalsWidgetProps {
@@ -33,6 +33,17 @@ export function ActiveRentalsWidget({ initialRentals }: ActiveRentalsWidgetProps
   function handleStartNow(rentalId: string) {
     startTransition(async () => {
       const res = await startRentalTimer(rentalId);
+      if (res.success) {
+        setRentals((prev) =>
+          prev.map((r) => (r.rentalId === rentalId ? res.data : r))
+        );
+      }
+    });
+  }
+
+  function handleExtend(rentalId: string, method: "cash" | "wallet") {
+    startTransition(async () => {
+      const res = await extendRentalSessionManual(rentalId, method);
       if (res.success) {
         setRentals((prev) =>
           prev.map((r) => (r.rentalId === rentalId ? res.data : r))
@@ -133,23 +144,43 @@ export function ActiveRentalsWidget({ initialRentals }: ActiveRentalsWidgetProps
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-2 pt-1">
-                {isGrace && (
+              <div className="space-y-2 pt-1">
+                <div className="flex gap-2">
+                  {isGrace && (
+                    <button
+                      onClick={() => handleStartNow(rental.rentalId)}
+                      disabled={isPending}
+                      className="flex-1 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-black hover:bg-amber-400 transition-colors disabled:opacity-50"
+                    >
+                      Start 1-Hr Session Now
+                    </button>
+                  )}
                   <button
-                    onClick={() => handleStartNow(rental.rentalId)}
+                    onClick={() => handleComplete(rental.rentalId)}
                     disabled={isPending}
-                    className="flex-1 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-black hover:bg-amber-400 transition-colors disabled:opacity-50"
+                    className="rounded-md bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-700 transition-colors disabled:opacity-50 ml-auto"
                   >
-                    Start 1-Hr Session Now
+                    Complete & Clear
                   </button>
-                )}
-                <button
-                  onClick={() => handleComplete(rental.rentalId)}
-                  disabled={isPending}
-                  className="rounded-md bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-700 transition-colors disabled:opacity-50"
-                >
-                  Complete & Clear
-                </button>
+                </div>
+
+                {/* Session Extension Controls */}
+                <div className="flex gap-2 pt-1.5 border-t border-zinc-800">
+                  <button
+                    onClick={() => handleExtend(rental.rentalId, "cash")}
+                    disabled={isPending}
+                    className="flex-1 rounded-md bg-white/10 hover:bg-white/20 border border-white/10 px-2 py-1.5 text-[11px] font-bold text-white transition-colors disabled:opacity-50 text-center"
+                  >
+                    💵 Extend +1 Hr (£10 Cash)
+                  </button>
+                  <button
+                    onClick={() => handleExtend(rental.rentalId, "wallet")}
+                    disabled={isPending}
+                    className="flex-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 px-2 py-1.5 text-[11px] font-bold text-amber-400 transition-colors disabled:opacity-50 text-center"
+                  >
+                    🎫 Extend +1 Hr (Wallet)
+                  </button>
+                </div>
               </div>
             </div>
           );

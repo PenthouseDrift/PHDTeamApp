@@ -9,7 +9,7 @@ interface NavUser {
   id: string;
   name?: string | null;
   image?: string | null;
-  role?: "admin" | "member";
+  role?: "admin" | "moderator" | "member";
 }
 
 interface ProtectedNavigationProps {
@@ -101,9 +101,9 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
             <ProfileIcon className="w-5 h-5" />
             Profile
           </Link>
-          {user.role === "admin" && (
+          {(user.role === "admin" || user.role === "moderator") && (
             <Link
-              href="/admin/members"
+              href="/admin"
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 pathname.startsWith("/admin")
                   ? "bg-amber-50 text-amber-700"
@@ -111,7 +111,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
               }`}
             >
               <AdminIcon className="w-5 h-5" />
-              Admin Panel
+              {user.role === "moderator" ? "Mod Panel" : "Admin Panel"}
             </Link>
           )}
         </nav>
@@ -166,15 +166,15 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
             </Link>
           );
         })}
-        {user.role === "admin" && (
+        {(user.role === "admin" || user.role === "moderator") && (
           <Link
-            href="/admin/members"
+            href="/admin"
             className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
               pathname.startsWith("/admin") ? "text-amber-600" : "text-amber-500"
             }`}
           >
             <AdminIcon className="w-5 h-5" />
-            <span>Admin</span>
+            <span>{user.role === "moderator" ? "Mod" : "Admin"}</span>
           </Link>
         )}
       </nav>

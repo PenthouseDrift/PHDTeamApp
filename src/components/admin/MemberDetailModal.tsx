@@ -139,6 +139,10 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
     });
   }
 
+  const viewerRole = session?.user?.role;
+  const isAdminViewer = viewerRole === "admin";
+  const isModeratorViewer = viewerRole === "moderator";
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
@@ -207,108 +211,123 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
             </div>
           </div>
 
-          {/* Membership Status */}
-          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Membership</h3>
-            {isAdmin ? (
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-100 dark:bg-purple-950/80 border border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs font-black uppercase tracking-wider">
-                <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
-                Admin Access
-              </span>
-            ) : localMembership ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <StatusBadge status={localMembership.status} size="sm" />
-                  {membershipActive && (
-                    <span className="text-xs text-zinc-500">
-                      {getRemainingDays(localMembership.expiresAt)} days remaining
-                    </span>
+          {/* Membership Status (Admin Only) */}
+          {!isModeratorViewer && (
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Membership</h3>
+              {isAdmin ? (
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-100 dark:bg-purple-950/80 border border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs font-black uppercase tracking-wider">
+                  <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+                  Admin Access
+                </span>
+              ) : localMembership ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <StatusBadge status={localMembership.status} size="sm" />
+                    {membershipActive && (
+                      <span className="text-xs text-zinc-500">
+                        {getRemainingDays(localMembership.expiresAt)} days remaining
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+                    <div>
+                      <span className="text-zinc-400 block">Purchased</span>
+                      <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                        {localMembership.purchasedAt ? formatDate(localMembership.purchasedAt) : "—"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-400 block">Expires</span>
+                      <span className={`font-medium ${membershipActive ? "text-zinc-800 dark:text-zinc-200" : "text-red-600"}`}>
+                        {formatDate(localMembership.expiresAt)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-zinc-500">No membership record</p>
+              )}
+
+              {/* Membership Actions (Admin Only) */}
+              {isAdminViewer && !isAdmin && (
+                <div className="flex flex-wrap gap-2 pt-1 border-t border-zinc-100 dark:border-zinc-800">
+                  {!membershipActive ? (
+                    <button
+                      onClick={handleActivate}
+                      disabled={isPending}
+                      className="flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-amber-500 text-black hover:bg-amber-400 transition-colors disabled:opacity-50"
+                    >
+                      Activate 28-Day Membership
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => { setShowRevoke(true); setRevokeStep(1); }}
+                      disabled={isPending}
+                      className="flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-colors disabled:opacity-50"
+                    >
+                      Revoke Membership
+                    </button>
                   )}
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs text-zinc-600 dark:text-zinc-400">
-                  <div>
-                    <span className="text-zinc-400 block">Purchased</span>
-                    <span className="font-medium text-zinc-800 dark:text-zinc-200">
-                      {localMembership.purchasedAt ? formatDate(localMembership.purchasedAt) : "—"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-zinc-400 block">Expires</span>
-                    <span className={`font-medium ${membershipActive ? "text-zinc-800 dark:text-zinc-200" : "text-red-600"}`}>
-                      {formatDate(localMembership.expiresAt)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-zinc-500">No membership record</p>
-            )}
-
-            {/* Membership Actions */}
-            {!isAdmin && (
-              <div className="flex flex-wrap gap-2 pt-1 border-t border-zinc-100 dark:border-zinc-800">
-                {!membershipActive ? (
                   <button
-                    onClick={handleActivate}
-                    disabled={isPending}
-                    className="flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-amber-500 text-black hover:bg-amber-400 transition-colors disabled:opacity-50"
+                    onClick={() => setShowOverride(!showOverride)}
+                    className="px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
                   >
-                    Activate 28-Day Membership
+                    Set Expiry Date
                   </button>
-                ) : (
                   <button
-                    onClick={() => { setShowRevoke(true); setRevokeStep(1); }}
+                    onClick={handleCheckIn}
                     disabled={isPending}
-                    className="flex-1 px-3 py-2 text-xs font-semibold rounded-lg bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-colors disabled:opacity-50"
+                    className="px-3 py-2 text-xs font-semibold rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
                   >
-                    Revoke Membership
+                    Check In Now
                   </button>
-                )}
-                <button
-                  onClick={() => setShowOverride(!showOverride)}
-                  className="px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-                >
-                  Set Expiry Date
-                </button>
-                <button
-                  onClick={handleCheckIn}
-                  disabled={isPending}
-                  className="px-3 py-2 text-xs font-semibold rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
-                >
-                  Check In Now
-                </button>
-              </div>
-            )}
+                </div>
+              )}
+              {/* Date Override Inline (Admin only) */}
+              {isAdminViewer && showOverride && (
+                <div className="flex gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                  <input
+                    type="date"
+                    value={overrideDate}
+                    onChange={(e) => setOverrideDate(e.target.value)}
+                    min={new Date().toISOString().split("T")[0]}
+                    className="flex-1 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                  <button
+                    onClick={handleOverrideDate}
+                    disabled={!overrideDate || isPending}
+                    className="px-4 py-2 text-xs font-bold rounded-lg bg-amber-500 text-black hover:bg-amber-400 disabled:opacity-50 transition-colors"
+                  >
+                    {isPending ? "..." : "Set"}
+                  </button>
+                  <button
+                    onClick={() => { setShowOverride(false); setOverrideDate(""); }}
+                    className="px-3 py-2 text-xs rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 hover:bg-zinc-200 transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
-            {/* Date Override Inline */}
-            {showOverride && (
-              <div className="flex gap-2 pt-2">
-                <input
-                  type="date"
-                  value={overrideDate}
-                  onChange={(e) => setOverrideDate(e.target.value)}
-                  min={new Date().toISOString().split("T")[0]}
-                  className="flex-1 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                />
-                <button
-                  onClick={handleOverrideDate}
-                  disabled={!overrideDate || isPending}
-                  className="px-4 py-2 text-xs font-bold rounded-lg bg-amber-500 text-black hover:bg-amber-400 disabled:opacity-50 transition-colors"
-                >
-                  {isPending ? "..." : "Set"}
-                </button>
-                <button
-                  onClick={() => { setShowOverride(false); setOverrideDate(""); }}
-                  className="px-3 py-2 text-xs rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 hover:bg-zinc-200 transition-colors"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-          </div>
+          {/* Moderator Track Action */}
+          {isModeratorViewer && (
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Track Actions</h3>
+              <button
+                onClick={handleCheckIn}
+                disabled={isPending}
+                className="w-full px-4 py-2.5 text-xs font-bold rounded-xl bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 shadow-sm"
+              >
+                Check In Member Now
+              </button>
+            </div>
+          )}
 
-          {/* Wallet Balances */}
-          {!isAdmin && (
+          {/* Wallet Balances (Admin only) */}
+          {!isAdmin && isAdminViewer && (
             <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Wallet</h3>
               <div className="grid grid-cols-2 gap-3">

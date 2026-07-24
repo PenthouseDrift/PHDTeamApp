@@ -20,9 +20,9 @@ export function CheckInHistory({ checkIns, selectedDate }: CheckInHistoryProps) 
   }
 
   function navigateDate(daysOffset: number) {
-    const current = new Date(selectedDate + "T00:00:00");
-    current.setDate(current.getDate() + daysOffset);
-    const newDateStr = current.toISOString().split("T")[0];
+    const [year, month, day] = selectedDate.split("-").map(Number);
+    const dateObj = new Date(Date.UTC(year, month - 1, day + daysOffset));
+    const newDateStr = dateObj.toISOString().split("T")[0];
     router.push(`/admin/history?date=${newDateStr}`);
   }
 
@@ -33,7 +33,8 @@ export function CheckInHistory({ checkIns, selectedDate }: CheckInHistoryProps) 
     });
   }
 
-  const formattedDateTitle = new Date(selectedDate + "T00:00:00").toLocaleDateString("en-AU", {
+  const [year, month, day] = selectedDate.split("-").map(Number);
+  const formattedDateTitle = new Date(year, month - 1, day).toLocaleDateString("en-GB", {
     weekday: "long",
     day: "numeric",
     month: "long",
