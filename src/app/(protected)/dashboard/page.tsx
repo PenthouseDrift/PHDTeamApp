@@ -134,6 +134,43 @@ export default async function DashboardPage() {
           </div>
         </div>
 
+        {/* Daily Track Check-In Status Banner */}
+        {isCheckedInToday ? (
+          <div className="rounded-xl bg-gradient-to-r from-green-500/10 via-emerald-500/10 to-green-500/10 border border-green-500/30 p-4 flex items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-center gap-3">
+              <span className="flex h-3 w-3 relative flex-shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
+              </span>
+              <div>
+                <p className="text-sm font-bold text-green-900 dark:text-green-200">
+                  Checked In Today
+                </p>
+                <p className="text-xs text-green-700 dark:text-green-400">
+                  Your track check-in is active for today. Have a great session!
+                </p>
+              </div>
+            </div>
+            <span className="hidden sm:inline-block rounded-full bg-green-500/20 border border-green-500/30 px-3 py-1 text-xs font-black text-green-700 dark:text-green-300 uppercase tracking-wider">
+              Verified On Track
+            </span>
+          </div>
+        ) : (
+          <div className="rounded-xl bg-zinc-100 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 p-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="h-2.5 w-2.5 rounded-full bg-zinc-400 dark:bg-zinc-600 flex-shrink-0" />
+              <div>
+                <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                  Daily Track Check-In
+                </p>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                  Not checked in yet today. Show your QR code below to an admin at the track.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Combined Membership Status & Check-In QR Section (Top of Dashboard) */}
         <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-6 shadow-sm">
           {/* Membership Status Header & Badge */}
@@ -206,17 +243,6 @@ export default async function DashboardPage() {
             )}
           </div>
         </section>
-
-        {/* Check-In Status */}
-        {isCheckedInToday && (
-          <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4 flex items-center gap-3">
-            <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
-            <div>
-              <p className="text-sm font-semibold text-green-800 dark:text-green-300">Checked In Today</p>
-              <p className="text-xs text-green-600 dark:text-green-400">You're on the track — enjoy your session!</p>
-            </div>
-          </div>
-        )}
 
         {/* Penthouse Drift Wallet & Pass Balances Card */}
         <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-4 shadow-sm">
