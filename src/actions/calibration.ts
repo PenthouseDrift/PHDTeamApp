@@ -99,6 +99,100 @@ export async function createCalibration(
   return { success: true, data: calibration };
 }
 
+/**
+ * Save a full CalibrationSetup (produced by the Tuning Advisor) directly to
+ * Redis without passing through calibrationSchema.safeParse(). This preserves
+ * every field from the original calibration that the advisor didn't change,
+ * since the zod schema strips unknown/extra keys on parse.
+ */
+export async function saveAdvisedCalibration(
+  carId: string,
+  userId: string,
+  setup: Omit<CalibrationSetup, "calibrationId" | "carId" | "userId" | "createdAt" | "name">,
+  name: string
+): Promise<ActionResult<CalibrationSetup>> {
+  // Verify ownership
+  const isMember = await redis.sismember(`member:${userId}:cars`, carId);
+  if (!isMember) {
+    return { success: false, error: "Car not found or access denied" };
+  }
+
+  // Enforce limit
+  const count = await redis.scard(`car:${carId}:calibrations`);
+  if (count >= MAX_CALIBRATIONS_PER_CAR) {
+    return {
+      success: false,
+      error: `Maximum of ${MAX_CALIBRATIONS_PER_CAR} calibrations per car`,
+    };
+  }
+
+  if (!name.trim()) {
+    return { success: false, error: "Calibration name is required" };
+  }
+
+  const calibrationId = crypto.randomUUID();
+  const calibration: CalibrationSetup = {
+    calibrationId,
+    carId,
+    userId,
+    createdAt: Date.now(),
+    name: name.trim(),
+    // Spread all fields from the advised setup — nothing stripped
+    frontCamber: setup.frontCamber ?? 0,
+    rearCamber: setup.rearCamber ?? 0,
+    frontToe: setup.frontToe ?? 0,
+    rearToe: setup.rearToe ?? 0,
+    frontCaster: setup.frontCaster ?? 0,
+    ackermann: setup.ackermann ?? 0,
+    steeringAngle: setup.steeringAngle ?? 0,
+    frontRideHeight: setup.frontRideHeight ?? 0,
+    rearRideHeight: setup.rearRideHeight ?? 0,
+    frontSpringRate: setup.frontSpringRate ?? "",
+    rearSpringRate: setup.rearSpringRate ?? "",
+    frontOilWeight: setup.frontOilWeight ?? "",
+    rearOilWeight: setup.rearOilWeight ?? "",
+    frontOilBrand: setup.frontOilBrand ?? "",
+    rearOilBrand: setup.rearOilBrand ?? "",
+    frontPistonHoles: setup.frontPistonHoles ?? 0,
+    rearPistonHoles: setup.rearPistonHoles ?? 0,
+    frontPistonHoleSize: setup.frontPistonHoleSize ?? "",
+    rearPistonHoleSize: setup.rearPistonHoleSize ?? "",
+    frontShockLength: setup.frontShockLength ?? 0,
+    rearShockLength: setup.rearShockLength ?? 0,
+    frontShockBrand: setup.frontShockBrand ?? "",
+    rearShockBrand: setup.rearShockBrand ?? "",
+    frontORings: setup.frontORings ?? "",
+    rearORings: setup.rearORings ?? "",
+    frontDroop: setup.frontDroop ?? 0,
+    rearDroop: setup.rearDroop ?? 0,
+    gyroGain: setup.gyroGain ?? 0,
+    motorTurns: setup.motorTurns ?? 0,
+    motorTiming: setup.motorTiming ?? 0,
+    motorPlacement: setup.motorPlacement ?? "",
+    throttleExpo: setup.throttleExpo ?? 0,
+    steeringExpo: setup.steeringExpo ?? 0,
+    boost: setup.boost ?? 0,
+    turbo: setup.turbo ?? 0,
+    frontTrackWidth: setup.frontTrackWidth ?? 0,
+    rearTrackWidth: setup.rearTrackWidth ?? 0,
+    wheelbase: setup.wheelbase ?? 0,
+    batteryPosition: setup.batteryPosition ?? "",
+    totalWeight: setup.totalWeight ?? 0,
+    frontTyres: setup.frontTyres ?? "",
+    rearTyres: setup.rearTyres ?? "",
+    customParams: setup.customParams ?? [],
+  };
+
+  await redis.hset(`calibration:${calibrationId}`, {
+    ...calibration,
+    customParams: JSON.stringify(calibration.customParams),
+  });
+  await redis.sadd(`car:${carId}:calibrations`, calibrationId);
+
+  revalidatePath(`/cars/${carId}`);
+  return { success: true, data: calibration };
+}
+
 export async function getCarCalibrations(
   carId: string
 ): Promise<CalibrationSetup[]> {
