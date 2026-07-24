@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { activateMembership, revokeMembership } from "@/actions/admin/membership";
 import { quickCheckIn } from "@/actions/admin/checkins";
+import { MemberDetailModal } from "@/components/admin/MemberDetailModal";
 import type { MemberWithMembership } from "@/actions/admin/members";
 
 interface MemberListProps {
@@ -17,6 +18,8 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
   const [isPending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const { data: session } = useSession();
+
+  const [selectedMember, setSelectedMember] = useState<MemberWithMembership | null>(null);
 
   const [overrideMember, setOverrideMember] = useState<{ id: string; name: string } | null>(null);
   const [overrideDate, setOverrideDate] = useState("");
@@ -172,7 +175,11 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
             </thead>
             <tbody className="divide-y divide-zinc-100">
               {filtered.map((m) => (
-                <tr key={m.member.id} className="hover:bg-zinc-50 transition-colors">
+                <tr
+                  key={m.member.id}
+                  className="hover:bg-amber-50/50 transition-colors cursor-pointer group"
+                  onClick={() => setSelectedMember(m)}
+                >
                   <td className="px-4 py-3 text-zinc-900 font-medium">
                     <span>{m.member.name}</span>
                     {m.member.nickname && (
@@ -198,7 +205,7 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
                   </td>
                   <td className="px-4 py-3 text-right">
                     {m.member.role !== "admin" && (
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                         {m.membership?.status !== "active" ? (
                           <button
                             onClick={() => handleActivate(m.member.id, m.member.name)}
@@ -234,12 +241,31 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
                         </button>
                       </div>
                     )}
+                    {m.member.role !== "admin" && (
+                      <div className="mt-1 text-right">
+                        <span className="text-[11px] text-zinc-400 group-hover:text-amber-500 transition-colors">
+                          View details →
+                        </span>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Member Detail Modal */}
+      {selectedMember && (
+        <MemberDetailModal
+          member={selectedMember}
+          onClose={() => setSelectedMember(null)}
+          onUpdate={(fb) => {
+            setFeedback(fb);
+            setTimeout(() => setFeedback(null), 5000);
+          }}
+        />
       )}
 
       {/* Date Override Modal */}

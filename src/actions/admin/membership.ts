@@ -77,3 +77,40 @@ export async function revokeMembership(
     };
   }
 }
+
+export async function adminAdjustWallet(
+  memberId: string,
+  itemType: "daypass" | "rental",
+  delta: number // positive = add, negative = remove
+): Promise<ActionResult<{ dayPasses: number; rentalHours: number }>> {
+  try {
+    const walletData = await redis.hgetall(`wallet:${memberId}`);
+    const current = {
+      dayPasses: Math.max(0, Number(walletData?.dayPasses) || 0),
+      rentalHours: Math.max(0, Number(walletData?.rentalHours) || 0),
+    };
+
+    const newDayPasses = itemType === "daypass"
+      ? Math.max(0, current.dayPasses + delta)
+      : current.dayPasses;
+    const newRentalHours = itemType === "rental"
+      ? Math.max(0, current.rentalHours + delta)
+      : current.rentalHours;
+
+    await redis.hset(`wallet:${memberId}`, {
+      userId: memberId,
+      dayPasses: newDayPasses,
+      rentalHours: newRentalHours,
+      updatedAt: Date.now(),
+    });
+
+    revalidatePath("/admin/members");
+    return { success: true, data: { dayPasses: newDayPasses, rentalHours: newRentalHours } };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to adjust wallet",
+    };
+  }
+}
+
