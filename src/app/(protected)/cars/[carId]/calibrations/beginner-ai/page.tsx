@@ -39,15 +39,15 @@ export default async function BeginnerAIPage({ params }: BeginnerAIPageProps) {
         {/* Header */}
         <div className="space-y-1">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 shadow-md">
+            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-600 dark:text-purple-400 shadow-sm">
               <span className="text-xl">✨</span>
             </div>
             <div>
               <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                Generate Beginner Setup for {car.name}
+                Generate AI Setup Calibration for {car.name}
               </h1>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Step-by-step AI wizard to create a complete starting baseline calibration from scratch
+                Step-by-step AI wizard to generate a complete starting baseline calibration setup from scratch
               </p>
             </div>
           </div>

@@ -35,11 +35,6 @@ export default function NewCarPage() {
       return;
     }
 
-    if (images.length === 0) {
-      setError("At least one image is required");
-      return;
-    }
-
     setSubmitting(true);
 
     try {
@@ -106,7 +101,7 @@ export default function NewCarPage() {
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-300">
-                Photos
+                Photos (Optional)
               </label>
               <span className="text-xs text-zinc-400">{images.length}/10 photos</span>
             </div>

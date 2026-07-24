@@ -6,6 +6,7 @@ import { checkInWithDayPass, checkInWithRental } from "@/actions/admin/checkins"
 
 interface ScanResult {
   status: "active" | "expired" | "duplicate" | "invalid" | "error";
+  scanType?: "membership" | "day_pass" | "rental";
   member?: {
     id: string;
     name: string;
@@ -117,6 +118,7 @@ export function QRScanner() {
       const data = await response.json();
       setResult({
         status: data.status,
+        scanType: data.scanType,
         member: data.member,
         message: data.message,
       });
@@ -314,6 +316,7 @@ export function QRScanner() {
     const isMembershipActive = result.member?.membershipStatus === "active";
     const dayPasses = result.member?.dayPasses || 0;
     const rentalHours = result.member?.rentalHours || 0;
+    const isDirectPassOrRental = result.scanType === "day_pass" || result.scanType === "rental";
 
     return (
       <div
@@ -338,8 +341,8 @@ export function QRScanner() {
             </div>
           )}
 
-          {/* Membership Status Badge */}
-          {result.member && (
+          {/* Membership Status Badge (only for standard membership scans) */}
+          {result.member && !isDirectPassOrRental && (
             <div className="flex justify-center">
               <span
                 className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider shadow-md ${
@@ -354,8 +357,8 @@ export function QRScanner() {
             </div>
           )}
 
-          {/* Wallet Balances Summary */}
-          {result.member && (
+          {/* Wallet Balances Summary (only for standard membership scans) */}
+          {result.member && !isDirectPassOrRental && (
             <div className="flex justify-center gap-4 py-1">
               <div className="bg-black/30 backdrop-blur-sm rounded-xl px-3 py-1.5 border border-white/20">
                 <p className="text-[10px] text-zinc-200 uppercase font-semibold">Day Passes</p>
@@ -371,8 +374,8 @@ export function QRScanner() {
           <p className="text-xl font-bold text-white leading-tight">{result.message}</p>
           <StatusIcon status={result.status} />
 
-          {/* Manual Action Buttons */}
-          {result.member && (
+          {/* Manual Action Buttons (only for standard membership scans) */}
+          {result.member && !isDirectPassOrRental && (
             <div className="space-y-2 pt-2 text-left">
               <p className="text-xs font-bold text-white/80 uppercase tracking-wider text-center">
                 Manual Check-In Options

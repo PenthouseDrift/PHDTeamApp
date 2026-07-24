@@ -118,9 +118,9 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
             <div className="flex flex-wrap items-center gap-2">
               <Link
                 href={`/cars/${carId}/calibrations/beginner-ai`}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500/15 to-orange-500/15 border border-amber-500/30 px-3 py-1.5 text-xs font-bold text-amber-700 dark:text-amber-400 hover:bg-amber-500/25 transition-colors shadow-sm"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-purple-500/15 border border-purple-500/30 px-3 py-1.5 text-xs font-bold text-purple-600 dark:text-purple-400 hover:bg-purple-500/25 transition-colors shadow-sm"
               >
-                <span>✨</span> Generate Beginner Setup with AI
+                <span>✨</span> Generate AI Calibration Setup
               </Link>
               <Link
                 href={`/cars/${carId}/calibrations/new`}
@@ -146,25 +146,30 @@ export default async function CarDetailPage({ params }: CarDetailPageProps) {
           </div>
 
           {calibrations.length === 0 ? (
-            <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-8 text-center shadow-sm">
-              <svg
-                className="mx-auto mb-3 h-12 w-12 text-zinc-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75"
-                />
-              </svg>
-              <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">No calibrations logged yet</p>
-              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                Log damper oil, spring rates, toe, camber & ESC settings or ask Gemini AI for recommendations.
-              </p>
+            <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-8 text-center space-y-4 shadow-sm">
+              <div className="w-12 h-12 rounded-2xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center mx-auto text-purple-600 dark:text-purple-400">
+                <TuningIcon className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">No Calibration Setups Saved Yet</h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-md mx-auto">
+                  Generate a complete starting baseline setup for your chassis and surface using AI, or log your setup parameters manually.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+                <Link
+                  href={`/cars/${carId}/calibrations/beginner-ai`}
+                  className="inline-flex items-center gap-2 rounded-xl bg-purple-500/15 border border-purple-500/30 px-4 py-2.5 text-xs font-bold text-purple-600 dark:text-purple-400 hover:bg-purple-500/25 transition-colors shadow-sm"
+                >
+                  <span>✨</span> Generate AI Calibration Setup
+                </Link>
+                <Link
+                  href={`/cars/${carId}/calibrations/new`}
+                  className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-xs font-bold text-black transition-colors hover:bg-amber-400 shadow-sm"
+                >
+                  + Add Manual Calibration
+                </Link>
+              </div>
             </div>
           ) : (
             <div className="space-y-2">
