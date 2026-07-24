@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { getMemberCars } from "@/actions/cars";
-import { getCarCalibrations, createCalibration } from "@/actions/calibration";
+import { getCarCalibrations, saveAdvisedCalibration } from "@/actions/calibration";
 import type { CarProfile, CalibrationSetup } from "@/types";
 
 interface TuningChange {
@@ -20,14 +20,15 @@ interface TuningChange {
 
 // ─── Surface types ────────────────────────────────────────────────────────────
 const SURFACES = [
-  { id: "Polished Concrete", label: "Polished Concrete", icon: "🏗️", desc: "Very low grip, smooth" },
-  { id: "Carpet", label: "Carpet", icon: "🟫", desc: "High grip, consistent" },
-  { id: "Asphalt/Tarmac", label: "Asphalt / Tarmac", icon: "🛣️", desc: "Medium grip, outdoor" },
-  { id: "Polished Tiles/Marble", label: "Polished Tiles", icon: "🔲", desc: "Extremely low grip" },
-  { id: "Gym Floor/Hardwood", label: "Gym / Hardwood", icon: "🏀", desc: "Low-medium grip, variable" },
-  { id: "Foam/EVA Tiles", label: "Foam / EVA Tiles", icon: "🟩", desc: "High grip, soft surface" },
-  { id: "RCP (Racing Combination Products)", label: "RCP Track", icon: "🔵", desc: "Very high grip plastic" },
-  { id: "Painted Concrete", label: "Painted Concrete", icon: "🎨", desc: "Low grip, inconsistent" },
+  { id: "PHD Track (P-Tile)", label: "PHD Track", icon: "🏆", desc: "Penthouse Drift P-tile plastic", featured: true },
+  { id: "Polished Concrete", label: "Polished Concrete", icon: "🏗️", desc: "Very low grip, smooth", featured: false },
+  { id: "Carpet", label: "Carpet", icon: "🟫", desc: "High grip, consistent", featured: false },
+  { id: "Asphalt/Tarmac", label: "Asphalt / Tarmac", icon: "🛣️", desc: "Medium grip, outdoor", featured: false },
+  { id: "Polished Tiles/Marble", label: "Polished Tiles", icon: "🔲", desc: "Extremely low grip", featured: false },
+  { id: "Gym Floor/Hardwood", label: "Gym / Hardwood", icon: "🏀", desc: "Low-medium grip, variable", featured: false },
+  { id: "Foam/EVA Tiles", label: "Foam / EVA Tiles", icon: "🟩", desc: "High grip, soft surface", featured: false },
+  { id: "RCP (Racing Combination Products)", label: "RCP Track", icon: "🔵", desc: "Very high grip plastic", featured: false },
+  { id: "Painted Concrete", label: "Painted Concrete", icon: "🎨", desc: "Low grip, inconsistent", featured: false },
 ];
 
 // ─── Tuning goals ─────────────────────────────────────────────────────────────
@@ -182,15 +183,19 @@ export default function TuningAdvisorClient() {
     setSaving(true);
     setSaveError(null);
 
+    // Apply AI changes on top of the FULL original calibration
     const updated = applyChanges(base, changes);
-    // Remove the old ID so createCalibration generates a fresh one
-    const { calibrationId: _old, createdAt: _ts, ...rest } = updated;
-    void _old; void _ts;
 
-    const result = await createCalibration(selectedCarId, session.user.id, {
-      ...rest,
-      name: saveName.trim() || `${base.name} (Advised)`,
-    });
+    // Pass the complete setup (every field preserved) to the dedicated advisor action
+    const { calibrationId: _id, carId: _car, userId: _user, createdAt: _ts, name: _name, ...setup } = updated;
+    void _id; void _car; void _user; void _ts; void _name;
+
+    const result = await saveAdvisedCalibration(
+      selectedCarId,
+      session.user.id,
+      setup,
+      saveName.trim() || `${base.name} (Advised)`
+    );
 
     if (result.success) {
       setSaveSuccess(true);
@@ -321,6 +326,7 @@ export default function TuningAdvisorClient() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           {SURFACES.map((s) => {
             const isActive = selectedSurface === s.id;
+            const isFeatured = s.featured;
             return (
               <button
                 key={s.id}
@@ -329,9 +335,16 @@ export default function TuningAdvisorClient() {
                 className={`relative rounded-xl border-2 p-3 text-left transition-all duration-150 ${
                   isActive
                     ? "border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/20 shadow-lg shadow-amber-500/10"
+                    : isFeatured
+                    ? "border-amber-500/40 bg-gradient-to-br from-amber-500/10 to-orange-500/5 hover:border-amber-500/70"
                     : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600"
                 }`}
               >
+                {isFeatured && !isActive && (
+                  <span className="absolute top-1.5 right-1.5 text-[9px] font-bold text-amber-400 bg-amber-500/15 border border-amber-500/30 rounded-full px-1.5 py-0.5 leading-none">
+                    OUR TRACK
+                  </span>
+                )}
                 {isActive && (
                   <div className="absolute top-2 right-2 w-3.5 h-3.5 rounded-full bg-amber-500 flex items-center justify-center">
                     <svg className="w-2 h-2 text-black" fill="currentColor" viewBox="0 0 20 20">
@@ -340,8 +353,8 @@ export default function TuningAdvisorClient() {
                   </div>
                 )}
                 <span className="text-lg mb-1 block">{s.icon}</span>
-                <p className={`text-xs font-bold leading-tight ${isActive ? "text-zinc-100" : "text-zinc-300"}`}>{s.label}</p>
-                <p className={`text-[10px] mt-0.5 leading-tight ${isActive ? "text-zinc-400" : "text-zinc-500"}`}>{s.desc}</p>
+                <p className={`text-xs font-bold leading-tight ${isActive || isFeatured ? "text-zinc-100" : "text-zinc-300"}`}>{s.label}</p>
+                <p className={`text-[10px] mt-0.5 leading-tight ${isActive ? "text-zinc-400" : isFeatured ? "text-amber-500/70" : "text-zinc-500"}`}>{s.desc}</p>
               </button>
             );
           })}

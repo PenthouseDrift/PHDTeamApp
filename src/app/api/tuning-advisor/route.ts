@@ -117,6 +117,7 @@ TUNING GOALS:
 ${goals.map((g, i) => `${i + 1}. ${g}`).join("\n")}
 
 SURFACE CONTEXT for "${surface}":
+- PHD Track (P-Tile): Penthouse Drift club track — smooth interlocking P-tile plastic, very low grip similar to polished tiles but slightly more consistent; requires soft oil, high droop, elevated gyro gain, careful camber to prevent snap oversteer
 - Polished Concrete: Very low grip, smooth — softer oil, higher droop, more gyro gain, aggressive camber
 - Carpet: High grip, consistent — stiffer setup, less gyro, more toe, tighter geometry
 - Asphalt/Tarmac: Medium grip, outdoor — balanced setup, moderate gyro, watch temperature sensitivity
