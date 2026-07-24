@@ -38,9 +38,9 @@ export default async function HomePage() {
       </header>
 
       {/* ── Hero Section ────────────────────────────────────────────────────── */}
-      <section className="relative px-6 pt-16 pb-20 sm:pt-28 sm:pb-32 text-center max-w-5xl mx-auto overflow-hidden">
+      <section className="relative px-6 pt-16 pb-20 sm:pt-24 sm:pb-28 text-center max-w-5xl mx-auto overflow-hidden">
         {/* Background glow effects */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-gradient-to-tr from-amber-500/20 via-orange-500/15 to-amber-600/10 blur-3xl -z-10 rounded-full pointer-events-none" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[320px] bg-gradient-to-tr from-amber-500/20 via-orange-500/15 to-amber-600/10 blur-3xl -z-10 rounded-full pointer-events-none" />
 
         {/* Feature badge */}
         <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 mb-8 shadow-sm">
@@ -96,8 +96,8 @@ export default async function HomePage() {
       </section>
 
       {/* ── AI Feature Spotlight ────────────────────────────────────────────── */}
-      <section className="px-6 py-12 max-w-6xl mx-auto">
-        <div className="relative rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-zinc-900/5 dark:to-zinc-900/40 p-8 sm:p-12 overflow-hidden">
+      <section className="px-6 py-10 max-w-6xl mx-auto">
+        <div className="relative rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-zinc-900/5 dark:to-zinc-900/40 p-8 sm:p-12 overflow-hidden shadow-sm">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
             <div className="lg:col-span-7 space-y-4 text-left">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-bold px-3 py-1">
@@ -152,11 +152,11 @@ export default async function HomePage() {
             Everything You Need for Track Day & Tuning
           </h2>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            A complete suite of tools designed specifically for RC drift drivers, track members, and officials.
+            A complete suite of tools designed specifically for RC drift drivers and track members.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           <FeatureCard
             icon="🎛️"
             title="AI Tuning Advisor"
@@ -166,51 +166,44 @@ export default async function HomePage() {
 
           <FeatureCard
             icon="🏎️"
-            title="My Cars & Multi-Photo Garage"
-            description="Manage your chassis profiles with multi-image upload galleries, active cover photo selection, and full calibration histories."
+            title="My Cars Garage"
+            description="Manage chassis profiles with multi-image galleries, active cover photo selection, and full calibration setup logs."
           />
 
           <FeatureCard
             icon="📱"
-            title="Digital Member Passes & QR Check-In"
-            description="Purchase memberships or track passes, track expiration dates, and scan your personal QR code for contactless track check-in."
+            title="Digital Member Passes"
+            description="Purchase memberships or track passes, track expiration dates, and scan your personal QR code for instant check-in."
           />
 
           <FeatureCard
             icon="📐"
-            title="Advanced Setup Calibrations"
-            description="Log camber, toe, caster, ackermann, droop (up to 50mm), oil weight/brand, piston hole counts, shock length, O-rings, and expo settings."
+            title="Setup Calibrations"
+            description="Log camber, toe, caster, ackermann, droop (up to 50mm), oil weight/brand, piston holes, shock length, O-rings, and expo settings."
           />
 
           <FeatureCard
             icon="⚙️"
-            title="Gear Ratio & FDR Calculator"
-            description="Calculate Final Drive Ratio (FDR), spur/pinion combinations, and internal gear ratios on the fly for peak motor efficiency."
+            title="FDR & Gear Calculator"
+            description="Calculate Final Drive Ratio (FDR), spur/pinion gear combinations, and internal ratios on the fly for optimal gearing."
           />
 
           <FeatureCard
             icon="🎨"
-            title="Shell Showcase & Winners Leaderboard"
+            title="Shell Showcase"
             description="Share custom body shell builds, vote on community favorites, and compete for top honors on the weekly winners leaderboard."
           />
 
           <FeatureCard
             icon="📰"
             title="Track Newsfeed"
-            description="Stay connected with real-time track updates, event schedules, community posts, and official announcements."
+            description="Stay connected with real-time track announcements, event schedules, community posts, and official updates."
           />
 
           <FeatureCard
             icon="💳"
-            title="SumUp Wallet & Pass Top-Ups"
-            description="Seamlessly purchase day passes and track rentals with secure SumUp merchant integration and live digital pass counts."
-          />
-
-          <FeatureCard
-            icon="🛡️"
-            title="Admin Track Portal"
-            description="Track officials can manage active check-ins, verify member passes, scan QR codes, and review member tables."
-            badge="Track Admins"
+            title="SumUp Pass Top-Ups"
+            description="Seamlessly purchase day passes and track rentals with secure SumUp merchant integration and live pass balances."
           />
         </div>
       </section>
@@ -262,21 +255,23 @@ function FeatureCard({
   badge?: string;
 }) {
   return (
-    <div className="relative rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/90 dark:border-zinc-800 p-6 space-y-3 hover:border-amber-500/50 dark:hover:border-amber-500/50 transition-all duration-200 hover:shadow-lg dark:hover:shadow-amber-500/5 group">
-      <div className="flex items-center justify-between">
-        <span className="text-3xl block">{icon}</span>
-        {badge && (
-          <span className="rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-[10px] font-bold px-2.5 py-0.5">
-            {badge}
-          </span>
-        )}
+    <div className="relative rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 p-6 space-y-3 hover:border-amber-500/50 dark:hover:border-amber-500/50 transition-all duration-200 hover:shadow-lg dark:hover:shadow-amber-500/5 group flex flex-col justify-between">
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-3xl block">{icon}</span>
+          {badge && (
+            <span className="rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-[10px] font-bold px-2.5 py-0.5">
+              {badge}
+            </span>
+          )}
+        </div>
+        <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 group-hover:text-amber-500 transition-colors">
+          {title}
+        </h3>
+        <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+          {description}
+        </p>
       </div>
-      <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100 group-hover:text-amber-500 transition-colors">
-        {title}
-      </h3>
-      <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-        {description}
-      </p>
     </div>
   );
 }
