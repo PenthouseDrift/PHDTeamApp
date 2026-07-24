@@ -73,7 +73,7 @@ export default async function WalletPage() {
       { ex: 3600 }
     );
 
-    const redirectUrl = checkout.hosted_checkout_url || `https://checkout.sumup.com/pay/c-${checkout.id}`;
+    const redirectUrl = checkout.hosted_checkout_url || `https://pay.sumup.com/b2c/Q${checkout.id}`;
     redirect(redirectUrl);
   }
 
