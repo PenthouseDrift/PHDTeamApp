@@ -58,22 +58,37 @@ function parseNumeric(val: string): number {
   return m ? parseFloat(m[0]) : 0;
 }
 
-// Apply the AI changes to the calibration object to produce a new one
+// Apply the AI changes to the base calibration object to produce a new one
 function applyChanges(base: CalibrationSetup, changes: TuningChange[]): CalibrationSetup {
-  const next = { ...base };
+  // Start with a complete clone of the selected calibration setup to guarantee no values are lost
+  const next: CalibrationSetup = {
+    ...base,
+    customParams: Array.isArray(base.customParams) ? [...base.customParams] : [],
+  };
+
   for (const c of changes) {
+    if (!c.field) continue;
     const key = c.field as keyof CalibrationSetup;
-    if (key in next) {
-      const current = next[key];
-      if (typeof current === "number") {
-        (next as Record<string, unknown>)[key] = parseNumeric(c.recommendedValue);
-      } else if (typeof current === "string") {
-        // Strip leading numbers/units for string fields
-        const stripped = c.recommendedValue.replace(/^\d+(\.\d+)?\s*/, "").trim() || c.recommendedValue;
-        (next as Record<string, unknown>)[key] = stripped;
+    const recVal = c.recommendedValue;
+
+    if (recVal === undefined || recVal === null) continue;
+
+    const existingVal = base[key];
+
+    if (typeof existingVal === "number") {
+      (next as unknown as Record<string, unknown>)[key] = parseNumeric(recVal);
+    } else if (typeof existingVal === "string") {
+      (next as unknown as Record<string, unknown>)[key] = recVal;
+    } else {
+      const num = parseNumeric(recVal);
+      if (!isNaN(num) && /^-?\d+(\.\d+)?/.test(recVal.trim())) {
+        (next as unknown as Record<string, unknown>)[key] = num;
+      } else {
+        (next as unknown as Record<string, unknown>)[key] = recVal;
       }
     }
   }
+
   return next;
 }
 

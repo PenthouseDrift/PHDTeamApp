@@ -132,12 +132,13 @@ export async function saveAdvisedCalibration(
 
   const calibrationId = crypto.randomUUID();
   const calibration: CalibrationSetup = {
+    ...setup,
     calibrationId,
     carId,
     userId,
     createdAt: Date.now(),
     name: name.trim(),
-    // Spread all fields from the advised setup — nothing stripped
+    // Fallback defaults for standard fields if missing
     frontCamber: setup.frontCamber ?? 0,
     rearCamber: setup.rearCamber ?? 0,
     frontToe: setup.frontToe ?? 0,
