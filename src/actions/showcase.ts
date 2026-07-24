@@ -32,7 +32,7 @@ export async function toggleVote(shellId: string, userId: string): Promise<Actio
 
       // Notify shell owner
       const member = await redis.hgetall(`member:${userId}`);
-      const userName = (member?.name as string) || "Someone";
+      const userName = (member?.nickname as string)?.trim() || (member?.name as string) || "Someone";
       await createNotification({
         userId: shellData.userId as string,
         type: "like",

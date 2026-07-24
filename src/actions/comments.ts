@@ -29,7 +29,7 @@ export async function addComment(
 
   // Get user info
   const member = await redis.hgetall(`member:${userId}`);
-  const userName = (member?.name as string) || "Unknown";
+  const userName = (member?.nickname as string)?.trim() || (member?.name as string) || "Unknown";
   const userImage = (member?.customAvatar as string) || (member?.image as string) || null;
 
   const commentId = crypto.randomUUID();

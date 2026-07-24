@@ -139,3 +139,85 @@ export async function removeCheckIn(
     };
   }
 }
+
+export async function checkInWithDayPass(
+  memberId: string,
+  memberName: string,
+  adminId: string,
+  isPaidInPerson: boolean
+): Promise<ActionResult<{ checkedIn: boolean }>> {
+  try {
+    const { redeemDayPass } = await import("@/actions/wallet");
+    if (!isPaidInPerson) {
+      const redeemRes = await redeemDayPass(memberId);
+      if (!redeemRes.success) {
+        return { success: false, error: redeemRes.error };
+      }
+    }
+
+    const now = Date.now();
+    const today = new Date().toISOString().split("T")[0];
+
+    const entry = JSON.stringify({
+      userId: memberId,
+      adminId,
+      timestamp: now,
+      method: "day_pass",
+      memberName,
+    });
+
+    await redis.rpush(`checkins:${today}`, entry);
+
+    revalidatePath("/admin/members");
+    revalidatePath("/admin/check-in");
+    return { success: true, data: { checkedIn: true } };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Day Pass check-in failed",
+    };
+  }
+}
+
+export async function checkInWithRental(
+  memberId: string,
+  memberName: string,
+  adminId: string,
+  isPaidInPerson: boolean
+): Promise<ActionResult<{ checkedIn: boolean }>> {
+  try {
+    const { redeemRentalHour } = await import("@/actions/wallet");
+    const { createRentalSession } = await import("@/actions/admin/rentals");
+
+    if (!isPaidInPerson) {
+      const redeemRes = await redeemRentalHour(memberId);
+      if (!redeemRes.success) {
+        return { success: false, error: redeemRes.error };
+      }
+    }
+
+    await createRentalSession(memberId, memberName);
+
+    const now = Date.now();
+    const today = new Date().toISOString().split("T")[0];
+
+    const entry = JSON.stringify({
+      userId: memberId,
+      adminId,
+      timestamp: now,
+      method: "rental",
+      memberName,
+    });
+
+    await redis.rpush(`checkins:${today}`, entry);
+
+    revalidatePath("/admin/members");
+    revalidatePath("/admin/check-in");
+    return { success: true, data: { checkedIn: true } };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Car rental check-in failed",
+    };
+  }
+}

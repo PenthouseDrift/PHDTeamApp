@@ -1,20 +1,47 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { redis } from "@/lib/redis";
 import { getMembership } from "@/actions/membership";
+import { getCheckoutStatus } from "@/lib/sumup";
+import { processSuccessfulMembershipPayment } from "@/lib/membership-activation";
 
 export const dynamic = "force-dynamic";
 
-export default async function MembershipSuccessPage() {
+interface PageProps {
+  searchParams: Promise<{ checkout_id?: string }>;
+}
+
+export default async function MembershipSuccessPage({ searchParams }: PageProps) {
   const session = await auth();
+  const params = await searchParams;
 
   if (!session?.user) {
     redirect("/auth/signin");
   }
 
-  const result = await getMembership(session.user.id);
-  const membership = result.success ? result.data : null;
-  const isActive = membership?.status === "active";
+  let result = await getMembership(session.user.id);
+  let membership = result.success ? result.data : null;
+  let isActive = membership?.status === "active";
+
+  // Instant fallback check if webhook hasn't arrived yet
+  if (!isActive) {
+    let targetCheckoutId = params.checkout_id;
+    if (!targetCheckoutId) {
+      targetCheckoutId = (await redis.get(`pending_checkout:${session.user.id}`)) as string | undefined;
+    }
+
+    if (targetCheckoutId) {
+      const checkout = await getCheckoutStatus(targetCheckoutId);
+      if (checkout && (checkout.status === "PAID" || checkout.status === "SUCCESSFUL")) {
+        await processSuccessfulMembershipPayment(session.user.id, checkout.id);
+        await redis.del(`pending_checkout:${session.user.id}`);
+        result = await getMembership(session.user.id);
+        membership = result.success ? result.data : null;
+        isActive = membership?.status === "active";
+      }
+    }
+  }
 
   const expiryDate = membership
     ? new Date(membership.expiresAt).toLocaleDateString("en-GB", {

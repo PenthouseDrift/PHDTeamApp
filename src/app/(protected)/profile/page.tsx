@@ -4,6 +4,7 @@ import { getOrCreateQRCode } from "@/actions/qr";
 import { QRDownloadButton } from "@/components/QRDownloadButton";
 import { ProfileQRError } from "./ProfileQRError";
 import { ProfileAvatarUpload } from "./ProfileAvatarUpload";
+import { ProfileNicknameForm } from "./ProfileNicknameForm";
 import { SignOutSection } from "./SignOutSection";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -28,9 +29,12 @@ export default async function ProfilePage() {
   const { user } = session;
   const qrResult = await getOrCreateQRCode(user.id);
 
-  // Get custom avatar from Redis (if uploaded)
-  const customAvatar = await redis.hget(`member:${user.id}`, "customAvatar") as string | null;
+  // Get member data from Redis (custom avatar, nickname)
+  const memberData = await redis.hgetall(`member:${user.id}`);
+  const customAvatar = (memberData?.customAvatar as string) || null;
+  const nickname = (memberData?.nickname as string) || "";
   const avatarUrl = customAvatar || user.image || null;
+  const displayName = nickname.trim() || user.name || "Member";
 
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
@@ -49,19 +53,32 @@ export default async function ProfilePage() {
               />
             ) : (
               <div className="h-16 w-16 rounded-full bg-amber-500 flex items-center justify-center text-xl font-bold text-white">
-                {getInitials(user.name)}
+                {getInitials(displayName)}
               </div>
             )}
             <div>
               <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                {user.name ?? "Member"}
+                {displayName}
               </h2>
+              {nickname && (
+                <p className="text-xs text-amber-600 dark:text-amber-500 font-medium">
+                  Full Name: {user.name}
+                </p>
+              )}
               <p className="text-sm text-zinc-500 dark:text-zinc-400">{user.email}</p>
-              <span className="mt-1 inline-block rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600 capitalize">
+              <span className="mt-1 inline-block rounded-full bg-zinc-100 dark:bg-zinc-800 px-2.5 py-0.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 capitalize">
                 {user.role}
               </span>
             </div>
           </div>
+        </section>
+
+        {/* Track Nickname */}
+        <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6">
+          <h2 className="mb-2 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            Track Nickname
+          </h2>
+          <ProfileNicknameForm userId={user.id} initialNickname={nickname} />
         </section>
 
         {/* Profile Picture Upload */}
@@ -86,14 +103,17 @@ export default async function ProfilePage() {
 
           {qrResult.success ? (
             <div className="flex flex-col items-center gap-6">
-              <div className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4">
+              <div className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 text-center">
                 <img
                   src={qrResult.data}
                   alt="Member QR Code"
                   width={300}
                   height={300}
-                  className="h-auto w-full max-w-[300px]"
+                  className="h-auto w-full max-w-[300px] mx-auto"
                 />
+                <p className="mt-3 text-xs font-mono font-bold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-3.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 inline-block">
+                  Member ID: {user.id}
+                </p>
               </div>
               <QRDownloadButton dataUrl={qrResult.data} />
             </div>

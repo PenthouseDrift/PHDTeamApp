@@ -33,6 +33,9 @@ export async function createCheckout(
       description: params.description,
       merchant_code: process.env.SUMUP_MERCHANT_CODE,
       redirect_url: params.returnUrl,
+      hosted_checkout: {
+        enabled: true,
+      },
     }),
   });
 
@@ -42,3 +45,25 @@ export async function createCheckout(
 
   return response.json();
 }
+
+export async function getCheckoutStatus(
+  checkoutId: string
+): Promise<CheckoutResponse | null> {
+  try {
+    const response = await fetch(`${SUMUP_API}/checkouts/${checkoutId}`, {
+      headers: {
+        Authorization: `Bearer ${process.env.SUMUP_API_KEY}`,
+      },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return response.json();
+  } catch {
+    return null;
+  }
+}
+

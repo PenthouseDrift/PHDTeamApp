@@ -19,3 +19,24 @@ export async function updateProfileAvatar(
     };
   }
 }
+
+export async function updateNickname(
+  userId: string,
+  nickname: string
+): Promise<ActionResult<string>> {
+  try {
+    const trimmed = nickname.trim();
+    await redis.hset(`member:${userId}`, { nickname: trimmed });
+    revalidatePath("/profile");
+    revalidatePath("/dashboard");
+    revalidatePath("/wallet");
+    revalidatePath("/admin/members");
+    revalidatePath("/admin/scanner");
+    return { success: true, data: trimmed };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to update nickname",
+    };
+  }
+}
