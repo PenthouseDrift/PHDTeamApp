@@ -53,3 +53,27 @@ export async function activateMembership(
     };
   }
 }
+
+export async function revokeMembership(
+  memberId: string
+): Promise<ActionResult<null>> {
+  try {
+    const pastExpiry = Date.now() - 1000;
+
+    await redis.hset(`membership:${memberId}`, {
+      userId: memberId,
+      status: "expired",
+      expiresAt: pastExpiry,
+    });
+
+    await redis.zrem("memberships:active", memberId);
+
+    revalidatePath("/admin/members");
+    return { success: true, data: null };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to revoke membership",
+    };
+  }
+}

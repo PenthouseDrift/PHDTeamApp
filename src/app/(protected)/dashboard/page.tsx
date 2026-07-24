@@ -2,14 +2,23 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import { getMembership } from "@/actions/membership";
+import { getWallet } from "@/actions/wallet";
 import { getRemainingDays } from "@/lib/membership-utils";
 import { getOrCreateQRCode } from "@/actions/qr";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { QRToggleButton } from "./QRToggleButton";
 
 export const dynamic = "force-dynamic";
 
 const quickLinks = [
+  {
+    title: "Wallet & Passes",
+    href: "/wallet",
+    icon: (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a2.25 2.25 0 0 0-2.25-2.25H15a3 3 0 1 1-6 0H5.25A2.25 2.25 0 0 0 3 12m18 0v6a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 9" />
+      </svg>
+    ),
+  },
   {
     title: "My Cars",
     href: "/cars",
@@ -51,26 +60,6 @@ const quickLinks = [
     ),
   },
   {
-    title: "Calculator",
-    href: "/calculator",
-    icon: (
-      <svg
-        className="w-6 h-6"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={1.5}
-          d="M15.75 15.75V18m-7.5-6.75h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25V13.5Zm0 2.25h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25V18Zm2.498-6.75h.007v.008h-.007v-.008Zm0 2.25h.007v.008h-.007V13.5Zm0 2.25h.007v.008h-.007v-.008Zm0 2.25h.007v.008h-.007V18Zm2.504-6.75h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V13.5Zm0 2.25h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V18Zm2.498-6.75h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V13.5ZM8.25 6h7.5v2.25h-7.5V6ZM12 2.25c-1.892 0-3.758.11-5.593.322C5.307 2.7 4.5 3.65 4.5 4.757V19.5a2.25 2.25 0 0 0 2.25 2.25h10.5a2.25 2.25 0 0 0 2.25-2.25V4.757c0-1.108-.806-2.057-1.907-2.185A48.507 48.507 0 0 0 12 2.25Z"
-        />
-      </svg>
-    ),
-  },
-  {
     title: "Newsfeed",
     href: "/newsfeed",
     icon: (
@@ -100,18 +89,23 @@ export default async function DashboardPage() {
   }
 
   // Fetch all dashboard data in parallel
-  const [result, customAvatar, qrResult, checkedInRaw] = await Promise.all([
+  const [result, walletRes, memberData, qrResult, checkedInRaw] = await Promise.all([
     getMembership(session.user.id),
-    redis.hget(`member:${session.user.id}`, "customAvatar") as Promise<string | null>,
+    getWallet(session.user.id),
+    redis.hgetall(`member:${session.user.id}`),
     getOrCreateQRCode(session.user.id),
     redis.get(`checkin:dedup:${session.user.id}`),
   ]);
 
   const membership = result.success ? result.data : null;
+  const wallet = walletRes.success ? walletRes.data : { dayPasses: 0, rentalHours: 0 };
   const isActive = membership?.status === "active";
+  const customAvatar = (memberData?.customAvatar as string) || null;
+  const nickname = (memberData?.nickname as string) || "";
   const avatarUrl = customAvatar || session.user.image || null;
-  const initials = session.user.name
-    ? session.user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
+  const displayName = nickname.trim() || session.user.name?.split(" ")[0] || "Member";
+  const initials = displayName
+    ? displayName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
     : "?";
   const remainingDays = membership && isActive ? getRemainingDays(membership) : 0;
   const isCheckedInToday = !!checkedInRaw;
@@ -134,101 +128,154 @@ export default async function DashboardPage() {
           )}
           <div>
             <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-              Welcome back, {session.user.name?.split(" ")[0] ?? "Member"}
+              Welcome back, {displayName}
             </h1>
             <p className="text-sm text-zinc-500 dark:text-zinc-400">Member Dashboard</p>
           </div>
         </div>
 
-        {/* Membership Status - only show for non-admins */}
-        {session.user.role !== "admin" && (
-        <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6">
-          <h2 className="mb-4 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            Membership Status
-          </h2>
-          {membership && isActive ? (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        {/* Combined Membership Status & Check-In QR Section (Top of Dashboard) */}
+        <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-6 shadow-sm">
+          {/* Membership Status Header & Badge */}
+          <div>
+            <h2 className="mb-3 text-lg font-bold text-zinc-900 dark:text-zinc-100">
+              Membership Status
+            </h2>
+            {session.user.role === "admin" ? (
               <div className="flex items-center gap-3">
-                <StatusBadge status="active" size="lg" />
-                <span className="text-zinc-700">
-                  {remainingDays} {remainingDays === 1 ? "day" : "days"}{" "}
-                  remaining
+                <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-purple-100 dark:bg-purple-950/80 border border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs font-black uppercase tracking-wider">
+                  <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+                  Admin Access (Unlimited Track Access)
                 </span>
               </div>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <StatusBadge status="expired" size="lg" />
-                <span className="text-zinc-600 dark:text-zinc-300">
-                  {membership
-                    ? "Membership expired"
-                    : "No active membership"}
-                </span>
+            ) : membership && isActive ? (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <StatusBadge status="active" size="lg" />
+                  <span className="text-zinc-700 dark:text-zinc-300 font-medium">
+                    {remainingDays} {remainingDays === 1 ? "day" : "days"} remaining
+                  </span>
+                </div>
               </div>
-              <Link
-                href="/membership/purchase"
-                className="inline-flex items-center justify-center rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-amber-400"
-              >
-                {membership ? "Renew Membership" : "Purchase Membership"}
-              </Link>
+            ) : (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <StatusBadge status="expired" size="lg" />
+                  <span className="text-zinc-600 dark:text-zinc-300 font-medium">
+                    {membership ? "Membership expired" : "No active 28-day membership"}
+                  </span>
+                </div>
+                <Link
+                  href="/membership/purchase"
+                  className="inline-flex items-center justify-center rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-black transition-colors hover:bg-amber-400"
+                >
+                  {membership ? "Renew Membership" : "Purchase Membership (£40)"}
+                </Link>
+              </div>
+            )}
+          </div>
+
+          {/* Divider & Check-In QR Code */}
+          <div className="border-t border-zinc-200 dark:border-zinc-800 pt-5 space-y-4 text-center sm:text-left">
+            <div>
+              <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                Membership Check-In QR
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                Show this to an admin to check in at the track with your 28-day membership. To access Day Pass or Car Rental QR codes, open your <Link href="/wallet" className="text-amber-600 dark:text-amber-500 font-semibold underline">Wallet</Link>.
+              </p>
             </div>
-          )}
+
+            {qrResult.success ? (
+              <div className="flex justify-center pt-1">
+                <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white p-4 shadow-md text-center">
+                  <img
+                    src={qrResult.data}
+                    alt="Membership Check-In QR Code"
+                    width={220}
+                    height={220}
+                    className="h-auto w-full max-w-[220px] mx-auto"
+                  />
+                  <p className="mt-2 text-[11px] font-mono font-bold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded-md border border-zinc-200 dark:border-zinc-700 inline-block">
+                    Member ID: {session.user.id}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-red-600 text-center">Unable to load QR code. Visit your profile to retry.</p>
+            )}
+          </div>
         </section>
-        )}
 
         {/* Check-In Status */}
         {isCheckedInToday && (
-          <div className="rounded-xl bg-green-50 border border-green-200 p-4 flex items-center gap-3">
+          <div className="rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 p-4 flex items-center gap-3">
             <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
             <div>
-              <p className="text-sm font-semibold text-green-800">Checked In Today</p>
-              <p className="text-xs text-green-600">You're on the track — enjoy your session!</p>
+              <p className="text-sm font-semibold text-green-800 dark:text-green-300">Checked In Today</p>
+              <p className="text-xs text-green-600 dark:text-green-400">You're on the track — enjoy your session!</p>
             </div>
           </div>
         )}
 
-        {/* QR Code — always visible on mobile, toggle on desktop */}
-        <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-              Check-In QR Code
+        {/* Penthouse Drift Wallet & Pass Balances Card */}
+        <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold text-amber-600 dark:text-amber-500 flex items-center gap-2">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              Penthouse Drift Wallet
             </h2>
-            {qrResult.success && <QRToggleButton />}
+            <Link
+              href="/wallet"
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-500 text-black hover:bg-amber-400 transition-colors"
+            >
+              Open Wallet & QR Passes →
+            </Link>
           </div>
-          <p className="text-sm text-zinc-500 mb-4">
-            Show this to an admin to check in at the track.
-          </p>
-          {qrResult.success ? (
-            <div className="flex justify-center md:hidden" id="qr-mobile">
-              <div className="rounded-xl border border-zinc-200 bg-white p-3">
-                <img
-                  src={qrResult.data}
-                  alt="Your QR Code"
-                  width={220}
-                  height={220}
-                  className="h-auto w-full max-w-[220px]"
-                />
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-red-600 text-center">Unable to load QR code. Visit your profile to retry.</p>
-          )}
-          {qrResult.success && (
-            <div className="hidden" id="qr-desktop">
-              <div className="flex justify-center">
-                <div className="rounded-xl border border-zinc-200 bg-white p-3">
-                  <img
-                    src={qrResult.data}
-                    alt="Your QR Code"
-                    width={220}
-                    height={220}
-                    className="h-auto w-full max-w-[220px]"
-                  />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+            <div className="rounded-xl bg-zinc-50 dark:bg-zinc-950/80 p-4 border border-zinc-200 dark:border-zinc-800 flex flex-col justify-between space-y-2">
+              <div>
+                <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-500 uppercase tracking-wider">Day Passes</p>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <span className="text-3xl font-black text-zinc-900 dark:text-white">{wallet.dayPasses}</span>
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">{wallet.dayPasses === 1 ? "Pass" : "Passes"}</span>
                 </div>
               </div>
+              {wallet.dayPasses <= 0 ? (
+                <Link
+                  href="/wallet"
+                  className="w-full text-center py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold hover:bg-amber-500/20 transition-colors"
+                >
+                  + Buy Day Pass (£10)
+                </Link>
+              ) : (
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Valid for 1 full track day</p>
+              )}
             </div>
-          )}
+
+            <div className="rounded-xl bg-zinc-50 dark:bg-zinc-950/80 p-4 border border-zinc-200 dark:border-zinc-800 flex flex-col justify-between space-y-2">
+              <div>
+                <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-500 uppercase tracking-wider">Car Rental Hours</p>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <span className="text-3xl font-black text-zinc-900 dark:text-white">{wallet.rentalHours}</span>
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">{wallet.rentalHours === 1 ? "Hour" : "Hours"}</span>
+                </div>
+              </div>
+              {wallet.rentalHours <= 0 ? (
+                <Link
+                  href="/wallet"
+                  className="w-full text-center py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold hover:bg-amber-500/20 transition-colors"
+                >
+                  + Buy Rental Hour (£10)
+                </Link>
+              ) : (
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">15m grace + 1hr rental</p>
+              )}
+            </div>
+          </div>
         </section>
 
         {/* Quick Links */}

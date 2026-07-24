@@ -41,7 +41,7 @@ export async function createPost(
   }
 
   const member = await redis.hgetall(`member:${userId}`);
-  const userName = (member?.name as string) || "Unknown";
+  const userName = (member?.nickname as string)?.trim() || (member?.name as string) || "Unknown";
   const userImage = (member?.customAvatar as string) || (member?.image as string) || null;
 
   const postId = crypto.randomUUID();
@@ -120,7 +120,7 @@ export async function togglePostLike(
       liked = true;
 
       const member = await redis.hgetall(`member:${userId}`);
-      const userName = (member?.name as string) || "Someone";
+      const userName = (member?.nickname as string)?.trim() || (member?.name as string) || "Someone";
       await createNotification({
         userId: postData.userId as string,
         type: "like",
@@ -153,7 +153,7 @@ export async function addFeedComment(
   }
 
   const member = await redis.hgetall(`member:${userId}`);
-  const userName = (member?.name as string) || "Unknown";
+  const userName = (member?.nickname as string)?.trim() || (member?.name as string) || "Unknown";
   const userImage = (member?.customAvatar as string) || (member?.image as string) || null;
 
   const commentId = crypto.randomUUID();

@@ -2,6 +2,7 @@ export interface Member {
   id: string;
   email: string;
   name: string;
+  nickname?: string | null;
   image: string | null;
   role: "admin" | "member";
   qrCode: string | null;
@@ -16,11 +17,29 @@ export interface Membership {
   paymentRef: string;
 }
 
+export interface Wallet {
+  userId: string;
+  dayPasses: number;
+  rentalHours: number;
+  updatedAt: number;
+}
+
+export interface RentalSession {
+  rentalId: string;
+  userId: string;
+  memberName: string;
+  scannedAt: number;
+  graceEndsAt: number;
+  timerStartedAt: number | null;
+  sessionEndsAt: number | null;
+  status: "grace" | "active" | "completed";
+}
+
 export interface CheckIn {
   userId: string;
   adminId: string;
   timestamp: number;
-  method: "qr" | "manual";
+  method: "qr" | "manual" | "day_pass" | "rental";
   memberName: string;
 }
 

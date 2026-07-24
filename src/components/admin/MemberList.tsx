@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useSession } from "next-auth/react";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { activateMembership } from "@/actions/admin/membership";
+import { activateMembership, revokeMembership } from "@/actions/admin/membership";
 import { quickCheckIn } from "@/actions/admin/checkins";
 import type { MemberWithMembership } from "@/actions/admin/members";
 
@@ -18,12 +18,19 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const { data: session } = useSession();
 
+  const [overrideMember, setOverrideMember] = useState<{ id: string; name: string } | null>(null);
+  const [overrideDate, setOverrideDate] = useState("");
+
+  const [revokeTarget, setRevokeTarget] = useState<{ id: string; name: string } | null>(null);
+  const [revokeStep, setRevokeStep] = useState<1 | 2>(1);
+
   const allMembers = [...members];
   const filtered = search
     ? allMembers.filter((m) => {
         const query = search.toLowerCase();
         return (
           m.member.name.toLowerCase().includes(query) ||
+          (m.member.nickname && m.member.nickname.toLowerCase().includes(query)) ||
           m.member.email.toLowerCase().includes(query)
         );
       })
@@ -49,9 +56,6 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
       setTimeout(() => setFeedback(null), 4000);
     });
   }
-
-  const [overrideMember, setOverrideMember] = useState<{ id: string; name: string } | null>(null);
-  const [overrideDate, setOverrideDate] = useState("");
 
   function handleActivate(memberId: string, memberName: string) {
     startTransition(async () => {
@@ -90,6 +94,21 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
     });
   }
 
+  function handleRevokeMembership() {
+    if (!revokeTarget) return;
+    startTransition(async () => {
+      const result = await revokeMembership(revokeTarget.id);
+      if (result.success) {
+        setFeedback({ type: "success", message: `Membership for ${revokeTarget.name} has been revoked.` });
+      } else {
+        setFeedback({ type: "error", message: result.error });
+      }
+      setRevokeTarget(null);
+      setRevokeStep(1);
+      setTimeout(() => setFeedback(null), 5000);
+    });
+  }
+
   return (
     <div className="space-y-4">
       {/* Search */}
@@ -99,7 +118,7 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
         </svg>
         <input
           type="text"
-          placeholder="Search members to check in..."
+          placeholder="Search members by name, nickname, or email..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full pl-10 pr-4 py-2.5 bg-white border border-zinc-300 rounded-lg text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
@@ -127,7 +146,7 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
             {checkedInMembers.map((m) => (
               <span key={m.member.id} className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                {m.member.name}
+                {m.member.name}{m.member.nickname ? ` ("${m.member.nickname}")` : ""}
               </span>
             ))}
           </div>
@@ -155,7 +174,12 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
               {filtered.map((m) => (
                 <tr key={m.member.id} className="hover:bg-zinc-50 transition-colors">
                   <td className="px-4 py-3 text-zinc-900 font-medium">
-                    {m.member.name}
+                    <span>{m.member.name}</span>
+                    {m.member.nickname && (
+                      <span className="ml-1.5 inline-block text-xs font-bold text-amber-600">
+                        (&quot;{m.member.nickname}&quot;)
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-zinc-600 hidden sm:table-cell">
                     {m.member.email}
@@ -175,13 +199,24 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
                   <td className="px-4 py-3 text-right">
                     {m.member.role !== "admin" && (
                       <div className="flex items-center justify-end gap-2">
-                        {m.membership?.status !== "active" && (
+                        {m.membership?.status !== "active" ? (
                           <button
                             onClick={() => handleActivate(m.member.id, m.member.name)}
                             disabled={isPending}
                             className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors disabled:opacity-50"
                           >
                             Activate
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setRevokeTarget({ id: m.member.id, name: m.member.name });
+                              setRevokeStep(1);
+                            }}
+                            disabled={isPending}
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-50"
+                          >
+                            Revoke
                           </button>
                         )}
                         <button
@@ -236,6 +271,105 @@ export function MemberList({ members, checkedInMembers }: MemberListProps) {
                 {isPending ? "Saving..." : "Set Date"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2-Step Revoke Membership Modal */}
+      {revokeTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setRevokeTarget(null)}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-xl space-y-5" onClick={(e) => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-100 text-red-600">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-zinc-900">Revoke Membership</h3>
+                  <p className="text-xs text-zinc-500">Step {revokeStep} of 2</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className={`h-2.5 w-2.5 rounded-full ${revokeStep >= 1 ? "bg-red-500" : "bg-zinc-200"}`} />
+                <span className={`h-2.5 w-2.5 rounded-full ${revokeStep === 2 ? "bg-red-500" : "bg-zinc-200"}`} />
+              </div>
+            </div>
+
+            {revokeStep === 1 ? (
+              /* Step 1: Warning & Impact */
+              <div className="space-y-4">
+                <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 space-y-2">
+                  <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide">
+                    Step 1: Impact Warning
+                  </p>
+                  <p className="text-xs text-amber-900 leading-relaxed">
+                    Revoking membership for <span className="font-bold">{revokeTarget.name}</span> will immediately change their status to <span className="font-semibold text-red-700">Expired</span> and revoke track check-in privileges.
+                  </p>
+                </div>
+
+                <p className="text-xs text-zinc-500">
+                  This action takes effect immediately upon confirmation in Step 2.
+                </p>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={() => setRevokeTarget(null)}
+                    className="flex-1 rounded-lg bg-zinc-100 px-4 py-2.5 text-xs font-medium text-zinc-700 hover:bg-zinc-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => setRevokeStep(2)}
+                    className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-700 transition-colors shadow-sm"
+                  >
+                    Next: Confirm Revocation →
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Step 2: Final Confirmation */
+              <div className="space-y-4">
+                <div className="rounded-xl bg-red-50 border border-red-200 p-4 space-y-2">
+                  <p className="text-xs font-semibold text-red-800 uppercase tracking-wide">
+                    Step 2: Final Confirmation
+                  </p>
+                  <p className="text-xs text-red-900 leading-relaxed">
+                    Are you completely sure you want to revoke the membership for <span className="font-bold">{revokeTarget.name}</span>?
+                  </p>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={() => setRevokeStep(1)}
+                    disabled={isPending}
+                    className="rounded-lg bg-zinc-100 px-3.5 py-2.5 text-xs font-medium text-zinc-700 hover:bg-zinc-200 transition-colors disabled:opacity-50"
+                  >
+                    ← Back
+                  </button>
+                  <button
+                    onClick={handleRevokeMembership}
+                    disabled={isPending}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-red-700 transition-colors disabled:opacity-50 shadow-sm"
+                  >
+                    {isPending ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        <span>Revoking...</span>
+                      </>
+                    ) : (
+                      <span>Confirm & Revoke Membership</span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

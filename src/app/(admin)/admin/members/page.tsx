@@ -1,14 +1,19 @@
 import { getAllMembers } from "@/actions/admin/members";
 import { getTodayCheckIns } from "@/actions/admin/checkins";
+import { getActiveRentals } from "@/actions/admin/rentals";
 import { MemberList } from "@/components/admin/MemberList";
 import { TodayCheckIns } from "@/components/admin/TodayCheckIns";
+import { ActiveRentalsWidget } from "@/components/admin/ActiveRentalsWidget";
 import { AutoRefresh } from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminMembersPage() {
-  const members = await getAllMembers();
-  const todayCheckIns = await getTodayCheckIns();
+  const [members, todayCheckIns, activeRentals] = await Promise.all([
+    getAllMembers(),
+    getTodayCheckIns(),
+    getActiveRentals(),
+  ]);
 
   // Get unique checked-in user IDs
   const checkedInIds = new Set(todayCheckIns.map((c) => c.userId));
@@ -26,6 +31,9 @@ export default async function AdminMembersPage() {
           {members.length} registered member{members.length !== 1 ? "s" : ""} • {todayCheckIns.length} checked in today
         </p>
       </div>
+
+      {/* Active Car Rentals Widget */}
+      <ActiveRentalsWidget initialRentals={activeRentals} />
 
       {/* Today's Check-Ins */}
       <TodayCheckIns checkIns={todayCheckIns} />

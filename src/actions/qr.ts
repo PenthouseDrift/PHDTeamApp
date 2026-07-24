@@ -26,3 +26,16 @@ export async function getOrCreateQRCode(memberId: string): Promise<ActionResult<
     };
   }
 }
+
+export async function getOrGeneratePassNonce(
+  memberId: string,
+  type: "day_pass" | "rental"
+): Promise<string> {
+  const key = `qr:nonce:${type}:${memberId}`;
+  let nonce = (await redis.get(key)) as string | null;
+  if (!nonce) {
+    nonce = globalThis.crypto.randomUUID();
+    await redis.set(key, nonce, { ex: 86400 * 30 });
+  }
+  return nonce;
+}
