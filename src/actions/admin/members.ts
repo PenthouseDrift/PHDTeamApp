@@ -1,11 +1,12 @@
 "use server";
 
 import { redis } from "@/lib/redis";
-import type { Member, Membership } from "@/types";
+import type { Member, Membership, Wallet } from "@/types";
 
 export interface MemberWithMembership {
   member: Member;
   membership: Membership | null;
+  wallet: Wallet;
 }
 
 export async function getAllMembers(): Promise<MemberWithMembership[]> {
@@ -38,9 +39,10 @@ export async function getAllMembers(): Promise<MemberWithMembership[]> {
       const userId = key.replace("member:", "");
       if (membersMap.has(userId)) return;
 
-      const [memberData, membershipData] = await Promise.all([
+      const [memberData, membershipData, walletData] = await Promise.all([
         redis.hgetall(key),
         redis.hgetall(`membership:${userId}`),
+        redis.hgetall(`wallet:${userId}`),
       ]);
 
       if (!memberData || !memberData.email) return;
@@ -49,6 +51,7 @@ export async function getAllMembers(): Promise<MemberWithMembership[]> {
         id: userId,
         email: (memberData.email as string) || "",
         name: (memberData.name as string) || "Unknown",
+        nickname: (memberData.nickname as string) || null,
         image: (memberData.customAvatar as string) || (memberData.image as string) || null,
         role: (memberData.role as "admin" | "member") || "member",
         qrCode: null,
@@ -66,7 +69,14 @@ export async function getAllMembers(): Promise<MemberWithMembership[]> {
         };
       }
 
-      membersMap.set(userId, { member, membership });
+      const wallet: Wallet = {
+        userId,
+        dayPasses: Math.max(0, Number(walletData?.dayPasses) || 0),
+        rentalHours: Math.max(0, Number(walletData?.rentalHours) || 0),
+        updatedAt: Number(walletData?.updatedAt) || 0,
+      };
+
+      membersMap.set(userId, { member, membership, wallet });
     });
 
     await Promise.all(memberDataPromises);
@@ -87,3 +97,4 @@ export async function getAllMembers(): Promise<MemberWithMembership[]> {
     return [];
   }
 }
+
