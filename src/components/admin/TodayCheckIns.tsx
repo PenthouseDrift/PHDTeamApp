@@ -207,40 +207,42 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
 
                 {/* Right: Method Badge + Rental Extension + Timestamp + Remove */}
                 <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-green-200/50 dark:border-green-800/30">
-                  {/* Extension Popover Controls */}
-                  {extendingIndex === i ? (
-                    <div className="flex items-center gap-1 bg-amber-100 dark:bg-amber-950 p-1 rounded-lg border border-amber-300 dark:border-amber-700 animate-fadeIn">
-                      <span className="text-[10px] font-bold text-amber-900 dark:text-amber-300 px-1">Extend +1h:</span>
+                  {/* Extension Popover Controls (Car Rentals only) */}
+                  {entry.method.includes("rental") && (
+                    extendingIndex === i ? (
+                      <div className="flex items-center gap-1 bg-amber-100 dark:bg-amber-950 p-1 rounded-lg border border-amber-300 dark:border-amber-700 animate-fadeIn">
+                        <span className="text-[10px] font-bold text-amber-900 dark:text-amber-300 px-1">Extend +1h:</span>
+                        <button
+                          onClick={() => handleExtendRental(entry.userId, entry.memberName, "cash")}
+                          disabled={isPending}
+                          className="bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[10px] font-extrabold px-2 py-1 rounded-md hover:bg-zinc-800"
+                        >
+                          💵 £10 Cash
+                        </button>
+                        <button
+                          onClick={() => handleExtendRental(entry.userId, entry.memberName, "wallet")}
+                          disabled={isPending}
+                          className="bg-amber-500 text-black text-[10px] font-extrabold px-2 py-1 rounded-md hover:bg-amber-400"
+                        >
+                          🎫 Pass
+                        </button>
+                        <button
+                          onClick={() => setExtendingIndex(null)}
+                          className="text-zinc-400 hover:text-zinc-600 text-[11px] px-1 font-bold"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
                       <button
-                        onClick={() => handleExtendRental(entry.userId, entry.memberName, "cash")}
-                        disabled={isPending}
-                        className="bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[10px] font-extrabold px-2 py-1 rounded-md hover:bg-zinc-800"
+                        onClick={() => setExtendingIndex(i)}
+                        title="Extend car rental for this member"
+                        className="text-[11px] font-black text-amber-900 dark:text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 rounded-lg px-2 py-1 transition-colors flex items-center gap-1 shadow-xs"
                       >
-                        💵 £10 Cash
+                        <span>🏎️</span>
+                        <span>+1 Hr</span>
                       </button>
-                      <button
-                        onClick={() => handleExtendRental(entry.userId, entry.memberName, "wallet")}
-                        disabled={isPending}
-                        className="bg-amber-500 text-black text-[10px] font-extrabold px-2 py-1 rounded-md hover:bg-amber-400"
-                      >
-                        🎫 Pass
-                      </button>
-                      <button
-                        onClick={() => setExtendingIndex(null)}
-                        className="text-zinc-400 hover:text-zinc-600 text-[11px] px-1 font-bold"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setExtendingIndex(i)}
-                      title="Extend car rental for this member"
-                      className="text-[11px] font-black text-amber-900 dark:text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 rounded-lg px-2 py-1 transition-colors flex items-center gap-1 shadow-xs"
-                    >
-                      <span>🏎️</span>
-                      <span>+1 Hr</span>
-                    </button>
+                    )
                   )}
 
                   {editingIndex === i ? (

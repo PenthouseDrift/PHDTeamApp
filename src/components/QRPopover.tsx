@@ -57,8 +57,8 @@ export function QRPopover({ userId }: QRPopoverProps) {
         <div className="flex items-center gap-2">
           <span className="text-xl">📱</span>
           <div>
-            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Check-In QR Codes</h3>
-            <p className="text-[10px] text-zinc-500 dark:text-zinc-400">Show to track admin for instant check-in</p>
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Member Account QR Code</h3>
+            <p className="text-[10px] text-zinc-500 dark:text-zinc-400">Show to track admin for check-in & wallet redemption</p>
           </div>
         </div>
         <button
@@ -73,7 +73,7 @@ export function QRPopover({ userId }: QRPopoverProps) {
       {/* Main Track Membership QR Code */}
       <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white p-3 text-center space-y-2 shadow-sm">
         <p className="text-xs font-bold text-zinc-800 dark:text-zinc-900 uppercase tracking-wider">
-          Membership Track Access QR
+          Main Member QR Code
         </p>
         {loading ? (
           <div className="py-8 text-center space-y-2">
@@ -84,7 +84,7 @@ export function QRPopover({ userId }: QRPopoverProps) {
           <div className="space-y-2">
             <img
               src={qrCodeUrl}
-              alt="Membership Check-In QR Code"
+              alt="Member Account Check-In QR Code"
               className="w-48 h-48 mx-auto object-contain rounded-lg"
             />
             <p className="text-[10px] font-mono font-bold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 rounded-md border border-zinc-200 dark:border-zinc-700 inline-block">
@@ -94,21 +94,6 @@ export function QRPopover({ userId }: QRPopoverProps) {
         ) : (
           <p className="text-xs text-red-500 py-4">Unable to load QR Code.</p>
         )}
-      </div>
-
-      {/* Wallet Pass & Rental QR Quick Link */}
-      <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate">Day Pass & Rental QRs</p>
-          <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">Access paid pass QR codes in your wallet</p>
-        </div>
-        <Link
-          href="/wallet"
-          onClick={() => setIsOpen(false)}
-          className="rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold px-3 py-1.5 transition-colors shrink-0"
-        >
-          Open Wallet →
-        </Link>
       </div>
     </div>
   );

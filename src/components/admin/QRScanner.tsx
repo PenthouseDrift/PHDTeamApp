@@ -2,7 +2,12 @@
 
 import { useEffect, useRef, useState, useCallback, useTransition } from "react";
 import { usePathname } from "next/navigation";
-import { checkInWithDayPass, checkInWithRental, checkInFriendWithPass } from "@/actions/admin/checkins";
+import {
+  checkInWithDayPass,
+  checkInWithRental,
+  checkInFriendWithPass,
+  addNonMemberCheckIn,
+} from "@/actions/admin/checkins";
 
 interface ScanResult {
   status: "active" | "expired" | "duplicate" | "invalid" | "error";
@@ -40,7 +45,6 @@ export function QRScanner() {
   const html5QrCodeRef = useRef<any>(null);
 
   const stopCamera = useCallback(() => {
-    // Invalidate any in-flight getUserMedia requests
     currentSessionIdRef.current = 0;
 
     if (scanIntervalRef.current) {
@@ -55,7 +59,6 @@ export function QRScanner() {
       html5QrCodeRef.current = null;
     }
 
-    // 1. Release tracks from mediaStreamRef
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => {
         track.stop();
@@ -64,7 +67,6 @@ export function QRScanner() {
       mediaStreamRef.current = null;
     }
 
-    // 2. Release tracks from video element srcObject
     if (videoRef.current) {
       if (videoRef.current.srcObject instanceof MediaStream) {
         videoRef.current.srcObject.getTracks().forEach((track) => {
@@ -151,7 +153,6 @@ export function QRScanner() {
         },
       });
 
-      // RACE CONDITION GUARD: If component unmounted or session stopped while getUserMedia was pending
       if (!isMountedRef.current || currentSessionIdRef.current !== sessionId) {
         stream.getTracks().forEach((track) => {
           track.stop();
@@ -167,7 +168,6 @@ export function QRScanner() {
         await videoRef.current.play().catch(() => {});
       }
 
-      // Check again after video play
       if (!isMountedRef.current || currentSessionIdRef.current !== sessionId) {
         stopCamera();
         return;
@@ -175,9 +175,7 @@ export function QRScanner() {
 
       setIsScanning(true);
 
-      // Start continuous scanning using native BarcodeDetector or html5-qrcode
       const { Html5Qrcode } = await import("html5-qrcode");
-
       let tempDivId = "temp-qr-scanner";
 
       if (typeof window !== "undefined" && !("BarcodeDetector" in window)) {
@@ -199,7 +197,6 @@ export function QRScanner() {
 
         if (!videoRef.current || videoRef.current.readyState < 2) return;
 
-        // 1. Try Native Browser BarcodeDetector (iOS Safari 17+, Chrome Android)
         if (typeof window !== "undefined" && "BarcodeDetector" in window) {
           try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -214,7 +211,6 @@ export function QRScanner() {
           }
         }
 
-        // 2. Fallback to Canvas snapshot + Html5Qrcode
         if (html5QrCodeRef.current && videoRef.current) {
           try {
             const canvas = document.createElement("canvas");
@@ -257,20 +253,15 @@ export function QRScanner() {
     }
   }, [handleScan, stopCamera]);
 
-  // Guarantee camera closure on component unmount, route navigation, tab switch, or page hide
   useEffect(() => {
     isMountedRef.current = true;
     startCamera();
 
     const handleVisibilityChange = () => {
-      if (document.hidden) {
-        stopCamera();
-      }
+      if (document.hidden) stopCamera();
     };
 
-    const handlePageHide = () => {
-      stopCamera();
-    };
+    const handlePageHide = () => stopCamera();
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("pagehide", handlePageHide);
@@ -285,20 +276,17 @@ export function QRScanner() {
     };
   }, [startCamera, stopCamera]);
 
-  // Cleanup on route navigation change
   useEffect(() => {
-    return () => {
-      stopCamera();
-    };
+    return () => stopCamera();
   }, [pathname, stopCamera]);
 
-  // Auto-dismiss result overlay after 15 seconds
+  // Auto-dismiss result overlay after 20 seconds
   useEffect(() => {
     if (result) {
       dismissTimerRef.current = setTimeout(() => {
         setResult(null);
         startCamera();
-      }, 15000);
+      }, 20000);
     }
 
     return () => {
@@ -312,7 +300,7 @@ export function QRScanner() {
     setResult((prev) => (prev ? { ...prev, status: "active", message } : null));
   }
 
-  function handleCheckInFriend(passType: "day_pass" | "rental") {
+  function handleCheckInFriendPass(passType: "day_pass" | "rental") {
     if (!result?.member) return;
     const memberId = result.member.id;
     const memberName = result.member.name;
@@ -351,19 +339,37 @@ export function QRScanner() {
     });
   }
 
+  function handleCheckInFriendCash(passType: "day_pass" | "rental") {
+    if (!result?.member) return;
+    const memberName = result.member.name;
+    const cleanFriendName = friendNameInput.trim() || `Guest of ${memberName}`;
+
+    startTransition(async () => {
+      const res = await addNonMemberCheckIn(cleanFriendName, "admin", passType);
+      if (res.success) {
+        setFriendNameInput("");
+        const msg = passType === "day_pass"
+          ? `Guest ${cleanFriendName} checked in (Paid £10 Day Pass Cash/Card)`
+          : `Guest ${cleanFriendName} checked in & Car Rental Started (Paid £10 Cash/Card)`;
+        handleActionComplete(msg);
+      }
+    });
+  }
+
   // Result overlay
   if (result) {
     const isMembershipActive = result.member?.membershipStatus === "active";
     const dayPasses = result.member?.dayPasses || 0;
     const rentalHours = result.member?.rentalHours || 0;
-    const isDirectPassOrRental = result.scanType === "day_pass" || result.scanType === "rental";
+    const isDuplicate = result.status === "duplicate";
+    const isExpired = result.status === "expired";
 
     return (
       <div
         className={`fixed inset-0 z-50 flex flex-col items-center justify-center p-6 overflow-y-auto ${getResultBackground(result.status)}`}
       >
         <div className="text-center space-y-4 max-w-md w-full my-auto">
-          {/* Member Name & Image */}
+          {/* Member Profile Avatar & Name */}
           {result.member && (
             <div className="flex flex-col items-center gap-2">
               {result.member.image ? (
@@ -381,8 +387,8 @@ export function QRScanner() {
             </div>
           )}
 
-          {/* Membership Status Badge (only for standard membership scans) */}
-          {result.member && !isDirectPassOrRental && (
+          {/* Membership Badge */}
+          {result.member && (
             <div className="flex justify-center">
               <span
                 className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider shadow-md ${
@@ -397,8 +403,8 @@ export function QRScanner() {
             </div>
           )}
 
-          {/* Wallet Balances Summary (only for standard membership scans) */}
-          {result.member && !isDirectPassOrRental && (
+          {/* Wallet Balances Summary */}
+          {result.member && (
             <div className="flex justify-center gap-4 py-1">
               <div className="bg-black/30 backdrop-blur-sm rounded-xl px-3 py-1.5 border border-white/20">
                 <p className="text-[10px] text-zinc-200 uppercase font-semibold">Day Passes</p>
@@ -414,57 +420,17 @@ export function QRScanner() {
           <p className="text-xl font-bold text-white leading-tight">{result.message}</p>
           <StatusIcon status={result.status} />
 
-          {/* Manual Action Buttons (only for standard membership scans) */}
-          {result.member && !isDirectPassOrRental && (
+          {/* ----------------------------------------------------------------- */}
+          {/* OPTION SET 1: Non-Member / Expired Membership Controls */}
+          {/* ----------------------------------------------------------------- */}
+          {result.member && isExpired && (
             <div className="space-y-3 pt-2 text-left">
-              {/* Friend / Guest Check-In Section using Member's Wallet Passes */}
-              {(dayPasses > 0 || rentalHours > 0) && (
-                <div className="bg-black/40 backdrop-blur-md rounded-xl p-3 border border-white/25 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-black uppercase tracking-wider text-amber-300">
-                      👥 Check In Friend / Guest
-                    </span>
-                    <span className="text-[10px] text-white/70">Using member&apos;s passes</span>
-                  </div>
-
-                  <input
-                    type="text"
-                    placeholder="Enter friend's name (optional)..."
-                    value={friendNameInput}
-                    onChange={(e) => setFriendNameInput(e.target.value)}
-                    className="w-full rounded-lg bg-black/50 border border-white/30 px-3 py-1.5 text-xs font-bold text-white placeholder-white/50 focus:outline-none focus:border-amber-400"
-                  />
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {dayPasses > 0 && (
-                      <button
-                        disabled={isPending}
-                        onClick={() => handleCheckInFriend("day_pass")}
-                        className="w-full py-2 px-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-[11px] font-black transition-all shadow-sm disabled:opacity-50 text-center"
-                      >
-                        🎫 Check In Friend (Day Pass: {dayPasses} left)
-                      </button>
-                    )}
-
-                    {rentalHours > 0 && (
-                      <button
-                        disabled={isPending}
-                        onClick={() => handleCheckInFriend("rental")}
-                        className="w-full py-2 px-2.5 rounded-lg bg-purple-500 hover:bg-purple-400 text-white text-[11px] font-black transition-all shadow-sm disabled:opacity-50 text-center"
-                      >
-                        🏎️ Check In Friend (Rental: {rentalHours} left)
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <p className="text-xs font-bold text-white/80 uppercase tracking-wider text-center pt-1">
-                Other Check-In Options
+              <p className="text-xs font-bold text-white/80 uppercase tracking-wider text-center">
+                Member Check-In Options (Non-Member / Expired)
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {/* Use Wallet Day Pass */}
+                {/* Check in using member's wallet pass */}
                 {dayPasses > 0 && (
                   <button
                     disabled={isPending}
@@ -473,34 +439,17 @@ export function QRScanner() {
                       startTransition(async () => {
                         const res = await checkInWithDayPass(result.member!.id, result.member!.name, "admin", false);
                         if (res.success) {
-                          handleActionComplete(`Day Pass Used for Member! (${dayPasses - 1} left)`);
+                          handleActionComplete(`Checked In with Wallet Day Pass! (${dayPasses - 1} left)`);
                         }
                       });
                     }}
-                    className="w-full py-2.5 px-3 rounded-lg bg-amber-500 text-black text-xs font-extrabold hover:bg-amber-400 transition-colors shadow-md disabled:opacity-50 text-center"
+                    className="w-full py-2.5 px-3 rounded-xl bg-amber-500 text-black text-xs font-extrabold hover:bg-amber-400 transition-colors shadow-md disabled:opacity-50 text-center"
                   >
-                    🎫 Member Day Pass ({dayPasses} left)
+                    🎫 Check In with Day Pass ({dayPasses} left)
                   </button>
                 )}
 
-                {/* Day Pass - Paid Cash/Card */}
-                <button
-                  disabled={isPending}
-                  onClick={() => {
-                    if (!result.member) return;
-                    startTransition(async () => {
-                      const res = await checkInWithDayPass(result.member!.id, result.member!.name, "admin", true);
-                      if (res.success) {
-                        handleActionComplete("Day Pass — Paid in Person (£10)");
-                      }
-                    });
-                  }}
-                  className="w-full py-2.5 px-3 rounded-lg bg-white/90 text-zinc-900 text-xs font-extrabold hover:bg-white transition-colors shadow-md disabled:opacity-50 text-center"
-                >
-                  💵 Day Pass (£10 Paid Cash/Card)
-                </button>
-
-                {/* Use Wallet Rental */}
+                {/* Check in using member's wallet rental */}
                 {rentalHours > 0 && (
                   <button
                     disabled={isPending}
@@ -509,17 +458,34 @@ export function QRScanner() {
                       startTransition(async () => {
                         const res = await checkInWithRental(result.member!.id, result.member!.name, "admin", false);
                         if (res.success) {
-                          handleActionComplete(`Car Rental Started for Member! (${rentalHours - 1} hrs left)`);
+                          handleActionComplete(`Checked In & Car Rental Started! (${rentalHours - 1} hrs left)`);
                         }
                       });
                     }}
                     className="w-full py-2.5 px-3 rounded-lg bg-amber-500 text-black text-xs font-extrabold hover:bg-amber-400 transition-colors shadow-md disabled:opacity-50 text-center"
                   >
-                    🏎️ Member Rental ({rentalHours} left)
+                    🏎️ Check In with Rental Hour ({rentalHours} left)
                   </button>
                 )}
 
-                {/* Rental - Paid Cash/Card */}
+                {/* Pay £10 Cash/Card for Day Pass */}
+                <button
+                  disabled={isPending}
+                  onClick={() => {
+                    if (!result.member) return;
+                    startTransition(async () => {
+                      const res = await checkInWithDayPass(result.member!.id, result.member!.name, "admin", true);
+                      if (res.success) {
+                        handleActionComplete("Checked In — Day Pass Paid (£10 Cash/Card)");
+                      }
+                    });
+                  }}
+                  className="w-full py-2.5 px-3 rounded-xl bg-white/90 text-zinc-900 text-xs font-extrabold hover:bg-white transition-colors shadow-md disabled:opacity-50 text-center"
+                >
+                  💵 Day Pass (£10 Paid Cash/Card)
+                </button>
+
+                {/* Pay £10 Cash/Card for Car Rental */}
                 <button
                   disabled={isPending}
                   onClick={() => {
@@ -527,37 +493,97 @@ export function QRScanner() {
                     startTransition(async () => {
                       const res = await checkInWithRental(result.member!.id, result.member!.name, "admin", true);
                       if (res.success) {
-                        handleActionComplete("Car Rental — Paid in Person (£10)");
+                        handleActionComplete("Car Rental Started — Paid (£10 Cash/Card)");
                       }
                     });
                   }}
-                  className="w-full py-2.5 px-3 rounded-lg bg-white/90 text-zinc-900 text-xs font-extrabold hover:bg-white transition-colors shadow-md disabled:opacity-50 text-center"
+                  className="w-full py-2.5 px-3 rounded-xl bg-white/90 text-zinc-900 text-xs font-extrabold hover:bg-white transition-colors shadow-md disabled:opacity-50 text-center"
                 >
                   🏎️ Car Rental (£10 Paid Cash/Card)
                 </button>
               </div>
 
-              {/* Standard Admin Override */}
-              {!isMembershipActive && (
+              {/* Standard Admin Quick Override */}
+              <button
+                disabled={isPending}
+                onClick={async () => {
+                  try {
+                    const res = await fetch("/api/checkin/scan", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ memberId: lastScannedId, override: true }),
+                    });
+                    if (res.ok) {
+                      handleActionComplete("Override — Member Checked In");
+                    }
+                  } catch { /* ignore */ }
+                }}
+                className="w-full py-2 px-3 bg-black/40 text-white text-xs font-bold rounded-lg transition-colors hover:bg-black/60 border border-white/20 text-center mt-1"
+              >
+                ⚡ Quick Override (Check In Anyway)
+              </button>
+            </div>
+          )}
+
+          {/* ----------------------------------------------------------------- */}
+          {/* OPTION SET 2: Friend / Guest Check-In Controls (Available on Duplicate or Active scans) */}
+          {/* ----------------------------------------------------------------- */}
+          {result.member && (isDuplicate || isMembershipActive) && (
+            <div className="bg-black/40 backdrop-blur-md rounded-2xl p-4 border border-white/25 space-y-3 text-left">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase tracking-wider text-amber-300">
+                  👥 Check In a Friend / Guest
+                </span>
+                <span className="text-[10px] text-white/70">
+                  Via {result.member.name.split(" ")[0]}&apos;s passes or cash
+                </span>
+              </div>
+
+              <input
+                type="text"
+                placeholder="Enter friend's name (optional)..."
+                value={friendNameInput}
+                onChange={(e) => setFriendNameInput(e.target.value)}
+                className="w-full rounded-xl bg-black/50 border border-white/30 px-3 py-2 text-xs font-bold text-white placeholder-white/50 focus:outline-none focus:border-amber-400"
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {dayPasses > 0 && (
+                  <button
+                    disabled={isPending}
+                    onClick={() => handleCheckInFriendPass("day_pass")}
+                    className="w-full py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-[11px] font-black transition-all shadow-sm disabled:opacity-50 text-center"
+                  >
+                    🎫 Use Wallet Day Pass ({dayPasses} left)
+                  </button>
+                )}
+
+                {rentalHours > 0 && (
+                  <button
+                    disabled={isPending}
+                    onClick={() => handleCheckInFriendPass("rental")}
+                    className="w-full py-2.5 px-3 rounded-xl bg-purple-500 hover:bg-purple-400 text-white text-[11px] font-black transition-all shadow-sm disabled:opacity-50 text-center"
+                  >
+                    🏎️ Use Wallet Rental Hr ({rentalHours} left)
+                  </button>
+                )}
+
                 <button
                   disabled={isPending}
-                  onClick={async () => {
-                    try {
-                      const res = await fetch("/api/checkin/scan", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ memberId: lastScannedId, override: true }),
-                      });
-                      if (res.ok) {
-                        handleActionComplete("Override — Checked In");
-                      }
-                    } catch { /* ignore */ }
-                  }}
-                  className="w-full py-2 px-3 bg-black/40 text-white text-xs font-bold rounded-lg transition-colors hover:bg-black/60 border border-white/20 text-center mt-1"
+                  onClick={() => handleCheckInFriendCash("day_pass")}
+                  className="w-full py-2.5 px-3 rounded-xl bg-white/90 hover:bg-white text-zinc-900 text-[11px] font-black transition-all shadow-sm disabled:opacity-50 text-center"
                 >
-                  ⚡ Quick Override (Check In Anyway)
+                  💵 Pay Friend Day Pass (£10 Cash)
                 </button>
-              )}
+
+                <button
+                  disabled={isPending}
+                  onClick={() => handleCheckInFriendCash("rental")}
+                  className="w-full py-2.5 px-3 rounded-xl bg-white/90 hover:bg-white text-zinc-900 text-[11px] font-black transition-all shadow-sm disabled:opacity-50 text-center"
+                >
+                  🏎️ Pay Friend Car Rental (£10 Cash)
+                </button>
+              </div>
             </div>
           )}
 
@@ -567,7 +593,7 @@ export function QRScanner() {
                 setResult(null);
                 startCamera();
               }}
-              className="px-6 py-2.5 bg-white/20 hover:bg-white/30 text-white font-bold text-xs rounded-lg transition-colors"
+              className="px-6 py-2.5 bg-white/20 hover:bg-white/30 text-white font-bold text-xs rounded-xl transition-colors"
             >
               Scan Next Member
             </button>
