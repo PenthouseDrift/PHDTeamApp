@@ -51,6 +51,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             image: user.image ?? "",
           });
         }
+      } else if (token.sub) {
+        // Refresh role from Redis on subsequent requests so role updates take effect immediately
+        const freshRole = (await redis.hget(`member:${token.sub}`, "role")) as string | null;
+        if (freshRole) {
+          token.role = freshRole as "admin" | "moderator" | "member";
+        }
       }
       return token;
     },

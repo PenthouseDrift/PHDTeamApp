@@ -53,7 +53,7 @@ export async function getAllMembers(): Promise<MemberWithMembership[]> {
         name: (memberData.name as string) || "Unknown",
         nickname: (memberData.nickname as string) || null,
         image: (memberData.customAvatar as string) || (memberData.image as string) || null,
-        role: (memberData.role as "admin" | "member") || "member",
+        role: (memberData.role as "admin" | "moderator" | "member") || "member",
         qrCode: null,
         createdAt: Number(memberData.createdAt) || 0,
       };
