@@ -25,11 +25,28 @@ export function getEventTiming(event: {
     };
   }
 
+  // Calculate current date & time explicitly in Europe/London timezone (UK Track)
   const now = new Date();
-  const nowYear = now.getFullYear();
-  const nowMonth = String(now.getMonth() + 1).padStart(2, "0");
-  const nowDate = String(now.getDate()).padStart(2, "0");
-  const localToday = `${nowYear}-${nowMonth}-${nowDate}`;
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(now);
+  const partMap: Record<string, string> = {};
+  parts.forEach((p) => {
+    partMap[p.type] = p.value;
+  });
+
+  const localToday = `${partMap.year}-${partMap.month}-${partMap.day}`;
+  const currentHour = parseInt(partMap.hour || "0", 10);
+  const currentMinute = parseInt(partMap.minute || "0", 10);
+  const currentMinutes = currentHour * 60 + currentMinute;
 
   const eventDate = event.date;
 
@@ -52,8 +69,6 @@ export function getEventTiming(event: {
   }
 
   // Event is TODAY
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
   let openMin = -1;
   let closeMin = -1;
 
