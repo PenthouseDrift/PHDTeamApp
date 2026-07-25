@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 export default auth((req) => {
   const { pathname } = req.nextUrl;
   const isAuth = !!req.auth;
-  const isAdmin = req.auth?.user?.role === "admin";
+  const isStaff = req.auth?.user?.role === "admin" || req.auth?.user?.role === "moderator";
 
   // Public routes
   if (pathname === "/" || pathname.startsWith("/auth")) {
@@ -16,8 +16,8 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/auth/signin", req.url));
   }
 
-  // Admin routes require admin role
-  if (pathname.startsWith("/admin") && !isAdmin) {
+  // Admin/Mod routes require admin or moderator role
+  if (pathname.startsWith("/admin") && !isStaff) {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
