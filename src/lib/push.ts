@@ -26,7 +26,8 @@ export async function sendPushNotification(
         keys: subscription.keys,
       },
       JSON.stringify({
-        icon: "/logo.png",
+        icon: "/favicon.png",
+        badge: "/icons/p-badge.png",
         ...payload,
       })
     );
