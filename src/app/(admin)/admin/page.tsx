@@ -98,6 +98,14 @@ export default async function AdminDashboardPage() {
       color: "from-sky-500/20 to-blue-500/10 border-sky-500/40 text-sky-600 dark:text-sky-400",
       adminOnly: true,
     },
+    {
+      title: "In Development",
+      description: "Admin poster generator & experimental track features",
+      href: "/admin/development",
+      icon: "🧪",
+      color: "from-purple-500/20 to-indigo-500/10 border-purple-500/40 text-purple-600 dark:text-purple-400",
+      adminOnly: true,
+    },
   ];
 
   const quickTiles = allQuickTiles.filter((t) => !isModerator || !t.adminOnly);
