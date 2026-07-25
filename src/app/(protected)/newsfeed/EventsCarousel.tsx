@@ -18,6 +18,22 @@ export function EventsCarousel({ events }: EventsCarouselProps) {
     });
   }
 
+  function fmt12(time: string): string {
+    if (!time) return "";
+    const [h, m] = time.split(":").map(Number);
+    const ampm = h >= 12 ? "PM" : "AM";
+    return `${((h % 12) || 12)}:${String(m).padStart(2, "0")} ${ampm}`;
+  }
+
+  function formatTimes(event: TrackEvent): string {
+    if (event.openTime) {
+      return event.closeTime
+        ? `${fmt12(event.openTime)} – ${fmt12(event.closeTime)}`
+        : `Opens: ${fmt12(event.openTime)}`;
+    }
+    return event.time ? fmt12(event.time) : "";
+  }
+
   function isToday(date: string): boolean {
     const today = new Date();
     const d = new Date(date + "T00:00:00");
@@ -38,17 +54,17 @@ export function EventsCarousel({ events }: EventsCarouselProps) {
           {events.map((event) => {
             const today = isToday(event.date);
             const cancelled = event.status === "cancelled";
+            const timesText = formatTimes(event);
             return (
               <button
                 key={event.eventId}
                 onClick={() => setSelectedEvent(event)}
-                className={`shrink-0 w-52 rounded-xl text-left border transition-all hover:shadow-md overflow-hidden ${
-                  cancelled
-                    ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
-                    : today
+                className={`shrink-0 w-52 rounded-xl text-left border transition-all hover:shadow-md overflow-hidden ${cancelled
+                  ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+                  : today
                     ? "bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/30 border-amber-400 dark:border-amber-500 ring-2 ring-amber-400/40 dark:ring-amber-500/30 shadow-md shadow-amber-100 dark:shadow-amber-900/20"
                     : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800"
-                }`}
+                  }`}
               >
                 {/* Happening Today banner */}
                 {today && !cancelled && (
@@ -79,7 +95,9 @@ export function EventsCarousel({ events }: EventsCarouselProps) {
                   <p className="mt-0.5 text-sm font-semibold text-zinc-900 dark:text-zinc-100 line-clamp-2">
                     {event.title}
                   </p>
-                  <p className="mt-0.5 text-xs text-zinc-500">{event.time}</p>
+                  {timesText && (
+                    <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{timesText}</p>
+                  )}
                   {cancelled && (
                     <span className="mt-2 inline-block rounded bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 text-[10px] font-bold text-red-700 dark:text-red-400 uppercase">
                       Cancelled
@@ -117,8 +135,11 @@ export function EventsCarousel({ events }: EventsCarouselProps) {
             )}
             <div>
               <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
-                {formatDate(selectedEvent.date)} • {selectedEvent.time}
+                {formatDate(selectedEvent.date)}
               </p>
+              {formatTimes(selectedEvent) && (
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">{formatTimes(selectedEvent)}</p>
+              )}
               <h3 className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">
                 {selectedEvent.title}
               </h3>
