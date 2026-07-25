@@ -156,9 +156,9 @@ export function InstallBanner() {
 
       {/* 2. Initial Load PWA Install Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-[99999] flex items-end sm:items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-300">
           <div
-            className="w-full max-w-sm rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 shadow-2xl space-y-5 animate-in slide-in-from-bottom-4 duration-300 relative text-left"
+            className="w-full max-w-sm rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200 relative text-left my-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close Button */}
