@@ -246,11 +246,7 @@ export default async function AdminDashboardPage() {
             </div>
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-baseline gap-1">
-                <span className="text-3xl font-extrabold text-amber-500">
-                  {isModerator
-                    ? todayCheckins.filter((c) => c.method.includes("day_pass") || c.method.includes("rental")).length
-                    : todayCheckins.length}
-                </span>
+                <span className="text-3xl font-extrabold text-amber-500">{todayCheckins.length}</span>
                 <span className="text-[10px] text-zinc-400 font-bold uppercase">Total</span>
               </div>
               {!isModerator && (
