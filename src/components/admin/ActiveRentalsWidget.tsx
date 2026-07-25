@@ -62,20 +62,20 @@ export function ActiveRentalsWidget({ initialRentals }: ActiveRentalsWidgetProps
   }
 
   return (
-    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-3 shadow-sm">
+    <div className="rounded-2xl border border-amber-500/40 bg-amber-50 dark:bg-amber-950/30 p-4 sm:p-5 space-y-3.5 shadow-sm">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="relative flex h-2.5 w-2.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
           </span>
-          <h2 className="text-sm font-bold text-amber-500 uppercase tracking-wider">
+          <h2 className="text-xs sm:text-sm font-extrabold text-amber-900 dark:text-amber-300 uppercase tracking-wider">
             Active Car Rentals ({rentals.length})
           </h2>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
         {rentals.map((rental) => {
           const isGrace = rental.status === "grace" && now < rental.graceEndsAt;
           const isExpiredGrace = rental.status === "grace" && now >= rental.graceEndsAt;
@@ -99,26 +99,26 @@ export function ActiveRentalsWidget({ initialRentals }: ActiveRentalsWidgetProps
           return (
             <div
               key={rental.rentalId}
-              className={`rounded-lg border p-3.5 space-y-2.5 transition-all ${
+              className={`rounded-xl border p-4 space-y-3 transition-all ${
                 isTimesUp
-                  ? "bg-red-500/20 border-red-500 animate-pulse shadow-lg"
+                  ? "bg-red-50 dark:bg-red-950/40 border-red-400 dark:border-red-800 animate-pulse shadow-md"
                   : isGrace
-                  ? "bg-amber-500/10 border-amber-500/30"
-                  : "bg-zinc-900 border-zinc-700"
+                  ? "bg-white dark:bg-zinc-900 border-amber-300 dark:border-amber-800 shadow-sm"
+                  : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 shadow-sm"
               }`}
             >
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-bold text-zinc-100">{rental.memberName}</p>
-                  <p className="text-xs text-zinc-400">Car Rental Session</p>
+                  <p className="text-sm font-extrabold text-zinc-900 dark:text-zinc-100">{rental.memberName}</p>
+                  <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Car Rental Session</p>
                 </div>
                 <span
-                  className={`text-xs px-2.5 py-1 rounded-full font-bold uppercase tracking-wider ${
+                  className={`text-[10px] px-2.5 py-1 rounded-full font-black uppercase tracking-wider shadow-xs ${
                     isTimesUp
                       ? "bg-red-600 text-white"
                       : isGrace
-                      ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                      : "bg-green-500/20 text-green-400 border border-green-500/30"
+                      ? "bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700"
+                      : "bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700"
                   }`}
                 >
                   {isTimesUp ? "⏰ Time's Up!" : isGrace ? "15m Grace" : "Rental Active"}
@@ -126,17 +126,17 @@ export function ActiveRentalsWidget({ initialRentals }: ActiveRentalsWidgetProps
               </div>
 
               {/* Countdown Timer Display */}
-              <div className="flex items-baseline justify-between pt-1">
-                <span className="text-xs text-zinc-400">
+              <div className="flex items-baseline justify-between pt-1 border-t border-zinc-100 dark:border-zinc-800/80">
+                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">
                   {isGrace ? "Grace Remaining:" : isTimesUp ? "Session Finished:" : "Time Remaining:"}
                 </span>
                 <span
-                  className={`font-mono text-xl font-extrabold ${
+                  className={`font-mono text-xl font-black ${
                     isTimesUp
-                      ? "text-red-400"
+                      ? "text-red-600 dark:text-red-400"
                       : isGrace
-                      ? "text-amber-400"
-                      : "text-green-400"
+                      ? "text-amber-700 dark:text-amber-400"
+                      : "text-emerald-700 dark:text-emerald-400"
                   }`}
                 >
                   {timeFormatted}
@@ -150,7 +150,7 @@ export function ActiveRentalsWidget({ initialRentals }: ActiveRentalsWidgetProps
                     <button
                       onClick={() => handleStartNow(rental.rentalId)}
                       disabled={isPending}
-                      className="flex-1 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-black hover:bg-amber-400 transition-colors disabled:opacity-50"
+                      className="flex-1 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black text-xs py-2 px-3 shadow-xs transition-all disabled:opacity-50"
                     >
                       Start 1-Hr Session Now
                     </button>
@@ -158,25 +158,25 @@ export function ActiveRentalsWidget({ initialRentals }: ActiveRentalsWidgetProps
                   <button
                     onClick={() => handleComplete(rental.rentalId)}
                     disabled={isPending}
-                    className="rounded-md bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-700 transition-colors disabled:opacity-50 ml-auto"
+                    className="rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-bold text-xs py-2 px-3 transition-colors disabled:opacity-50 ml-auto"
                   >
-                    Complete & Clear
+                    Complete &amp; Clear
                   </button>
                 </div>
 
                 {/* Session Extension Controls */}
-                <div className="flex gap-2 pt-1.5 border-t border-zinc-800">
+                <div className="flex gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                   <button
                     onClick={() => handleExtend(rental.rentalId, "cash")}
                     disabled={isPending}
-                    className="flex-1 rounded-md bg-white/10 hover:bg-white/20 border border-white/10 px-2 py-1.5 text-[11px] font-bold text-white transition-colors disabled:opacity-50 text-center"
+                    className="flex-1 rounded-xl bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 font-bold text-[11px] py-2 px-2 transition-colors disabled:opacity-50 text-center shadow-xs"
                   >
                     💵 Extend +1 Hr (£10 Cash)
                   </button>
                   <button
                     onClick={() => handleExtend(rental.rentalId, "wallet")}
                     disabled={isPending}
-                    className="flex-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 px-2 py-1.5 text-[11px] font-bold text-amber-400 transition-colors disabled:opacity-50 text-center"
+                    className="flex-1 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-900 dark:text-amber-300 border border-amber-500/40 font-bold text-[11px] py-2 px-2 transition-colors disabled:opacity-50 text-center"
                   >
                     🎫 Extend +1 Hr (Wallet)
                   </button>

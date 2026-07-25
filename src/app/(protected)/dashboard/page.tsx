@@ -7,6 +7,7 @@ import { getRemainingDays } from "@/lib/membership-utils";
 import { getUpcomingEvents } from "@/actions/events";
 import { isUserCheckedInToday } from "@/actions/admin/checkins";
 import { getEventTiming } from "@/lib/event-utils";
+import { QuickRSVPButton } from "@/components/QuickRSVPButton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { AITuningBanner } from "@/components/cars/AITuningBanner";
 
@@ -273,12 +274,13 @@ export default async function DashboardPage() {
                       </div>
                     </div>
 
-                    <div className="px-3 pb-3 pt-0">
+                    <div className="px-3 pb-3 pt-0 flex items-center justify-between">
+                      <QuickRSVPButton eventId={event.eventId} />
                       <Link
                         href="/newsfeed"
                         className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:text-amber-500"
                       >
-                        <span>RSVP Details</span> →
+                        <span>Details</span> →
                       </Link>
                     </div>
                   </div>

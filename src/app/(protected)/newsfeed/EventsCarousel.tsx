@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type { TrackEvent } from "@/actions/events";
 import { getEventTiming } from "@/lib/event-utils";
+import { EventRSVPSection } from "@/components/EventRSVPSection";
+import { QuickRSVPButton } from "@/components/QuickRSVPButton";
 
 interface EventsCarouselProps {
   events: TrackEvent[];
@@ -88,16 +90,21 @@ export function EventsCarousel({ events }: EventsCarouselProps) {
                     />
                   </div>
                 )}
-                <div className="p-3">
-                  <p className="text-xs font-bold text-amber-600 dark:text-amber-400">
-                    {formatDate(event.date)}
-                  </p>
-                  <p className="mt-0.5 text-sm font-semibold text-zinc-900 dark:text-zinc-100 line-clamp-2">
-                    {event.title}
-                  </p>
-                  {timesText && (
-                    <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{timesText}</p>
-                  )}
+                <div className="p-3 space-y-2">
+                  <div>
+                    <p className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                      {formatDate(event.date)}
+                    </p>
+                    <p className="mt-0.5 text-sm font-semibold text-zinc-900 dark:text-zinc-100 line-clamp-2">
+                      {event.title}
+                    </p>
+                    {timesText && (
+                      <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{timesText}</p>
+                    )}
+                  </div>
+                  <div className="pt-1.5 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                    <QuickRSVPButton eventId={event.eventId} />
+                  </div>
                 </div>
               </button>
             );
@@ -161,6 +168,10 @@ export function EventsCarousel({ events }: EventsCarouselProps) {
                 className="w-full rounded-lg object-cover"
               />
             )}
+
+            {/* Event RSVP & Attendees */}
+            <EventRSVPSection eventId={selectedEvent.eventId} />
+
             <button
               onClick={() => setSelectedEvent(null)}
               className="w-full rounded-lg bg-zinc-100 dark:bg-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"

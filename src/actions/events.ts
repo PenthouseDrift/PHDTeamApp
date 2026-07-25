@@ -250,3 +250,107 @@ export async function deleteEventTemplate(templateId: string): Promise<ActionRes
     return { success: false, error: error instanceof Error ? error.message : "Failed to delete template" };
   }
 }
+
+/* =========================================================================
+   Event RSVP Server Actions
+   ========================================================================= */
+
+export type RSVPStatus = "going" | "maybe" | "cant_go";
+
+export interface RSVPMember {
+  userId: string;
+  name: string;
+  avatar?: string;
+}
+
+export interface EventRSVPData {
+  goingCount: number;
+  maybeCount: number;
+  cantGoCount: number;
+  userRSVP?: RSVPStatus | null;
+  goingMembers: RSVPMember[];
+}
+
+export async function setEventRSVP(
+  eventId: string,
+  userId: string,
+  status: RSVPStatus | null
+): Promise<ActionResult<EventRSVPData>> {
+  try {
+    if (!eventId || !userId) {
+      return { success: false, error: "Event ID and User ID are required" };
+    }
+
+    const key = `event:${eventId}:rsvps`;
+    if (status === null) {
+      await redis.hdel(key, userId);
+    } else {
+      await redis.hset(key, { [userId]: status });
+    }
+
+    revalidatePath("/newsfeed");
+    revalidatePath("/dashboard");
+
+    const updatedData = await getEventRSVPs(eventId, userId);
+    return { success: true, data: updatedData };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Failed to update RSVP" };
+  }
+}
+
+export async function getEventRSVPs(
+  eventId: string,
+  currentUserId?: string
+): Promise<EventRSVPData> {
+  try {
+    const rsvps = await redis.hgetall(`event:${eventId}:rsvps`);
+    if (!rsvps || Object.keys(rsvps).length === 0) {
+      return { goingCount: 0, maybeCount: 0, cantGoCount: 0, userRSVP: null, goingMembers: [] };
+    }
+
+    let goingCount = 0;
+    let maybeCount = 0;
+    let cantGoCount = 0;
+    let userRSVP: RSVPStatus | null = null;
+    const goingUserIds: string[] = [];
+
+    for (const [uid, status] of Object.entries(rsvps)) {
+      const st = status as RSVPStatus;
+      if (uid === currentUserId) {
+        userRSVP = st;
+      }
+      if (st === "going") {
+        goingCount++;
+        goingUserIds.push(uid);
+      } else if (st === "maybe") {
+        maybeCount++;
+      } else if (st === "cant_go") {
+        cantGoCount++;
+      }
+    }
+
+    const goingMembers: RSVPMember[] = [];
+    const slice = goingUserIds.slice(0, 10);
+    for (const uid of slice) {
+      const memberData = await redis.hgetall(`member:${uid}`);
+      if (memberData) {
+        goingMembers.push({
+          userId: uid,
+          name: (memberData.name as string) || (memberData.nickname as string) || "Member",
+          avatar: (memberData.customAvatar as string) || (memberData.image as string) || undefined,
+        });
+      }
+    }
+
+    return {
+      goingCount,
+      maybeCount,
+      cantGoCount,
+      userRSVP,
+      goingMembers,
+    };
+  } catch (error) {
+    console.error("getEventRSVPs error:", error);
+    return { goingCount: 0, maybeCount: 0, cantGoCount: 0, userRSVP: null, goingMembers: [] };
+  }
+}
