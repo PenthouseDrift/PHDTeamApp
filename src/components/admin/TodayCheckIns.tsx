@@ -7,10 +7,12 @@ import { useSession } from "next-auth/react";
 
 interface TodayCheckInsProps {
   checkIns: CheckInEntry[];
+  userRole?: "admin" | "moderator" | "member";
 }
 
-export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
+export function TodayCheckIns({ checkIns, userRole }: TodayCheckInsProps) {
   const { data: session } = useSession();
+  const isModerator = userRole === "moderator" || session?.user?.role === "moderator";
   const [guestName, setGuestName] = useState("");
   const [passType, setPassType] = useState<"manual" | "day_pass" | "rental">("manual");
   const [adding, setAdding] = useState(false);
@@ -18,6 +20,15 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
   const [confirmRemoveIndex, setConfirmRemoveIndex] = useState<number | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // For moderators, filter out member check-ins so members aren't shown in Today's Check-ins
+  const visibleEntries = checkIns
+    .map((entry, originalIndex) => ({ entry, originalIndex }))
+    .filter(({ entry }) =>
+      isModerator
+        ? entry.method.includes("day_pass") || entry.method.includes("rental")
+        : true
+    );
 
   async function handleAddGuest(e: React.FormEvent) {
     e.preventDefault();
@@ -99,8 +110,8 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
           Checked In Today
-          <span className="ml-2 inline-flex items-center justify-center rounded-full bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5">
-            {checkIns.length}
+          <span className="ml-2 inline-flex items-center justify-center rounded-full bg-green-100 dark:bg-green-950/60 text-green-700 dark:text-green-300 text-xs font-bold px-2 py-0.5">
+            {visibleEntries.length}
           </span>
         </h2>
       </div>
@@ -136,13 +147,15 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
         <p className="text-sm text-green-700 dark:text-green-400 mb-3">{feedback}</p>
       )}
 
-      {checkIns.length === 0 ? (
-        <p className="text-sm text-zinc-500 py-4 text-center">No one checked in yet today.</p>
+      {visibleEntries.length === 0 ? (
+        <p className="text-sm text-zinc-500 py-4 text-center">
+          {isModerator ? "No guest / day pass check-ins today." : "No one checked in yet today."}
+        </p>
       ) : (
         <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
-          {checkIns.map((entry, i) => (
+          {visibleEntries.map(({ entry, originalIndex }) => (
             <div
-              key={`${entry.userId}-${i}`}
+              key={`${entry.userId}-${originalIndex}`}
               className="flex flex-col sm:flex-row sm:items-center justify-between rounded-xl bg-green-50 dark:bg-green-950/40 border border-green-200/60 dark:border-green-800/40 p-3 sm:px-4 sm:py-2.5 gap-2 sm:gap-3 shadow-sm"
             >
               {/* Left: Status Dot + Member Name + Mobile Timestamp */}
@@ -160,12 +173,12 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
 
               {/* Right: Check-In Method Badge + Desktop Timestamp + Remove Button */}
               <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-green-200/50 dark:border-green-800/30">
-                {editingIndex === i ? (
+                {editingIndex === originalIndex ? (
                   <select
                     value={entry.method}
                     onChange={(e) =>
                       handleUpdateMethod(
-                        i,
+                        originalIndex,
                         e.target.value as "manual" | "day_pass_wallet" | "day_pass_cash" | "rental_wallet" | "rental_cash" | "membership_cash" | "qr"
                       )
                     }
@@ -184,7 +197,7 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setEditingIndex(i)}
+                    onClick={() => setEditingIndex(originalIndex)}
                     title="Click to edit check-in type"
                     className="text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:text-amber-600 dark:hover:text-amber-400 bg-white dark:bg-zinc-800 hover:bg-amber-50 dark:hover:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-700/80 rounded-lg px-2.5 py-1 transition-colors flex items-center gap-1.5 shrink-0 max-w-full overflow-hidden shadow-xs"
                   >
@@ -198,7 +211,7 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
                 </span>
 
                 <button
-                  onClick={() => setConfirmRemoveIndex(i)}
+                  onClick={() => setConfirmRemoveIndex(originalIndex)}
                   className="text-zinc-400 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 shrink-0"
                   aria-label={`Remove ${entry.memberName}`}
                 >
