@@ -165,8 +165,6 @@ Focus on the most impactful changes (typically 4-10 changes). You can suggest ch
   const MODELS = [
     "gemini-3.5-flash",
     "gemini-3.1-flash-lite",
-    "gemini-2.0-flash-001",
-    "gemini-2.0-flash-lite",
   ];
 
   let response: Response | null = null;
@@ -183,7 +181,7 @@ Focus on the most impactful changes (typically 4-10 changes). You can suggest ch
           generationConfig: {
             temperature: 0.4,
             topP: 0.9,
-            maxOutputTokens: 2048,
+            maxOutputTokens: 8192,
           },
         }),
       }
@@ -214,11 +212,20 @@ Focus on the most impactful changes (typically 4-10 changes). You can suggest ch
   const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 
   // Strip markdown code fences if present
-  const cleaned = rawText
+  let cleaned = rawText
     .replace(/^```json\s*/i, "")
     .replace(/^```\s*/i, "")
     .replace(/\s*```$/i, "")
     .trim();
+
+  // Truncation repair: if the response was cut off mid-JSON, try to recover
+  // by trimming the incomplete last object and closing the array.
+  if (!cleaned.endsWith("]")) {
+    const lastClose = cleaned.lastIndexOf("}");
+    if (lastClose !== -1) {
+      cleaned = cleaned.slice(0, lastClose + 1) + "\n]";
+    }
+  }
 
   let changes: TuningChange[];
   try {
