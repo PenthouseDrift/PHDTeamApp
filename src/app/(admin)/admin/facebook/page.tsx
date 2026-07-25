@@ -61,12 +61,12 @@ export default function AdminFacebookPage() {
       <div className="mb-6">
         <Link
           href="/admin"
-          className="inline-flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-amber-500 transition-colors mb-1"
+          className="inline-flex items-center gap-1 text-xs font-bold text-zinc-500 dark:text-zinc-400 hover:text-amber-500 transition-colors mb-1"
         >
           ← Back to Admin Dashboard
         </Link>
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Publish to Facebook</h1>
-        <p className="text-sm text-zinc-500 mt-1">
+        <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
           Compose and publish a post to the Penthouse Drift Facebook page.
         </p>
       </div>
@@ -79,7 +79,7 @@ export default function AdminFacebookPage() {
           <button
             type="button"
             onClick={handleComposeAnother}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-blue-700 transition-colors"
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
           >
             Compose Another
           </button>
@@ -100,11 +100,11 @@ export default function AdminFacebookPage() {
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Left: Form */}
             <div className="space-y-4">
-              {/* Message textarea */}
+              {/* Message text area */}
               <div>
                 <label
                   htmlFor="post-message"
-                  className="block text-sm font-medium text-zinc-600 mb-1"
+                  className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1"
                 >
                   Message
                 </label>
@@ -115,13 +115,13 @@ export default function AdminFacebookPage() {
                   maxLength={MAX_MESSAGE_LENGTH}
                   rows={8}
                   placeholder="What's on your mind?"
-                  className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 placeholder-zinc-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y"
+                  className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-y"
                 />
                 <p
                   className={`mt-1 text-xs ${
                     charCount > MAX_MESSAGE_LENGTH
                       ? "text-red-400"
-                      : "text-zinc-500"
+                      : "text-zinc-500 dark:text-zinc-400"
                   }`}
                 >
                   {charCount.toLocaleString()} / {MAX_MESSAGE_LENGTH.toLocaleString()} characters
@@ -130,7 +130,7 @@ export default function AdminFacebookPage() {
 
               {/* Image upload */}
               <div>
-                <label className="block text-sm font-medium text-zinc-600 mb-1">
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
                   Images (optional, up to 4)
                 </label>
                 <ImageUploader
@@ -146,7 +146,7 @@ export default function AdminFacebookPage() {
                 type="button"
                 onClick={handlePublish}
                 disabled={!isValid || publishing}
-                className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-zinc-900 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
               >
                 {publishing ? "Publishing..." : "Publish to Facebook"}
               </button>
@@ -154,8 +154,8 @@ export default function AdminFacebookPage() {
 
             {/* Right: Preview */}
             <div>
-              <p className="text-sm font-medium text-zinc-600 mb-2">Preview</p>
-              <div className="rounded-lg border border-zinc-300 bg-white p-4">
+              <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">Preview</p>
+              <div className="rounded-lg border border-zinc-300 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
                 {message || imageUrls.length > 0 ? (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
@@ -168,7 +168,7 @@ export default function AdminFacebookPage() {
                       </div>
                     </div>
                     {message && (
-                      <p className="text-sm text-zinc-600 whitespace-pre-wrap break-words">
+                      <p className="text-sm text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap break-words">
                         {message}
                       </p>
                     )}
@@ -192,7 +192,7 @@ export default function AdminFacebookPage() {
                     )}
                   </div>
                 ) : (
-                  <p className="text-sm text-zinc-500 text-center py-8">
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center py-8">
                     Start typing to see a preview
                   </p>
                 )}
