@@ -117,7 +117,7 @@ export default function CalculatorPage() {
         </div>
 
         {/* Chassis Preset Selector */}
-        <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-4">
+        <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-4 shadow-xs">
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             Chassis Internal Ratio
           </h2>
@@ -177,12 +177,12 @@ export default function CalculatorPage() {
         </section>
 
         {/* Calculator Section */}
-        <section className="rounded-xl bg-white p-6 space-y-5">
+        <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-5 shadow-xs">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label
                 htmlFor="spur"
-                className="block text-sm font-medium text-zinc-600"
+                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
               >
                 Spur Gear (30–130)
               </label>
@@ -194,14 +194,14 @@ export default function CalculatorPage() {
                 step={1}
                 value={spur}
                 onChange={(e) => setSpur(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 text-zinc-900 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                className="mt-1 w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 placeholder="80"
               />
             </div>
             <div>
               <label
                 htmlFor="pinion"
-                className="block text-sm font-medium text-zinc-600"
+                className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
               >
                 Pinion Gear (10–60)
               </label>
@@ -213,7 +213,7 @@ export default function CalculatorPage() {
                 step={1}
                 value={pinion}
                 onChange={(e) => setPinion(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 text-zinc-900 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                className="mt-1 w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 placeholder="25"
               />
             </div>
@@ -258,7 +258,7 @@ export default function CalculatorPage() {
         </section>
 
         {/* Save to Car Profile Section */}
-        <section className="rounded-xl bg-white p-6 space-y-4">
+        <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-4 shadow-xs">
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             Save to Car Profile
           </h2>
@@ -266,13 +266,13 @@ export default function CalculatorPage() {
           {carsLoading ? (
             <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading car profiles...</p>
           ) : cars.length === 0 ? (
-            <div className="rounded-lg bg-zinc-100 p-4 text-center">
+            <div className="rounded-lg bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 p-4 text-center">
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
                 Create a car profile first to save gear ratios.
               </p>
               <Link
                 href="/cars/new"
-                className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-amber-400 hover:text-amber-300"
+                className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-amber-500 dark:text-amber-400 hover:underline"
               >
                 Create a car profile
                 <svg
@@ -296,7 +296,7 @@ export default function CalculatorPage() {
               <div>
                 <label
                   htmlFor="car-select"
-                  className="block text-sm font-medium text-zinc-600"
+                  className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
                 >
                   Select Car
                 </label>
@@ -304,7 +304,7 @@ export default function CalculatorPage() {
                   id="car-select"
                   value={selectedCarId}
                   onChange={(e) => setSelectedCarId(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 text-zinc-900 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  className="mt-1 w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-zinc-900 dark:text-zinc-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 >
                   {cars.map((car) => (
                     <option key={car.carId} value={car.carId}>
@@ -317,17 +317,17 @@ export default function CalculatorPage() {
               <button
                 onClick={handleSave}
                 disabled={saving || ratio === null}
-                className="w-full rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-black transition-colors hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-bold text-black transition-colors hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50 shadow-xs"
               >
                 {saving ? "Saving..." : "Save to Car Profile"}
               </button>
 
               {saveStatus && (
                 <p
-                  className={`text-sm ${
+                  className={`text-sm font-semibold ${
                     saveStatus.includes("success")
-                      ? "text-green-400"
-                      : "text-red-400"
+                      ? "text-green-600 dark:text-green-400"
+                      : "text-red-600 dark:text-red-400"
                   }`}
                 >
                   {saveStatus}

@@ -6,12 +6,12 @@ export default function SignInPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-50">
-      <div className="bg-white rounded-2xl p-8 w-full max-w-md shadow-lg border border-zinc-200">
+    <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950">
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl p-8 w-full max-w-md shadow-lg border border-zinc-200 dark:border-zinc-800">
         <div className="flex justify-center mb-6">
           <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-12 w-12" />
         </div>
-        <p className="text-zinc-500 text-center mb-8">
+        <p className="text-zinc-500 dark:text-zinc-400 text-center mb-8">
           Sign in to access the track
         </p>
 
@@ -31,7 +31,7 @@ async function SignInContent({
   return (
     <>
       {params?.error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-6 text-sm text-center">
+        <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 rounded-lg p-3 mb-6 text-sm text-center">
           Sign-in could not be completed. Please try again.
         </div>
       )}
@@ -44,7 +44,7 @@ async function SignInContent({
       >
         <button
           type="submit"
-          className="w-full flex items-center justify-center gap-3 bg-zinc-900 text-white font-medium py-3 px-4 rounded-lg hover:bg-zinc-800 transition-colors"
+          className="w-full flex items-center justify-center gap-3 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-medium py-3 px-4 rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors shadow-sm"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path

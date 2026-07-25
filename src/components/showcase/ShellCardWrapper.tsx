@@ -38,7 +38,7 @@ export function ShellCardWrapper({
     <>
       <div
         onClick={() => setShowModal(true)}
-        className="group relative overflow-hidden rounded-xl bg-white border border-zinc-200 shadow-sm transition-shadow hover:shadow-md cursor-pointer"
+        className="group relative overflow-hidden rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm transition-shadow hover:shadow-md cursor-pointer"
       >
         {isWinner && (
           <div className="absolute top-2 left-2 z-10 rounded-md bg-amber-500/90 px-2 py-0.5 text-[10px] font-bold text-black">
@@ -54,13 +54,13 @@ export function ShellCardWrapper({
         </div>
         <div className="p-3 space-y-2">
           {entry.description && (
-            <p className="line-clamp-2 text-xs text-zinc-600">
+            <p className="line-clamp-2 text-xs text-zinc-600 dark:text-zinc-300">
               {entry.description}
             </p>
           )}
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-zinc-400 truncate max-w-[80px]">{authorName}</span>
-            <span className="text-[10px] text-zinc-400">{formatDate(entry.createdAt)}</span>
+            <span className="text-[10px] text-zinc-400 dark:text-zinc-500 truncate max-w-[80px]">{authorName}</span>
+            <span className="text-[10px] text-zinc-400 dark:text-zinc-500">{formatDate(entry.createdAt)}</span>
           </div>
           <div className="flex items-center justify-between">
             <VoteButton
