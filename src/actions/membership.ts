@@ -34,7 +34,8 @@ export async function getMembership(
 }
 
 export async function createMembershipCheckout(
-  userId: string
+  userId: string,
+  customReturnUrl?: string
 ): Promise<ActionResult<{ url: string }>> {
   try {
     const { createCheckout } = await import("@/lib/sumup");
@@ -42,23 +43,25 @@ export async function createMembershipCheckout(
     const MEMBERSHIP_CURRENCY = "GBP";
     const MEMBERSHIP_DURATION_DAYS = 28;
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const returnUrl = customReturnUrl || `${baseUrl}/membership/success`;
 
     const checkout = await createCheckout({
       memberId: userId,
       amount: MEMBERSHIP_PRICE,
       currency: MEMBERSHIP_CURRENCY,
       description: `Penthouse Drift - ${MEMBERSHIP_DURATION_DAYS}-Day Membership`,
-      returnUrl: `${baseUrl}/membership/success`,
+      returnUrl,
     });
 
     await redis.set(
       `checkout:${checkout.id}`,
       JSON.stringify({
         memberId: userId,
+        itemType: "membership",
         checkoutReference: checkout.checkout_reference,
         createdAt: Date.now(),
       }),
-      { ex: 3600 }
+      { ex: 86400 * 30 }
     );
     await redis.set(`pending_checkout:${userId}`, checkout.id, { ex: 3600 });
 

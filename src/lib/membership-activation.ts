@@ -54,10 +54,11 @@ export async function processSuccessfulMembershipPayment(
 export async function processSuccessfulPaymentReference(
   checkoutReference: string,
   checkoutId: string
-): Promise<{ success: boolean; itemType: "membership" | "daypass" | "rental"; memberId: string }> {
+): Promise<{ success: boolean; itemType: "membership" | "daypass" | "rental"; memberId: string; guestName?: string }> {
   let memberId = "";
   let itemType: "membership" | "daypass" | "rental" = "membership";
   let quantity = 1;
+  let guestName: string | undefined = undefined;
 
   // 1. First check if we have metadata stored in Redis under checkout:${checkoutId}
   if (checkoutId) {
@@ -65,11 +66,10 @@ export async function processSuccessfulPaymentReference(
     if (storedCheckoutStr) {
       try {
         const stored = typeof storedCheckoutStr === "string" ? JSON.parse(storedCheckoutStr) : storedCheckoutStr;
-        if (stored.memberId && stored.itemType) {
-          memberId = stored.memberId;
-          itemType = stored.itemType;
-          quantity = Number(stored.quantity) || 1;
-        }
+        if (stored.memberId) memberId = stored.memberId;
+        if (stored.itemType) itemType = stored.itemType;
+        if (stored.quantity) quantity = Number(stored.quantity) || 1;
+        if (stored.guestName) guestName = stored.guestName;
       } catch (e) {
         console.error("Failed to parse stored checkout JSON:", e);
       }
@@ -100,35 +100,41 @@ export async function processSuccessfulPaymentReference(
   // 3. Process payment idempotently based on itemType
   if (itemType === "membership") {
     await processSuccessfulMembershipPayment(memberId, checkoutId);
-    return { success: true, itemType: "membership", memberId };
+    return { success: true, itemType: "membership", memberId, guestName };
   } else if (itemType === "daypass") {
     const key = `payment:processed:${checkoutId}`;
     const alreadyProcessed = await redis.get(key);
     if (!alreadyProcessed) {
-      const current = await redis.hget(`wallet:${memberId}`, "dayPasses");
-      const newPasses = (Number(current) || 0) + quantity;
+      const walletData = await redis.hgetall(`wallet:${memberId}`);
+      const currentPasses = Number(walletData?.dayPasses) || 0;
+      const currentRentals = Number(walletData?.rentalHours) || 0;
+      const newPasses = currentPasses + quantity;
       await redis.hset(`wallet:${memberId}`, {
         userId: memberId,
         dayPasses: newPasses,
+        rentalHours: currentRentals,
         updatedAt: Date.now(),
       });
       await redis.set(key, "1", { ex: 86400 * 30 });
     }
-    return { success: true, itemType: "daypass", memberId };
+    return { success: true, itemType: "daypass", memberId, guestName };
   } else if (itemType === "rental") {
     const key = `payment:processed:${checkoutId}`;
     const alreadyProcessed = await redis.get(key);
     if (!alreadyProcessed) {
-      const current = await redis.hget(`wallet:${memberId}`, "rentalHours");
-      const newHours = (Number(current) || 0) + quantity;
+      const walletData = await redis.hgetall(`wallet:${memberId}`);
+      const currentPasses = Number(walletData?.dayPasses) || 0;
+      const currentRentals = Number(walletData?.rentalHours) || 0;
+      const newHours = currentRentals + quantity;
       await redis.hset(`wallet:${memberId}`, {
         userId: memberId,
+        dayPasses: currentPasses,
         rentalHours: newHours,
         updatedAt: Date.now(),
       });
       await redis.set(key, "1", { ex: 86400 * 30 });
     }
-    return { success: true, itemType: "rental", memberId };
+    return { success: true, itemType: "rental", memberId, guestName };
   }
 
   throw new Error(`Unsupported item type: ${itemType}`);

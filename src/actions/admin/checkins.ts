@@ -306,3 +306,64 @@ export async function checkInWithRental(
     };
   }
 }
+
+export async function checkInFriendWithPass(
+  memberId: string,
+  memberName: string,
+  friendName: string,
+  passType: "day_pass" | "rental",
+  adminId: string
+): Promise<ActionResult<{ message: string; remaining: number }>> {
+  try {
+    const cleanFriendName = friendName.trim() || `Guest of ${memberName}`;
+    const now = Date.now();
+    const today = new Date().toISOString().split("T")[0];
+    const guestId = `guest_${now}`;
+
+    let checkInMethod = "day_pass_wallet";
+    let message = "";
+    let remaining = 0;
+
+    if (passType === "day_pass") {
+      const { redeemDayPass } = await import("@/actions/wallet");
+      const redeemRes = await redeemDayPass(memberId);
+      if (!redeemRes.success) {
+        return { success: false, error: redeemRes.error || "No Day Passes left in member wallet" };
+      }
+      remaining = redeemRes.data.remaining;
+      checkInMethod = "day_pass_wallet";
+      message = `Guest ${cleanFriendName} checked in using 1 Day Pass from ${memberName}'s wallet! 🎫 (${remaining} left)`;
+    } else {
+      const { redeemRentalHour } = await import("@/actions/wallet");
+      const { createRentalSession } = await import("@/actions/admin/rentals");
+      const redeemRes = await redeemRentalHour(memberId);
+      if (!redeemRes.success) {
+        return { success: false, error: redeemRes.error || "No Rental Hours left in member wallet" };
+      }
+      remaining = redeemRes.data.remaining;
+      await createRentalSession(guestId, `${cleanFriendName} (Guest of ${memberName})`);
+      checkInMethod = "rental_wallet";
+      message = `Guest ${cleanFriendName} checked in & Car Rental Started using ${memberName}'s wallet! 🏎️ (${remaining} hrs left)`;
+    }
+
+    const entry = JSON.stringify({
+      userId: guestId,
+      adminId,
+      timestamp: now,
+      method: checkInMethod,
+      memberName: `${cleanFriendName} (Guest of ${memberName})`,
+    });
+
+    await redis.rpush(`checkins:${today}`, entry);
+
+    revalidatePath("/admin/members");
+    revalidatePath("/admin/check-in");
+    revalidatePath("/dashboard");
+    return { success: true, data: { message, remaining } };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to check in friend with wallet pass",
+    };
+  }
+}

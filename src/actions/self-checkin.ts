@@ -9,7 +9,8 @@ import { createRentalSession } from "@/actions/admin/rentals";
 
 export async function performSelfCheckIn(
   userId: string,
-  method: "membership" | "day_pass" | "rental"
+  method: "membership" | "day_pass" | "rental",
+  skipRevalidate = false
 ): Promise<ActionResult<{ checkedIn: boolean; method: string; message: string }>> {
   try {
     if (!userId) {
@@ -26,18 +27,21 @@ export async function performSelfCheckIn(
     }
 
     // Fetch user & membership details
-    const [memberData, membershipData] = await Promise.all([
+    const [memberData, userData, membershipData] = await Promise.all([
       redis.hgetall(`member:${userId}`),
+      redis.hgetall(`user:${userId}`),
       redis.hgetall(`membership:${userId}`),
     ]);
 
-    if (!memberData) {
-      return { success: false, error: "Member profile not found" };
-    }
-
-    const memberName = (memberData.name as string) || "Member";
-    const nickname = (memberData.nickname as string) || "";
-    const displayName = nickname.trim() ? `${memberName} ("${nickname.trim()}")` : memberName;
+    const rawName =
+      (memberData?.name as string) ||
+      (userData?.name as string) ||
+      "Member";
+    const nickname =
+      (memberData?.nickname as string) ||
+      (userData?.nickname as string) ||
+      "";
+    const displayName = nickname.trim() ? `${rawName} ("${nickname.trim()}")` : rawName;
 
     let checkInMethod = "manual";
     let successMessage = "";
@@ -50,14 +54,14 @@ export async function performSelfCheckIn(
       checkInMethod = "qr";
       successMessage = `Checked in with 28-Day Membership! Have a great track session 🏎️`;
     } else if (method === "day_pass") {
-      const redeemRes = await redeemDayPass(userId);
+      const redeemRes = await redeemDayPass(userId, skipRevalidate);
       if (!redeemRes.success) {
         return { success: false, error: redeemRes.error || "No Day Passes left in wallet" };
       }
       checkInMethod = "day_pass_wallet";
       successMessage = `Day Pass redeemed! Checked in for today 🎫 (${redeemRes.data.remaining} passes remaining)`;
     } else if (method === "rental") {
-      const redeemRes = await redeemRentalHour(userId);
+      const redeemRes = await redeemRentalHour(userId, skipRevalidate);
       if (!redeemRes.success) {
         return { success: false, error: redeemRes.error || "No Car Rental Hours left in wallet" };
       }
@@ -77,10 +81,16 @@ export async function performSelfCheckIn(
     await redis.rpush(`checkins:${today}`, entry);
     await redis.set(`checkin:dedup:${userId}`, "1", { ex: 86400 });
 
-    revalidatePath("/track-checkin");
-    revalidatePath("/admin/members");
-    revalidatePath("/admin/check-in");
-    revalidatePath("/dashboard");
+    if (!skipRevalidate) {
+      try {
+        revalidatePath("/track-checkin");
+        revalidatePath("/admin/members");
+        revalidatePath("/admin/check-in");
+        revalidatePath("/dashboard");
+      } catch {
+        // Safe fallback if called during server rendering
+      }
+    }
 
     return {
       success: true,
@@ -97,7 +107,8 @@ export async function performSelfCheckIn(
 export async function performGuestSelfCheckIn(
   userId: string,
   guestName: string,
-  method: "day_pass" | "rental"
+  method: "day_pass" | "rental",
+  skipRevalidate = false
 ): Promise<ActionResult<{ checkedIn: boolean; message: string }>> {
   try {
     if (!userId || !guestName.trim()) {
@@ -113,14 +124,14 @@ export async function performGuestSelfCheckIn(
     let message = "";
 
     if (method === "day_pass") {
-      const redeemRes = await redeemDayPass(userId);
+      const redeemRes = await redeemDayPass(userId, skipRevalidate);
       if (!redeemRes.success) {
         return { success: false, error: redeemRes.error || "No Day Passes left in wallet" };
       }
       checkInMethod = "day_pass_wallet";
       message = `Guest ${cleanGuestName} checked in using 1 Day Pass! 🎫`;
     } else if (method === "rental") {
-      const redeemRes = await redeemRentalHour(userId);
+      const redeemRes = await redeemRentalHour(userId, skipRevalidate);
       if (!redeemRes.success) {
         return { success: false, error: redeemRes.error || "No Car Rental Hours left in wallet" };
       }
@@ -139,10 +150,16 @@ export async function performGuestSelfCheckIn(
 
     await redis.rpush(`checkins:${today}`, entry);
 
-    revalidatePath("/track-checkin");
-    revalidatePath("/admin/members");
-    revalidatePath("/admin/check-in");
-    revalidatePath("/dashboard");
+    if (!skipRevalidate) {
+      try {
+        revalidatePath("/track-checkin");
+        revalidatePath("/admin/members");
+        revalidatePath("/admin/check-in");
+        revalidatePath("/dashboard");
+      } catch {
+        // Safe fallback if called during server rendering
+      }
+    }
 
     return {
       success: true,

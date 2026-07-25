@@ -95,7 +95,10 @@ export async function addRentalHours(
   }
 }
 
-export async function redeemDayPass(userId: string): Promise<ActionResult<{ remaining: number }>> {
+export async function redeemDayPass(
+  userId: string,
+  skipRevalidate = false
+): Promise<ActionResult<{ remaining: number }>> {
   try {
     const current = await getWallet(userId);
     if (!current.success || current.data.dayPasses <= 0) {
@@ -112,7 +115,13 @@ export async function redeemDayPass(userId: string): Promise<ActionResult<{ rema
       updatedAt: now,
     });
 
-    revalidatePath("/wallet");
+    if (!skipRevalidate) {
+      try {
+        revalidatePath("/wallet");
+      } catch {
+        // Safe fallback if called during server rendering
+      }
+    }
     return { success: true, data: { remaining: newPasses } };
   } catch (error) {
     return {
@@ -122,7 +131,10 @@ export async function redeemDayPass(userId: string): Promise<ActionResult<{ rema
   }
 }
 
-export async function redeemRentalHour(userId: string): Promise<ActionResult<{ remaining: number }>> {
+export async function redeemRentalHour(
+  userId: string,
+  skipRevalidate = false
+): Promise<ActionResult<{ remaining: number }>> {
   try {
     const current = await getWallet(userId);
     if (!current.success || current.data.rentalHours <= 0) {
@@ -139,7 +151,13 @@ export async function redeemRentalHour(userId: string): Promise<ActionResult<{ r
       updatedAt: now,
     });
 
-    revalidatePath("/wallet");
+    if (!skipRevalidate) {
+      try {
+        revalidatePath("/wallet");
+      } catch {
+        // Safe fallback if called during server rendering
+      }
+    }
     return { success: true, data: { remaining: newHours } };
   } catch (error) {
     return {
@@ -152,7 +170,9 @@ export async function redeemRentalHour(userId: string): Promise<ActionResult<{ r
 export async function createWalletCheckout(
   userId: string,
   itemType: "daypass" | "rental",
-  quantity: number
+  quantity: number,
+  customReturnUrl?: string,
+  guestName?: string
 ): Promise<ActionResult<{ url: string }>> {
   try {
     const { createCheckout } = await import("@/lib/sumup");
@@ -164,13 +184,14 @@ export async function createWalletCheckout(
         : `Penthouse Drift - ${quantity}x Car Rental Hour`;
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const returnUrl = customReturnUrl || `${baseUrl}/wallet`;
 
     const checkout = await createCheckout({
       memberId: `${itemType}_${userId}_${quantity}`,
       amount: totalAmount,
       currency: "GBP",
       description,
-      returnUrl: `${baseUrl}/wallet`,
+      returnUrl,
     });
 
     await redis.set(
@@ -179,6 +200,7 @@ export async function createWalletCheckout(
         memberId: userId,
         itemType,
         quantity,
+        guestName: guestName?.trim() || undefined,
         checkoutReference: checkout.checkout_reference,
         createdAt: Date.now(),
       }),

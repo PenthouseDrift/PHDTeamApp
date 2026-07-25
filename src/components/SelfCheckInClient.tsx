@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { performSelfCheckIn, performGuestSelfCheckIn } from "@/actions/self-checkin";
-import { addDayPasses, addRentalHours } from "@/actions/wallet";
+import { createWalletCheckout } from "@/actions/wallet";
+import { createMembershipCheckout } from "@/actions/membership";
 import Link from "next/link";
 
 interface SelfCheckInClientProps {
@@ -50,23 +51,23 @@ export function SelfCheckInClient({
     });
   }
 
-  async function handleBuyAndCheckIn(type: "day_pass" | "rental") {
+  async function handleBuyAndCheckIn(type: "day_pass" | "rental" | "membership") {
     setFeedback(null);
     startTransition(async () => {
-      // 1. Top up wallet pass
-      const topUpRes = type === "day_pass" ? await addDayPasses(userId, 1) : await addRentalHours(userId, 1);
-      if (!topUpRes.success) {
-        setFeedback({ type: "error", message: topUpRes.error });
-        return;
+      const baseUrl = window.location.origin;
+      let res;
+      if (type === "membership") {
+        res = await createMembershipCheckout(userId, `${baseUrl}/track-checkin?autoCheckin=membership`);
+      } else {
+        const itemType = type === "day_pass" ? "daypass" : "rental";
+        res = await createWalletCheckout(userId, itemType, 1, `${baseUrl}/track-checkin?autoCheckin=${type}`);
       }
 
-      // 2. Perform self check-in with new pass
-      const checkInRes = await performSelfCheckIn(userId, type);
-      if (checkInRes.success) {
-        setFeedback({ type: "success", message: `Pass Purchased! ${checkInRes.data.message}` });
-        setAlreadyCheckedIn(true);
+      if (res.success && res.data?.url) {
+        setFeedback({ type: "success", message: "Redirecting to SumUp Secure Payment..." });
+        window.location.href = res.data.url;
       } else {
-        setFeedback({ type: "error", message: checkInRes.error });
+        setFeedback({ type: "error", message: !res.success ? res.error : "Failed to initialize payment checkout" });
       }
     });
   }
@@ -77,17 +78,29 @@ export function SelfCheckInClient({
 
     setFeedback(null);
     startTransition(async () => {
-      // If user has no wallet passes, top up first
+      // If user has no wallet passes, redirect to SumUp checkout first
       if (guestPassType === "day_pass" && dayPasses === 0) {
-        const topUp = await addDayPasses(userId, 1);
-        if (!topUp.success) {
-          setFeedback({ type: "error", message: topUp.error });
+        const baseUrl = window.location.origin;
+        const returnUrl = `${baseUrl}/track-checkin?guestName=${encodeURIComponent(guestName.trim())}&guestPassType=day_pass`;
+        const res = await createWalletCheckout(userId, "daypass", 1, returnUrl, guestName.trim());
+        if (res.success && res.data?.url) {
+          setFeedback({ type: "success", message: "Redirecting to SumUp Secure Payment..." });
+          window.location.href = res.data.url;
+          return;
+        } else {
+          setFeedback({ type: "error", message: !res.success ? res.error : "Payment failed" });
           return;
         }
       } else if (guestPassType === "rental" && rentalHours === 0) {
-        const topUp = await addRentalHours(userId, 1);
-        if (!topUp.success) {
-          setFeedback({ type: "error", message: topUp.error });
+        const baseUrl = window.location.origin;
+        const returnUrl = `${baseUrl}/track-checkin?guestName=${encodeURIComponent(guestName.trim())}&guestPassType=rental`;
+        const res = await createWalletCheckout(userId, "rental", 1, returnUrl, guestName.trim());
+        if (res.success && res.data?.url) {
+          setFeedback({ type: "success", message: "Redirecting to SumUp Secure Payment..." });
+          window.location.href = res.data.url;
+          return;
+        } else {
+          setFeedback({ type: "error", message: !res.success ? res.error : "Payment failed" });
           return;
         }
       }
@@ -165,23 +178,20 @@ export function SelfCheckInClient({
                 <span className="text-lg group-hover:translate-x-1 transition-transform">→</span>
               </button>
             ) : (
-              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/40 p-4 opacity-75 flex items-center justify-between">
+              <button
+                onClick={() => handleBuyAndCheckIn("membership")}
+                disabled={isPending}
+                className="w-full text-left rounded-xl bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 p-4 font-bold transition-all shadow-sm flex items-center justify-between group"
+              >
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
-                    <span className="text-base text-zinc-400">⚪</span>
-                    <span className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
-                      28-Day Membership Inactive
-                    </span>
+                    <span className="text-lg">⭐</span>
+                    <span className="text-base font-extrabold">Buy 28-Day Membership (£40) &amp; Check In</span>
                   </div>
-                  <p className="text-xs text-zinc-400">No active 28-day track membership on file</p>
+                  <p className="text-xs opacity-80">SumUp Secure Payment • Activates &amp; checks you in immediately</p>
                 </div>
-                <Link
-                  href="/wallet"
-                  className="text-xs font-bold text-amber-600 dark:text-amber-400 hover:underline"
-                >
-                  Join (£40)
-                </Link>
-              </div>
+                <span className="text-lg group-hover:translate-x-1 transition-transform">→</span>
+              </button>
             )}
 
             {/* 2. Wallet Day Pass */}
