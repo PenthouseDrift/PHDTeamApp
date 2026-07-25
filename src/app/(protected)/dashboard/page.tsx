@@ -445,10 +445,10 @@ export default async function DashboardPage() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="flex flex-col items-center gap-2 rounded-xl bg-white p-5 text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
+                className="flex flex-col items-center gap-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 p-5 text-zinc-700 dark:text-zinc-200 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800/80 hover:text-zinc-900 dark:hover:text-white shadow-xs group"
               >
                 {link.icon}
-                <span className="text-sm font-medium">{link.title}</span>
+                <span className="text-sm font-medium text-center">{link.title}</span>
               </Link>
             ))}
           </div>
