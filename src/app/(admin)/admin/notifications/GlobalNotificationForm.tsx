@@ -62,23 +62,6 @@ export function GlobalNotificationForm({ adminId }: { adminId: string }) {
         adminId
       );
 
-      // 3. Trigger immediate Service Worker test banner on local device
-      if ("serviceWorker" in navigator) {
-        try {
-          const registration = await navigator.serviceWorker.ready;
-          registration.showNotification(
-            `🧪 ${title.trim()}`,
-            {
-              body: message.trim(),
-              icon: "/icons/icon-192.png",
-              data: { url: url.trim() || "/notifications" },
-            }
-          );
-        } catch {
-          // Fallback if ServiceWorker not ready
-        }
-      }
-
       if (res.success) {
         setSuccess(`🧪 Test alert "${title.trim()}" successfully pinged to your device!`);
       } else {
