@@ -182,8 +182,9 @@ export async function createWalletCheckout(
         checkoutReference: checkout.checkout_reference,
         createdAt: Date.now(),
       }),
-      { ex: 3600 }
+      { ex: 86400 * 30 }
     );
+    await redis.set(`pending_wallet_checkout:${userId}`, checkout.id, { ex: 86400 });
 
     const redirectUrl = checkout.hosted_checkout_url || `https://pay.sumup.com/b2c/Q${checkout.id}`;
     return { success: true, data: { url: redirectUrl } };

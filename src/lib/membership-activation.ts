@@ -55,15 +55,49 @@ export async function processSuccessfulPaymentReference(
   checkoutReference: string,
   checkoutId: string
 ): Promise<{ success: boolean; itemType: "membership" | "daypass" | "rental"; memberId: string }> {
-  const parts = checkoutReference.split("_");
-  if (parts.length < 3) {
-    throw new Error("Invalid checkout reference format");
+  let memberId = "";
+  let itemType: "membership" | "daypass" | "rental" = "membership";
+  let quantity = 1;
+
+  // 1. First check if we have metadata stored in Redis under checkout:${checkoutId}
+  if (checkoutId) {
+    const storedCheckoutStr = await redis.get(`checkout:${checkoutId}`);
+    if (storedCheckoutStr) {
+      try {
+        const stored = typeof storedCheckoutStr === "string" ? JSON.parse(storedCheckoutStr) : storedCheckoutStr;
+        if (stored.memberId && stored.itemType) {
+          memberId = stored.memberId;
+          itemType = stored.itemType;
+          quantity = Number(stored.quantity) || 1;
+        }
+      } catch (e) {
+        console.error("Failed to parse stored checkout JSON:", e);
+      }
+    }
   }
 
-  const itemType = parts[0] as "membership" | "daypass" | "rental";
-  const memberId = parts[1];
-  const quantity = parseInt(parts[2], 10) || 1;
+  // 2. Fallback to reference string parsing if metadata was not found in Redis
+  if (!memberId && checkoutReference) {
+    const parts = checkoutReference.split("_");
+    if (parts[0] === "phd" && parts.length >= 4) {
+      itemType = parts[1] as "membership" | "daypass" | "rental";
+      memberId = parts[2];
+      quantity = parseInt(parts[3], 10) || 1;
+    } else if (parts.length >= 3) {
+      itemType = parts[0] as "membership" | "daypass" | "rental";
+      memberId = parts[1];
+      quantity = parseInt(parts[2], 10) || 1;
+    } else if (parts.length >= 2) {
+      itemType = "membership";
+      memberId = parts[1];
+    }
+  }
 
+  if (!memberId) {
+    throw new Error(`Unable to determine memberId for checkout ID: ${checkoutId} (ref: ${checkoutReference})`);
+  }
+
+  // 3. Process payment idempotently based on itemType
   if (itemType === "membership") {
     await processSuccessfulMembershipPayment(memberId, checkoutId);
     return { success: true, itemType: "membership", memberId };
