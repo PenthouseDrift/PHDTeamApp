@@ -127,7 +127,9 @@ export async function togglePostLike(
         type: "like",
         fromUserId: userId,
         fromUserName: userName,
-        shellId: postId,
+        postId: postId,
+        targetType: "post",
+        url: "/newsfeed",
         message: `${userName} liked your post`,
       });
     }
@@ -185,7 +187,9 @@ export async function addFeedComment(
       type: "comment",
       fromUserId: userId,
       fromUserName: userName,
-      shellId: postId,
+      postId: postId,
+      targetType: "post",
+      url: "/newsfeed",
       message: `${userName} commented: "${text.trim().slice(0, 80)}"`,
     });
   }

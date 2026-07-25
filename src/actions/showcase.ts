@@ -38,6 +38,8 @@ export async function toggleVote(shellId: string, userId: string): Promise<Actio
           fromUserId: userId,
           fromUserName: userName,
           shellId,
+          targetType: "shell",
+          url: `/showcase?open=${shellId}`,
           message: `${userName} liked your shell`,
         });
       }

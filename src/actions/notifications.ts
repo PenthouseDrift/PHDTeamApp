@@ -10,7 +10,10 @@ export interface AppNotification {
   type: "like" | "comment" | "reply" | "comment_like" | "global" | "event_reminder";
   fromUserId: string;
   fromUserName: string;
-  shellId: string;
+  shellId?: string;
+  postId?: string;
+  targetType?: "post" | "shell";
+  url?: string;
   message: string;
   read: boolean;
   createdAt: number;
@@ -37,7 +40,10 @@ export async function createNotification(params: {
   type: AppNotification["type"];
   fromUserId: string;
   fromUserName: string;
-  shellId: string;
+  shellId?: string;
+  postId?: string;
+  targetType?: "post" | "shell";
+  url?: string;
   message: string;
   dedupKey?: string;
 }): Promise<boolean> {
@@ -50,7 +56,7 @@ export async function createNotification(params: {
     // 2. Action deduplication check: Prevent rapid misclick spam (15s for comments/replies, 60s for likes)
     const ttl = (params.type === "comment" || params.type === "reply") ? 15 : 60;
     const windowBucket = Math.floor(Date.now() / (ttl * 1000));
-    const dedupKey = params.dedupKey || `notification:dedup:${params.type}:${params.fromUserId}:${params.shellId || "global"}:${params.userId}:${windowBucket}`;
+    const dedupKey = params.dedupKey || `notification:dedup:${params.type}:${params.fromUserId}:${params.shellId || params.postId || "global"}:${params.userId}:${windowBucket}`;
     const alreadyNotified = await redis.get(dedupKey);
 
     if (alreadyNotified) {
@@ -61,16 +67,20 @@ export async function createNotification(params: {
     await redis.set(dedupKey, "1", { ex: ttl });
 
     const notificationId = crypto.randomUUID();
+    const now = Date.now();
     const notification: AppNotification = {
       notificationId,
       userId: params.userId,
       type: params.type,
       fromUserId: params.fromUserId,
       fromUserName: params.fromUserName,
-      shellId: params.shellId,
+      shellId: params.shellId || params.postId || "",
+      postId: params.postId || "",
+      targetType: params.targetType || (params.postId ? "post" : "shell"),
+      url: params.url || (params.postId ? "/newsfeed" : params.shellId ? `/showcase?open=${params.shellId}` : "/newsfeed"),
       message: params.message,
       read: false,
-      createdAt: Date.now(),
+      createdAt: now,
     };
 
     // Store in-app notification in Redis with 7 day retention TTL
@@ -406,7 +416,7 @@ export async function getNotifications(userId: string, limit = 30): Promise<AppN
     const ids = await redis.lrange(`notifications:${userId}`, 0, limit - 1);
     if (!ids || ids.length === 0) return [];
 
-    const promises = ids.map(async (id) => {
+    const promises = ids.map(async (id): Promise<AppNotification | null> => {
       const data = await redis.hgetall(`notification:${id as string}`);
       if (data && Object.keys(data).length > 0) {
         return {
@@ -416,6 +426,9 @@ export async function getNotifications(userId: string, limit = 30): Promise<AppN
           fromUserId: (data.fromUserId as string) || "",
           fromUserName: (data.fromUserName as string) || "Someone",
           shellId: (data.shellId as string) || "",
+          postId: (data.postId as string) || "",
+          targetType: (data.targetType as "post" | "shell") || (data.postId ? "post" : "shell"),
+          url: (data.url as string) || (data.postId ? "/newsfeed" : data.shellId ? `/showcase?open=${data.shellId}` : "/newsfeed"),
           message: (data.message as string) || "",
           read: String(data.read) === "true",
           createdAt: Number(data.createdAt),
