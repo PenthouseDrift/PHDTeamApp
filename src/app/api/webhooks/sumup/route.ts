@@ -7,19 +7,24 @@ export async function POST(request: Request) {
 
     const { event_type, id: checkoutId, status, checkout_reference } = body;
 
-    // Only process successful payments
-    if (status !== "PAID" && event_type !== "checkout.completed") {
+    // Only process successful payments (SumUp sends "PAID", "SUCCESSFUL", or event_type "checkout.completed")
+    const isPaid = status === "PAID" || status === "SUCCESSFUL" || event_type === "checkout.completed";
+
+    if (!isPaid) {
       return NextResponse.json({ received: true });
     }
 
-    if (!checkout_reference || typeof checkout_reference !== "string") {
+    if (!checkoutId && !checkout_reference) {
       return NextResponse.json(
-        { error: "Invalid checkout reference" },
+        { error: "Invalid checkout payload: missing ID or reference" },
         { status: 400 }
       );
     }
 
-    const result = await processSuccessfulPaymentReference(checkout_reference, checkoutId);
+    const result = await processSuccessfulPaymentReference(
+      checkout_reference || "",
+      checkoutId || ""
+    );
 
     return NextResponse.json({
       received: true,

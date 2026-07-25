@@ -30,8 +30,8 @@ export async function createCheckout(
     throw new Error("Missing SUMUP_MERCHANT_CODE environment variable");
   }
 
-  // Clean member ID reference for SumUp reference constraint
-  const cleanId = params.memberId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24);
+  // Preserve underscores and hyphens in cleanId for reference parsing
+  const cleanId = params.memberId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 48);
   const checkoutRef = `phd_${cleanId}_${Date.now()}`;
 
   const payload: Record<string, unknown> = {

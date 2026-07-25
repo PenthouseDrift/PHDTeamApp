@@ -1,16 +1,21 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getWallet, addDayPasses, addRentalHours } from "@/actions/wallet";
+import { getWallet, addDayPasses, addRentalHours, createWalletCheckout } from "@/actions/wallet";
 import { getMembership } from "@/actions/membership";
 import { generateQRCode } from "@/lib/qr";
 import { getOrGeneratePassNonce } from "@/actions/qr";
-import { createCheckout } from "@/lib/sumup";
+import { getCheckoutStatus } from "@/lib/sumup";
+import { processSuccessfulPaymentReference } from "@/lib/membership-activation";
 import { redis } from "@/lib/redis";
 import { WalletClient } from "./WalletClient";
 
 export const dynamic = "force-dynamic";
 
-export default async function WalletPage() {
+interface PageProps {
+  searchParams: Promise<{ checkout_id?: string }>;
+}
+
+export default async function WalletPage({ searchParams }: PageProps) {
   const session = await auth();
 
   if (!session?.user) {
@@ -18,6 +23,21 @@ export default async function WalletPage() {
   }
 
   const userId = session.user.id;
+  const params = await searchParams;
+
+  // Instant fallback verification when customer returns from SumUp checkout
+  let targetCheckoutId = params.checkout_id;
+  if (!targetCheckoutId) {
+    targetCheckoutId = (await redis.get(`pending_wallet_checkout:${userId}`)) as string | undefined;
+  }
+
+  if (targetCheckoutId) {
+    const checkout = await getCheckoutStatus(targetCheckoutId);
+    if (checkout && (checkout.status === "PAID" || checkout.status === "SUCCESSFUL")) {
+      await processSuccessfulPaymentReference(checkout.checkout_reference, checkout.id);
+      await redis.del(`pending_wallet_checkout:${userId}`);
+    }
+  }
 
   const [walletRes, membershipRes, dayPassNonce, rentalNonce] = await Promise.all([
     getWallet(userId),
@@ -44,37 +64,10 @@ export default async function WalletPage() {
     const session = await auth();
     if (!session?.user) redirect("/auth/signin");
 
-    const unitPrice = 10.0;
-    const totalAmount = quantity * unitPrice;
-    const description =
-      itemType === "daypass"
-        ? `Penthouse Drift - ${quantity}x Day Pass`
-        : `Penthouse Drift - ${quantity}x Car Rental Hour`;
-
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
-    const checkout = await createCheckout({
-      memberId: `${itemType}_${session.user.id}_${quantity}`,
-      amount: totalAmount,
-      currency: "GBP",
-      description,
-      returnUrl: `${baseUrl}/wallet`,
-    });
-
-    await redis.set(
-      `checkout:${checkout.id}`,
-      JSON.stringify({
-        memberId: session.user.id,
-        itemType,
-        quantity,
-        checkoutReference: checkout.checkout_reference,
-        createdAt: Date.now(),
-      }),
-      { ex: 3600 }
-    );
-
-    const redirectUrl = checkout.hosted_checkout_url || `https://pay.sumup.com/b2c/Q${checkout.id}`;
-    redirect(redirectUrl);
+    const result = await createWalletCheckout(session.user.id, itemType, quantity);
+    if (result.success) {
+      redirect(result.data.url);
+    }
   }
 
   async function handleTestAddBalance(itemType: "daypass" | "rental", quantity: number) {
