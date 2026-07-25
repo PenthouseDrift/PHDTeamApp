@@ -50,7 +50,7 @@ export default async function AdminMembersPage() {
       <ActiveRentalsWidget initialRentals={activeRentals} />
 
       {/* Today's Check-Ins */}
-      <TodayCheckIns checkIns={todayCheckIns} />
+      <TodayCheckIns checkIns={todayCheckIns} userRole={userRole} />
 
       {/* All Members */}
       <div>
