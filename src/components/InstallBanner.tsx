@@ -38,14 +38,17 @@ export function InstallBanner() {
     setIsStandalone(!!standalone);
     if (standalone) return;
 
+    // Check if mobile device
+    const isMobile =
+      /iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
+
+    if (!isMobile) return; // Strictly only show install prompts on mobile devices
+
     // iOS detection
     const isIOSDevice =
       /iPad|iPhone|iPod/.test(navigator.userAgent) &&
       !(window as unknown as { MSStream: unknown }).MSStream;
     setIsIOS(isIOSDevice);
-
-    const isMobile =
-      /iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
 
     // Retrieve global prompt if captured early
     if (typeof window !== "undefined" && window.__phdInstallPrompt) {
@@ -59,7 +62,7 @@ export function InstallBanner() {
       setShowBanner(true);
     }
 
-    if (isMobile && (!modalDismissed || Date.now() - Number(modalDismissed) >= 3 * 24 * 60 * 60 * 1000)) {
+    if (!modalDismissed || Date.now() - Number(modalDismissed) >= 3 * 24 * 60 * 60 * 1000) {
       const timer = setTimeout(() => {
         setShowModal(true);
       }, 800);
