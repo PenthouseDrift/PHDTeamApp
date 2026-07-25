@@ -123,7 +123,15 @@ export function NotificationsPopover({ userId, initialUnreadCount = 0 }: Notific
 
   function handleNotificationClick(item: AppNotification) {
     setIsOpen(false);
-    if (item.shellId) {
+    if (item.url) {
+      router.push(item.url);
+    } else if (
+      item.targetType === "post" ||
+      item.postId ||
+      item.message.toLowerCase().includes("post")
+    ) {
+      router.push("/newsfeed");
+    } else if (item.shellId || item.targetType === "shell") {
       router.push(`/showcase?open=${item.shellId}`);
     } else if (item.type === "global" || item.type === "event_reminder") {
       router.push("/newsfeed");

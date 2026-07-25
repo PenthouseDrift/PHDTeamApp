@@ -32,8 +32,20 @@ function formatTime(timestamp: number): string {
 export function NotificationList({ notifications }: NotificationListProps) {
   const router = useRouter();
 
-  function handleClick(shellId: string) {
-    router.push(`/showcase?open=${shellId}`);
+  function handleClick(n: AppNotification) {
+    if (n.url) {
+      router.push(n.url);
+    } else if (
+      n.targetType === "post" ||
+      n.postId ||
+      n.message.toLowerCase().includes("post")
+    ) {
+      router.push("/newsfeed");
+    } else if (n.shellId || n.targetType === "shell") {
+      router.push(`/showcase?open=${n.shellId}`);
+    } else {
+      router.push("/newsfeed");
+    }
   }
 
   return (
@@ -41,7 +53,7 @@ export function NotificationList({ notifications }: NotificationListProps) {
       {notifications.map((n) => (
         <button
           key={n.notificationId}
-          onClick={() => handleClick(n.shellId)}
+          onClick={() => handleClick(n)}
           className={`w-full text-left rounded-xl p-4 border transition-colors ${
             n.read
               ? "bg-white border-zinc-200"
