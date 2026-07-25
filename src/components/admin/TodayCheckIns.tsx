@@ -140,23 +140,35 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
         <p className="text-sm text-zinc-500 py-4 text-center">No one checked in yet today.</p>
       ) : (
         <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
-          {checkIns.map((entry, i) => (
-            <div
-              key={`${entry.userId}-${i}`}
-              className="flex flex-col sm:flex-row sm:items-center justify-between rounded-xl bg-green-50 dark:bg-green-950/40 border border-green-200/60 dark:border-green-800/40 p-3 sm:px-4 sm:py-2.5 gap-2 sm:gap-3 shadow-sm"
-            >
-              {/* Left: Status Dot + Member Name + Mobile Timestamp */}
-              <div className="flex items-center justify-between sm:justify-start gap-2.5 min-w-0">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0" />
-                  <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
-                    {entry.memberName}
+          {checkIns.map((entry, i) => {
+            const isMembershipEntry =
+              entry.method === "qr" ||
+              entry.method === "manual" ||
+              entry.method === "membership_cash";
+
+            return (
+              <div
+                key={`${entry.userId}-${i}`}
+                className={`flex flex-col sm:flex-row sm:items-center justify-between rounded-xl border p-3 sm:px-4 sm:py-2.5 gap-2 sm:gap-3 shadow-sm ${
+                  isMembershipEntry
+                    ? "bg-green-50/70 dark:bg-green-950/40 border-green-200/70 dark:border-green-800/40"
+                    : "bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700/60"
+                }`}
+              >
+                {/* Left: Status Dot (Members with Membership only) + Name + Mobile Timestamp */}
+                <div className="flex items-center justify-between sm:justify-start gap-2.5 min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {isMembershipEntry && (
+                      <span className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0" title="Active Membership" />
+                    )}
+                    <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                      {entry.memberName}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium shrink-0 sm:hidden">
+                    {formatTime(entry.timestamp)}
                   </span>
                 </div>
-                <span className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium shrink-0 sm:hidden">
-                  {formatTime(entry.timestamp)}
-                </span>
-              </div>
 
               {/* Right: Check-In Method Badge + Desktop Timestamp + Remove Button */}
               <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-green-200/50 dark:border-green-800/30">
@@ -208,8 +220,9 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
                 </button>
               </div>
             </div>
-          ))}
-        </div>
+          );
+        })}
+      </div>
       )}
 
       {/* Two-step removal confirmation */}
