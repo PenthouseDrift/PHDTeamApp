@@ -6,18 +6,7 @@ import type { ActionResult } from "@/types";
 
 export async function getOrCreateQRCode(memberId: string): Promise<ActionResult<string>> {
   try {
-    // Check if QR code already exists
-    const existing = await redis.get(`qr:${memberId}`);
-    if (existing) {
-      return { success: true, data: existing as string };
-    }
-
-    // Generate new QR code
-    const qrDataUrl = await generateQRCode(memberId);
-
-    // Persist in Redis
-    await redis.set(`qr:${memberId}`, qrDataUrl);
-
+    const qrDataUrl = await generateQRCode(memberId, "membership");
     return { success: true, data: qrDataUrl };
   } catch (error) {
     return {
