@@ -88,7 +88,11 @@ export async function getUpcomingEvents(): Promise<TrackEvent[]> {
   const ids = await redis.lrange("events:all", 0, -1);
   if (!ids || ids.length === 0) return [];
 
-  const today = new Date().toISOString().split("T")[0];
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const today = `${year}-${month}-${day}`;
 
   const promises = ids.map(async (id) => {
     const data = await redis.hgetall(`event:${id as string}`);
