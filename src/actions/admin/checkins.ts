@@ -8,7 +8,7 @@ export interface CheckInEntry {
   userId: string;
   adminId: string;
   timestamp: number;
-  method: "qr" | "manual";
+  method: "qr" | "manual" | "day_pass" | "day_pass_wallet" | "day_pass_cash" | "rental" | "rental_wallet" | "rental_cash" | "membership_cash";
   memberName: string;
 }
 
@@ -70,7 +70,8 @@ export async function isUserCheckedInToday(userId: string): Promise<boolean> {
 export async function quickCheckIn(
   memberId: string,
   memberName: string,
-  adminId: string
+  adminId: string,
+  method: "manual" | "membership_cash" = "manual"
 ): Promise<ActionResult<{ checkedIn: boolean }>> {
   try {
     // No membership check required — admin override for manual tracking
@@ -88,7 +89,7 @@ export async function quickCheckIn(
       userId: memberId,
       adminId,
       timestamp: now,
-      method: "manual",
+      method,
       memberName,
     });
 
@@ -125,7 +126,7 @@ export async function addNonMemberCheckIn(
       userId: guestId,
       adminId,
       timestamp: now,
-      method,
+      method: method === "day_pass" ? "day_pass_cash" : method === "rental" ? "rental_cash" : "manual",
       memberName: name,
     });
 
@@ -143,6 +144,51 @@ export async function addNonMemberCheckIn(
   }
 }
 
+export async function updateCheckInMethod(
+  index: number,
+  newMethod: "manual" | "day_pass" | "day_pass_wallet" | "day_pass_cash" | "rental" | "rental_wallet" | "rental_cash" | "membership_cash" | "qr"
+): Promise<ActionResult<{ success: boolean }>> {
+  try {
+    const { auth } = await import("@/lib/auth");
+    const session = await auth();
+    if (
+      !session?.user ||
+      (session.user.role !== "admin" && session.user.role !== "moderator")
+    ) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const today = new Date().toISOString().split("T")[0];
+    const key = `checkins:${today}`;
+
+    const entries = await redis.lrange(key, 0, -1);
+    if (index < 0 || index >= entries.length) {
+      return { success: false, error: "Check-in entry not found" };
+    }
+
+    const entryStr = entries[index];
+    const parsed = typeof entryStr === "string" ? JSON.parse(entryStr) : entryStr;
+    parsed.method = newMethod;
+
+    await redis.lset(key, index, JSON.stringify(parsed));
+
+    if (newMethod === "rental" && parsed.userId && parsed.memberName) {
+      const { createOrExtendRentalSession } = await import("@/actions/admin/rentals");
+      await createOrExtendRentalSession(parsed.userId, parsed.memberName);
+    }
+
+    revalidatePath("/admin/members");
+    revalidatePath("/admin/check-in");
+    revalidatePath("/dashboard");
+    return { success: true, data: { success: true } };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to update check-in type",
+    };
+  }
+}
+
 export async function removeCheckIn(
   index: number
 ): Promise<ActionResult<null>> {
@@ -150,18 +196,15 @@ export async function removeCheckIn(
     const today = new Date().toISOString().split("T")[0];
     const key = `checkins:${today}`;
 
-    // Get all entries, remove the one at index, rewrite the list
     const entries = await redis.lrange(key, 0, -1);
     if (index < 0 || index >= entries.length) {
       return { success: false, error: "Check-in not found" };
     }
 
-    // Remove by setting to a placeholder then removing it
     const placeholder = "__REMOVED__";
     await redis.lset(key, index, placeholder);
     await redis.lrem(key, 1, placeholder);
 
-    // Also clear the dedup key if it was a real user
     const entry = entries[index];
     const parsed = typeof entry === "string" ? JSON.parse(entry) : entry;
     if (parsed?.userId && !parsed.userId.startsWith("guest_")) {
@@ -200,7 +243,7 @@ export async function checkInWithDayPass(
       userId: memberId,
       adminId,
       timestamp: now,
-      method: "day_pass",
+      method: isPaidInPerson ? "day_pass_cash" : "day_pass_wallet",
       memberName,
     });
 
@@ -245,7 +288,7 @@ export async function checkInWithRental(
       userId: memberId,
       adminId,
       timestamp: now,
-      method: "rental",
+      method: isPaidInPerson ? "rental_cash" : "rental_wallet",
       memberName,
     });
 

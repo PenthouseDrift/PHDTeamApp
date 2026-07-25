@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { CheckInEntry } from "@/actions/admin/checkins";
-import { addNonMemberCheckIn, removeCheckIn } from "@/actions/admin/checkins";
+import { addNonMemberCheckIn, removeCheckIn, updateCheckInMethod } from "@/actions/admin/checkins";
 import { useSession } from "next-auth/react";
 
 interface TodayCheckInsProps {
@@ -16,6 +16,7 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
   const [adding, setAdding] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [confirmRemoveIndex, setConfirmRemoveIndex] = useState<number | null>(null);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
 
   async function handleAddGuest(e: React.FormEvent) {
@@ -49,6 +50,22 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
     });
   }
 
+  function handleUpdateMethod(
+    index: number,
+    newMethod: "manual" | "day_pass" | "day_pass_wallet" | "day_pass_cash" | "rental" | "rental_wallet" | "rental_cash" | "membership_cash" | "qr"
+  ) {
+    startTransition(async () => {
+      const result = await updateCheckInMethod(index, newMethod);
+      if (result.success) {
+        setFeedback(`Check-in type updated to ${formatMethodBadge(newMethod)}`);
+        setTimeout(() => setFeedback(null), 3000);
+      } else {
+        setFeedback(result.error);
+      }
+      setEditingIndex(null);
+    });
+  }
+
   function formatTime(timestamp: number): string {
     return new Date(timestamp).toLocaleTimeString("en-AU", {
       hour: "2-digit",
@@ -58,10 +75,22 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
 
   function formatMethodBadge(method: string): string {
     switch (method) {
-      case "day_pass": return "🎫 Day Pass";
-      case "rental": return "🏎️ Car Rental";
-      case "qr": return "📱 QR Scan";
-      default: return "🟢 Standard";
+      case "day_pass_wallet":
+      case "day_pass":
+        return "📱 Day Pass (Wallet)";
+      case "day_pass_cash":
+        return "💵 Day Pass (£10 Cash)";
+      case "rental_wallet":
+      case "rental":
+        return "📱 Car Rental (Wallet)";
+      case "rental_cash":
+        return "💵 Car Rental (£10 Cash)";
+      case "membership_cash":
+        return "💵 Membership (£40 Cash)";
+      case "qr":
+        return "📱 QR - Membership Track Access";
+      default:
+        return "🟢 Membership Track Access";
     }
   }
 
@@ -90,9 +119,9 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
           onChange={(e) => setPassType(e.target.value as "manual" | "day_pass" | "rental")}
           className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-xs font-semibold text-zinc-800 dark:text-zinc-200 focus:border-amber-500 focus:outline-none"
         >
-          <option value="manual">🟢 Standard Track</option>
-          <option value="day_pass">🎫 Day Pass (£10)</option>
-          <option value="rental">🏎️ Car Rental (£10)</option>
+          <option value="manual">🟢 Membership Track Access</option>
+          <option value="day_pass">💵 Day Pass (£10 Cash)</option>
+          <option value="rental">💵 Car Rental (£10 Cash)</option>
         </select>
         <button
           type="submit"
@@ -110,25 +139,67 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
       {checkIns.length === 0 ? (
         <p className="text-sm text-zinc-500 py-4 text-center">No one checked in yet today.</p>
       ) : (
-        <div className="space-y-2 max-h-80 overflow-y-auto">
+        <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
           {checkIns.map((entry, i) => (
             <div
               key={`${entry.userId}-${i}`}
-              className="flex items-center justify-between rounded-lg bg-green-50 dark:bg-green-900/20 px-4 py-2.5"
+              className="flex flex-col sm:flex-row sm:items-center justify-between rounded-xl bg-green-50 dark:bg-green-950/40 border border-green-200/60 dark:border-green-800/40 p-3 sm:px-4 sm:py-2.5 gap-2 sm:gap-3 shadow-sm"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-green-500" />
-                <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{entry.memberName}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 text-xs text-zinc-500">
-                  <span className="font-semibold text-zinc-700 dark:text-zinc-300">{formatMethodBadge(entry.method)}</span>
-                  <span>•</span>
-                  <span>{formatTime(entry.timestamp)}</span>
+              {/* Left: Status Dot + Member Name + Mobile Timestamp */}
+              <div className="flex items-center justify-between sm:justify-start gap-2.5 min-w-0">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0" />
+                  <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                    {entry.memberName}
+                  </span>
                 </div>
+                <span className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium shrink-0 sm:hidden">
+                  {formatTime(entry.timestamp)}
+                </span>
+              </div>
+
+              {/* Right: Check-In Method Badge + Desktop Timestamp + Remove Button */}
+              <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-green-200/50 dark:border-green-800/30">
+                {editingIndex === i ? (
+                  <select
+                    value={entry.method}
+                    onChange={(e) =>
+                      handleUpdateMethod(
+                        i,
+                        e.target.value as "manual" | "day_pass_wallet" | "day_pass_cash" | "rental_wallet" | "rental_cash" | "membership_cash" | "qr"
+                      )
+                    }
+                    onBlur={() => setEditingIndex(null)}
+                    autoFocus
+                    className="rounded-lg border border-amber-500 bg-white dark:bg-zinc-800 text-xs font-bold text-zinc-900 dark:text-zinc-100 py-1 px-2 focus:outline-none shadow-sm max-w-full"
+                  >
+                    <option value="manual">🟢 Membership Track Access</option>
+                    <option value="qr">📱 QR - Membership Track Access</option>
+                    <option value="day_pass_wallet">📱 Day Pass (Wallet)</option>
+                    <option value="day_pass_cash">💵 Day Pass (£10 Cash)</option>
+                    <option value="rental_wallet">📱 Car Rental (Wallet)</option>
+                    <option value="rental_cash">💵 Car Rental (£10 Cash)</option>
+                    <option value="membership_cash">💵 Membership (£40 Cash)</option>
+                  </select>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setEditingIndex(i)}
+                    title="Click to edit check-in type"
+                    className="text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:text-amber-600 dark:hover:text-amber-400 bg-white dark:bg-zinc-800 hover:bg-amber-50 dark:hover:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-700/80 rounded-lg px-2.5 py-1 transition-colors flex items-center gap-1.5 shrink-0 max-w-full overflow-hidden shadow-xs"
+                  >
+                    <span className="truncate">{formatMethodBadge(entry.method)}</span>
+                    <span className="text-[10px] text-zinc-400 shrink-0">✏️</span>
+                  </button>
+                )}
+
+                <span className="text-xs text-zinc-500 dark:text-zinc-400 hidden sm:inline-block shrink-0">
+                  • {formatTime(entry.timestamp)}
+                </span>
+
                 <button
                   onClick={() => setConfirmRemoveIndex(i)}
-                  className="text-zinc-400 hover:text-red-500 transition-colors p-1"
+                  className="text-zinc-400 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 shrink-0"
                   aria-label={`Remove ${entry.memberName}`}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
@@ -158,28 +229,24 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
               <div>
                 <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Remove Check-In</h3>
                 <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                  Remove <strong>{checkIns[confirmRemoveIndex]?.memberName}</strong> from today's list?
+                  Are you sure you want to remove <strong>{checkIns[confirmRemoveIndex]?.memberName}</strong>'s check-in?
                 </p>
               </div>
             </div>
-
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 rounded-lg p-3">
-              This will remove them from today's check-in record. They can be checked in again if needed.
-            </p>
-
             <div className="flex gap-2">
               <button
                 onClick={() => setConfirmRemoveIndex(null)}
-                className="flex-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                disabled={isPending}
+                className="flex-1 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleRemove(confirmRemoveIndex)}
                 disabled={isPending}
-                className="flex-1 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+                className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
               >
-                {isPending ? "Removing..." : "Yes, Remove"}
+                {isPending ? "Removing..." : "Remove"}
               </button>
             </div>
           </div>

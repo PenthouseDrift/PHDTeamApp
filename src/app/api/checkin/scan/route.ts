@@ -160,7 +160,7 @@ export async function POST(request: Request) {
         userId: memberId,
         adminId: session.user.id,
         timestamp: now,
-        method: "rental",
+        method: "rental_wallet",
         memberName: isExtension ? `${formattedAdminName} (Extended +1 Hr)` : formattedAdminName,
       });
 
@@ -199,7 +199,7 @@ export async function POST(request: Request) {
         userId: memberId,
         adminId: session.user.id,
         timestamp: now,
-        method: "day_pass",
+        method: "day_pass_wallet",
         memberName: formattedAdminName,
       });
 

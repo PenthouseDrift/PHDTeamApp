@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { NotificationsPopover } from "@/components/NotificationsPopover";
+import { QRPopover } from "@/components/QRPopover";
 
 interface NavUser {
   id: string;
@@ -53,6 +54,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
         <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800">
           <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-8 w-8" />
           <div className="flex items-center gap-2">
+            <QRPopover userId={user.id} />
             <NotificationsPopover userId={user.id} initialUnreadCount={unreadNotifications} />
             <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200 truncate max-w-[100px]">
               {user.name ?? "Member"}
@@ -130,8 +132,20 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
 
       {/* Mobile top header */}
       <header className="fixed top-0 left-0 right-0 z-40 flex md:hidden items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/95 backdrop-blur-sm">
-        <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-7 w-7" />
+        <div className="flex items-center gap-2">
+          {pathname !== "/dashboard" ? (
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-1 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:text-amber-500 transition-colors bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700"
+            >
+              <span>←</span> Back
+            </Link>
+          ) : (
+            <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-7 w-7" />
+          )}
+        </div>
         <div className="flex items-center gap-3">
+          <QRPopover userId={user.id} />
           <NotificationsPopover userId={user.id} initialUnreadCount={unreadNotifications} />
           <Link href="/profile">
             {user.image ? (

@@ -71,6 +71,10 @@ export default async function PurchaseMembershipPage() {
     redirect("/membership/success");
   }
 
+  const isStaff = session.user.role === "admin" || session.user.role === "moderator";
+  const isDev = process.env.NODE_ENV === "development";
+  const isPurchaseDisabled = isStaff && !isDev;
+
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-lg space-y-6">
@@ -82,6 +86,41 @@ export default async function PurchaseMembershipPage() {
             Get access to the Penthouse Drift RC track
           </p>
         </div>
+
+        {/* Active Membership / Staff Access Status Banner */}
+        {isStaff ? (
+          <div className="rounded-2xl border border-purple-300 dark:border-purple-800/60 bg-purple-50 dark:bg-purple-950/40 p-5 space-y-2 shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🛡️</span>
+              <h2 className="text-sm font-black text-purple-900 dark:text-purple-200 uppercase tracking-wider">
+                Permanent Staff Track Access Active
+              </h2>
+            </div>
+            <p className="text-xs text-purple-700 dark:text-purple-300 leading-relaxed">
+              As a <strong>{session.user.role === "admin" ? "Track Admin" : "Track Moderator"}</strong>, you have permanent unlimited track access included automatically. {isDev ? "In development mode, purchase button remains enabled for testing." : "Membership purchasing is disabled for staff accounts."}
+            </p>
+          </div>
+        ) : isActive ? (
+          <div className="rounded-2xl border border-green-300 dark:border-green-800/60 bg-green-50 dark:bg-green-950/40 p-5 space-y-2 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="flex h-3 w-3 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
+                </span>
+                <h2 className="text-sm font-black text-green-900 dark:text-green-200 uppercase tracking-wider">
+                  Active Membership Found
+                </h2>
+              </div>
+              <span className="rounded-full bg-green-200 dark:bg-green-900/80 px-3 py-0.5 text-xs font-black text-green-800 dark:text-green-200">
+                {remainingDays} {remainingDays === 1 ? "day" : "days"} remaining
+              </span>
+            </div>
+            <p className="text-xs text-green-800 dark:text-green-300 leading-relaxed">
+              You already have an active 28-Day Track Membership valid for another <strong>{remainingDays} {remainingDays === 1 ? "day" : "days"}</strong>. Purchasing below will extend your existing membership duration by an additional 28 days.
+            </p>
+          </div>
+        ) : null}
 
         {/* Membership Info Card */}
         <div className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-5 shadow-sm">
@@ -121,6 +160,15 @@ export default async function PurchaseMembershipPage() {
             </li>
           </ul>
 
+          <PurchaseButton
+            userId={session.user.id}
+            isActive={isActive}
+            price={MEMBERSHIP_PRICE}
+            durationDays={MEMBERSHIP_DURATION_DAYS}
+            isDisabled={isPurchaseDisabled}
+            disabledReason="🛡️ Staff Accounts Have Permanent Access (Purchasing Disabled)"
+          />
+
           {isActive && (
             <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3.5 text-sm text-zinc-700 dark:text-zinc-200">
               <p>
@@ -133,13 +181,6 @@ export default async function PurchaseMembershipPage() {
               </p>
             </div>
           )}
-
-          <PurchaseButton
-            userId={session.user.id}
-            isActive={isActive}
-            price={MEMBERSHIP_PRICE}
-            durationDays={MEMBERSHIP_DURATION_DAYS}
-          />
 
           <div className="flex items-center justify-center gap-2 pt-1 text-xs text-zinc-500 dark:text-zinc-400">
             <svg className="h-4 w-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

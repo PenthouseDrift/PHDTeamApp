@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useTransition, useEffect, useCallback } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
   activateMembership,
   revokeMembership,
+  clearMembershipRecord,
   adminAdjustWallet,
 } from "@/actions/admin/membership";
 import { quickCheckIn, checkInWithDayPass, checkInWithRental } from "@/actions/admin/checkins";
+import { setUserRole } from "@/actions/admin/users";
 import { getOrCreateQRCode } from "@/actions/qr";
 import type { MemberWithMembership } from "@/actions/admin/members";
 
@@ -36,9 +38,13 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
   const [isPending, startTransition] = useTransition();
   const [localWallet, setLocalWallet] = useState(initialMember.wallet);
   const [localMembership, setLocalMembership] = useState(initialMember.membership);
+  const [localRole, setLocalRole] = useState<"admin" | "moderator" | "member">(initialMember.member.role);
   const [overrideDate, setOverrideDate] = useState("");
   const [showOverride, setShowOverride] = useState(false);
   const [showRevoke, setShowRevoke] = useState(false);
+  const [showCheckInModal, setShowCheckInModal] = useState(false);
+  const [confirmingInPersonMembership, setConfirmingInPersonMembership] = useState(false);
+  const [pendingRole, setPendingRole] = useState<"admin" | "moderator" | "member" | null>(null);
   const [revokeStep, setRevokeStep] = useState<1 | 2>(1);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
 
@@ -111,6 +117,20 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
     });
   }
 
+  function handleClearExpiry() {
+    startTransition(async () => {
+      const res = await clearMembershipRecord(m.id);
+      if (res.success) {
+        setLocalMembership(null);
+        setShowOverride(false);
+        setOverrideDate("");
+        onUpdate({ type: "success", message: `Membership record cleared for ${m.name}` });
+      } else {
+        onUpdate({ type: "error", message: res.error });
+      }
+    });
+  }
+
   function handleRevoke() {
     startTransition(async () => {
       const res = await revokeMembership(m.id);
@@ -169,6 +189,51 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
     });
   }
 
+  function handleCheckInWithInPersonMembership() {
+    if (!session?.user?.id) return;
+    startTransition(async () => {
+      const memRes = await activateMembership(m.id);
+      if (memRes.success) {
+        setLocalMembership({
+          userId: m.id,
+          status: "active",
+          purchasedAt: Date.now(),
+          expiresAt: memRes.data.expiresAt,
+          paymentRef: `cash_membership_${Date.now()}`,
+        });
+        const checkInRes = await quickCheckIn(m.id, m.name, session.user.id, "membership_cash");
+        if (checkInRes.success) {
+          onUpdate({
+            type: "success",
+            message: `${m.name} 28-day membership activated (£40 Paid in Person) & checked in!`,
+          });
+        } else {
+          onUpdate({
+            type: "success",
+            message: `${m.name} 28-day membership activated (£40 Paid in Person)!`,
+          });
+        }
+      } else {
+        onUpdate({ type: "error", message: memRes.error });
+      }
+    });
+  }
+
+  function handleSetRole(newRole: "admin" | "moderator" | "member") {
+    startTransition(async () => {
+      const res = await setUserRole(m.id, newRole);
+      if (res.success) {
+        setLocalRole(newRole);
+        onUpdate({
+          type: "success",
+          message: `Role for ${m.name} changed to ${newRole.toUpperCase()}`,
+        });
+      } else {
+        onUpdate({ type: "error", message: res.error });
+      }
+    });
+  }
+
   const viewerRole = session?.user?.role;
   const isAdminViewer = viewerRole === "admin";
   const isModeratorViewer = viewerRole === "moderator";
@@ -197,12 +262,31 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
               </div>
             )}
             <div className="min-w-0">
-              <p className="font-bold text-zinc-900 dark:text-zinc-100 truncate">
-                {m.name}
-                {m.nickname && (
-                  <span className="ml-1.5 text-amber-600 font-bold text-sm">"{m.nickname}"</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                  {m.name}
+                  {m.nickname && (
+                    <span className="ml-1.5 text-amber-600 font-bold text-sm">&quot;{m.nickname}&quot;</span>
+                  )}
+                </p>
+                {localRole === "admin" ? (
+                  <span className="px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950 border border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-[10px] font-black uppercase">
+                    Admin
+                  </span>
+                ) : localRole === "moderator" ? (
+                  <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-[10px] font-black uppercase">
+                    Moderator
+                  </span>
+                ) : membershipActive ? (
+                  <span className="px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-950 border border-green-300 dark:border-green-800 text-green-700 dark:text-green-300 text-[10px] font-black uppercase">
+                    Member
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 text-[10px] font-black uppercase">
+                    User
+                  </span>
                 )}
-              </p>
+              </div>
               <p className="text-xs text-zinc-500 truncate">{m.email}</p>
             </div>
           </div>
@@ -218,15 +302,20 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
         </div>
 
         <div className="p-5 space-y-5">
-          {/* Member ID */}
-          <div className="text-center">
-            <p className="text-[11px] font-mono text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded-md inline-block border border-zinc-200 dark:border-zinc-700">
-              Member ID: {m.id}
-            </p>
-          </div>
+          {/* Single Check-In Button (Admin & Moderator) */}
+          {(isAdminViewer || isModeratorViewer) && (
+            <button
+              type="button"
+              onClick={() => setShowCheckInModal(true)}
+              disabled={isPending}
+              className="w-full py-3 px-4 rounded-xl bg-green-600 hover:bg-green-700 active:scale-[0.99] text-white font-black text-sm flex items-center justify-center gap-2 shadow-md transition-all disabled:opacity-50"
+            >
+              <span>🟢</span> Check-In {m.name}
+            </button>
+          )}
 
-          {/* QR Code */}
-          <div className="flex justify-center">
+          {/* QR Code & Member ID */}
+          <div className="flex flex-col items-center gap-2">
             <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white p-3 shadow-sm">
               {qrUrl ? (
                 <img src={qrUrl} alt="Member QR Code" className="w-40 h-40" />
@@ -239,48 +328,59 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
                 </div>
               )}
             </div>
+            <p className="text-[11px] font-mono text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800/80 px-3 py-1 rounded-md border border-zinc-200 dark:border-zinc-700">
+              Member ID: {m.id}
+            </p>
           </div>
 
-          {/* Membership Status (Admin Only) */}
-          {!isModeratorViewer && (
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Membership</h3>
-              {isAdmin ? (
-                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-100 dark:bg-purple-950/80 border border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs font-black uppercase tracking-wider">
-                  <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
-                  Admin Access
-                </span>
-              ) : localMembership ? (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <StatusBadge status={localMembership.status} size="sm" />
-                    {membershipActive && (
-                      <span className="text-xs text-zinc-500">
-                        {getRemainingDays(localMembership.expiresAt)} days remaining
-                      </span>
-                    )}
+          {/* Membership Status (Admin & Moderator) */}
+          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Membership</h3>
+            {localRole === "admin" ? (
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-100 dark:bg-purple-950/80 border border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs font-black uppercase tracking-wider">
+                <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+                Admin Access
+              </span>
+            ) : localRole === "moderator" ? (
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-100 dark:bg-blue-950/80 border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-black uppercase tracking-wider">
+                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                Moderator Access
+              </span>
+            ) : localMembership ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <StatusBadge status={localMembership.status} size="sm" />
+                  {membershipActive ? (
+                    <span className="text-xs text-zinc-500">
+                      {getRemainingDays(localMembership.expiresAt)} days remaining
+                    </span>
+                  ) : (
+                    <span className="text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 px-2.5 py-1 rounded-md border border-red-200 dark:border-red-800">
+                      Expired on {formatDate(localMembership.expiresAt)}
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+                  <div>
+                    <span className="text-zinc-400 block">Purchased</span>
+                    <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                      {localMembership.purchasedAt ? formatDate(localMembership.purchasedAt) : "—"}
+                    </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs text-zinc-600 dark:text-zinc-400">
-                    <div>
-                      <span className="text-zinc-400 block">Purchased</span>
-                      <span className="font-medium text-zinc-800 dark:text-zinc-200">
-                        {localMembership.purchasedAt ? formatDate(localMembership.purchasedAt) : "—"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-zinc-400 block">Expires</span>
-                      <span className={`font-medium ${membershipActive ? "text-zinc-800 dark:text-zinc-200" : "text-red-600"}`}>
-                        {formatDate(localMembership.expiresAt)}
-                      </span>
-                    </div>
+                  <div>
+                    <span className="text-zinc-400 block">{membershipActive ? "Expires" : "Expired Date"}</span>
+                    <span className={`font-medium ${membershipActive ? "text-zinc-800 dark:text-zinc-200" : "text-red-600 font-bold"}`}>
+                      {formatDate(localMembership.expiresAt)}
+                    </span>
                   </div>
                 </div>
-              ) : (
-                <p className="text-sm text-zinc-500">No membership record</p>
-              )}
+              </div>
+            ) : (
+              <p className="text-sm text-zinc-500">No membership record</p>
+            )}
 
-              {/* Membership Actions (Admin Only) */}
-              {isAdminViewer && !isAdmin && (
+              {/* Membership Actions (Admin Only for Non-Staff Members) */}
+              {isAdminViewer && localRole !== "admin" && localRole !== "moderator" && (
                 <div className="flex flex-wrap gap-2 pt-1 border-t border-zinc-100 dark:border-zinc-800">
                   {!membershipActive ? (
                     <button
@@ -305,11 +405,20 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
                   >
                     Set Expiry Date
                   </button>
+                  {localMembership && (
+                    <button
+                      onClick={handleClearExpiry}
+                      disabled={isPending}
+                      className="px-3 py-2 text-xs font-semibold rounded-lg bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-200 transition-colors disabled:opacity-50"
+                    >
+                      Clear Expiry
+                    </button>
+                  )}
                 </div>
               )}
               {/* Date Override Inline (Admin only) */}
-              {isAdminViewer && showOverride && (
-                <div className="flex gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              {isAdminViewer && localRole !== "admin" && localRole !== "moderator" && showOverride && (
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                   <input
                     type="date"
                     value={overrideDate}
@@ -322,7 +431,14 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
                     disabled={!overrideDate || isPending}
                     className="px-4 py-2 text-xs font-bold rounded-lg bg-amber-500 text-black hover:bg-amber-400 disabled:opacity-50 transition-colors"
                   >
-                    {isPending ? "..." : "Set"}
+                    {isPending ? "..." : "Set Date"}
+                  </button>
+                  <button
+                    onClick={handleClearExpiry}
+                    disabled={isPending}
+                    className="px-3 py-2 text-xs font-bold rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors shadow-sm"
+                  >
+                    Clear Expiry
                   </button>
                   <button
                     onClick={() => { setShowOverride(false); setOverrideDate(""); }}
@@ -333,64 +449,9 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
                 </div>
               )}
             </div>
-          )}
 
-          {/* Manual Check-In Options (Admin & Moderator) */}
-          {(isAdminViewer || isModeratorViewer) && (
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-3 bg-zinc-50/50 dark:bg-zinc-900/50">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                Manual Check-In Options
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  onClick={handleCheckInStandard}
-                  disabled={isPending}
-                  className="px-3 py-2.5 text-xs font-bold rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 text-center shadow-sm"
-                >
-                  🟢 Standard Track Check-In
-                </button>
-
-                {isAdminViewer && localWallet.dayPasses > 0 && (
-                  <button
-                    onClick={() => handleCheckInDayPass(false)}
-                    disabled={isPending}
-                    className="px-3 py-2.5 text-xs font-bold rounded-lg bg-amber-500 text-black hover:bg-amber-400 transition-colors disabled:opacity-50 text-center shadow-sm"
-                  >
-                    🎫 Use Day Pass ({localWallet.dayPasses} left)
-                  </button>
-                )}
-
-                <button
-                  onClick={() => handleCheckInDayPass(true)}
-                  disabled={isPending}
-                  className="px-3 py-2.5 text-xs font-bold rounded-lg bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors disabled:opacity-50 text-center shadow-sm"
-                >
-                  💵 Day Pass (£10 Paid Cash/Card)
-                </button>
-
-                {isAdminViewer && localWallet.rentalHours > 0 && (
-                  <button
-                    onClick={() => handleCheckInRental(false)}
-                    disabled={isPending}
-                    className="px-3 py-2.5 text-xs font-bold rounded-lg bg-amber-500 text-black hover:bg-amber-400 transition-colors disabled:opacity-50 text-center shadow-sm"
-                  >
-                    🏎️ Use Rental Hour ({localWallet.rentalHours} left)
-                  </button>
-                )}
-
-                <button
-                  onClick={() => handleCheckInRental(true)}
-                  disabled={isPending}
-                  className="px-3 py-2.5 text-xs font-bold rounded-lg bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors disabled:opacity-50 text-center shadow-sm"
-                >
-                  🏎️ Car Rental (£10 Paid Cash/Card)
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Wallet Balances (Admin only) */}
-          {!isAdmin && isAdminViewer && (
+          {/* Wallet Balances (Admin Viewer) */}
+          {isAdminViewer && (
             <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Wallet</h3>
               <div className="grid grid-cols-2 gap-3">
@@ -450,7 +511,314 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
               </div>
             </div>
           )}
+
+          {/* Manage Member Role (Admin Only - Bottom) */}
+          {isAdminViewer && (
+            <div className="rounded-xl border border-purple-200 dark:border-purple-900/60 p-4 space-y-2 bg-purple-50/40 dark:bg-purple-950/20">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-400 flex items-center gap-1.5">
+                  <span>🛡️</span> Manage Member Role
+                </h3>
+                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-200">
+                  {localRole}
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                Change access permission level across Penthouse Drift:
+              </p>
+              {pendingRole ? (
+                <div className="space-y-3 rounded-xl bg-purple-500/10 border border-purple-500/30 p-3 text-center">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200">
+                      Step 2 of 2: Confirm Role Change
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPendingRole(null)}
+                      className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <p className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                    Change <span className="text-purple-600 dark:text-purple-400 font-extrabold">{m.name}</span>&apos;s role from{" "}
+                    <span className="uppercase font-bold text-zinc-600 dark:text-zinc-400">{localRole}</span> to{" "}
+                    <span className="uppercase font-black text-amber-500">{pendingRole}</span>?
+                  </p>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    {pendingRole === "admin"
+                      ? "⚠️ Grants full admin control over users, roles, and settings."
+                      : pendingRole === "moderator"
+                      ? "ℹ️ Grants moderator access to members, check-ins, and events."
+                      : "ℹ️ Standard user level without staff permissions."}
+                  </p>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setPendingRole(null)}
+                      disabled={isPending}
+                      className="flex-1 py-2 px-3 text-xs font-bold rounded-lg bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors disabled:opacity-50"
+                    >
+                      ← Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleSetRole(pendingRole);
+                        setPendingRole(null);
+                      }}
+                      disabled={isPending}
+                      className="flex-1 py-2 px-3 text-xs font-black rounded-lg bg-purple-600 text-white hover:bg-purple-700 transition-colors disabled:opacity-50 shadow-sm"
+                    >
+                      {isPending ? "Updating..." : `Confirm ${pendingRole.toUpperCase()} ✓`}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  {(["member", "moderator", "admin"] as const).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      disabled={isPending || localRole === r}
+                      onClick={() => setPendingRole(r)}
+                      className={`py-2 px-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+                        localRole === r
+                          ? r === "admin"
+                            ? "bg-purple-600 text-white shadow-md ring-2 ring-purple-400"
+                            : r === "moderator"
+                            ? "bg-blue-600 text-white shadow-md ring-2 ring-blue-400"
+                            : "bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 shadow-md"
+                          : "bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                      } disabled:opacity-50 text-center`}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* Check-In Modal Options Dialog */}
+        {showCheckInModal && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={() => setShowCheckInModal(false)}>
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <div
+              className="relative w-full max-w-md rounded-2xl bg-white dark:bg-zinc-900 p-6 shadow-2xl space-y-4 border border-zinc-200 dark:border-zinc-800"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+                <div>
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                    Check-In Options
+                  </h3>
+                  <p className="text-xs text-zinc-500">
+                    Select check-in option for <strong className="text-amber-500">{m.name}</strong>
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowCheckInModal(false)}
+                  className="p-1.5 rounded-full text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {confirmingInPersonMembership ? (
+                <div className="space-y-4 py-2 text-center">
+                  <div className="mx-auto w-12 h-12 rounded-full bg-purple-100 dark:bg-purple-950/80 border border-purple-200 dark:border-purple-800 flex items-center justify-center text-xl">
+                    💳
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-zinc-900 dark:text-zinc-100">
+                      Confirm £40 In-Person Membership
+                    </h4>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                      Activate 28-day membership for <strong className="text-amber-500 font-bold">{m.name}</strong> and perform track check-in for today?
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 p-3 text-xs text-purple-800 dark:text-purple-300 font-bold">
+                    💰 £40 Payment received in person (Cash / Card)
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingInPersonMembership(false)}
+                      disabled={isPending}
+                      className="flex-1 py-2.5 px-4 text-xs font-bold rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors disabled:opacity-50"
+                    >
+                      ← Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfirmingInPersonMembership(false);
+                        setShowCheckInModal(false);
+                        handleCheckInWithInPersonMembership();
+                      }}
+                      disabled={isPending}
+                      className="flex-1 py-2.5 px-4 text-xs font-black rounded-xl bg-purple-600 hover:bg-purple-700 text-white shadow-md transition-colors disabled:opacity-50"
+                    >
+                      {isPending ? "Activating..." : "Confirm & Activate (£40) ✓"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {/* Option 1: Standard Track (Active Membership / Staff only) */}
+                  {(membershipActive || isAdmin || m.role === "moderator") && (
+                    <button
+                      onClick={() => {
+                        setShowCheckInModal(false);
+                        handleCheckInStandard();
+                      }}
+                      disabled={isPending}
+                      className="w-full p-3 text-left rounded-xl border border-green-200 dark:border-green-800/60 bg-green-50/50 dark:bg-green-950/30 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors flex items-center justify-between group"
+                    >
+                      <div>
+                        <p className="text-xs font-bold text-green-800 dark:text-green-300">
+                          🟢 Membership Track Access
+                        </p>
+                        <p className="text-[11px] text-green-600 dark:text-green-400">
+                          Free check-in with active membership
+                        </p>
+                      </div>
+                      <span className="text-xs font-bold text-green-700 dark:text-green-300 group-hover:translate-x-0.5 transition-transform">
+                        Select →
+                      </span>
+                    </button>
+                  )}
+
+                  {/* Option 2: In-Person 28-Day Membership (£40 Cash/Card) */}
+                  {isAdminViewer && (
+                    <button
+                      onClick={() => {
+                        setConfirmingInPersonMembership(true);
+                      }}
+                      disabled={isPending}
+                      className="w-full p-3 text-left rounded-xl border border-purple-200 dark:border-purple-800/60 bg-purple-50/50 dark:bg-purple-950/30 hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors flex items-center justify-between group"
+                    >
+                      <div>
+                        <p className="text-xs font-bold text-purple-900 dark:text-purple-200 flex items-center gap-1">
+                          <span>💳</span> 28-Day Membership (£40 Paid Cash/Card)
+                        </p>
+                        <p className="text-[11px] text-purple-700 dark:text-purple-400">
+                          Activates 28-day track membership &amp; checks in for today
+                        </p>
+                      </div>
+                      <span className="text-xs font-bold text-purple-700 dark:text-purple-300 group-hover:translate-x-0.5 transition-transform">
+                        Select →
+                      </span>
+                    </button>
+                  )}
+
+                  {/* Option 3: Day Pass (Wallet Balance) */}
+                  {isAdminViewer && localWallet.dayPasses > 0 && (
+                    <button
+                      onClick={() => {
+                        setShowCheckInModal(false);
+                        handleCheckInDayPass(false);
+                      }}
+                      disabled={isPending}
+                      className="w-full p-3 text-left rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50/50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors flex items-center justify-between group"
+                    >
+                      <div>
+                        <p className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                          🎫 Use Wallet Day Pass
+                        </p>
+                        <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                          {localWallet.dayPasses} pass{localWallet.dayPasses !== 1 ? "es" : ""} remaining in wallet
+                        </p>
+                      </div>
+                      <span className="text-xs font-bold text-amber-700 dark:text-amber-300 group-hover:translate-x-0.5 transition-transform">
+                        Select →
+                      </span>
+                    </button>
+                  )}
+
+                  {/* Option 3: Day Pass (£10 Cash/Card) */}
+                  <button
+                    onClick={() => {
+                      setShowCheckInModal(false);
+                      handleCheckInDayPass(true);
+                    }}
+                    disabled={isPending}
+                    className="w-full p-3 text-left rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700/60 transition-colors flex items-center justify-between group"
+                  >
+                    <div>
+                      <p className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                        💵 Day Pass (£10 Cash/Card)
+                      </p>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        Paid in person at the track desk
+                      </p>
+                    </div>
+                    <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 group-hover:translate-x-0.5 transition-transform">
+                      Select →
+                    </span>
+                  </button>
+
+                  {/* Option 4: Rental Hour (Wallet Balance) */}
+                  {isAdminViewer && localWallet.rentalHours > 0 && (
+                    <button
+                      onClick={() => {
+                        setShowCheckInModal(false);
+                        handleCheckInRental(false);
+                      }}
+                      disabled={isPending}
+                      className="w-full p-3 text-left rounded-xl border border-blue-200 dark:border-blue-800/60 bg-blue-50/50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors flex items-center justify-between group"
+                    >
+                      <div>
+                        <p className="text-xs font-bold text-blue-900 dark:text-blue-200">
+                          🏎️ Use Wallet Rental Hour
+                        </p>
+                        <p className="text-[11px] text-blue-700 dark:text-blue-400">
+                          {localWallet.rentalHours} hour{localWallet.rentalHours !== 1 ? "s" : ""} remaining in wallet
+                        </p>
+                      </div>
+                      <span className="text-xs font-bold text-blue-700 dark:text-blue-300 group-hover:translate-x-0.5 transition-transform">
+                        Select →
+                      </span>
+                    </button>
+                  )}
+
+                  {/* Option 5: Car Rental (£10 Cash/Card) */}
+                  <button
+                    onClick={() => {
+                      setShowCheckInModal(false);
+                      handleCheckInRental(true);
+                    }}
+                    disabled={isPending}
+                    className="w-full p-3 text-left rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700/60 transition-colors flex items-center justify-between group"
+                  >
+                    <div>
+                      <p className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                        🏎️ Car Rental (£10 Cash/Card)
+                      </p>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        Car rental session paid at desk
+                      </p>
+                    </div>
+                    <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 group-hover:translate-x-0.5 transition-transform">
+                      Select →
+                    </span>
+                  </button>
+                </div>
+              )}
+
+              <div className="pt-2">
+                <button
+                  onClick={() => setShowCheckInModal(false)}
+                  className="w-full py-2.5 px-4 text-xs font-bold rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Revoke Confirmation Inline */}
         {showRevoke && (

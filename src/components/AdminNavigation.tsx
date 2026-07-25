@@ -2,18 +2,25 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { NotificationsPopover } from "@/components/NotificationsPopover";
+import { QRPopover } from "@/components/QRPopover";
 
 interface NavUser {
+  id?: string;
   name?: string | null;
   image?: string | null;
   role?: "admin" | "moderator" | "member";
+}
+
+interface AdminNavigationProps {
+  user: NavUser;
+  unreadNotifications?: number;
 }
 
 const adminNavItems = [
   { href: "/admin", label: "Admin Home", icon: HomeIcon, exact: true },
   { href: "/admin/check-in", label: "QR Scan", icon: CheckInIcon },
   { href: "/admin/members", label: "Members", icon: MembersIcon },
-  { href: "/admin/users", label: "Users & Roles", icon: UsersIcon, adminOnly: true },
   { href: "/admin/events", label: "Events", icon: EventsIcon },
   { href: "/admin/notifications", label: "Global Alerts", icon: BellIcon, adminOnly: true },
   { href: "/admin/history", label: "History", icon: HistoryIcon },
@@ -21,7 +28,7 @@ const adminNavItems = [
   { href: "/admin/facebook", label: "Facebook", icon: ShareIcon, adminOnly: true },
 ];
 
-export function AdminNavigation({ user }: { user: NavUser }) {
+export function AdminNavigation({ user, unreadNotifications = 0 }: AdminNavigationProps) {
   const pathname = usePathname();
   const isModerator = user.role === "moderator";
   const roleLabel = user.role === "moderator" ? "Moderator" : user.role === "admin" ? "Admin" : "Staff";
@@ -29,22 +36,20 @@ export function AdminNavigation({ user }: { user: NavUser }) {
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex md:w-64 md:flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-        <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800">
-          <Link href="/admin" className="flex items-center gap-2">
-            <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-8 w-8" />
-            <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
-              {isModerator ? "Mod Portal" : "Admin Portal"}
-            </span>
+      {/* Mobile & Tablet top header navigation */}
+      <header className="fixed top-0 left-0 right-0 z-40 flex md:hidden items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-sm">
+        <div className="flex items-center gap-2">
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:text-amber-500 transition-colors bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700"
+          >
+            <span>←</span> Back to Dashboard
           </Link>
-          <div className="flex items-center gap-2">
-            <div className="flex flex-col items-end min-w-0">
-              <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300 truncate max-w-[100px]">
-                {user.name ?? roleLabel}
-              </span>
-              <span className="text-[10px] text-amber-600 dark:text-amber-500 font-medium">{roleLabel}</span>
-            </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {user.id && <QRPopover userId={user.id} />}
+          {user.id && <NotificationsPopover userId={user.id} initialUnreadCount={unreadNotifications} />}
+          <Link href="/profile">
             {user.image ? (
               <img
                 src={user.image}
@@ -53,10 +58,37 @@ export function AdminNavigation({ user }: { user: NavUser }) {
               />
             ) : (
               <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-xs">
-                {user.name ? user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() : "?"}
+                {user.name ? user.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase() : "?"}
               </div>
             )}
-          </div>
+          </Link>
+        </div>
+      </header>
+
+      {/* Desktop sidebar */}
+      <aside className="hidden md:flex md:w-64 md:flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+        <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800">
+          <Link href="/admin" className="flex items-center gap-2.5 min-w-0">
+            <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-8 w-8 shrink-0" />
+            <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100 truncate">
+              {isModerator ? "Mod Portal" : "Admin Portal"}
+            </span>
+          </Link>
+          {user.image ? (
+            <img
+              src={user.image}
+              alt={user.name ?? roleLabel}
+              className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-200 dark:ring-zinc-700 shrink-0"
+              title={`${user.name ?? roleLabel} (${roleLabel})`}
+            />
+          ) : (
+            <div
+              className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-xs shrink-0"
+              title={`${user.name ?? roleLabel} (${roleLabel})`}
+            >
+              {user.name ? user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase() : "?"}
+            </div>
+          )}
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {visibleItems.map((item) => {

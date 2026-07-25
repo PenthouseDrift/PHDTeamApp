@@ -25,22 +25,25 @@ export default async function AdminMembersPage() {
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
       <AutoRefresh interval={5000} />
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Members & Check-In</h1>
+          <Link
+            href="/admin"
+            className="inline-flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-amber-500 transition-colors mb-1"
+          >
+            ← Back to Admin Dashboard
+          </Link>
+          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Members &amp; Check-In</h1>
           <p className="text-sm text-zinc-500 mt-1">
             {members.length} registered member{members.length !== 1 ? "s" : ""} • {todayCheckIns.length} checked in today
           </p>
         </div>
-
-        {userRole === "admin" && (
-          <Link
-            href="/admin/users"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-600 dark:text-purple-400 text-xs font-extrabold px-4 py-2.5 hover:bg-purple-500/20 transition-colors shrink-0 shadow-sm"
-          >
-            <span>👥 Manage Users & Roles</span>
-          </Link>
-        )}
+        <Link
+          href="/admin/check-in"
+          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-black text-sm shadow-md transition-all active:scale-[0.99]"
+        >
+          <span>📱</span> Launch QR Scanner →
+        </Link>
       </div>
 
       {/* Active Car Rentals Widget */}

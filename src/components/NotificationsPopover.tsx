@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { getNotifications, markAllRead, type AppNotification } from "@/actions/notifications";
+import { getNotifications, getUnreadCount, markAllRead, type AppNotification } from "@/actions/notifications";
 
 interface NotificationsPopoverProps {
   userId: string;
@@ -44,6 +44,27 @@ export function NotificationsPopover({ userId, initialUnreadCount = 0 }: Notific
   useEffect(() => {
     setUnreadCount(initialUnreadCount);
   }, [initialUnreadCount]);
+
+  // Live polling for unread count
+  useEffect(() => {
+    if (!userId) return;
+    let isMounted = true;
+
+    async function poll() {
+      try {
+        const count = await getUnreadCount(userId);
+        if (isMounted) setUnreadCount(count);
+      } catch {
+        // Silently ignore poll errors
+      }
+    }
+
+    const interval = setInterval(poll, 15000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [userId]);
 
   // Close on outside click
   useEffect(() => {

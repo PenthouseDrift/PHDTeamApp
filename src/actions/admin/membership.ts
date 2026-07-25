@@ -91,6 +91,24 @@ export async function revokeMembership(
   }
 }
 
+export async function clearMembershipRecord(
+  memberId: string
+): Promise<ActionResult<null>> {
+  try {
+    await redis.del(`membership:${memberId}`);
+    await redis.zrem("memberships:active", memberId);
+    await redis.zrem("memberships:all", memberId);
+
+    revalidatePath("/admin/members");
+    return { success: true, data: null };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to clear membership record",
+    };
+  }
+}
+
 export async function adminAdjustWallet(
   memberId: string,
   itemType: "daypass" | "rental",

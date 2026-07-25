@@ -18,7 +18,19 @@ export default async function AdminLayout({
     redirect("/dashboard");
   }
 
-  const customAvatar = await redis.hget(`member:${session.user.id}`, "customAvatar") as string | null;
+  let customAvatar: string | null = null;
+  let unreadCount = 0;
+  try {
+    const [avatar, unread] = await Promise.all([
+      redis.hget(`member:${session.user.id}`, "customAvatar") as Promise<string | null>,
+      redis.get(`notifications:${session.user.id}:unread`).then((v) => Number(v) || 0),
+    ]);
+    customAvatar = avatar;
+    unreadCount = unread;
+  } catch {
+    // Silently handle errors
+  }
+
   const userWithAvatar = {
     ...session.user,
     image: customAvatar || session.user.image || null,
@@ -26,7 +38,7 @@ export default async function AdminLayout({
 
   return (
     <div className="flex h-dvh bg-zinc-50 dark:bg-zinc-950">
-      <AdminNavigation user={userWithAvatar} />
+      <AdminNavigation user={userWithAvatar} unreadNotifications={unreadCount} />
       <main className="flex-1 overflow-y-auto pt-14 pb-16 md:pt-0 md:pb-0">
         {children}
       </main>

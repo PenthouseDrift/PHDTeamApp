@@ -29,12 +29,16 @@ export default async function ProfilePage() {
   const { user } = session;
   const qrResult = await getOrCreateQRCode(user.id);
 
-  // Get member data from Redis (custom avatar, nickname)
-  const memberData = await redis.hgetall(`member:${user.id}`);
+  // Get member & membership data from Redis
+  const [memberData, membershipData] = await Promise.all([
+    redis.hgetall(`member:${user.id}`),
+    redis.hgetall(`membership:${user.id}`),
+  ]);
   const customAvatar = (memberData?.customAvatar as string) || null;
   const nickname = (memberData?.nickname as string) || "";
   const avatarUrl = customAvatar || user.image || null;
   const displayName = nickname.trim() || user.name || "Member";
+  const isActiveMember = Number(membershipData?.expiresAt) > Date.now();
 
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
@@ -42,8 +46,8 @@ export default async function ProfilePage() {
         {/* Header */}
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">My Profile</h1>
 
-        {/* Profile Info */}
-        <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6">
+        {/* Profile Card */}
+        <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 shadow-sm">
           <div className="flex items-center gap-4">
             {avatarUrl ? (
               <img
@@ -66,9 +70,23 @@ export default async function ProfilePage() {
                 </p>
               )}
               <p className="text-sm text-zinc-500 dark:text-zinc-400">{user.email}</p>
-              <span className="mt-1 inline-block rounded-full bg-zinc-100 dark:bg-zinc-800 px-2.5 py-0.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 capitalize">
-                {user.role}
-              </span>
+              {user.role === "admin" ? (
+                <span className="mt-1 inline-block rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 px-2.5 py-0.5 text-xs font-bold uppercase">
+                  Admin
+                </span>
+              ) : user.role === "moderator" ? (
+                <span className="mt-1 inline-block rounded-full bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2.5 py-0.5 text-xs font-bold uppercase">
+                  Moderator
+                </span>
+              ) : isActiveMember ? (
+                <span className="mt-1 inline-block rounded-full bg-green-100 dark:bg-green-950/60 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800 px-2.5 py-0.5 text-xs font-bold uppercase">
+                  Member
+                </span>
+              ) : (
+                <span className="mt-1 inline-block rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 px-2.5 py-0.5 text-xs font-bold uppercase">
+                  User
+                </span>
+              )}
             </div>
           </div>
         </section>

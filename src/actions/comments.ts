@@ -150,17 +150,20 @@ export async function toggleCommentLike(
       newCount = Number(commentData.likes) + 1;
       liked = true;
 
-      // Notify comment author
-      const member = await redis.hgetall(`member:${userId}`);
-      const userName = (member?.name as string) || "Someone";
-      await createNotification({
-        userId: commentData.userId as string,
-        type: "comment_like",
-        fromUserId: userId,
-        fromUserName: userName,
-        shellId: (commentData.shellId as string) || "",
-        message: `${userName} liked your comment`,
-      });
+      // Notify comment author ONLY if it's another user's comment
+      const commentOwnerId = commentData.userId as string;
+      if (commentOwnerId && commentOwnerId !== userId) {
+        const member = await redis.hgetall(`member:${userId}`);
+        const userName = (member?.name as string) || "Someone";
+        await createNotification({
+          userId: commentOwnerId,
+          type: "comment_like",
+          fromUserId: userId,
+          fromUserName: userName,
+          shellId: (commentData.shellId as string) || "",
+          message: `${userName} liked your comment`,
+        });
+      }
     }
 
     await redis.hset(`comment:${commentId}`, { likes: newCount });

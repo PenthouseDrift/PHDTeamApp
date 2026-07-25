@@ -85,6 +85,8 @@ export function ShellCardWrapper({
         <ShellDetailModal
           entry={entry}
           authorName={authorName}
+          userId={userId}
+          hasVoted={hasVoted}
           onClose={() => setShowModal(false)}
         />
       )}

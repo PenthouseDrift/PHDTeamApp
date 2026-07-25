@@ -3,16 +3,22 @@
 import { useState, useEffect, useTransition } from "react";
 import { useSession } from "next-auth/react";
 import { getComments, addComment, toggleCommentLike, type Comment } from "@/actions/comments";
+import { hasUserVoted } from "@/actions/showcase";
+import { VoteButton } from "./VoteButton";
 import type { ShellEntry } from "@/types";
 
 interface ShellDetailModalProps {
   entry: ShellEntry;
   authorName: string;
+  userId?: string;
+  hasVoted?: boolean;
   onClose: () => void;
 }
 
-export function ShellDetailModal({ entry, authorName, onClose }: ShellDetailModalProps) {
+export function ShellDetailModal({ entry, authorName, userId, hasVoted = false, onClose }: ShellDetailModalProps) {
   const { data: session } = useSession();
+  const currentUserId = userId || session?.user?.id;
+  const [voted, setVoted] = useState(hasVoted);
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -27,6 +33,16 @@ export function ShellDetailModal({ entry, authorName, onClose }: ShellDetailModa
     }
     load();
   }, [entry.shellId]);
+
+  useEffect(() => {
+    async function checkVote() {
+      if (currentUserId) {
+        const userVoted = await hasUserVoted(entry.shellId, currentUserId);
+        setVoted(userVoted);
+      }
+    }
+    checkVote();
+  }, [entry.shellId, currentUserId]);
 
   // Prevent body scroll
   useEffect(() => {
@@ -74,10 +90,21 @@ export function ShellDetailModal({ entry, authorName, onClose }: ShellDetailModa
 
   const commentsSection = (
     <div className="flex flex-col h-full">
-      <div className="p-4 border-b border-zinc-200">
+      <div className="p-4 border-b border-zinc-200 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-zinc-900">
           Comments ({comments.length})
         </h3>
+        {currentUserId && (
+          <div className="flex items-center gap-1 bg-zinc-100 px-2.5 py-1 rounded-full border border-zinc-200">
+            <VoteButton
+              shellId={entry.shellId}
+              userId={currentUserId}
+              initialVoted={voted}
+              initialCount={entry.voteCount}
+              isOwnEntry={entry.userId === currentUserId}
+            />
+          </div>
+        )}
       </div>
 
       {/* Comments list */}
@@ -102,15 +129,19 @@ export function ShellDetailModal({ entry, authorName, onClose }: ShellDetailModa
                   <span className="text-[10px] text-zinc-400">{formatTime(comment.createdAt)}</span>
                 </div>
                 <p className="text-sm text-zinc-700 mt-0.5">{comment.text}</p>
-                <button
-                  onClick={() => handleLikeComment(comment.commentId)}
-                  className="flex items-center gap-1 mt-1 text-[10px] text-zinc-400 hover:text-blue-500 transition-colors"
-                >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.633 10.25c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75a.75.75 0 0 1 .75-.75 2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282m0 0h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H13.48c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23H5.904m7.723-9.97a9.296 9.296 0 0 0 3.622-2.867" />
-                  </svg>
-                  {comment.likes > 0 && <span>{comment.likes}</span>}
-                </button>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleLikeComment(comment.commentId)}
+                    className="flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold text-zinc-600 bg-zinc-100 hover:text-blue-600 hover:bg-blue-50 transition-colors border border-zinc-200"
+                    title="Like comment"
+                  >
+                    <svg className="w-3.5 h-3.5 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M7.493 18.75c-.425 0-.82-.236-.975-.632A12.23 12.23 0 0 1 6 14.502c0-1.547.288-3.024.81-4.382.155-.397.55-.633.975-.633H10.5V5.25c0-.966.784-1.75 1.75-1.75.526 0 .997.232 1.317.6l2.128 2.394a4.5 4.5 0 0 1 1.137 2.946v1.31h3.125c.966 0 1.75.784 1.75 1.75 0 .285-.068.555-.188.795l-2.072 4.144a1.75 1.75 0 0 1-1.565 1.011H7.493Z" />
+                    </svg>
+                    <span>{comment.likes || 0} Likes</span>
+                  </button>
+                </div>
               </div>
             </div>
           ))
@@ -161,10 +192,23 @@ export function ShellDetailModal({ entry, authorName, onClose }: ShellDetailModa
         {/* Comments sidebar */}
         <div className="w-80 border-l border-zinc-200 flex flex-col">
           {/* Author header */}
-          <div className="p-4 border-b border-zinc-200">
-            <p className="text-sm font-medium text-zinc-900">{authorName}</p>
-            {entry.description && (
-              <p className="text-sm text-zinc-600 mt-1">{entry.description}</p>
+          <div className="p-4 border-b border-zinc-200 flex items-center justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-zinc-900 truncate">{authorName}</p>
+              {entry.description && (
+                <p className="text-xs text-zinc-600 mt-0.5 line-clamp-2">{entry.description}</p>
+              )}
+            </div>
+            {currentUserId && (
+              <div className="flex-shrink-0 ml-2">
+                <VoteButton
+                  shellId={entry.shellId}
+                  userId={currentUserId}
+                  initialVoted={voted}
+                  initialCount={entry.voteCount}
+                  isOwnEntry={entry.userId === currentUserId}
+                />
+              </div>
             )}
           </div>
           {commentsSection}
@@ -189,12 +233,21 @@ export function ShellDetailModal({ entry, authorName, onClose }: ShellDetailModa
         {/* Header */}
         <div className="flex items-center justify-between p-3 border-b border-zinc-200">
           <div>
-            <p className="text-sm font-medium text-zinc-900">{authorName}</p>
+            <p className="text-sm font-bold text-zinc-900">{authorName}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {currentUserId && (
+              <VoteButton
+                shellId={entry.shellId}
+                userId={currentUserId}
+                initialVoted={voted}
+                initialCount={entry.voteCount}
+                isOwnEntry={entry.userId === currentUserId}
+              />
+            )}
             <button
               onClick={() => setShowComments(!showComments)}
-              className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
                 showComments ? "bg-blue-50 text-blue-700" : "bg-zinc-100 text-zinc-600"
               }`}
             >

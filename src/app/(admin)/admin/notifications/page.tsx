@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getGlobalNotificationsHistory } from "@/actions/notifications";
@@ -18,6 +19,12 @@ export default async function GlobalNotificationsPage() {
       <div className="mx-auto max-w-4xl space-y-6">
         {/* Header */}
         <div>
+          <Link
+            href="/admin"
+            className="inline-flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-amber-500 transition-colors mb-1"
+          >
+            ← Back to Admin Dashboard
+          </Link>
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Global Notifications</h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
             Broadcast in-app and push notifications to all registered members
