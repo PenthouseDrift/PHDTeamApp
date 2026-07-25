@@ -9,7 +9,9 @@ export interface TrackEvent {
   title: string;
   description: string;
   date: string; // YYYY-MM-DD
-  time: string;
+  time: string; // legacy / display fallback
+  openTime?: string;  // HH:MM — gates open
+  closeTime?: string; // HH:MM — gates close
   imageUrl?: string;
   status: "upcoming" | "cancelled";
   createdBy: string;
@@ -21,13 +23,15 @@ export interface EventTemplate {
   title: string;
   description: string;
   time: string;
+  openTime?: string;
+  closeTime?: string;
   imageUrl?: string;
   createdBy: string;
   createdAt: number;
 }
 
 export async function createEvent(
-  data: { title: string; description: string; date: string; time: string; imageUrl?: string },
+  data: { title: string; description: string; date: string; time: string; openTime?: string; closeTime?: string; imageUrl?: string },
   adminId: string
 ): Promise<ActionResult<TrackEvent>> {
   if (!data.title.trim() || !data.date || !data.time) {
@@ -41,6 +45,8 @@ export async function createEvent(
     description: data.description.trim(),
     date: data.date,
     time: data.time,
+    openTime: data.openTime || "",
+    closeTime: data.closeTime || "",
     imageUrl: data.imageUrl || "",
     status: "upcoming",
     createdBy: adminId,
@@ -53,6 +59,29 @@ export async function createEvent(
   revalidatePath("/newsfeed");
   revalidatePath("/admin/events");
   return { success: true, data: event };
+}
+
+export async function updateEvent(
+  eventId: string,
+  data: { title: string; description: string; date: string; time: string; openTime?: string; closeTime?: string; imageUrl?: string }
+): Promise<ActionResult<null>> {
+  if (!data.title.trim() || !data.date || !data.time) {
+    return { success: false, error: "Title, date, and time are required" };
+  }
+
+  await redis.hset(`event:${eventId}`, {
+    title: data.title.trim(),
+    description: data.description.trim(),
+    date: data.date,
+    time: data.time,
+    openTime: data.openTime || "",
+    closeTime: data.closeTime || "",
+    imageUrl: data.imageUrl || "",
+  } as Record<string, unknown>);
+
+  revalidatePath("/newsfeed");
+  revalidatePath("/admin/events");
+  return { success: true, data: null };
 }
 
 export async function getUpcomingEvents(): Promise<TrackEvent[]> {
@@ -70,6 +99,8 @@ export async function getUpcomingEvents(): Promise<TrackEvent[]> {
         description: (data.description as string) || "",
         date: (data.date as string) || "",
         time: (data.time as string) || "",
+        openTime: (data.openTime as string) || "",
+        closeTime: (data.closeTime as string) || "",
         imageUrl: (data.imageUrl as string) || "",
         status: (data.status as "upcoming" | "cancelled") || "upcoming",
         createdBy: (data.createdBy as string) || "",
@@ -117,7 +148,7 @@ export async function deleteEvent(eventId: string): Promise<ActionResult<null>> 
    ========================================================================= */
 
 export async function saveEventTemplate(
-  data: { title: string; description: string; time: string; imageUrl?: string },
+  data: { title: string; description: string; time: string; openTime?: string; closeTime?: string; imageUrl?: string },
   adminId: string
 ): Promise<ActionResult<EventTemplate>> {
   try {
@@ -131,6 +162,8 @@ export async function saveEventTemplate(
       title: data.title.trim(),
       description: data.description.trim(),
       time: data.time || "18:00",
+      openTime: data.openTime || "",
+      closeTime: data.closeTime || "",
       imageUrl: data.imageUrl || "",
       createdBy: adminId,
       createdAt: Date.now(),
@@ -161,6 +194,8 @@ export async function saveExistingEventAsTemplate(
         title: (data.title as string) || "Track Event",
         description: (data.description as string) || "",
         time: (data.time as string) || "18:00",
+        openTime: (data.openTime as string) || "",
+        closeTime: (data.closeTime as string) || "",
         imageUrl: (data.imageUrl as string) || "",
       },
       adminId
@@ -183,6 +218,8 @@ export async function getEventTemplates(): Promise<EventTemplate[]> {
           title: (data.title as string) || "",
           description: (data.description as string) || "",
           time: (data.time as string) || "18:00",
+          openTime: (data.openTime as string) || "",
+          closeTime: (data.closeTime as string) || "",
           imageUrl: (data.imageUrl as string) || "",
           createdBy: (data.createdBy as string) || "",
           createdAt: Number(data.createdAt),
