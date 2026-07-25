@@ -1,8 +1,13 @@
-"use client";
-
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { getNotifications, getUnreadCount, markAllRead, type AppNotification } from "@/actions/notifications";
+import {
+  getNotifications,
+  getUnreadCount,
+  markAllRead,
+  deleteNotification,
+  clearAllNotifications,
+  type AppNotification,
+} from "@/actions/notifications";
 
 interface NotificationsPopoverProps {
   userId: string;
@@ -96,6 +101,26 @@ export function NotificationsPopover({ userId, initialUnreadCount = 0 }: Notific
     }
   }
 
+  async function handleClearAll() {
+    setNotifications([]);
+    setUnreadCount(0);
+    try {
+      await clearAllNotifications(userId);
+    } catch (err) {
+      console.error("Failed to clear notifications:", err);
+    }
+  }
+
+  async function handleDeleteOne(e: React.MouseEvent, notificationId: string) {
+    e.stopPropagation();
+    setNotifications((prev) => prev.filter((n) => n.notificationId !== notificationId));
+    try {
+      await deleteNotification(userId, notificationId);
+    } catch (err) {
+      console.error("Failed to delete notification:", err);
+    }
+  }
+
   function handleNotificationClick(item: AppNotification) {
     setIsOpen(false);
     if (item.shellId) {
@@ -110,20 +135,33 @@ export function NotificationsPopover({ userId, initialUnreadCount = 0 }: Notific
   const panelContent = (
     <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Notifications</h3>
-          <span className="text-[10px] font-bold text-zinc-400 bg-zinc-200 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
-            7-Day
-          </span>
+          {notifications.length > 0 && (
+            <span className="text-[10px] font-bold text-zinc-400 bg-zinc-200 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
+              {notifications.length}
+            </span>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={() => setIsOpen(false)}
-          className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 text-sm font-bold"
-        >
-          ✕
-        </button>
+        <div className="flex items-center gap-2">
+          {notifications.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:text-amber-500 transition-colors"
+            >
+              Clear All
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsOpen(false)}
+            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 text-sm font-bold ml-1"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       {/* List */}
@@ -141,14 +179,13 @@ export function NotificationsPopover({ userId, initialUnreadCount = 0 }: Notific
           </div>
         ) : (
           notifications.map((n) => (
-            <button
+            <div
               key={n.notificationId}
-              type="button"
+              className="group relative w-full text-left p-3.5 flex items-start gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer"
               onClick={() => handleNotificationClick(n)}
-              className="w-full text-left p-3.5 flex items-start gap-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 transition-colors"
             >
               <span className="text-xl shrink-0 mt-0.5">{getIcon(n.type)}</span>
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 pr-6">
                 <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 leading-snug line-clamp-2">
                   {n.message}
                 </p>
@@ -156,7 +193,15 @@ export function NotificationsPopover({ userId, initialUnreadCount = 0 }: Notific
                   {formatTime(n.createdAt)}
                 </p>
               </div>
-            </button>
+              <button
+                type="button"
+                onClick={(e) => handleDeleteOne(e, n.notificationId)}
+                title="Clear notification"
+                className="absolute top-3.5 right-3 opacity-60 group-hover:opacity-100 hover:text-red-500 text-zinc-400 p-1 rounded-md hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all text-xs"
+              >
+                ✕
+              </button>
+            </div>
           ))
         )}
       </div>

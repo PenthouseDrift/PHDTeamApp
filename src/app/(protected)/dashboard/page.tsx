@@ -6,6 +6,7 @@ import { getWallet } from "@/actions/wallet";
 import { getRemainingDays } from "@/lib/membership-utils";
 import { getUpcomingEvents } from "@/actions/events";
 import { isUserCheckedInToday } from "@/actions/admin/checkins";
+import { getEventTiming } from "@/lib/event-utils";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { AITuningBanner } from "@/components/cars/AITuningBanner";
 
@@ -211,61 +212,78 @@ export default async function DashboardPage() {
             </div>
           ) : (
             <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none snap-x snap-mandatory -mx-1 px-1">
-              {upcomingEvents.map((event) => (
-                <div
-                  key={event.eventId}
-                  className="shrink-0 w-60 sm:w-64 snap-start rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-800/40 overflow-hidden flex flex-col justify-between hover:border-amber-500/50 transition-all group"
-                >
-                  <div>
-                    {event.imageUrl ? (
-                      <div className="w-full h-24 overflow-hidden relative bg-zinc-100 dark:bg-zinc-800">
-                        <img
-                          src={event.imageUrl}
-                          alt={event.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                        <div className="absolute top-2 left-2">
-                          <span className="rounded-md bg-amber-500 text-black text-[9px] font-black px-2 py-0.5 uppercase tracking-wider shadow-xs">
-                            {event.date}
+              {upcomingEvents.map((event) => {
+                const timing = getEventTiming(event);
+                return (
+                  <div
+                    key={event.eventId}
+                    className={`shrink-0 w-60 sm:w-64 snap-start rounded-xl border overflow-hidden flex flex-col justify-between hover:border-amber-500/50 transition-all group ${
+                      timing.state === "happening_now"
+                        ? "bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/30 border-emerald-400 dark:border-emerald-500 ring-1 ring-emerald-400/40"
+                        : timing.state === "today"
+                        ? "bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/30 border-amber-400 dark:border-amber-500"
+                        : timing.state === "finished"
+                        ? "bg-zinc-100/80 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-800 opacity-75"
+                        : "bg-zinc-50/60 dark:bg-zinc-800/40 border-zinc-200 dark:border-zinc-800"
+                    }`}
+                  >
+                    <div>
+                      {event.imageUrl ? (
+                        <div className="w-full h-24 overflow-hidden relative bg-zinc-100 dark:bg-zinc-800">
+                          <img
+                            src={event.imageUrl}
+                            alt={event.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                          <div className="absolute top-2 left-2">
+                            <span className={`rounded-md px-2 py-0.5 text-[9px] font-black uppercase tracking-wider shadow-xs flex items-center gap-1 ${timing.badgeBg} ${timing.badgeText}`}>
+                              {timing.dotColor && (
+                                <span className={`w-1.5 h-1.5 rounded-full ${timing.dotColor} ${timing.animateDot ? "animate-pulse" : ""}`} />
+                              )}
+                              {timing.label}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-3 pb-0 flex items-center justify-between gap-2">
+                          <span className={`rounded-md px-2 py-0.5 text-[9px] font-black uppercase tracking-wider flex items-center gap-1 ${timing.badgeBg} ${timing.badgeText}`}>
+                            {timing.dotColor && (
+                              <span className={`w-1.5 h-1.5 rounded-full ${timing.dotColor} ${timing.animateDot ? "animate-pulse" : ""}`} />
+                            )}
+                            {timing.label}
+                          </span>
+                          <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 truncate">
+                            {event.openTime && event.closeTime ? `${event.openTime} - ${event.closeTime}` : event.time}
                           </span>
                         </div>
-                      </div>
-                    ) : (
-                      <div className="p-3 pb-0 flex items-center justify-between gap-2">
-                        <span className="rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-[9px] font-black px-2 py-0.5 uppercase tracking-wider">
-                          {event.date}
-                        </span>
-                        <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 truncate">
-                          {event.openTime && event.closeTime ? `${event.openTime} - ${event.closeTime}` : event.time}
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="p-3 space-y-1">
-                      {event.imageUrl && (
-                        <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">
-                          {event.openTime && event.closeTime ? `${event.openTime} - ${event.closeTime}` : event.time}
-                        </p>
                       )}
-                      <h3 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 line-clamp-1 group-hover:text-amber-500 transition-colors">
-                        {event.title}
-                      </h3>
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-snug">
-                        {event.description}
-                      </p>
+
+                      <div className="p-3 space-y-1">
+                        {event.imageUrl && (
+                          <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                            {event.openTime && event.closeTime ? `${event.openTime} - ${event.closeTime}` : event.time}
+                          </p>
+                        )}
+                        <h3 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 line-clamp-1 group-hover:text-amber-500 transition-colors">
+                          {event.title}
+                        </h3>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-snug">
+                          {event.description}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="px-3 pb-3 pt-0">
+                      <Link
+                        href="/newsfeed"
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:text-amber-500"
+                      >
+                        <span>RSVP Details</span> →
+                      </Link>
                     </div>
                   </div>
-
-                  <div className="px-3 pb-3 pt-0">
-                    <Link
-                      href="/newsfeed"
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:text-amber-500"
-                    >
-                      <span>RSVP Details</span> →
-                    </Link>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>

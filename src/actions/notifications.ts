@@ -457,3 +457,52 @@ export async function markAllRead(userId: string): Promise<void> {
     console.error("markAllRead error:", error);
   }
 }
+
+/**
+ * Manually delete a single notification for a user.
+ */
+export async function deleteNotification(userId: string, notificationId: string): Promise<ActionResult<{ success: boolean }>> {
+  try {
+    if (!userId || !notificationId) {
+      return { success: false, error: "Invalid request" };
+    }
+
+    const { revalidatePath } = await import("next/cache");
+    await redis.lrem(`notifications:${userId}`, 0, notificationId);
+    await redis.del(`notification:${notificationId}`);
+
+    revalidatePath("/");
+    return { success: true, data: { success: true } };
+  } catch (error) {
+    console.error("deleteNotification error:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Failed to delete notification" };
+  }
+}
+
+/**
+ * Manually clear ALL notifications for a user.
+ */
+export async function clearAllNotifications(userId: string): Promise<ActionResult<{ success: boolean }>> {
+  try {
+    if (!userId) {
+      return { success: false, error: "Invalid user ID" };
+    }
+
+    const { revalidatePath } = await import("next/cache");
+    const ids = await redis.lrange(`notifications:${userId}`, 0, -1);
+
+    if (ids && ids.length > 0) {
+      const delPromises = ids.map((id) => redis.del(`notification:${id as string}`));
+      await Promise.all(delPromises);
+    }
+
+    await redis.del(`notifications:${userId}`);
+    await redis.set(`notifications:${userId}:unread`, 0);
+
+    revalidatePath("/");
+    return { success: true, data: { success: true } };
+  } catch (error) {
+    console.error("clearAllNotifications error:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Failed to clear notifications" };
+  }
+}
