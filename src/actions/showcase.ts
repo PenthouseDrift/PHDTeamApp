@@ -11,9 +11,6 @@ export async function toggleVote(shellId: string, userId: string): Promise<Actio
     if (!shellData || Object.keys(shellData).length === 0) {
       return { success: false, error: "Shell entry not found" };
     }
-    if (shellData.userId === userId) {
-      return { success: false, error: "Cannot vote on your own entry" };
-    }
 
     const votersKey = `shell:${shellId}:voters`;
     const isMember = await redis.sismember(votersKey, userId);
@@ -30,17 +27,20 @@ export async function toggleVote(shellId: string, userId: string): Promise<Actio
       newCount = Number(shellData.voteCount) + 1;
       voted = true;
 
-      // Notify shell owner
-      const member = await redis.hgetall(`member:${userId}`);
-      const userName = (member?.nickname as string)?.trim() || (member?.name as string) || "Someone";
-      await createNotification({
-        userId: shellData.userId as string,
-        type: "like",
-        fromUserId: userId,
-        fromUserName: userName,
-        shellId,
-        message: `${userName} liked your shell`,
-      });
+      // Notify shell owner ONLY if it's another user's shell
+      const ownerId = shellData.userId as string;
+      if (ownerId && ownerId !== userId) {
+        const member = await redis.hgetall(`member:${userId}`);
+        const userName = (member?.nickname as string)?.trim() || (member?.name as string) || "Someone";
+        await createNotification({
+          userId: ownerId,
+          type: "like",
+          fromUserId: userId,
+          fromUserName: userName,
+          shellId,
+          message: `${userName} liked your shell`,
+        });
+      }
     }
 
     await redis.hset(`shell:${shellId}`, { voteCount: newCount });

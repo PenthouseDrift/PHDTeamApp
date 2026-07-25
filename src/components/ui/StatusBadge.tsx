@@ -4,9 +4,9 @@ interface StatusBadgeProps {
 }
 
 const sizeClasses = {
-  sm: "text-xs px-2 py-0.5",
-  md: "text-sm px-2.5 py-1",
-  lg: "text-base px-3 py-1.5",
+  sm: "text-xs px-2.5 py-0.5",
+  md: "text-sm px-3 py-1",
+  lg: "text-base px-3.5 py-1.5",
 };
 
 const dotSizeClasses = {
@@ -20,19 +20,19 @@ export function StatusBadge({ status, size = "md" }: StatusBadgeProps) {
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 font-medium rounded-full ${sizeClasses[size]} ${
+      className={`inline-flex items-center gap-1.5 font-bold rounded-full border ${sizeClasses[size]} ${
         isActive
-          ? "bg-green-50 text-green-700"
-          : "bg-red-50 text-red-700"
+          ? "bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800"
+          : "bg-zinc-100 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700"
       }`}
     >
       <span
         className={`rounded-full ${dotSizeClasses[size]} ${
-          isActive ? "bg-green-500" : "bg-red-500"
+          isActive ? "bg-green-500" : "bg-zinc-400 dark:bg-zinc-500"
         }`}
         aria-hidden="true"
       />
-      {isActive ? "Active" : "Expired"}
+      {isActive ? "Member" : "User"}
     </span>
   );
 }

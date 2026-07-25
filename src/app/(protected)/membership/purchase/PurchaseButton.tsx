@@ -8,13 +8,23 @@ interface PurchaseButtonProps {
   isActive: boolean;
   price: number;
   durationDays: number;
+  isDisabled?: boolean;
+  disabledReason?: string;
 }
 
-export function PurchaseButton({ userId, isActive, price, durationDays }: PurchaseButtonProps) {
+export function PurchaseButton({
+  userId,
+  isActive,
+  price,
+  durationDays,
+  isDisabled = false,
+  disabledReason,
+}: PurchaseButtonProps) {
   const [isPending, startTransition] = useTransition();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   function handlePurchaseClick() {
+    if (isDisabled) return;
     setErrorMsg(null);
     startTransition(async () => {
       try {
@@ -40,8 +50,12 @@ export function PurchaseButton({ userId, isActive, price, durationDays }: Purcha
       <button
         type="button"
         onClick={handlePurchaseClick}
-        disabled={isPending}
-        className="w-full flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-3.5 text-base font-semibold text-black transition-all hover:bg-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-zinc-900 disabled:opacity-75 disabled:cursor-not-allowed shadow-lg active:scale-[0.99]"
+        disabled={isPending || isDisabled}
+        className={`w-full flex items-center justify-center gap-2 rounded-lg px-4 py-3.5 text-base font-semibold transition-all shadow-lg active:scale-[0.99] ${
+          isDisabled
+            ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 cursor-not-allowed border border-zinc-300 dark:border-zinc-700"
+            : "bg-amber-500 text-black hover:bg-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-zinc-900 disabled:opacity-75 disabled:cursor-not-allowed"
+        }`}
       >
         {isPending ? (
           <>
@@ -55,6 +69,8 @@ export function PurchaseButton({ userId, isActive, price, durationDays }: Purcha
             </svg>
             <span>Connecting to SumUp...</span>
           </>
+        ) : isDisabled ? (
+          <span>{disabledReason || "Purchasing Disabled for Staff"}</span>
         ) : (
           <span>
             {isActive

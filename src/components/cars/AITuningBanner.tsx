@@ -42,8 +42,8 @@ export function AITuningBanner() {
           <TuningIcon className="w-6 h-6" />
         </div>
         <div>
-          <h3 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
-            Need AI Tuning Setup Recommendations?
+          <h3 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 sm:text-sm">
+            Have you created your AI tuning setup?
           </h3>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
             Use our AI Tuning Advisor to tailor suspension, gearing & electronics for PHD P-Tile track dynamics.

@@ -47,16 +47,18 @@ export async function createNotification(params: {
       return false;
     }
 
-    // 2. Action deduplication check: Ensure only 1 notification per unique action
-    const dedupKey = params.dedupKey || `notification:dedup:${params.type}:${params.fromUserId}:${params.shellId}:${params.userId}`;
+    // 2. Action deduplication check: Prevent rapid misclick spam (15s for comments/replies, 60s for likes)
+    const ttl = (params.type === "comment" || params.type === "reply") ? 15 : 60;
+    const windowBucket = Math.floor(Date.now() / (ttl * 1000));
+    const dedupKey = params.dedupKey || `notification:dedup:${params.type}:${params.fromUserId}:${params.shellId || "global"}:${params.userId}:${windowBucket}`;
     const alreadyNotified = await redis.get(dedupKey);
 
     if (alreadyNotified) {
-      return false; // Skip duplicate notification
+      return false; // Skip rapid duplicate notification
     }
 
-    // Mark action as notified for 7 days
-    await redis.set(dedupKey, "1", { ex: 7 * 86400 });
+    // Mark action as notified for short TTL window
+    await redis.set(dedupKey, "1", { ex: ttl });
 
     const notificationId = crypto.randomUUID();
     const notification: AppNotification = {
@@ -176,18 +178,25 @@ export async function sendGlobalNotification(
     const sentEndpoints = new Set<string>();
     const pushPromises = Array.from(uniqueSubIds).map(async (subId) => {
       const subData = await redis.get(`push:subscription:${subId}`);
-      if (!subData) return;
+      if (!subData) {
+        await redis.srem("push:all:subscriptions", subId);
+        return;
+      }
 
       const subscription: PushSubscriptionData =
         typeof subData === "string" ? JSON.parse(subData) : (subData as unknown as PushSubscriptionData);
 
       if (subscription?.endpoint && !sentEndpoints.has(subscription.endpoint)) {
         sentEndpoints.add(subscription.endpoint);
-        await sendPushNotification(subscription, {
-          title: `📢 ${params.title.trim()}`,
-          body: params.message.trim(),
-          url: targetUrl,
-        });
+        await sendPushNotification(
+          subscription,
+          {
+            title: `📢 ${params.title.trim()}`,
+            body: params.message.trim(),
+            url: targetUrl,
+          },
+          subId
+        );
       }
     });
 
@@ -212,6 +221,56 @@ export async function sendGlobalNotification(
   } catch (error) {
     console.error("sendGlobalNotification error:", error);
     return { success: false, error: error instanceof Error ? error.message : "Failed to send global notification" };
+  }
+}
+
+/**
+ * Send a Test Local Notification ONLY to the requesting Admin's registered device.
+ */
+export async function sendTestNotificationToAdmin(
+  params: { title?: string; message?: string; url?: string },
+  adminId: string
+): Promise<ActionResult<{ success: boolean }>> {
+  try {
+    if (!adminId) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const title = params.title?.trim() || "🧪 Test Local Alert";
+    const message = params.message?.trim() || "This is a test notification sent only to your admin device.";
+    const targetUrl = params.url?.trim() || "/notifications";
+
+    // Create in-app notification for the admin
+    const notificationId = crypto.randomUUID();
+    const notification: AppNotification = {
+      notificationId,
+      userId: adminId,
+      type: "global",
+      fromUserId: adminId,
+      fromUserName: "Admin Test",
+      shellId: "",
+      message: `[TEST ALERT] ${title}: ${message}`,
+      read: false,
+      createdAt: Date.now(),
+    };
+
+    await redis.hset(`notification:${notificationId}`, notification as unknown as Record<string, unknown>);
+    await redis.expire(`notification:${notificationId}`, 7 * 86400);
+    await redis.lpush(`notifications:${adminId}`, notificationId);
+    await redis.ltrim(`notifications:${adminId}`, 0, 99);
+    await redis.incr(`notifications:${adminId}:unread`);
+
+    // Dispatch Push Notification to the admin's device subscriptions only
+    await sendPushToUser(adminId, {
+      title: `🧪 ${title}`,
+      body: message,
+      url: targetUrl,
+    });
+
+    return { success: true, data: { success: true } };
+  } catch (error) {
+    console.error("sendTestNotificationToAdmin error:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Failed to send test notification" };
   }
 }
 
@@ -306,18 +365,23 @@ export async function sendDailyEventReminders(): Promise<{ sentCount: number }> 
 async function sendPushToUser(userId: string, payload: { title: string; body: string; url: string }) {
   try {
     const subIds = await redis.smembers(`push:user:${userId}:subscriptions`);
+    if (!subIds || subIds.length === 0) return;
+
     const sentEndpoints = new Set<string>();
 
     for (const subId of subIds) {
       const subData = await redis.get(`push:subscription:${subId}`);
-      if (!subData) continue;
+      if (!subData) {
+        await redis.srem(`push:user:${userId}:subscriptions`, subId);
+        continue;
+      }
 
       const subscription: PushSubscriptionData =
         typeof subData === "string" ? JSON.parse(subData) : (subData as unknown as PushSubscriptionData);
 
       if (subscription?.endpoint && !sentEndpoints.has(subscription.endpoint)) {
         sentEndpoints.add(subscription.endpoint);
-        await sendPushNotification(subscription, payload);
+        await sendPushNotification(subscription, payload, subId);
       }
     }
   } catch (error) {

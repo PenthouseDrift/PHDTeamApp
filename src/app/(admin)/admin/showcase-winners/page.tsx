@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { redis } from "@/lib/redis";
@@ -15,9 +16,17 @@ function formatDate(timestamp: number): string {
   });
 }
 
+function getStartOfCurrentWeekTimestamp(): number {
+  const now = new Date();
+  const d = new Date(now);
+  const day = d.getDay(); // 0 = Sunday, 1 = Monday, ... 6 = Saturday
+  d.setDate(d.getDate() - day); // Roll back to Sunday
+  d.setHours(0, 0, 0, 0); // Start of Sunday (00:00:00)
+  return d.getTime();
+}
+
 function isSubmittedThisWeek(timestamp: number): boolean {
-  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-  return Date.now() - timestamp <= SEVEN_DAYS_MS;
+  return timestamp >= getStartOfCurrentWeekTimestamp();
 }
 
 export default async function AdminShowcaseWinnersPage() {
@@ -49,6 +58,12 @@ export default async function AdminShowcaseWinnersPage() {
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8">
       <div>
+        <Link
+          href="/admin"
+          className="inline-flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-amber-500 transition-colors mb-1"
+        >
+          ← Back to Admin Dashboard
+        </Link>
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Showcase Winners</h1>
           <span className="rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-extrabold px-3 py-1 uppercase tracking-wider">

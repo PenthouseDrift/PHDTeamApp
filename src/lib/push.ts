@@ -16,7 +16,8 @@ export interface PushSubscriptionData {
 
 export async function sendPushNotification(
   subscription: PushSubscriptionData,
-  payload: { title: string; body: string; url?: string; icon?: string; badge?: string }
+  payload: { title: string; body: string; url?: string; icon?: string; badge?: string },
+  subId?: string
 ): Promise<boolean> {
   try {
     await webPush.sendNotification(
@@ -30,8 +31,20 @@ export async function sendPushNotification(
       })
     );
     return true;
-  } catch (error) {
-    console.error("Push notification failed:", error);
+  } catch (error: unknown) {
+    const err = error as { statusCode?: number; message?: string };
+    console.error("Push notification delivery failed:", err?.statusCode || err?.message || error);
+    // If endpoint is expired or unsubscribed (404 / 410), remove from Redis
+    if (subId && (err?.statusCode === 404 || err?.statusCode === 410)) {
+      try {
+        const { redis } = await import("./redis");
+        await redis.del(`push:subscription:${subId}`);
+        await redis.srem("push:all:subscriptions", subId);
+        await redis.srem("push:admin:subscriptions", subId);
+      } catch {
+        // Silently ignore cleanup errors
+      }
+    }
     return false;
   }
 }

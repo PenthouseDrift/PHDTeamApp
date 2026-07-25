@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Link from "next/link";
 import ImageUploader from "@/components/ui/ImageUploader";
 
 const MAX_MESSAGE_LENGTH = 63206;
@@ -58,6 +59,12 @@ export default function AdminFacebookPage() {
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto">
       <div className="mb-6">
+        <Link
+          href="/admin"
+          className="inline-flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-amber-500 transition-colors mb-1"
+        >
+          ← Back to Admin Dashboard
+        </Link>
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Publish to Facebook</h1>
         <p className="text-sm text-zinc-500 mt-1">
           Compose and publish a post to the Penthouse Drift Facebook page.

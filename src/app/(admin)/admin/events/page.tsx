@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getUpcomingEvents, getEventTemplates } from "@/actions/events";
 import { EventsManager } from "./EventsManager";
 
@@ -12,6 +13,12 @@ export default async function AdminEventsPage() {
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6">
       <div>
+        <Link
+          href="/admin"
+          className="inline-flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-amber-500 transition-colors mb-1"
+        >
+          ← Back to Admin Dashboard
+        </Link>
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Events Management</h1>
         <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
           Create, manage, and save reusable event templates for track announcements.

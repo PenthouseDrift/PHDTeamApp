@@ -21,9 +21,17 @@ async function getAuthorName(userId: string): Promise<string> {
   return "Unknown";
 }
 
+function getStartOfCurrentWeekTimestamp(): number {
+  const now = new Date();
+  const d = new Date(now);
+  const day = d.getDay(); // 0 = Sunday, 1 = Monday, ... 6 = Saturday
+  d.setDate(d.getDate() - day); // Roll back to Sunday
+  d.setHours(0, 0, 0, 0); // Start of Sunday (00:00:00)
+  return d.getTime();
+}
+
 function isSubmittedThisWeek(timestamp: number): boolean {
-  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-  return Date.now() - timestamp <= SEVEN_DAYS_MS;
+  return timestamp >= getStartOfCurrentWeekTimestamp();
 }
 
 export default async function ShowcasePage({ searchParams }: ShowcasePageProps) {
@@ -114,7 +122,7 @@ export default async function ShowcasePage({ searchParams }: ShowcasePageProps) 
                 : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
             }`}
           >
-            Leaderboard 🏆
+            Previous Winners 🏆
           </Link>
         </div>
 
@@ -122,15 +130,43 @@ export default async function ShowcasePage({ searchParams }: ShowcasePageProps) 
         {entries.length === 0 ? (
           <div className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-12 text-center">
             <p className="text-zinc-500 dark:text-zinc-400">
-              No shells submitted yet. Be the first!
+              {view === "leaderboard" ? "No previous winners selected yet." : "No shells submitted yet. Be the first!"}
             </p>
-            <Link
-              href="/showcase/submit"
-              className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-amber-600 transition-colors hover:text-amber-500"
-            >
-              Submit a shell →
-            </Link>
+            {view !== "leaderboard" && (
+              <Link
+                href="/showcase/submit"
+                className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-amber-600 transition-colors hover:text-amber-500"
+              >
+                Submit a shell →
+              </Link>
+            )}
           </div>
+        ) : view === "leaderboard" ? (
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-3">
+              <h2 className="text-lg font-extrabold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                <span>🏆</span> Previous Winners
+              </h2>
+              <span className="rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold px-2.5 py-0.5">
+                {entries.length} {entries.length === 1 ? "winner" : "winners"}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {entries.map((entry) => (
+                <ShellCardWrapper
+                  key={entry.shellId}
+                  entry={entry}
+                  authorName={authorNames.get(entry.userId) || "Unknown"}
+                  userId={userId}
+                  hasVoted={votedMap.get(entry.shellId) || false}
+                  isWinner={winnerMap.has(entry.shellId)}
+                  winnerLabel={winnerMap.get(entry.shellId) || null}
+                  commentCount={commentCountMap.get(entry.shellId) || 0}
+                />
+              ))}
+            </div>
+          </section>
         ) : (
           <div className="space-y-8">
             {/* Section 1: This Week's Entries */}

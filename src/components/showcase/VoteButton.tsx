@@ -16,20 +16,10 @@ export function VoteButton({
   userId,
   initialVoted,
   initialCount,
-  isOwnEntry,
 }: VoteButtonProps) {
   const [voted, setVoted] = useState(initialVoted);
   const [count, setCount] = useState(initialCount);
   const [isPending, startTransition] = useTransition();
-
-  if (isOwnEntry) {
-    return (
-      <div className="flex items-center gap-1 text-xs text-zinc-400">
-        <ThumbsUpIcon filled={false} className="h-4 w-4" />
-        <span>{count}</span>
-      </div>
-    );
-  }
 
   function handleVote() {
     const newVoted = !voted;
