@@ -29,7 +29,6 @@ export function WalletClient({
   onPurchaseItem,
   onTestAddBalance,
 }: WalletClientProps) {
-  const [activeQrTab, setActiveQrTab] = useState<"membership" | "daypass" | "rental">("membership");
   const [dayPassQty, setDayPassQty] = useState(1);
   const [rentalQty, setRentalQty] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -52,12 +51,6 @@ export function WalletClient({
     }
   }
 
-  const currentQrUrl =
-    activeQrTab === "membership"
-      ? membershipQrUrl
-      : activeQrTab === "daypass"
-        ? dayPassQrUrl
-        : rentalQrUrl;
 
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
@@ -95,108 +88,28 @@ export function WalletClient({
         )}
 
         {/* Your Track Pass QR Code Section */}
-        <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-5 text-center shadow-sm">
+        <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-4 text-center shadow-sm">
           <div>
-            <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Your Track Pass QR Code</h2>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Select a pass to display its QR code for track scan</p>
+            <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Your Member Account QR Code</h2>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Show this single QR code to staff at the track to check in, redeem day passes, or start car rentals</p>
           </div>
 
-          {/* Selector Tabs */}
-          <div className="flex rounded-xl bg-zinc-100 dark:bg-zinc-950 p-1 border border-zinc-200 dark:border-zinc-800">
-            <button
-              onClick={() => setActiveQrTab("membership")}
-              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-colors ${activeQrTab === "membership"
-                ? "bg-amber-500 text-black shadow-sm"
-                : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
-                }`}
-            >
-              Member QR
-            </button>
-            <button
-              onClick={() => setActiveQrTab("daypass")}
-              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-colors ${activeQrTab === "daypass"
-                ? "bg-amber-500 text-black shadow-sm"
-                : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
-                }`}
-            >
-              Day Pass QR ({wallet.dayPasses})
-            </button>
-            <button
-              onClick={() => setActiveQrTab("rental")}
-              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-colors ${activeQrTab === "rental"
-                ? "bg-amber-500 text-black shadow-sm"
-                : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
-                }`}
-            >
-              Car Rental QR ({wallet.rentalHours})
-            </button>
+          <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-white border border-zinc-200 dark:border-zinc-700 w-fit mx-auto shadow-md">
+            <Image
+              src={membershipQrUrl}
+              alt="Member Account Check-In QR Code"
+              width={220}
+              height={220}
+              className="rounded-lg"
+            />
+            <p className="mt-2 text-[11px] font-mono font-bold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded-md border border-zinc-200 dark:border-zinc-700">
+              ID: {userId}
+            </p>
           </div>
 
-          {/* QR Display or Empty State */}
-          {activeQrTab === "daypass" && wallet.dayPasses <= 0 ? (
-            <div className="flex flex-col items-center justify-center p-6 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 space-y-3 max-w-sm mx-auto text-center">
-              <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500">
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">No Day Passes Available</h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                  You have 0 Day Passes in your wallet. Purchase a pass to generate your track QR code.
-                </p>
-              </div>
-              <button
-                onClick={() => handleBuy("daypass", 1)}
-                disabled={isSubmitting}
-                className="px-4 py-2 rounded-lg bg-amber-500 text-black text-xs font-bold hover:bg-amber-400 transition-colors disabled:opacity-50"
-              >
-                Purchase Day Pass Now (£10.00)
-              </button>
-            </div>
-          ) : activeQrTab === "rental" && wallet.rentalHours <= 0 ? (
-            <div className="flex flex-col items-center justify-center p-6 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 space-y-3 max-w-sm mx-auto text-center">
-              <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500">
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">No Car Rental Hours Available</h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                  You have 0 Car Rental Hours in your wallet. Purchase rental hours to generate your track QR code.
-                </p>
-              </div>
-              <button
-                onClick={() => handleBuy("rental", 1)}
-                disabled={isSubmitting}
-                className="px-4 py-2 rounded-lg bg-amber-500 text-black text-xs font-bold hover:bg-amber-400 transition-colors disabled:opacity-50"
-              >
-                Purchase Rental Hour Now (£10.00)
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-white border border-zinc-200 dark:border-zinc-700 w-fit mx-auto shadow-md">
-                <Image
-                  src={currentQrUrl}
-                  alt="Track QR Code"
-                  width={220}
-                  height={220}
-                  className="rounded-lg"
-                />
-                <p className="mt-2 text-[11px] font-mono font-bold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded-md border border-zinc-200 dark:border-zinc-700">
-                  Member ID: {userId}
-                </p>
-              </div>
-
-              <div className="text-xs text-zinc-500 dark:text-zinc-400 max-w-xs mx-auto">
-                {activeQrTab === "membership" && "Present this QR at check-in."}
-                {activeQrTab === "daypass" && "Present this QR to redeem 1 Day Pass for full track entry."}
-                {activeQrTab === "rental" && "Present this QR to start a 1-Hour Car Rental session (includes 15m grace period)."}
-              </div>
-            </>
-          )}
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-xs mx-auto">
+            Staff can scan this code to verify your 28-day membership, redeem your Day Passes, start Car Rentals, or check in a friend.
+          </p>
         </div>
 
         {/* Balances Summary Cards (Side-by-Side on Mobile) */}
