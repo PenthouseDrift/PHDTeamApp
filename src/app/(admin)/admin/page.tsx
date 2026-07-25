@@ -235,7 +235,7 @@ export default async function AdminDashboardPage() {
           )}
 
           <Link
-            href="/admin/check-in"
+            href="/admin/members"
             className="group rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 shadow-sm space-y-2 hover:border-amber-500/60 transition-all hover:shadow-md block overflow-hidden"
           >
             <div className="flex items-center justify-between gap-1">
