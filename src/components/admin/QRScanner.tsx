@@ -8,6 +8,7 @@ import {
   checkInFriendWithPass,
   addNonMemberCheckIn,
 } from "@/actions/admin/checkins";
+import { activateMembershipInPerson } from "@/actions/membership";
 
 interface ScanResult {
   status: "active" | "expired" | "duplicate" | "invalid" | "error";
@@ -430,6 +431,22 @@ export function QRScanner() {
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {/* Activate 28-Day Membership In-Person */}
+                <button
+                  disabled={isPending}
+                  onClick={() => {
+                    if (!result.member) return;
+                    startTransition(async () => {
+                      const res = await activateMembershipInPerson(result.member!.id, result.member!.name, "admin");
+                      if (res.success) {
+                        handleActionComplete(res.data.message);
+                      }
+                    });
+                  }}
+                  className="w-full py-3 px-3 rounded-xl bg-green-500 hover:bg-green-400 text-white text-xs font-black transition-colors shadow-lg disabled:opacity-50 text-center col-span-1 sm:col-span-2 border border-green-300/40"
+                >
+                  💳 Activate 28-Day Membership (£40 Paid Cash/Card) &amp; Check In
+                </button>
                 {/* Check in using member's wallet pass */}
                 {dayPasses > 0 && (
                   <button
