@@ -108,23 +108,32 @@ export async function quickCheckIn(
 
 export async function addNonMemberCheckIn(
   name: string,
-  adminId: string
+  adminId: string,
+  method: "manual" | "day_pass" | "rental" = "manual"
 ): Promise<ActionResult<{ checkedIn: boolean }>> {
   try {
     const now = Date.now();
     const today = new Date().toISOString().split("T")[0];
+    const guestId = `guest_${now}`;
+
+    if (method === "rental") {
+      const { createRentalSession } = await import("@/actions/admin/rentals");
+      await createRentalSession(guestId, name);
+    }
 
     const entry = JSON.stringify({
-      userId: `guest_${now}`,
+      userId: guestId,
       adminId,
       timestamp: now,
-      method: "manual",
+      method,
       memberName: name,
     });
 
     await redis.rpush(`checkins:${today}`, entry);
 
     revalidatePath("/admin/members");
+    revalidatePath("/admin/check-in");
+    revalidatePath("/dashboard");
     return { success: true, data: { checkedIn: true } };
   } catch (error) {
     return {

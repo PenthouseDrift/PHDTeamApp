@@ -12,6 +12,7 @@ interface TodayCheckInsProps {
 export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
   const { data: session } = useSession();
   const [guestName, setGuestName] = useState("");
+  const [passType, setPassType] = useState<"manual" | "day_pass" | "rental">("manual");
   const [adding, setAdding] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [confirmRemoveIndex, setConfirmRemoveIndex] = useState<number | null>(null);
@@ -24,9 +25,9 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
     setAdding(true);
     setFeedback(null);
 
-    const result = await addNonMemberCheckIn(guestName.trim(), session.user.id);
+    const result = await addNonMemberCheckIn(guestName.trim(), session.user.id, passType);
     if (result.success) {
-      setFeedback(`${guestName.trim()} added to today's check-ins`);
+      setFeedback(`${guestName.trim()} checked in (${formatMethodBadge(passType)})`);
       setGuestName("");
     } else {
       setFeedback(result.error);
@@ -55,6 +56,15 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
     });
   }
 
+  function formatMethodBadge(method: string): string {
+    switch (method) {
+      case "day_pass": return "🎫 Day Pass";
+      case "rental": return "🏎️ Car Rental";
+      case "qr": return "📱 QR Scan";
+      default: return "🟢 Standard";
+    }
+  }
+
   return (
     <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6">
       <div className="flex items-center justify-between mb-4">
@@ -67,7 +77,7 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
       </div>
 
       {/* Add non-member / guest */}
-      <form onSubmit={handleAddGuest} className="flex gap-2 mb-4">
+      <form onSubmit={handleAddGuest} className="flex flex-col sm:flex-row gap-2 mb-4">
         <input
           type="text"
           value={guestName}
@@ -75,6 +85,15 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
           placeholder="Add person manually (name)..."
           className="flex-1 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
         />
+        <select
+          value={passType}
+          onChange={(e) => setPassType(e.target.value as "manual" | "day_pass" | "rental")}
+          className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-xs font-semibold text-zinc-800 dark:text-zinc-200 focus:border-amber-500 focus:outline-none"
+        >
+          <option value="manual">🟢 Standard Track</option>
+          <option value="day_pass">🎫 Day Pass (£10)</option>
+          <option value="rental">🏎️ Car Rental (£10)</option>
+        </select>
         <button
           type="submit"
           disabled={!guestName.trim() || adding}
@@ -103,7 +122,7 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
               </div>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 text-xs text-zinc-500">
-                  <span className="capitalize">{entry.method}</span>
+                  <span className="font-semibold text-zinc-700 dark:text-zinc-300">{formatMethodBadge(entry.method)}</span>
                   <span>•</span>
                   <span>{formatTime(entry.timestamp)}</span>
                 </div>

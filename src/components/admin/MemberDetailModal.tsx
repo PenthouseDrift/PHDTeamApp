@@ -8,7 +8,7 @@ import {
   revokeMembership,
   adminAdjustWallet,
 } from "@/actions/admin/membership";
-import { quickCheckIn } from "@/actions/admin/checkins";
+import { quickCheckIn, checkInWithDayPass, checkInWithRental } from "@/actions/admin/checkins";
 import { getOrCreateQRCode } from "@/actions/qr";
 import type { MemberWithMembership } from "@/actions/admin/members";
 
@@ -127,12 +127,42 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
     });
   }
 
-  function handleCheckIn() {
+  function handleCheckInStandard() {
     if (!session?.user?.id) return;
     startTransition(async () => {
       const res = await quickCheckIn(m.id, m.name, session.user.id);
       if (res.success) {
-        onUpdate({ type: "success", message: `${m.name} checked in!` });
+        onUpdate({ type: "success", message: `${m.name} checked in (Standard)!` });
+      } else {
+        onUpdate({ type: "error", message: res.error });
+      }
+    });
+  }
+
+  function handleCheckInDayPass(isPaidInPerson: boolean) {
+    if (!session?.user?.id) return;
+    startTransition(async () => {
+      const res = await checkInWithDayPass(m.id, m.name, session.user.id, isPaidInPerson);
+      if (res.success) {
+        if (!isPaidInPerson) {
+          setLocalWallet((w) => ({ ...w, dayPasses: Math.max(0, w.dayPasses - 1) }));
+        }
+        onUpdate({ type: "success", message: `${m.name} checked in with Day Pass ${isPaidInPerson ? "(Paid £10)" : "(Wallet Pass)"}` });
+      } else {
+        onUpdate({ type: "error", message: res.error });
+      }
+    });
+  }
+
+  function handleCheckInRental(isPaidInPerson: boolean) {
+    if (!session?.user?.id) return;
+    startTransition(async () => {
+      const res = await checkInWithRental(m.id, m.name, session.user.id, isPaidInPerson);
+      if (res.success) {
+        if (!isPaidInPerson) {
+          setLocalWallet((w) => ({ ...w, rentalHours: Math.max(0, w.rentalHours - 1) }));
+        }
+        onUpdate({ type: "success", message: `${m.name} checked in with Car Rental ${isPaidInPerson ? "(Paid £10)" : "(Wallet Pass)"}` });
       } else {
         onUpdate({ type: "error", message: res.error });
       }
@@ -275,13 +305,6 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
                   >
                     Set Expiry Date
                   </button>
-                  <button
-                    onClick={handleCheckIn}
-                    disabled={isPending}
-                    className="px-3 py-2 text-xs font-semibold rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50"
-                  >
-                    Check In Now
-                  </button>
                 </div>
               )}
               {/* Date Override Inline (Admin only) */}
@@ -312,17 +335,57 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
             </div>
           )}
 
-          {/* Moderator Track Action */}
-          {isModeratorViewer && (
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Track Actions</h3>
-              <button
-                onClick={handleCheckIn}
-                disabled={isPending}
-                className="w-full px-4 py-2.5 text-xs font-bold rounded-xl bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 shadow-sm"
-              >
-                Check In Member Now
-              </button>
+          {/* Manual Check-In Options (Admin & Moderator) */}
+          {(isAdminViewer || isModeratorViewer) && (
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-3 bg-zinc-50/50 dark:bg-zinc-900/50">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                Manual Check-In Options
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  onClick={handleCheckInStandard}
+                  disabled={isPending}
+                  className="px-3 py-2.5 text-xs font-bold rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 text-center shadow-sm"
+                >
+                  🟢 Standard Track Check-In
+                </button>
+
+                {isAdminViewer && localWallet.dayPasses > 0 && (
+                  <button
+                    onClick={() => handleCheckInDayPass(false)}
+                    disabled={isPending}
+                    className="px-3 py-2.5 text-xs font-bold rounded-lg bg-amber-500 text-black hover:bg-amber-400 transition-colors disabled:opacity-50 text-center shadow-sm"
+                  >
+                    🎫 Use Day Pass ({localWallet.dayPasses} left)
+                  </button>
+                )}
+
+                <button
+                  onClick={() => handleCheckInDayPass(true)}
+                  disabled={isPending}
+                  className="px-3 py-2.5 text-xs font-bold rounded-lg bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors disabled:opacity-50 text-center shadow-sm"
+                >
+                  💵 Day Pass (£10 Paid Cash/Card)
+                </button>
+
+                {isAdminViewer && localWallet.rentalHours > 0 && (
+                  <button
+                    onClick={() => handleCheckInRental(false)}
+                    disabled={isPending}
+                    className="px-3 py-2.5 text-xs font-bold rounded-lg bg-amber-500 text-black hover:bg-amber-400 transition-colors disabled:opacity-50 text-center shadow-sm"
+                  >
+                    🏎️ Use Rental Hour ({localWallet.rentalHours} left)
+                  </button>
+                )}
+
+                <button
+                  onClick={() => handleCheckInRental(true)}
+                  disabled={isPending}
+                  className="px-3 py-2.5 text-xs font-bold rounded-lg bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors disabled:opacity-50 text-center shadow-sm"
+                >
+                  🏎️ Car Rental (£10 Paid Cash/Card)
+                </button>
+              </div>
             </div>
           )}
 
