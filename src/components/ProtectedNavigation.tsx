@@ -16,6 +16,7 @@ interface NavUser {
 interface ProtectedNavigationProps {
   user: NavUser;
   unreadNotifications?: number;
+  winnerSelectionPending?: boolean;
 }
 
 const navItems = [
@@ -43,7 +44,7 @@ function getInitials(name: string | null | undefined): string {
   return name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 }
 
-export function ProtectedNavigation({ user, unreadNotifications = 0 }: ProtectedNavigationProps) {
+export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelectionPending = false }: ProtectedNavigationProps) {
   const pathname = usePathname();
 
   return (
@@ -106,14 +107,22 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
           {(user.role === "admin" || user.role === "moderator") && (
             <Link
               href="/admin"
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 pathname.startsWith("/admin")
-                  ? "bg-amber-50 text-amber-700"
-                  : "text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                  ? "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 font-bold"
+                  : "text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30"
               }`}
             >
-              <AdminIcon className="w-5 h-5" />
-              {user.role === "moderator" ? "Mod Panel" : "Admin Panel"}
+              <div className="flex items-center gap-3">
+                <AdminIcon className="w-5 h-5" />
+                <span>{user.role === "moderator" ? "Mod Panel" : "Admin Panel"}</span>
+              </div>
+              {winnerSelectionPending && (
+                <span className="relative flex h-2.5 w-2.5 shrink-0" title="Weekly Winner Selection Required">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                </span>
+              )}
             </Link>
           )}
         </nav>
@@ -183,10 +192,16 @@ export function ProtectedNavigation({ user, unreadNotifications = 0 }: Protected
         {(user.role === "admin" || user.role === "moderator") && (
           <Link
             href="/admin"
-            className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
-              pathname.startsWith("/admin") ? "text-amber-600" : "text-amber-500"
+            className={`relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
+              pathname.startsWith("/admin") ? "text-amber-600 dark:text-amber-400 font-bold" : "text-amber-500 dark:text-amber-400"
             }`}
           >
+            {winnerSelectionPending && (
+              <span className="absolute top-1 right-3 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+              </span>
+            )}
             <AdminIcon className="w-5 h-5" />
             <span>{user.role === "moderator" ? "Mod" : "Admin"}</span>
           </Link>
