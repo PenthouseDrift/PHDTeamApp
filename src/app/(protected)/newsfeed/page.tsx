@@ -40,7 +40,12 @@ export default async function NewsfeedPage() {
         <CreatePostForm userId={userId} userImage={session.user.image} userName={session.user.name} />
 
         {/* Feed posts */}
-        <FeedView posts={posts} userId={userId} likedMap={Object.fromEntries(likedMap)} />
+        <FeedView
+          posts={posts}
+          userId={userId}
+          userRole={session.user.role}
+          likedMap={Object.fromEntries(likedMap)}
+        />
       </div>
     </div>
   );

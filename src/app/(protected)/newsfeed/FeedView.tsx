@@ -1,15 +1,37 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { togglePostLike, addFeedComment, getFeedComments, type FeedPost, type FeedComment } from "@/actions/feed";
+import { useState, useTransition, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  togglePostLike,
+  addFeedComment,
+  getFeedComments,
+  deletePost,
+  type FeedPost,
+  type FeedComment,
+} from "@/actions/feed";
+import { ReportPostModal } from "@/components/ReportPostModal";
 
 interface FeedViewProps {
   posts: FeedPost[];
   userId: string;
+  userRole?: "admin" | "moderator" | "member";
   likedMap: Record<string, boolean>;
 }
 
-export function FeedView({ posts, userId, likedMap }: FeedViewProps) {
+export function FeedView({ posts, userId, userRole, likedMap }: FeedViewProps) {
+  const searchParams = useSearchParams();
+  const highlightedPostId = searchParams.get("postId");
+
+  useEffect(() => {
+    if (highlightedPostId) {
+      const el = document.getElementById(`post-${highlightedPostId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }
+  }, [highlightedPostId]);
+
   if (posts.length === 0) {
     return (
       <div className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-8 text-center">
@@ -21,20 +43,47 @@ export function FeedView({ posts, userId, likedMap }: FeedViewProps) {
   return (
     <div className="space-y-4">
       {posts.map((post) => (
-        <PostCard key={post.postId} post={post} userId={userId} initialLiked={likedMap[post.postId] || false} />
+        <PostCard
+          key={post.postId}
+          post={post}
+          userId={userId}
+          userRole={userRole}
+          initialLiked={likedMap[post.postId] || false}
+          isHighlighted={highlightedPostId === post.postId}
+        />
       ))}
     </div>
   );
 }
 
-function PostCard({ post, userId, initialLiked }: { post: FeedPost; userId: string; initialLiked: boolean }) {
+function PostCard({
+  post,
+  userId,
+  userRole,
+  initialLiked,
+  isHighlighted,
+}: {
+  post: FeedPost;
+  userId: string;
+  userRole?: "admin" | "moderator" | "member";
+  initialLiked: boolean;
+  isHighlighted?: boolean;
+}) {
   const [liked, setLiked] = useState(initialLiked);
   const [likeCount, setLikeCount] = useState(post.likes);
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState<FeedComment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [commentsLoaded, setCommentsLoaded] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isReported, setIsReported] = useState(false);
+  const [isDeleted, setIsDeleted] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  const isOwner = post.userId === userId;
+  const isAdminOrMod = userRole === "admin" || userRole === "moderator";
+  const canDelete = isOwner || isAdminOrMod;
 
   function handleLike() {
     const newLiked = !liked;
@@ -75,6 +124,15 @@ function PostCard({ post, userId, initialLiked }: { post: FeedPost; userId: stri
     });
   }
 
+  function handleDeletePost() {
+    startTransition(async () => {
+      const res = await deletePost(post.postId, userId, isAdminOrMod);
+      if (res.success) {
+        setIsDeleted(true);
+      }
+    });
+  }
+
   function formatTime(timestamp: number): string {
     const diff = Date.now() - timestamp;
     const mins = Math.floor(diff / 60000);
@@ -86,22 +144,92 @@ function PostCard({ post, userId, initialLiked }: { post: FeedPost; userId: stri
     return `${days}d`;
   }
 
+  if (isDeleted) return null;
+
   return (
-    <article className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+    <article
+      id={`post-${post.postId}`}
+      className={`rounded-xl bg-white dark:bg-zinc-900 border transition-all overflow-hidden ${
+        isHighlighted
+          ? "border-amber-500 ring-2 ring-amber-500/30 shadow-lg"
+          : "border-zinc-200 dark:border-zinc-800"
+      }`}
+    >
       {/* Header */}
-      <div className="flex items-center gap-3 p-4 pb-2">
-        {post.userImage ? (
-          <img src={post.userImage} alt="" className="w-9 h-9 rounded-full object-cover" />
-        ) : (
-          <div className="w-9 h-9 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-xs">
-            {post.userName[0]}
+      <div className="flex items-center justify-between p-4 pb-2">
+        <div className="flex items-center gap-3">
+          {post.userImage ? (
+            <img src={post.userImage} alt="" className="w-9 h-9 rounded-full object-cover" />
+          ) : (
+            <div className="w-9 h-9 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-xs">
+              {post.userName[0]}
+            </div>
+          )}
+          <div>
+            <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{post.userName}</p>
+            <p className="text-xs text-zinc-500">{formatTime(post.createdAt)}</p>
           </div>
-        )}
-        <div className="flex-1">
-          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{post.userName}</p>
-          <p className="text-xs text-zinc-500">{formatTime(post.createdAt)}</p>
+        </div>
+
+        {/* Post Options (Report & Delete) */}
+        <div className="flex items-center gap-2">
+          {/* Report Button (available for all users) */}
+          <button
+            type="button"
+            onClick={() => setShowReportModal(true)}
+            title="Report this post"
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors text-xs font-semibold flex items-center gap-1"
+          >
+            <span>🚩</span>
+            <span className="hidden sm:inline">Report</span>
+          </button>
+
+          {/* Delete Button (Owner or Admin/Mod) */}
+          {canDelete && (
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(true)}
+              title={isAdminOrMod && !isOwner ? "Delete post (Staff Moderation)" : "Delete this post"}
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors text-xs font-semibold flex items-center gap-1"
+            >
+              <span>🗑️</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Delete Confirmation Inline */}
+      {showDeleteConfirm && (
+        <div className="mx-4 my-2 p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 flex items-center justify-between gap-2 animate-in fade-in duration-150">
+          <p className="text-xs text-red-700 dark:text-red-300 font-bold">
+            Delete this post permanently?
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(false)}
+              className="px-2.5 py-1 text-xs font-bold rounded-lg bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleDeletePost}
+              disabled={isPending}
+              className="px-2.5 py-1 text-xs font-black rounded-lg bg-red-600 text-white hover:bg-red-700 shadow-xs"
+            >
+              {isPending ? "Deleting..." : "Delete ✓"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Report Feedback Banner */}
+      {isReported && (
+        <div className="mx-4 my-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-bold flex items-center gap-2">
+          <span>✓</span> Report submitted. Thank you for helping keep our community safe!
+        </div>
+      )}
 
       {/* Content */}
       {post.text && (
@@ -118,29 +246,31 @@ function PostCard({ post, userId, initialLiked }: { post: FeedPost; userId: stri
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-6 px-4 py-3 border-t border-zinc-100 dark:border-zinc-800">
-        <button
-          onClick={handleLike}
-          disabled={post.userId === userId}
-          className={`flex items-center gap-1.5 text-sm transition-colors ${
-            liked ? "text-blue-600" : "text-zinc-500 hover:text-blue-500"
-          } ${post.userId === userId ? "opacity-50 cursor-default" : ""}`}
-        >
-          <svg className="w-5 h-5" fill={liked ? "currentColor" : "none"} stroke="currentColor" strokeWidth={liked ? 0 : 1.5} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6.633 10.25c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75a.75.75 0 0 1 .75-.75 2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282m0 0h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H13.48c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23H5.904m7.723-9.97a9.296 9.296 0 0 0 3.622-2.867M5.904 18.75c.083.205.173.405.27.602.197.4-.078.898-.523.898h-.908c-.889 0-1.713-.518-1.972-1.368a12 12 0 0 1-.521-3.507c0-1.553.295-3.036.831-4.398C3.387 9.953 4.167 9.5 5 9.5h1.053c.472 0 .745.556.5.96a8.958 8.958 0 0 0-1.302 4.665c0 1.194.232 2.333.654 3.375Z" />
-          </svg>
-          {likeCount > 0 && <span>{likeCount}</span>}
-        </button>
+      <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-100 dark:border-zinc-800">
+        <div className="flex items-center gap-6">
+          <button
+            onClick={handleLike}
+            disabled={post.userId === userId}
+            className={`flex items-center gap-1.5 text-sm transition-colors ${
+              liked ? "text-blue-600" : "text-zinc-500 hover:text-blue-500"
+            } ${post.userId === userId ? "opacity-50 cursor-default" : ""}`}
+          >
+            <svg className="w-5 h-5" fill={liked ? "currentColor" : "none"} stroke="currentColor" strokeWidth={liked ? 0 : 1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.633 10.25c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75a.75.75 0 0 1 .75-.75 2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282m0 0h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H13.48c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23H5.904m7.723-9.97a9.296 9.296 0 0 0 3.622-2.867M5.904 18.75c.083.205.173.405.27.602.197.4-.078.898-.523.898h-.908c-.889 0-1.713-.518-1.972-1.368a12 12 0 0 1-.521-3.507c0-1.553.295-3.036.831-4.398C3.387 9.953 4.167 9.5 5 9.5h1.053c.472 0 .745.556.5.96a8.958 8.958 0 0 0-1.302 4.665c0 1.194.232 2.333.654 3.375Z" />
+            </svg>
+            {likeCount > 0 && <span>{likeCount}</span>}
+          </button>
 
-        <button
-          onClick={handleShowComments}
-          className="flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.48.432.447.74 1.04.586 1.641a4.483 4.483 0 0 1-.923 1.785A5.969 5.969 0 0 0 6 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337Z" />
-          </svg>
-          {post.commentCount > 0 && <span>{post.commentCount}</span>}
-        </button>
+          <button
+            onClick={handleShowComments}
+            className="flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12c0 2.104.859 4.023 2.273 5.48.432.447.74 1.04.586 1.641a4.483 4.483 0 0 1-.923 1.785A5.969 5.969 0 0 0 6 21c1.282 0 2.47-.402 3.445-1.087.81.22 1.668.337 2.555.337Z" />
+            </svg>
+            {post.commentCount > 0 && <span>{post.commentCount}</span>}
+          </button>
+        </div>
       </div>
 
       {/* Comments */}
@@ -180,6 +310,16 @@ function PostCard({ post, userId, initialLiked }: { post: FeedPost; userId: stri
             </button>
           </form>
         </div>
+      )}
+
+      {/* Report Modal */}
+      {showReportModal && (
+        <ReportPostModal
+          postId={post.postId}
+          postAuthorName={post.userName}
+          onClose={() => setShowReportModal(false)}
+          onSuccess={() => setIsReported(true)}
+        />
       )}
     </article>
   );
