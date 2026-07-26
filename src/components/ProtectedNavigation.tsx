@@ -153,8 +153,8 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
             <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-7 w-7" />
           )}
         </div>
-        <div className="flex items-center gap-3">
-          <QRPopover userId={user.id} />
+        <div className="flex items-center gap-1.5 sm:gap-3">
+          <QRPopover userId={user.id} variant="button" buttonText="Show QR code" />
           <NotificationsPopover userId={user.id} initialUnreadCount={unreadNotifications} />
           <Link href="/profile">
             {user.image ? (
