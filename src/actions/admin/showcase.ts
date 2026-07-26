@@ -2,6 +2,7 @@
 
 import { redis } from "@/lib/redis";
 import { auth } from "@/lib/auth";
+import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/types";
 
 function calcCurrentWeek(): { year: number; week: number } {
@@ -61,6 +62,11 @@ export async function selectWeeklyWinner(shellId: string): Promise<ActionResult<
     // Add to winners index sorted set (score = year*100 + week for ordering)
     const score = year * 100 + week;
     await redis.zadd("shells:winners", { score, member: shellId });
+
+    revalidatePath("/admin/showcase-winners");
+    revalidatePath("/showcase");
+    revalidatePath("/admin");
+    revalidatePath("/dashboard");
 
     return { success: true, data: { selected: true } };
   } catch (error) {
