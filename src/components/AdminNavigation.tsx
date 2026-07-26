@@ -48,8 +48,8 @@ export function AdminNavigation({ user, unreadNotifications = 0 }: AdminNavigati
             <span>←</span> Back to Dashboard
           </Link>
         </div>
-        <div className="flex items-center gap-3">
-          {user.id && <QRPopover userId={user.id} />}
+        <div className="flex items-center gap-1.5 sm:gap-3">
+          {user.id && <QRPopover userId={user.id} variant="button" buttonText="Show QR code" />}
           {user.id && <NotificationsPopover userId={user.id} initialUnreadCount={unreadNotifications} />}
           <Link href="/profile">
             {user.image ? (
