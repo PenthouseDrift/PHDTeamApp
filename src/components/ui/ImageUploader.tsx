@@ -30,6 +30,7 @@ interface ImageUploaderProps {
   onUploadComplete?: (urls: string[]) => void;
   maxWidth?: number;
   quality?: number;
+  label?: string;
 }
 
 const DEFAULT_ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -64,13 +65,8 @@ async function compressImage(file: File, maxWidth: number, quality: number): Pro
 
       canvas.toBlob(
         (blob) => {
-          if (blob && blob.size < file.size) {
-            // Only use compressed version if it's actually smaller
-            const compressed = new File([blob], file.name, {
-              type: "image/webp",
-              lastModified: Date.now(),
-            });
-            resolve(compressed);
+          if (blob) {
+            resolve(new File([blob], file.name.replace(/\.[^/.]+$/, ".webp"), { type: "image/webp" }));
           } else {
             resolve(file);
           }
@@ -92,6 +88,7 @@ export default function ImageUploader({
   onUploadComplete,
   maxWidth = 1920,
   quality = 0.82,
+  label = "Image Upload",
 }: ImageUploaderProps) {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>(() =>
     initialUrls.map((url) => ({
@@ -205,6 +202,31 @@ export default function ImageUploader({
             access: "public",
             handleUploadUrl: "/api/upload",
           });
+
+          // Run AI image safety moderation check
+          try {
+            const modRes = await fetch("/api/moderate-image", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                imageUrl: blob.url,
+                context: label || "Image Upload",
+              }),
+            });
+            if (modRes.ok) {
+              const modData = await modRes.json();
+              if (modData.safe === false) {
+                throw new Error(
+                  `⚠️ Image Flagged: ${modData.reason || "Inappropriate content detected."} Upload rejected and logged for admin review.`
+                );
+              }
+            }
+          } catch (modErr) {
+            if (modErr instanceof Error && modErr.message.includes("Image Flagged")) {
+              throw modErr;
+            }
+            // Ignore temporary moderation service errors
+          }
 
           const uploaded: UploadedFile = {
             id: crypto.randomUUID(),

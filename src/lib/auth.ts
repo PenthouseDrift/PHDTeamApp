@@ -32,6 +32,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             ? "admin"
             : "member";
           token.role = role;
+          token.theme = "light";
 
           await redis.hset(`member:${stableId}`, {
             id: stableId,
@@ -39,23 +40,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             name: user.name,
             image: user.image ?? "",
             role,
+            theme: "light",
             createdAt: Date.now(),
           });
         } else {
-          // Existing user — use the role from Redis (respects admin/moderator toggle)
+          // Existing user — use the role and theme from Redis
           token.role = (existing.role as "admin" | "moderator" | "member") || "member";
+          token.theme = (existing.theme as "light" | "dark") || "light";
 
-          // Update name/image only (don't touch role)
+          // Update name/image only (don't touch role or theme)
           await redis.hset(`member:${stableId}`, {
             name: user.name,
             image: user.image ?? "",
           });
         }
       } else if (token.sub) {
-        // Refresh role from Redis on subsequent requests so role updates take effect immediately
-        const freshRole = (await redis.hget(`member:${token.sub}`, "role")) as string | null;
+        // Refresh role and theme from Redis on subsequent requests
+        const [freshRole, freshTheme] = await Promise.all([
+          redis.hget(`member:${token.sub}`, "role") as Promise<string | null>,
+          redis.hget(`member:${token.sub}`, "theme") as Promise<string | null>,
+        ]);
         if (freshRole) {
           token.role = freshRole as "admin" | "moderator" | "member";
+        }
+        if (freshTheme) {
+          token.theme = freshTheme as "light" | "dark";
         }
       }
       return token;
@@ -63,6 +72,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       session.user.id = token.sub!;
       session.user.role = (token.role as "admin" | "moderator" | "member") || "member";
+      session.user.theme = (token.theme as "light" | "dark") || "light";
       return session;
     },
   },

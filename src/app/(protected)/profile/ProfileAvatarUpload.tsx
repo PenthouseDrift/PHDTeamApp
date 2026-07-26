@@ -43,6 +43,26 @@ export function ProfileAvatarUpload({ currentAvatar, userId, initials }: Profile
         handleUploadUrl: "/api/upload",
       });
 
+      // Run AI image safety moderation check
+      const modRes = await fetch("/api/moderate-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageUrl: blob.url,
+          context: "Profile Avatar Upload",
+        }),
+      });
+
+      if (modRes.ok) {
+        const modData = await modRes.json();
+        if (modData.safe === false) {
+          setError(`⚠️ Image Flagged: ${modData.reason || "Inappropriate avatar content detected."} Upload rejected and reported to admin.`);
+          setUploading(false);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+          return;
+        }
+      }
+
       // Save to Redis
       const result = await updateProfileAvatar(userId, blob.url);
       if (result.success) {
