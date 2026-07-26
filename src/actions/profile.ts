@@ -40,3 +40,19 @@ export async function updateNickname(
     };
   }
 }
+
+export async function updateUserTheme(
+  userId: string,
+  theme: "light" | "dark"
+): Promise<ActionResult<"light" | "dark">> {
+  try {
+    await redis.hset(`member:${userId}`, { theme });
+    revalidatePath("/profile");
+    return { success: true, data: theme };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to save theme preference",
+    };
+  }
+}

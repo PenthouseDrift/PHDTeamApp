@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import { getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
 import { ProtectedNavigation } from "@/components/ProtectedNavigation";
+import { BetaFeedbackBanner } from "@/components/BetaFeedbackBanner";
 
 export default async function ProtectedLayout({
   children,
@@ -49,8 +50,11 @@ export default async function ProtectedLayout({
         unreadNotifications={unreadCount}
         winnerSelectionPending={winnerSelectionPending}
       />
-      <main className="flex-1 overflow-y-auto pt-14 pb-16 md:pt-0 md:pb-0">
-        {children}
+      <main className="flex-1 overflow-y-auto pt-16 pb-16 md:pt-0 md:pb-0 flex flex-col">
+        <BetaFeedbackBanner />
+        <div className="flex-1 overflow-y-auto">
+          {children}
+        </div>
       </main>
     </div>
   );
