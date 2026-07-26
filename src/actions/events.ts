@@ -2,6 +2,7 @@
 
 import { redis } from "@/lib/redis";
 import { revalidatePath } from "next/cache";
+import { auth } from "@/lib/auth";
 import type { ActionResult } from "@/types";
 
 export interface TrackEvent {
@@ -303,6 +304,10 @@ export async function getEventRSVPs(
   currentUserId?: string
 ): Promise<EventRSVPData> {
   try {
+    const session = await auth();
+    const role = session?.user?.role;
+    const isAdminOrMod = role === "admin" || role === "moderator";
+
     const rsvps = await redis.hgetall(`event:${eventId}:rsvps`);
     if (!rsvps || Object.keys(rsvps).length === 0) {
       return { goingCount: 0, maybeCount: 0, cantGoCount: 0, userRSVP: null, goingMembers: [] };
@@ -314,9 +319,11 @@ export async function getEventRSVPs(
     let userRSVP: RSVPStatus | null = null;
     const goingUserIds: string[] = [];
 
+    const effectiveUserId = currentUserId || session?.user?.id;
+
     for (const [uid, status] of Object.entries(rsvps)) {
       const st = status as RSVPStatus;
-      if (uid === currentUserId) {
+      if (uid === effectiveUserId) {
         userRSVP = st;
       }
       if (st === "going") {
@@ -327,6 +334,17 @@ export async function getEventRSVPs(
       } else if (st === "cant_go") {
         cantGoCount++;
       }
+    }
+
+    // Only return overall counts and member lists to Admin or Moderator users
+    if (!isAdminOrMod) {
+      return {
+        goingCount: 0,
+        maybeCount: 0,
+        cantGoCount: 0,
+        userRSVP,
+        goingMembers: [],
+      };
     }
 
     const goingMembers: RSVPMember[] = [];
