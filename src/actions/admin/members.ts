@@ -55,6 +55,7 @@ export async function getAllMembers(): Promise<MemberWithMembership[]> {
         image: (memberData.customAvatar as string) || (memberData.image as string) || null,
         role: (memberData.role as "admin" | "moderator" | "member") || "member",
         qrCode: null,
+        aiGenerations: Number(memberData.aiGenerations) || 0,
         createdAt: Number(memberData.createdAt) || 0,
       };
 
