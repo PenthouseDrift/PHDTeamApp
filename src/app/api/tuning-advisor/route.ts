@@ -112,15 +112,25 @@ export async function POST(req: NextRequest) {
   const { calibration, carName, goals, surface, isBeginnerMode } = body;
 
   const prompt = isBeginnerMode
-    ? `You are an expert RC drift car tuning advisor. Generate a complete, beginner-friendly baseline calibration setup from scratch for a driver setting up their RC drift car for the first time.
+    ? `You are an expert RC drift car tuning advisor. Generate a COMPLETE beginner-friendly baseline calibration setup from scratch for a driver setting up their RC drift car for the first time.
 
 Car Model: ${carName}
 Track Surface: ${surface}
 GOALS: ${goals.join(", ")}
 
-Respond ONLY with a valid JSON array (no markdown, no explanation, just the raw JSON) containing tuning change objects for a complete starting setup. Each object must have these exact fields:
-- "section": one of "Suspension & Shocks", "Steering & Alignment", "Electronics & Drivetrain", "Geometry & Tyres"
-- "field": the exact parameter name from the calibration (e.g. "frontCamber", "rearCamber", "gyroGain", "frontOilWeight", "rearSpringRate", "frontRideHeight", "finalDriveRatio", "boost")
+SURFACE CONTEXT for "${surface}":
+- PHD Track (P-Tile): Smooth interlocking P-tile plastic, very low grip similar to polished tiles but slightly more consistent; requires soft oil, high droop, elevated gyro gain, careful camber to prevent snap oversteer
+- Polished Concrete: Very low grip, smooth — softer oil, higher droop, more gyro gain, aggressive camber
+- Carpet: High grip, consistent — stiffer setup, less gyro, more toe, tighter geometry
+- Asphalt/Tarmac: Medium grip, outdoor — balanced setup, moderate gyro, watch temperature sensitivity
+- Polished Tiles/Marble: Extremely low grip — very soft oil, maximum droop, high gyro, minimal steering expo
+- Gym Floor/Hardwood: Low-medium grip, variable — soft-medium oil, medium gyro, flexible setup
+
+Respond ONLY with a valid JSON array (no markdown, no explanation, just the raw JSON) containing tuning change objects for ALL parameters listed below. You MUST include an entry for every single field listed.
+
+Each object must have these exact fields:
+- "section": one of "Steering & Alignment", "Suspension & Shocks", "Electronics & Drivetrain", "Geometry & Weight", "Tyres"
+- "field": the exact camelCase parameter name as listed below
 - "label": human-readable name (e.g. "Front Camber", "Gyro Gain", "Front Oil Weight")
 - "currentValue": "Unset / Factory Default"
 - "recommendedValue": your recommended starting value for beginners as a string (include units, e.g. "6°", "65%", "150cSt", "6.5mm")
@@ -128,7 +138,14 @@ Respond ONLY with a valid JSON array (no markdown, no explanation, just the raw 
 - "priority": "high", "medium", or "low"
 - "direction": "change"
 
-Generate 6-10 essential starting parameter values that give a stable, easy-to-drift baseline setup for beginners on ${surface}.`
+YOU MUST include ALL of the following fields — do not skip any:
+STEERING & ALIGNMENT: frontCamber, rearCamber, frontToe, rearToe, frontCaster, ackermann, steeringAngle
+SUSPENSION & SHOCKS: frontRideHeight, rearRideHeight, frontSpringRate, rearSpringRate, frontOilWeight, rearOilWeight, frontOilBrand, rearOilBrand, frontPistonHoles, rearPistonHoles, frontPistonHoleSize, rearPistonHoleSize, frontShockLength, rearShockLength, frontShockBrand, rearShockBrand, frontORings, rearORings, frontDroop, rearDroop
+ELECTRONICS & DRIVETRAIN: motorTurns, motorTiming, motorPlacement, spurGear, pinionGear, finalDriveRatio, gyroGain, throttleExpo, steeringExpo, boost, turbo
+GEOMETRY & WEIGHT: frontTrackWidth, rearTrackWidth, wheelbase, batteryPosition, totalWeight
+TYRES: frontTyres, rearTyres
+
+Generate a value for every single field above — this is a complete baseline calibration, not a partial list.`
     : `You are an expert RC drift car tuning advisor. Analyse the following calibration setup and provide specific, actionable tuning changes to achieve the user's goals.
 
 Car: ${carName}

@@ -10,6 +10,7 @@ import { chassisPresets, brands } from "@/lib/chassis-data";
 interface CarOption {
   carId: string;
   name: string;
+  chassis?: string;
 }
 
 export default function CalculatorPage() {
@@ -53,6 +54,26 @@ export default function CalculatorPage() {
     }
     loadCars();
   }, [session?.user?.id]);
+
+  // Auto-populate chassis fields when selected car changes
+  useEffect(() => {
+    if (!selectedCarId || cars.length === 0) return;
+    const car = cars.find((c) => c.carId === selectedCarId);
+    if (!car?.chassis) return;
+
+    const preset = chassisPresets.find(
+      (c) => `${c.brand} ${c.model}` === car.chassis
+    );
+    if (preset) {
+      setSelectedBrand(preset.brand);
+      setSelectedChassis(`${preset.brand} ${preset.model}`);
+      setInternalRatio(preset.internalRatio);
+    } else {
+      // Custom chassis — clear dropdowns but keep label
+      setSelectedBrand("");
+      setSelectedChassis("");
+    }
+  }, [selectedCarId, cars]);
 
   // Compute ratio with debounce
   const computeRatio = useCallback((spurVal: string, pinionVal: string) => {
@@ -161,18 +182,26 @@ export default function CalculatorPage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
-              Internal Ratio (or enter manually)
+              Internal Ratio
             </label>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={internalRatio}
-              onChange={(e) => {
-                const num = parseFloat(e.target.value);
-                if (!isNaN(num) && num > 0) setInternalRatio(num);
-              }}
-              className="w-32 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-            />
+            <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mb-2">
+              Auto-filled from chassis selection above. You can override it manually if needed.
+            </p>
+            <div className="flex items-center">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={internalRatio}
+                onChange={(e) => {
+                  const num = parseFloat(e.target.value);
+                  if (!isNaN(num) && num > 0) setInternalRatio(num);
+                }}
+                className="w-24 rounded-l-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2 text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              />
+              <span className="inline-flex items-center rounded-r-lg border border-l-0 border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-700 px-3 py-2 text-sm font-semibold text-zinc-500 dark:text-zinc-300 select-none">
+                : 1
+              </span>
+            </div>
           </div>
         </section>
 
@@ -312,6 +341,33 @@ export default function CalculatorPage() {
                     </option>
                   ))}
                 </select>
+                {/* Show chassis pre-fill status for selected car */}
+                {(() => {
+                  const car = cars.find((c) => c.carId === selectedCarId);
+                  if (!car) return null;
+                  if (car.chassis) {
+                    const preset = chassisPresets.find(
+                      (c) => `${c.brand} ${c.model}` === car.chassis
+                    );
+                    return (
+                      <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
+                        <span>⚙️</span>
+                        {preset
+                          ? `${car.chassis} · ${preset.internalRatio}:1 ratio auto-loaded`
+                          : `Custom chassis: ${car.chassis} · set ratio manually above`
+                        }
+                      </p>
+                    );
+                  }
+                  return (
+                    <p className="mt-1.5 text-xs text-zinc-400 flex items-center gap-1">
+                      <span>ℹ️</span>
+                      No chassis set for this car —
+                      <a href={`/cars`} className="underline hover:text-amber-500">edit car</a>
+                      to add one.
+                    </p>
+                  );
+                })()}
               </div>
 
               <button

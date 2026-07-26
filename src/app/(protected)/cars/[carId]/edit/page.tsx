@@ -6,12 +6,14 @@ import { useSession } from "next-auth/react";
 import { getCar, updateCar } from "@/actions/cars";
 import ImageUploader from "@/components/ui/ImageUploader";
 import Link from "next/link";
+import { ChassisSelector } from "@/components/cars/ChassisSelector";
 
 export default function EditCarPage() {
   const { carId } = useParams<{ carId: string }>();
   const router = useRouter();
   const { data: session } = useSession();
   const [name, setName] = useState("");
+  const [chassis, setChassis] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +25,7 @@ export default function EditCarPage() {
       const result = await getCar(carId, session.user.id);
       if (result.success) {
         setName(result.data.name);
+        setChassis(result.data.chassis || "");
         setImages(result.data.images);
       } else {
         setError(result.error);
@@ -50,6 +53,7 @@ export default function EditCarPage() {
     try {
       const result = await updateCar(carId, session.user.id, {
         name: name.trim(),
+        chassis: chassis || undefined,
         images,
       });
 
@@ -105,6 +109,17 @@ export default function EditCarPage() {
               className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-zinc-900 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
             />
             <p className="mt-1.5 text-xs text-zinc-400">{name.length}/50 characters</p>
+          </div>
+
+          {/* Chassis Selection */}
+          <div>
+            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+              Chassis Model <span className="text-zinc-400 font-normal">(Optional)</span>
+            </label>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3">
+              Selecting your chassis will auto-fill internal gear ratios in the Calculator.
+            </p>
+            <ChassisSelector value={chassis} onChange={setChassis} />
           </div>
 
           <div>

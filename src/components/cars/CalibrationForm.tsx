@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface CustomParamInput {
   name: string;
@@ -15,7 +15,7 @@ interface CalibrationFormData {
 
 interface CalibrationFormProps {
   onSubmit: (data: CalibrationFormData) => Promise<void>;
-  initialData?: Partial<CalibrationFormData>;
+  initialData?: Partial<CalibrationFormData> & { internalRatio?: number };
 }
 
 interface FieldDef {
@@ -104,6 +104,8 @@ const sections: { title: string; fields: FieldDef[] }[] = [
 ];
 
 export default function CalibrationForm({ onSubmit, initialData }: CalibrationFormProps) {
+  const internalRatio = initialData?.internalRatio ?? null;
+
   const [name, setName] = useState(initialData?.name ?? "");
   const [values, setValues] = useState<Record<string, string | number>>(() => {
     const initial: Record<string, string | number> = {};
@@ -119,6 +121,19 @@ export default function CalibrationForm({ onSubmit, initialData }: CalibrationFo
     }
     return initial;
   });
+
+  // Recompute FDR whenever spur, pinion, or internalRatio changes
+  useEffect(() => {
+    if (!internalRatio) return;
+    const spur = Number(values["spurGear"]);
+    const pinion = Number(values["pinionGear"]);
+    if (spur > 0 && pinion > 0) {
+      const fdr = parseFloat(((spur / pinion) * internalRatio).toFixed(3));
+      setValues((prev) => ({ ...prev, finalDriveRatio: fdr }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [values["spurGear"], values["pinionGear"], internalRatio]);
+
   const [customParams, setCustomParams] = useState<CustomParamInput[]>(
     (initialData?.customParams as CustomParamInput[]) ?? []
   );
@@ -189,9 +204,16 @@ export default function CalibrationForm({ onSubmit, initialData }: CalibrationFo
       {/* Parameter Sections */}
       {sections.map((section) => (
         <fieldset key={section.title} className="space-y-4">
-          <legend className="text-sm font-semibold text-amber-400 uppercase tracking-wide">
-            {section.title}
-          </legend>
+          <div className="flex items-center gap-3">
+            <legend className="text-sm font-semibold text-amber-400 uppercase tracking-wide">
+              {section.title}
+            </legend>
+            {section.title === "Drivetrain & Electronics" && internalRatio && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                ⚙️ {internalRatio}:1 ratio · FDR auto-calculates
+              </span>
+            )}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {section.fields.map((field) => (
               <div key={field.key}>

@@ -44,7 +44,7 @@ export async function saveGearRatio(
 
 export async function getMemberCarsForSelect(
   userId: string
-): Promise<ActionResult<Pick<CarProfile, "carId" | "name">[]>> {
+): Promise<ActionResult<Pick<CarProfile, "carId" | "name" | "chassis">[]>> {
   try {
     const carIds = await redis.smembers(`member:${userId}:cars`);
 
@@ -52,13 +52,14 @@ export async function getMemberCarsForSelect(
       return { success: true, data: [] };
     }
 
-    const cars: Pick<CarProfile, "carId" | "name">[] = [];
+    const cars: Pick<CarProfile, "carId" | "name" | "chassis">[] = [];
     for (const carId of carIds) {
       const carData = await redis.hgetall(`car:${carId}`);
       if (carData && Object.keys(carData).length > 0) {
         cars.push({
           carId: carData.carId as string,
           name: carData.name as string,
+          chassis: (carData.chassis as string) || undefined,
         });
       }
     }
