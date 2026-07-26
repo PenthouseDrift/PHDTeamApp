@@ -2,8 +2,26 @@
 
 import { redis } from "@/lib/redis";
 import { revalidatePath } from "next/cache";
+import { auth } from "@/lib/auth";
 import { createNotification } from "./notifications";
 import type { ActionResult } from "@/types";
+
+export interface ReportedPost {
+  reportId: string;
+  postId: string;
+  postUserId: string;
+  postUserName: string;
+  postUserImage: string | null;
+  postText: string;
+  postImages: string[];
+  postCreatedAt: number;
+  reporterId: string;
+  reporterName: string;
+  reporterEmail: string;
+  reason: string;
+  status: "open" | "resolved";
+  createdAt: number;
+}
 
 export interface FeedPost {
   postId: string;
@@ -223,15 +241,146 @@ export async function getFeedComments(postId: string): Promise<FeedComment[]> {
   return results.filter((c): c is FeedComment => c !== null);
 }
 
-export async function deletePost(postId: string, userId: string, isAdmin: boolean): Promise<ActionResult<null>> {
+export async function deletePost(postId: string, userId: string, isAdminOrMod: boolean): Promise<ActionResult<null>> {
   const postData = await redis.hgetall(`feed:post:${postId}`);
   if (!postData) return { success: false, error: "Post not found" };
-  if (postData.userId !== userId && !isAdmin) {
+  if (postData.userId !== userId && !isAdminOrMod) {
     return { success: false, error: "Not authorized" };
   }
 
   await redis.del(`feed:post:${postId}`);
   await redis.lrem("feed:posts", 1, postId);
   revalidatePath("/newsfeed");
+  revalidatePath("/admin/feedback");
   return { success: true, data: null };
+}
+
+export async function reportPost(
+  postId: string,
+  reason: string
+): Promise<ActionResult<ReportedPost>> {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return { success: false, error: "You must be logged in to report posts" };
+    }
+
+    if (!reason || !reason.trim()) {
+      return { success: false, error: "Please provide a reason for your report" };
+    }
+
+    const postData = await redis.hgetall(`feed:post:${postId}`);
+    if (!postData || Object.keys(postData).length === 0) {
+      return { success: false, error: "Post not found" };
+    }
+
+    const reportId = `report_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const images = Array.isArray(postData.images)
+      ? postData.images
+      : typeof postData.images === "string"
+      ? JSON.parse(postData.images || "[]")
+      : [];
+
+    const report: ReportedPost = {
+      reportId,
+      postId,
+      postUserId: postData.userId as string,
+      postUserName: (postData.userName as string) || "Unknown User",
+      postUserImage: (postData.userImage as string) || null,
+      postText: (postData.text as string) || "",
+      postImages: images,
+      postCreatedAt: Number(postData.createdAt) || Date.now(),
+      reporterId: session.user.id,
+      reporterName: session.user.name || "Member",
+      reporterEmail: session.user.email || "",
+      reason: reason.trim(),
+      status: "open",
+      createdAt: Date.now(),
+    };
+
+    await redis.hset(`feedback:reported_post:${reportId}`, {
+      ...report,
+      postImages: JSON.stringify(images),
+    });
+    await redis.lpush("feedback:reported_posts_list", reportId);
+
+    revalidatePath("/admin/feedback");
+
+    return { success: true, data: report };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to report post",
+    };
+  }
+}
+
+export async function getReportedPostsList(): Promise<ActionResult<ReportedPost[]>> {
+  try {
+    const session = await auth();
+    if (!session?.user || (session.user.role !== "admin" && session.user.role !== "moderator")) {
+      return { success: false, error: "Unauthorized access" };
+    }
+
+    const ids = await redis.lrange("feedback:reported_posts_list", 0, -1);
+    if (!ids || ids.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    const reports: ReportedPost[] = [];
+    for (const id of ids) {
+      const data = await redis.hgetall(`feedback:reported_post:${id}`);
+      if (data && Object.keys(data).length > 0) {
+        const postImages = Array.isArray(data.postImages)
+          ? data.postImages
+          : typeof data.postImages === "string"
+          ? JSON.parse(data.postImages || "[]")
+          : [];
+
+        reports.push({
+          reportId: data.reportId as string,
+          postId: data.postId as string,
+          postUserId: data.postUserId as string,
+          postUserName: (data.postUserName as string) || "Unknown",
+          postUserImage: (data.postUserImage as string) || null,
+          postText: (data.postText as string) || "",
+          postImages,
+          postCreatedAt: Number(data.postCreatedAt) || 0,
+          reporterId: data.reporterId as string,
+          reporterName: (data.reporterName as string) || "Member",
+          reporterEmail: (data.reporterEmail as string) || "",
+          reason: data.reason as string,
+          status: (data.status as "open" | "resolved") || "open",
+          createdAt: Number(data.createdAt) || Date.now(),
+        });
+      }
+    }
+
+    return { success: true, data: reports };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to fetch reported posts",
+    };
+  }
+}
+
+export async function dismissPostReport(reportId: string): Promise<ActionResult<boolean>> {
+  try {
+    const session = await auth();
+    if (!session?.user || (session.user.role !== "admin" && session.user.role !== "moderator")) {
+      return { success: false, error: "Unauthorized access" };
+    }
+
+    await redis.del(`feedback:reported_post:${reportId}`);
+    await redis.lrem("feedback:reported_posts_list", 1, reportId);
+
+    revalidatePath("/admin/feedback");
+    return { success: true, data: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to dismiss report",
+    };
+  }
 }
