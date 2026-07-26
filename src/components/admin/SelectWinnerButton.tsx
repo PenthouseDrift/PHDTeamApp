@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition, useState } from "react";
+import { useRouter } from "next/navigation";
 import { selectWeeklyWinner } from "@/actions/admin/showcase";
 
 interface SelectWinnerButtonProps {
@@ -9,6 +10,7 @@ interface SelectWinnerButtonProps {
 }
 
 export function SelectWinnerButton({ shellId, isCurrentWinner }: SelectWinnerButtonProps) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [selected, setSelected] = useState(isCurrentWinner);
   const [error, setError] = useState<string | null>(null);
@@ -19,6 +21,7 @@ export function SelectWinnerButton({ shellId, isCurrentWinner }: SelectWinnerBut
       const result = await selectWeeklyWinner(shellId);
       if (result.success) {
         setSelected(true);
+        router.refresh();
       } else {
         setError(result.error);
       }

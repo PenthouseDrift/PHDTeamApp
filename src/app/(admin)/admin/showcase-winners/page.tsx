@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { getShowcaseEntries } from "@/actions/showcase";
 import { getCurrentWeek, getWeeklyWinners } from "@/actions/admin/showcase";
 import { SelectWinnerButton } from "@/components/admin/SelectWinnerButton";
+import { AutoRefresh } from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,7 @@ export default async function AdminShowcaseWinnersPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8">
+      <AutoRefresh interval={5000} />
       <div>
         <Link
           href="/admin"
