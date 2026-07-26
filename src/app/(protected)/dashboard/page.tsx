@@ -10,6 +10,9 @@ import { getEventTiming } from "@/lib/event-utils";
 import { QuickRSVPButton } from "@/components/QuickRSVPButton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { AITuningBanner } from "@/components/cars/AITuningBanner";
+import { QRPopover } from "@/components/QRPopover";
+
+import { getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
 
 export const dynamic = "force-dynamic";
 
@@ -96,15 +99,19 @@ export default async function DashboardPage() {
     return null;
   }
 
+  const isAdminOrMod = session.user.role === "admin" || session.user.role === "moderator";
+
   // Fetch all dashboard data in parallel
-  const [result, walletRes, memberData, upcomingEvents, isCheckedInToday] = await Promise.all([
+  const [result, walletRes, memberData, upcomingEvents, isCheckedInToday, winnerInfo] = await Promise.all([
     getMembership(session.user.id),
     getWallet(session.user.id),
     redis.hgetall(`member:${session.user.id}`),
     getUpcomingEvents(),
     isUserCheckedInToday(session.user.id),
+    isAdminOrMod ? getCurrentWeekWinnerInfo() : Promise.resolve(null),
   ]);
 
+  const winnerSelectionPending = isAdminOrMod && Boolean(winnerInfo && !winnerInfo.shellId);
   const membership = result.success ? result.data : null;
   const wallet = walletRes.success ? walletRes.data : { dayPasses: 0, rentalHours: 0 };
   const isActive = membership?.status === "active";
@@ -120,66 +127,172 @@ export default async function DashboardPage() {
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          {avatarUrl ? (
-            <img
-              src={avatarUrl}
-              alt=""
-              className="h-14 w-14 rounded-full object-cover ring-2 ring-zinc-200"
-            />
-          ) : (
-            <div className="h-14 w-14 rounded-full bg-amber-500 flex items-center justify-center text-xl font-bold text-white">
-              {initials}
+        {/* Unified Hero Section: Welcome + Membership Status + Daily Track Check-In */}
+        <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 sm:p-6 shadow-sm space-y-4">
+          {/* Top Row: User Avatar, Welcome Text & Membership Status Badge */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3.5">
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt={displayName}
+                  className="h-14 w-14 rounded-full object-cover ring-2 ring-zinc-200 dark:ring-zinc-700 shrink-0"
+                />
+              ) : (
+                <div className="h-14 w-14 rounded-full bg-amber-500 flex items-center justify-center text-xl font-bold text-white shrink-0">
+                  {initials}
+                </div>
+              )}
+              <div>
+                <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                  Welcome back, {displayName}
+                </h1>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  Member Dashboard
+                </p>
+              </div>
             </div>
-          )}
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-              Welcome back, {displayName}
-            </h1>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">Member Dashboard</p>
+
+            {/* Integrated Membership Status Badge */}
+            <div className="shrink-0">
+              {session.user.role === "admin" ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-100 dark:bg-purple-950/80 border border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs font-black uppercase tracking-wider">
+                  <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+                  Admin Access
+                </span>
+              ) : session.user.role === "moderator" ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-100 dark:bg-blue-950/80 border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-black uppercase tracking-wider">
+                  <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                  Mod Access
+                </span>
+              ) : membership && isActive ? (
+                <div className="flex items-center gap-2.5 bg-green-500/10 border border-green-500/30 px-3 py-1.5 rounded-full">
+                  <StatusBadge status="active" size="sm" />
+                  <span className="text-xs font-bold text-green-700 dark:text-green-300">
+                    {remainingDays} {remainingDays === 1 ? "day" : "days"} left
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2.5">
+                  <StatusBadge status="expired" size="sm" />
+                  <Link
+                    href="/membership/purchase"
+                    className="inline-flex items-center justify-center rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-black transition-colors hover:bg-amber-400 shadow-xs"
+                  >
+                    {membership ? "Renew (£40)" : "Buy Membership (£40)"}
+                  </Link>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+
+          {/* Bottom Integrated Section: Daily Track Check-In Banner */}
+          <div className="border-t border-zinc-100 dark:border-zinc-800/80 pt-3.5">
+            {isCheckedInToday ? (
+              <div className="rounded-xl bg-gradient-to-r from-green-500/10 via-emerald-500/10 to-green-500/10 border border-green-500/30 px-3.5 py-2.5 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-2.5 w-2.5 relative flex-shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
+                  </span>
+                  <p className="text-xs font-bold text-green-900 dark:text-green-200">
+                    Checked In Today <span className="font-normal text-green-700 dark:text-green-400 hidden sm:inline">— Your track check-in is active. Have a great session!</span>
+                  </p>
+                </div>
+                <span className="rounded-full bg-green-500/20 border border-green-500/30 px-2.5 py-0.5 text-[10px] font-black text-green-700 dark:text-green-300 uppercase tracking-wider shrink-0">
+                  Verified On Track
+                </span>
+              </div>
+            ) : (
+              <div className="rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800 px-3.5 py-2.5 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="h-2 w-2 rounded-full bg-zinc-400 dark:bg-zinc-500 flex-shrink-0" />
+                  <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                    Daily Track Check-In: <span className="font-normal text-zinc-500 dark:text-zinc-400">Not checked in yet today</span>
+                  </p>
+                </div>
+                <QRPopover userId={session.user.id} variant="button" buttonText="Show QR code" />
+              </div>
+            )}
+          </div>
+        </section>
 
         {/* AI Tuning Setup Banner Section (Top of Dashboard) */}
         <AITuningBanner />
 
         {/* Staff Quick Links — admin & moderator only (Top of Dashboard) */}
-        {(session.user.role === "admin" || session.user.role === "moderator") && (
-          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 shadow-sm space-y-3">
-            <p className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              {session.user.role === "moderator" ? "Mod Quick Access" : "Admin Quick Access"}
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              {/* Dashboard */}
+        {isAdminOrMod && (
+          <div className="space-y-3">
+            {winnerSelectionPending && (
               <Link
-                href="/admin"
-                className="flex flex-col items-center gap-2 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/60 p-3 hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:border-amber-200 dark:hover:border-amber-800 transition-colors group"
+                href="/admin/showcase-winners"
+                className="flex items-center justify-between rounded-xl bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-orange-500/20 border border-amber-500/40 p-3.5 text-xs font-bold text-zinc-900 dark:text-zinc-100 hover:border-amber-500 transition-all shadow-xs group"
               >
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950/60 group-hover:bg-amber-200 dark:group-hover:bg-amber-900/60 transition-colors">
-                  <svg className="w-5 h-5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25a2.25 2.25 0 0 1-2.25-2.25v-2.25Z" />
-                  </svg>
-                </span>
-                <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 group-hover:text-amber-700 dark:group-hover:text-amber-400 transition-colors text-center">
-                  {session.user.role === "moderator" ? "Mod Dashboard" : "Admin Dashboard"}
+                <div className="flex items-center gap-2.5">
+                  <span className="text-base animate-bounce">🏆</span>
+                  <div>
+                    <p className="font-extrabold text-amber-700 dark:text-amber-400">
+                      Action Required: Select Weekly Showcase Winner
+                    </p>
+                    <p className="text-[11px] font-normal text-zinc-600 dark:text-zinc-300 mt-0.5">
+                      No weekly showcase winner has been crowned for this week yet.
+                    </p>
+                  </div>
+                </div>
+                <span className="rounded-lg bg-amber-500 px-3 py-1.5 text-[11px] font-black text-black group-hover:bg-amber-400 transition-colors shrink-0 shadow-xs">
+                  Select Winner →
                 </span>
               </Link>
+            )}
 
-              {/* QR Scanner */}
-              <Link
-                href="/admin/check-in"
-                className="flex flex-col items-center gap-2 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/60 p-3 hover:bg-green-50 dark:hover:bg-green-950/30 hover:border-green-200 dark:hover:border-green-800 transition-colors group"
-              >
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-green-100 dark:bg-green-950/60 group-hover:bg-green-200 dark:group-hover:bg-green-900/60 transition-colors">
-                  <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 13.5 9.375v-4.5ZM6.75 6.75h.75v.75h-.75v-.75ZM6.75 16.5h.75v.75h-.75v-.75ZM16.5 6.75h.75v.75h-.75v-.75ZM13.5 13.5h.75v.75h-.75v-.75ZM13.5 19.5h.75v.75h-.75v-.75ZM19.5 13.5h.75v.75h-.75v-.75ZM19.5 19.5h.75v.75h-.75v-.75ZM16.5 16.5h.75v.75h-.75v-.75Z" />
-                  </svg>
-                </span>
-                <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 group-hover:text-green-700 dark:group-hover:text-green-400 transition-colors text-center">
-                  QR Scanner
-                </span>
-              </Link>
+            <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                  {session.user.role === "moderator" ? "Mod Quick Access" : "Admin Quick Access"}
+                </p>
+                {winnerSelectionPending && (
+                  <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full animate-pulse">
+                    🏆 Selection Required
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {/* Dashboard */}
+                <Link
+                  href="/admin"
+                  className="relative flex flex-col items-center gap-2 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/60 p-3 hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:border-amber-200 dark:hover:border-amber-800 transition-colors group"
+                >
+                  {winnerSelectionPending && (
+                    <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-amber-500 text-[8px] font-black text-black items-center justify-center shadow-xs">!</span>
+                    </span>
+                  )}
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950/60 group-hover:bg-amber-200 dark:group-hover:bg-amber-900/60 transition-colors">
+                    <svg className="w-5 h-5 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25a2.25 2.25 0 0 1-2.25-2.25v-2.25Z" />
+                    </svg>
+                  </span>
+                  <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 group-hover:text-amber-700 dark:group-hover:text-amber-400 transition-colors text-center">
+                    {session.user.role === "moderator" ? "Mod Dashboard" : "Admin Dashboard"}
+                  </span>
+                </Link>
+
+                {/* QR Scanner */}
+                <Link
+                  href="/admin/check-in"
+                  className="flex flex-col items-center gap-2 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/60 p-3 hover:bg-green-50 dark:hover:bg-green-950/30 hover:border-green-200 dark:hover:border-green-800 transition-colors group"
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-green-100 dark:bg-green-950/60 group-hover:bg-green-200 dark:group-hover:bg-green-900/60 transition-colors">
+                    <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 3.75 9.375v-4.5ZM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 0 1-1.125-1.125v-4.5ZM13.5 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 13.5 9.375v-4.5ZM6.75 6.75h.75v.75h-.75v-.75ZM6.75 16.5h.75v.75h-.75v-.75ZM16.5 6.75h.75v.75h-.75v-.75ZM13.5 13.5h.75v.75h-.75v-.75ZM13.5 19.5h.75v.75h-.75v-.75ZM19.5 13.5h.75v.75h-.75v-.75ZM19.5 19.5h.75v.75h-.75v-.75ZM16.5 16.5h.75v.75h-.75v-.75Z" />
+                    </svg>
+                  </span>
+                  <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 group-hover:text-green-700 dark:group-hover:text-green-400 transition-colors text-center">
+                    QR Scanner
+                  </span>
+                </Link>
+              </div>
             </div>
           </div>
         )}
@@ -290,90 +403,6 @@ export default async function DashboardPage() {
           )}
         </section>
 
-        {/* Daily Track Check-In Status Banner (Regular Members only) */}
-        {session.user.role !== "admin" && session.user.role !== "moderator" && (
-          isCheckedInToday ? (
-            <div className="rounded-xl bg-gradient-to-r from-green-500/10 via-emerald-500/10 to-green-500/10 border border-green-500/30 p-4 flex items-center justify-between gap-3 shadow-sm">
-              <div className="flex items-center gap-3">
-                <span className="flex h-3 w-3 relative flex-shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
-                </span>
-                <div>
-                  <p className="text-sm font-bold text-green-900 dark:text-green-200">
-                    Checked In Today
-                  </p>
-                  <p className="text-xs text-green-700 dark:text-green-400">
-                    Your track check-in is active for today. Have a great session!
-                  </p>
-                </div>
-              </div>
-              <span className="hidden sm:inline-block rounded-full bg-green-500/20 border border-green-500/30 px-3 py-1 text-xs font-black text-green-700 dark:text-green-300 uppercase tracking-wider">
-                Verified On Track
-              </span>
-            </div>
-          ) : (
-            <div className="rounded-xl bg-zinc-100 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 p-4 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <span className="h-2.5 w-2.5 rounded-full bg-zinc-400 dark:bg-zinc-600 flex-shrink-0" />
-                <div>
-                  <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                    Daily Track Check-In
-                  </p>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                    Not checked in yet today. Tap the 📱 QR icon in the top header bar to show your check-in code.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )
-        )}
-
-        {/* Membership Status Section */}
-        <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 shadow-sm">
-          <h2 className="mb-3 text-lg font-bold text-zinc-900 dark:text-zinc-100">
-            Membership Status
-          </h2>
-          {session.user.role === "admin" ? (
-            <div className="flex items-center gap-3">
-              <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-purple-100 dark:bg-purple-950/80 border border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs font-black uppercase tracking-wider">
-                <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
-                Admin Access (Unlimited Track Access)
-              </span>
-            </div>
-          ) : session.user.role === "moderator" ? (
-            <div className="flex items-center gap-3">
-              <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-100 dark:bg-blue-950/80 border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-black uppercase tracking-wider">
-                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                Moderator Access (Unlimited Track Access)
-              </span>
-            </div>
-          ) : membership && isActive ? (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <StatusBadge status="active" size="lg" />
-                <span className="text-zinc-700 dark:text-zinc-300 font-medium">
-                  {remainingDays} {remainingDays === 1 ? "day" : "days"} remaining
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <StatusBadge status="expired" size="lg" />
-                <span className="text-zinc-600 dark:text-zinc-300 font-medium">
-                  {membership ? "Membership expired" : "No active 28-day membership"}
-                </span>
-              </div>
-              <Link
-                href="/membership/purchase"
-                className="inline-flex items-center justify-center rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-black transition-colors hover:bg-amber-400"
-              >
-                {membership ? "Renew Membership" : "Purchase Membership (£40)"}
-              </Link>
-            </div>
-          )}
-        </section>
 
         {/* Penthouse Drift Wallet & Pass Balances Card */}
         <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-4 shadow-sm">

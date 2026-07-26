@@ -49,10 +49,18 @@ export function EventsCarousel({ events }: EventsCarouselProps) {
             const timesText = formatTimes(event);
 
             return (
-              <button
+              <div
                 key={event.eventId}
+                role="button"
+                tabIndex={0}
                 onClick={() => setSelectedEvent(event)}
-                className={`shrink-0 w-52 rounded-xl text-left border transition-all hover:shadow-md overflow-hidden ${
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedEvent(event);
+                  }
+                }}
+                className={`shrink-0 w-52 rounded-xl text-left border transition-all hover:shadow-md overflow-hidden cursor-pointer ${
                   timing.state === "cancelled"
                     ? "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 opacity-80"
                     : timing.state === "happening_now"
@@ -106,7 +114,7 @@ export function EventsCarousel({ events }: EventsCarouselProps) {
                     <QuickRSVPButton eventId={event.eventId} />
                   </div>
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
