@@ -6,6 +6,7 @@ export interface Member {
   image: string | null;
   role: "admin" | "moderator" | "member";
   qrCode: string | null;
+  aiGenerations?: number;
   createdAt: number;
 }
 

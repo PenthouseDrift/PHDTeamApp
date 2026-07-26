@@ -333,6 +333,24 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
             </p>
           </div>
 
+          {/* AI Advisor Usage */}
+          <div className="rounded-xl border border-purple-200/80 dark:border-purple-900/50 bg-gradient-to-br from-purple-500/10 to-indigo-500/5 p-3.5 flex items-center justify-between shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">✨</span>
+              <div>
+                <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                  AI Tuning Generations
+                </h4>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                  Total AI setup &amp; tuning advice generated
+                </p>
+              </div>
+            </div>
+            <span className="text-base font-black text-purple-600 dark:text-purple-400 bg-purple-500/15 border border-purple-500/30 px-3 py-1 rounded-xl">
+              {m.aiGenerations || 0}
+            </span>
+          </div>
+
           {/* Membership Status (Admin & Moderator) */}
           <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Membership</h3>

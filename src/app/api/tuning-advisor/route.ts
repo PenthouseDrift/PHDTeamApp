@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { redis } from "@/lib/redis";
 import type { CalibrationSetup } from "@/types";
 
 export const runtime = "nodejs";
@@ -251,6 +252,13 @@ Focus on the most impactful changes (typically 4-10 changes). You can suggest ch
   } catch {
     console.error("[Gemini] Parse error, raw:", rawText);
     return NextResponse.json({ error: "Failed to parse AI response", raw: rawText }, { status: 500 });
+  }
+
+  // Record AI generation usage against the user profile in Redis
+  try {
+    await redis.hincrby(`member:${session.user.id}`, "aiGenerations", 1);
+  } catch (redisErr) {
+    console.warn("[TuningAdvisor] Failed to increment aiGenerations counter:", redisErr);
   }
 
   return NextResponse.json({ changes });
