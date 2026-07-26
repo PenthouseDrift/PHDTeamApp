@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { redis } from "@/lib/redis";
 import { sendToAllAdmins } from "@/lib/push";
+import { getCurrentWeek } from "@/actions/admin/showcase";
 
 export async function GET(request: Request) {
   // Can be triggered by external cron (cron-job.org) or manually
@@ -11,11 +12,7 @@ export async function GET(request: Request) {
 
   try {
     // Check if winner already selected this week
-    const now = new Date();
-    const jan1 = new Date(now.getFullYear(), 0, 1);
-    const dayOfYear = Math.ceil((now.getTime() - jan1.getTime()) / 86400000);
-    const week = Math.ceil((dayOfYear + jan1.getDay()) / 7);
-    const year = now.getFullYear();
+    const { year, week } = await getCurrentWeek();
 
     const winnerKey = `shells:winner:${year}:${week}`;
     const currentWinner = await redis.get(winnerKey);

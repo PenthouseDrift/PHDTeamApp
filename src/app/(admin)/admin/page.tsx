@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { getAllMembers } from "@/actions/admin/members";
 import { getTodayCheckIns } from "@/actions/admin/checkins";
 import { getUpcomingEvents } from "@/actions/events";
-import { getCurrentWeek } from "@/actions/admin/showcase";
+import { getCurrentWeek, getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
 import { redis } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
@@ -19,15 +19,16 @@ export default async function AdminDashboardPage() {
   const { year, week } = await getCurrentWeek();
 
   // Fetch overview metrics in parallel
-  const [members, todayCheckins, events, customAvatar, currentWinnerId] = await Promise.all([
+  const [members, todayCheckins, events, customAvatar, currentWinnerInfo] = await Promise.all([
     getAllMembers(),
     getTodayCheckIns(),
     getUpcomingEvents(),
     redis.hget(`member:${session.user.id}`, "customAvatar") as Promise<string | null>,
-    redis.get(`shells:winner:${year}:${week}`),
+    getCurrentWeekWinnerInfo(),
   ]);
 
-  const winnerChosenThisWeek = Boolean(currentWinnerId);
+  const winnerChosenThisWeek = Boolean(currentWinnerInfo.shellId);
+  const selectedByName = currentWinnerInfo.selectedByName;
   const activeMemberships = members.filter((m) => m.membership?.status === "active").length;
   const memberCheckinsCount = todayCheckins.filter(
     (c) => c.method === "qr" || c.method === "manual" || c.method === "membership_cash"
@@ -173,7 +174,7 @@ export default async function AdminDashboardPage() {
                         : "bg-amber-500 text-black"
                     }`}
                   >
-                    {winnerChosenThisWeek ? "WINNER SELECTED" : "SUNDAY ACTION REQUIRED"}
+                    {winnerChosenThisWeek ? (selectedByName ? `WINNER SELECTED BY ${selectedByName.toUpperCase()}` : "WINNER SELECTED") : "SUNDAY ACTION REQUIRED"}
                   </span>
                   <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
                     Weekly Shell Winner Selection (Week {week}, {year})
@@ -181,7 +182,9 @@ export default async function AdminDashboardPage() {
                 </div>
                 <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1">
                   {winnerChosenThisWeek
-                    ? "Great job! A weekly shell showcase winner has already been crowned for this week."
+                    ? selectedByName
+                      ? `Selected by ${selectedByName}. A weekly shell showcase winner has been crowned for this week.`
+                      : "Great job! A weekly shell showcase winner has already been crowned for this week."
                     : "Today is Sunday! Choose this week's community shell showcase winner from member submissions."}
                 </p>
               </div>

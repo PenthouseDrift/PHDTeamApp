@@ -25,8 +25,9 @@ function getStartOfCurrentWeekTimestamp(): number {
   const now = new Date();
   const d = new Date(now);
   const day = d.getDay(); // 0 = Sunday, 1 = Monday, ... 6 = Saturday
-  d.setDate(d.getDate() - day); // Roll back to Sunday
-  d.setHours(0, 0, 0, 0); // Start of Sunday (00:00:00)
+  const diff = day === 0 ? 6 : day - 1;
+  d.setDate(d.getDate() - diff); // Roll back to Monday
+  d.setHours(0, 0, 0, 0); // Start of Monday (00:00:00)
   return d.getTime();
 }
 
