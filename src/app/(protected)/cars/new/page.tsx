@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import { createCar } from "@/actions/cars";
 import ImageUploader from "@/components/ui/ImageUploader";
 import { useSession } from "next-auth/react";
+import { ChassisSelector } from "@/components/cars/ChassisSelector";
 
 export default function NewCarPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const [name, setName] = useState("");
+  const [chassis, setChassis] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
@@ -40,6 +42,7 @@ export default function NewCarPage() {
     try {
       const result = await createCar(session.user.id, {
         name: name.trim(),
+        chassis: chassis || undefined,
         images,
       });
 
@@ -95,6 +98,17 @@ export default function NewCarPage() {
             <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
               {name.length}/50 characters
             </p>
+          </div>
+
+          {/* Chassis Selection */}
+          <div>
+            <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-300 mb-1">
+              Chassis Model <span className="text-zinc-400 font-normal">(Optional)</span>
+            </label>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3">
+              Selecting your chassis will auto-fill internal gear ratios in the Calculator.
+            </p>
+            <ChassisSelector value={chassis} onChange={setChassis} />
           </div>
 
           {/* Images */}

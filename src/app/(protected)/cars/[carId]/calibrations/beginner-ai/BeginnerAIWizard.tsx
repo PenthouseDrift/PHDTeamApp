@@ -349,59 +349,170 @@ export function BeginnerAIWizard({ car, userId }: BeginnerAIWizardProps) {
       )}
 
       {/* Step 3: Review Generated Setup & Save */}
-      {step === 3 && changes.length > 0 && (
-        <div className="space-y-6">
-          <div className="rounded-2xl bg-purple-500/10 border border-purple-500/30 p-5 space-y-2">
-            <h3 className="text-sm font-bold text-purple-600 dark:text-purple-400 flex items-center gap-2">
-              <span>✨</span> AI Setup Calibration Summary
-            </h3>
-            <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
-              Below is the starting baseline setup generated for <strong>{car.name}</strong> on <strong>{selectedSurface}</strong>. These settings provide maximum stability and smooth drift control to help you start practicing right away!
-            </p>
-          </div>
+      {step === 3 && changes.length > 0 && (() => {
+        // Build the merged setup from base + AI changes
+        const base = { ...DEFAULT_BEGINNER_SETUP, carId: car.carId };
+        const merged = applyChanges(base, changes);
 
-          {/* Parameters list */}
-          <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 space-y-4 shadow-sm">
-            <h3 className="text-xs font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 border-b border-zinc-200 dark:border-zinc-800 pb-2">
-              Recommended Starting Settings
-            </h3>
+        // Build a lookup of AI-touched fields
+        const aiFields = new Map(changes.map((c) => [c.field, c]));
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {changes.map((c, i) => (
-                <div key={i} className="rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60 p-3.5 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">{c.label}</span>
-                    <span className="text-xs font-extrabold text-green-600 dark:text-green-400 bg-green-500/10 border border-green-500/30 px-2 py-0.5 rounded">
-                      {c.recommendedValue}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    {c.reason}
-                  </p>
+        const sections: { title: string; icon: string; rows: { field: string; label: string; value: string; isAI: boolean; reason?: string }[] }[] = [
+          {
+            title: "Steering & Alignment", icon: "🎯",
+            rows: [
+              { field: "frontCamber", label: "Front Camber", value: `${merged.frontCamber}°` },
+              { field: "rearCamber", label: "Rear Camber", value: `${merged.rearCamber}°` },
+              { field: "frontToe", label: "Front Toe", value: `${merged.frontToe}°` },
+              { field: "rearToe", label: "Rear Toe", value: `${merged.rearToe}°` },
+              { field: "frontCaster", label: "Front Caster", value: `${merged.frontCaster}°` },
+              { field: "ackermann", label: "Ackermann", value: `${merged.ackermann}%` },
+              { field: "steeringAngle", label: "Steering Angle", value: `${merged.steeringAngle}°` },
+            ].map(r => ({ ...r, isAI: aiFields.has(r.field), reason: aiFields.get(r.field)?.reason })),
+          },
+          {
+            title: "Suspension & Shocks", icon: "🔩",
+            rows: [
+              { field: "frontRideHeight", label: "Front Ride Height", value: `${merged.frontRideHeight}mm` },
+              { field: "rearRideHeight", label: "Rear Ride Height", value: `${merged.rearRideHeight}mm` },
+              { field: "frontSpringRate", label: "Front Spring", value: merged.frontSpringRate || "—" },
+              { field: "rearSpringRate", label: "Rear Spring", value: merged.rearSpringRate || "—" },
+              { field: "frontOilWeight", label: "Front Oil Weight", value: merged.frontOilWeight || "—" },
+              { field: "rearOilWeight", label: "Rear Oil Weight", value: merged.rearOilWeight || "—" },
+              { field: "frontOilBrand", label: "Front Oil Brand", value: merged.frontOilBrand || "—" },
+              { field: "rearOilBrand", label: "Rear Oil Brand", value: merged.rearOilBrand || "—" },
+              { field: "frontPistonHoles", label: "Front Piston Holes", value: `${merged.frontPistonHoles}` },
+              { field: "rearPistonHoles", label: "Rear Piston Holes", value: `${merged.rearPistonHoles}` },
+              { field: "frontPistonHoleSize", label: "Front Hole Size", value: merged.frontPistonHoleSize || "—" },
+              { field: "rearPistonHoleSize", label: "Rear Hole Size", value: merged.rearPistonHoleSize || "—" },
+              { field: "frontShockLength", label: "Front Shock Length", value: `${merged.frontShockLength}mm` },
+              { field: "rearShockLength", label: "Rear Shock Length", value: `${merged.rearShockLength}mm` },
+              { field: "frontShockBrand", label: "Front Shock Brand", value: merged.frontShockBrand || "—" },
+              { field: "rearShockBrand", label: "Rear Shock Brand", value: merged.rearShockBrand || "—" },
+              { field: "frontORings", label: "Front O-Rings", value: merged.frontORings || "—" },
+              { field: "rearORings", label: "Rear O-Rings", value: merged.rearORings || "—" },
+              { field: "frontDroop", label: "Front Droop", value: `${merged.frontDroop}mm` },
+              { field: "rearDroop", label: "Rear Droop", value: `${merged.rearDroop}mm` },
+            ].map(r => ({ ...r, isAI: aiFields.has(r.field), reason: aiFields.get(r.field)?.reason })),
+          },
+          {
+            title: "Electronics & Drivetrain", icon: "⚡",
+            rows: [
+              { field: "motorTurns", label: "Motor Turns", value: `${merged.motorTurns}T` },
+              { field: "motorTiming", label: "Motor Timing", value: `${merged.motorTiming}°` },
+              { field: "motorPlacement", label: "Motor Placement", value: merged.motorPlacement || "—" },
+              { field: "spurGear", label: "Spur Gear", value: `${merged.spurGear}T` },
+              { field: "pinionGear", label: "Pinion Gear", value: `${merged.pinionGear}T` },
+              { field: "finalDriveRatio", label: "Final Drive Ratio", value: `${merged.finalDriveRatio}` },
+              { field: "gyroGain", label: "Gyro Gain", value: `${merged.gyroGain}%` },
+              { field: "throttleExpo", label: "Throttle Expo", value: `${merged.throttleExpo}%` },
+              { field: "steeringExpo", label: "Steering Expo", value: `${merged.steeringExpo}%` },
+              { field: "boost", label: "Boost", value: `${merged.boost}%` },
+              { field: "turbo", label: "Turbo", value: `${merged.turbo}%` },
+            ].map(r => ({ ...r, isAI: aiFields.has(r.field), reason: aiFields.get(r.field)?.reason })),
+          },
+          {
+            title: "Geometry & Weight", icon: "📐",
+            rows: [
+              { field: "frontTrackWidth", label: "Front Track Width", value: `${merged.frontTrackWidth}mm` },
+              { field: "rearTrackWidth", label: "Rear Track Width", value: `${merged.rearTrackWidth}mm` },
+              { field: "wheelbase", label: "Wheelbase", value: `${merged.wheelbase}mm` },
+              { field: "batteryPosition", label: "Battery Position", value: merged.batteryPosition || "—" },
+              { field: "totalWeight", label: "Total Weight", value: `${merged.totalWeight}g` },
+            ].map(r => ({ ...r, isAI: aiFields.has(r.field), reason: aiFields.get(r.field)?.reason })),
+          },
+          {
+            title: "Tyres", icon: "🛞",
+            rows: [
+              { field: "frontTyres", label: "Front Tyres", value: merged.frontTyres || "—" },
+              { field: "rearTyres", label: "Rear Tyres", value: merged.rearTyres || "—" },
+            ].map(r => ({ ...r, isAI: aiFields.has(r.field), reason: aiFields.get(r.field)?.reason })),
+          },
+        ];
+
+        return (
+          <div className="space-y-6">
+            <div className="rounded-2xl bg-purple-500/10 border border-purple-500/30 p-5 space-y-2">
+              <h3 className="text-sm font-bold text-purple-600 dark:text-purple-400 flex items-center gap-2">
+                <span>✨</span> AI Setup Calibration — {car.name}
+              </h3>
+              <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                Complete starting baseline for <strong>{selectedSurface}</strong>. Fields highlighted in <span className="text-purple-600 dark:text-purple-400 font-bold">purple</span> were specifically recommended by AI for this surface.
+              </p>
+              <div className="flex items-center gap-3 pt-1">
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-600 dark:text-purple-400 bg-purple-500/10 border border-purple-500/30 rounded-full px-2 py-0.5">
+                  ✨ AI Recommended
+                </span>
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full px-2 py-0.5">
+                  Baseline Default
+                </span>
+              </div>
+            </div>
+
+            {/* Grouped sections */}
+            {sections.map((sec) => (
+              <div key={sec.title} className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-sm">
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50">
+                  <span className="text-base">{sec.icon}</span>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-zinc-700 dark:text-zinc-300">{sec.title}</h4>
+                  <span className="ml-auto text-[10px] text-zinc-400">{sec.rows.filter(r => r.isAI).length} AI fields</span>
                 </div>
-              ))}
+                <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                  {sec.rows.map((row) => (
+                    <div
+                      key={row.field}
+                      className={`flex items-start justify-between gap-3 px-4 py-2.5 ${
+                        row.isAI ? "bg-purple-50/50 dark:bg-purple-500/5" : ""
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-xs font-semibold ${row.isAI ? "text-purple-700 dark:text-purple-300" : "text-zinc-700 dark:text-zinc-300"}`}>
+                            {row.label}
+                          </span>
+                          {row.isAI && (
+                            <span className="text-[9px] font-bold text-purple-500 bg-purple-500/10 border border-purple-500/20 rounded-full px-1.5 py-px shrink-0">
+                              ✨ AI
+                            </span>
+                          )}
+                        </div>
+                        {row.isAI && row.reason && (
+                          <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5 leading-snug line-clamp-2">{row.reason}</p>
+                        )}
+                      </div>
+                      <span className={`text-xs font-bold shrink-0 px-2 py-0.5 rounded-md ${
+                        row.isAI
+                          ? "text-purple-700 dark:text-purple-300 bg-purple-500/10 border border-purple-500/20"
+                          : "text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700"
+                      }`}>
+                        {row.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setStep(2)}
+                className="px-4 py-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold hover:bg-zinc-200"
+              >
+                ← Change Surface
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-extrabold transition-all shadow-lg shadow-purple-500/20 text-center"
+              >
+                {saving ? "Saving Setup..." : "💾 Save Calibration to Car Garage"}
+              </button>
             </div>
           </div>
-
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => setStep(2)}
-              className="px-4 py-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold hover:bg-zinc-200"
-            >
-              ← Change Surface
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-extrabold transition-all shadow-lg shadow-purple-500/20 text-center"
-            >
-              {saving ? "Saving Setup..." : "💾 Save Calibration to Car Garage"}
-            </button>
-          </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

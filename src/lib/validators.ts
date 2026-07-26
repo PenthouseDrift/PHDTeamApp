@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const carProfileSchema = z.object({
   name: z.string().min(1).max(50),
+  chassis: z.string().max(100).optional().default(""),
   images: z.array(z.string().url()).min(0).max(10).default([]),
 });
 

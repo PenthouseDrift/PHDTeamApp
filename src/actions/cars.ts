@@ -24,7 +24,7 @@ function parseImages(images: unknown): string[] {
 
 export async function createCar(
   userId: string,
-  data: { name: string; images: string[] }
+  data: { name: string; chassis?: string; images: string[] }
 ): Promise<ActionResult<CarProfile>> {
   try {
     const parsed = carProfileSchema.safeParse(data);
@@ -51,6 +51,7 @@ export async function createCar(
       carId,
       userId,
       name: parsed.data.name,
+      chassis: parsed.data.chassis || undefined,
       images: parsed.data.images,
       createdAt: Date.now(),
     };
@@ -59,6 +60,7 @@ export async function createCar(
       carId: car.carId,
       userId: car.userId,
       name: car.name,
+      ...(car.chassis ? { chassis: car.chassis } : {}),
       images: JSON.stringify(car.images),
       createdAt: car.createdAt,
     });
@@ -78,7 +80,7 @@ export async function createCar(
 export async function updateCar(
   carId: string,
   userId: string,
-  data: { name: string; images: string[] }
+  data: { name: string; chassis?: string; images: string[] }
 ): Promise<ActionResult<CarProfile>> {
   try {
     // Verify ownership
@@ -97,18 +99,23 @@ export async function updateCar(
       };
     }
 
+    // Preserve original createdAt
+    const existing = await redis.hget(`car:${carId}`, "createdAt");
+
     const updatedCar: CarProfile = {
       carId,
       userId,
       name: parsed.data.name,
+      chassis: parsed.data.chassis || undefined,
       images: parsed.data.images,
-      createdAt: Date.now(),
+      createdAt: existing ? Number(existing) : Date.now(),
     };
 
     await redis.hset(`car:${carId}`, {
       carId: updatedCar.carId,
       userId: updatedCar.userId,
       name: updatedCar.name,
+      ...(updatedCar.chassis ? { chassis: updatedCar.chassis } : { chassis: "" }),
       images: JSON.stringify(updatedCar.images),
       createdAt: updatedCar.createdAt,
     });
@@ -194,6 +201,7 @@ export async function getMemberCars(
           carId: carData.carId as string,
           userId: carData.userId as string,
           name: carData.name as string,
+          chassis: (carData.chassis as string) || undefined,
           images: parseImages(carData.images),
           createdAt: Number(carData.createdAt),
         };
@@ -202,7 +210,7 @@ export async function getMemberCars(
     });
 
     const results = await Promise.all(carPromises);
-    const cars = results.filter((c): c is CarProfile => c !== null);
+    const cars = (results.filter((c) => c !== null) as CarProfile[]);
 
     // Sort by newest first
     cars.sort((a, b) => b.createdAt - a.createdAt);
@@ -236,6 +244,7 @@ export async function getCar(
       carId: carData.carId as string,
       userId: carData.userId as string,
       name: carData.name as string,
+      chassis: (carData.chassis as string) || undefined,
       images: parseImages(carData.images),
       createdAt: Number(carData.createdAt),
     };

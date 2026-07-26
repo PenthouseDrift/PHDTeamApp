@@ -47,6 +47,7 @@ export interface CarProfile {
   carId: string;
   userId: string;
   name: string;
+  chassis?: string;
   images: string[];
   createdAt: number;
 }
