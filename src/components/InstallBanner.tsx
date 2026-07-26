@@ -58,7 +58,8 @@ export function InstallBanner() {
     const modalDismissed = localStorage.getItem("phd-install-modal-dismissed");
     const bannerDismissed = localStorage.getItem("phd-install-banner-dismissed");
 
-    if (!bannerDismissed || Date.now() - Number(bannerDismissed) >= 7 * 24 * 60 * 60 * 1000) {
+    const isBannerActive = !bannerDismissed || Date.now() - Number(bannerDismissed) >= 7 * 24 * 60 * 60 * 1000;
+    if (isBannerActive) {
       setShowBanner(true);
     }
 
@@ -74,7 +75,11 @@ export function InstallBanner() {
       const promptEvent = e as BeforeInstallPromptEvent;
       if (typeof window !== "undefined") window.__phdInstallPrompt = promptEvent;
       setDeferredPrompt(promptEvent);
-      setShowBanner(true);
+
+      const currentlyDismissed = localStorage.getItem("phd-install-banner-dismissed");
+      if (!currentlyDismissed || Date.now() - Number(currentlyDismissed) >= 7 * 24 * 60 * 60 * 1000) {
+        setShowBanner(true);
+      }
     };
 
     window.addEventListener("beforeinstallprompt", handler);
