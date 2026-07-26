@@ -16,6 +16,7 @@ interface EventRSVPSectionProps {
 export function EventRSVPSection({ eventId }: EventRSVPSectionProps) {
   const { data: session } = useSession();
   const userId = session?.user?.id;
+  const isAdminOrMod = session?.user?.role === "admin" || session?.user?.role === "moderator";
 
   const [rsvpData, setRsvpData] = useState<EventRSVPData>({
     goingCount: 0,
@@ -87,16 +88,31 @@ export function EventRSVPSection({ eventId }: EventRSVPSectionProps) {
         <div className="flex items-center gap-2">
           <span className="text-base">🏁</span>
           <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-zinc-100">
-            RSVP &amp; Attendees
+            {isAdminOrMod ? "RSVP & Attendees" : "Your Event RSVP"}
           </h4>
         </div>
         {loading ? (
           <span className="text-[10px] text-zinc-400">Loading...</span>
-        ) : (
+        ) : isAdminOrMod ? (
           <div className="text-[11px] font-bold text-zinc-600 dark:text-zinc-300">
             <span className="text-emerald-600 dark:text-emerald-400">{rsvpData.goingCount} Going</span>
             {rsvpData.maybeCount > 0 && <span className="ml-1 text-amber-600 dark:text-amber-400">• {rsvpData.maybeCount} Maybe</span>}
           </div>
+        ) : rsvpData.userRSVP ? (
+          <div className="text-[11px] font-bold text-zinc-600 dark:text-zinc-300 flex items-center gap-1">
+            <span className="text-zinc-400">Status:</span>
+            <span className={
+              rsvpData.userRSVP === "going"
+                ? "text-emerald-600 dark:text-emerald-400"
+                : rsvpData.userRSVP === "maybe"
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-red-600 dark:text-red-400"
+            }>
+              {rsvpData.userRSVP === "going" ? "🏎️ Going" : rsvpData.userRSVP === "maybe" ? "🤔 Maybe" : "❌ Can't Go"}
+            </span>
+          </div>
+        ) : (
+          <span className="text-[10px] font-medium text-zinc-400">Select an option below</span>
         )}
       </div>
 
@@ -145,11 +161,11 @@ export function EventRSVPSection({ eventId }: EventRSVPSectionProps) {
         </button>
       </div>
 
-      {/* Going Attendees Avatars */}
-      {rsvpData.goingMembers.length > 0 && (
+      {/* Going Attendees Avatars — Admins and Moderators only */}
+      {isAdminOrMod && rsvpData.goingMembers.length > 0 && (
         <div className="pt-2 border-t border-zinc-200/80 dark:border-zinc-700/60 space-y-1.5">
           <p className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-            Attending Drivers:
+            Attending Drivers ({rsvpData.goingCount}):
           </p>
           <div className="flex items-center gap-1.5 flex-wrap">
             {rsvpData.goingMembers.map((m) => (

@@ -12,6 +12,7 @@ interface QuickRSVPButtonProps {
 export function QuickRSVPButton({ eventId, className = "" }: QuickRSVPButtonProps) {
   const { data: session } = useSession();
   const userId = session?.user?.id;
+  const isAdminOrMod = session?.user?.role === "admin" || session?.user?.role === "moderator";
 
   const [status, setStatus] = useState<RSVPStatus | null>(null);
   const [goingCount, setGoingCount] = useState<number>(0);
@@ -49,8 +50,10 @@ export function QuickRSVPButton({ eventId, className = "" }: QuickRSVPButtonProp
     const prevStatus = status;
     setStatus(nextStatus);
 
-    if (prevStatus === "going" && nextStatus !== "going") setGoingCount((c) => Math.max(0, c - 1));
-    if (prevStatus !== "going" && nextStatus === "going") setGoingCount((c) => c + 1);
+    if (isAdminOrMod) {
+      if (prevStatus === "going" && nextStatus !== "going") setGoingCount((c) => Math.max(0, c - 1));
+      if (prevStatus !== "going" && nextStatus === "going") setGoingCount((c) => c + 1);
+    }
 
     startTransition(async () => {
       const res = await setEventRSVP(eventId, userId, nextStatus);
@@ -93,7 +96,7 @@ export function QuickRSVPButton({ eventId, className = "" }: QuickRSVPButtonProp
           ? "❌ Can't Go"
           : "🏎️ RSVP"}
       </span>
-      {goingCount > 0 && (
+      {isAdminOrMod && goingCount > 0 && (
         <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
           status === "going" ? "bg-black/20 text-black" : "bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200"
         }`}>
