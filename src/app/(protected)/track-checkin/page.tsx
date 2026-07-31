@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { redis } from "@/lib/redis";
-import { isUserCheckedInToday } from "@/actions/admin/checkins";
+import { isUserCheckedInToday, getSelfCheckInStatus } from "@/actions/admin/checkins";
 import { performSelfCheckIn, performGuestSelfCheckIn } from "@/actions/self-checkin";
 import { getCheckoutStatus } from "@/lib/sumup";
 import { processSuccessfulPaymentReference } from "@/lib/membership-activation";
@@ -81,11 +81,12 @@ export default async function TrackCheckInPage({ searchParams }: PageProps) {
     }
   }
 
-  const [memberData, membershipData, walletData, alreadyCheckedIn] = await Promise.all([
+  const [memberData, membershipData, walletData, alreadyCheckedIn, selfCheckinActive] = await Promise.all([
     redis.hgetall(`member:${userId}`),
     redis.hgetall(`membership:${userId}`),
     redis.hgetall(`wallet:${userId}`),
     isUserCheckedInToday(userId),
+    getSelfCheckInStatus(),
   ]);
 
   const userName =
@@ -111,15 +112,32 @@ export default async function TrackCheckInPage({ searchParams }: PageProps) {
           <span>{autoCheckinMessage}</span>
         </div>
       )}
-      <SelfCheckInClient
-        userId={userId}
-        userName={userName}
-        isMembershipActive={Boolean(isMembershipActive)}
-        membershipExpiresAt={membershipExpiresAt}
-        dayPasses={dayPasses}
-        rentalHours={rentalHours}
-        alreadyCheckedIn={alreadyCheckedIn}
-      />
+      
+      {!selfCheckinActive && !autoCheckinMessage ? (
+        <div className="rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-8 text-center flex flex-col items-center justify-center space-y-4">
+          <div className="w-16 h-16 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 mb-2">
+            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <h2 className="text-xl sm:text-2xl font-black text-zinc-900 dark:text-zinc-100">
+            Check-In Closed
+          </h2>
+          <p className="text-sm text-zinc-500 max-w-sm">
+            Self check-in is currently closed. If there is a track event today, please see an admin at the track entrance to scan your QR code.
+          </p>
+        </div>
+      ) : (
+        <SelfCheckInClient
+          userId={userId}
+          userName={userName}
+          isMembershipActive={Boolean(isMembershipActive)}
+          membershipExpiresAt={membershipExpiresAt}
+          dayPasses={dayPasses}
+          rentalHours={rentalHours}
+          alreadyCheckedIn={alreadyCheckedIn}
+        />
+      )}
     </div>
   );
 }

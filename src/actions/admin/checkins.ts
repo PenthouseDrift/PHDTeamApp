@@ -1,15 +1,89 @@
 "use server";
 
 import { redis } from "@/lib/redis";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import type { ActionResult } from "@/types";
+import { sendGlobalNotification } from "@/actions/notifications";
 
 export interface CheckInEntry {
   userId: string;
   adminId: string;
   timestamp: number;
-  method: "qr" | "manual" | "day_pass" | "day_pass_wallet" | "day_pass_cash" | "rental" | "rental_wallet" | "rental_cash" | "membership_cash";
+  method: "qr" | "manual" | "day_pass" | "day_pass_wallet" | "day_pass_cash" | "rental" | "rental_wallet" | "rental_cash" | "membership_cash" | "self_checkin";
   memberName: string;
+}
+
+export async function getSelfCheckInStatus(): Promise<boolean> {
+  noStore();
+  try {
+    const status = await redis.get("settings:self_checkin_active");
+    return status === "true" || status === true;
+  } catch (error) {
+    return false;
+  }
+}
+
+export async function toggleSelfCheckInStatus(adminId: string): Promise<ActionResult<{ active: boolean }>> {
+  try {
+    const current = await getSelfCheckInStatus();
+    const next = !current;
+    
+    // Use string representation for explicit parsing later
+    await redis.set("settings:self_checkin_active", next ? "true" : "false");
+    
+    if (next) {
+      // Background the notification dispatch so it doesn't block the UI response
+      sendGlobalNotification({
+        title: "Track Check-In Open! 🏁",
+        message: "Self check-in is now active. You can check yourself in from your dashboard to skip the queue at the gates.",
+        url: "/track-checkin"
+      }, adminId).catch(console.error);
+    }
+    
+    revalidatePath("/admin", "page");
+    revalidatePath("/dashboard", "page");
+    
+    return { success: true, data: { active: next } };
+  } catch (error) {
+    console.error("toggle fail:", error);
+    return { success: false, error: "Failed to toggle self check-in" };
+  }
+}
+
+export async function submitSelfCheckIn(memberId: string, memberName: string): Promise<ActionResult<{ checkedIn: boolean }>> {
+  try {
+    const isActive = await getSelfCheckInStatus();
+    if (!isActive) {
+      return { success: false, error: "Self check-in is not currently active." };
+    }
+
+    const alreadyCheckedIn = await isUserCheckedInToday(memberId);
+    if (alreadyCheckedIn) {
+      return { success: false, error: "You are already checked in today." };
+    }
+
+    const now = Date.now();
+    const today = new Date().toISOString().split("T")[0];
+    const dedupKey = `checkin:dedup:${memberId}`;
+
+    const entry = JSON.stringify({
+      userId: memberId,
+      adminId: memberId, // Self check-in uses member's own ID
+      timestamp: now,
+      method: "self_checkin",
+      memberName,
+    });
+
+    await redis.rpush(`checkins:${today}`, entry);
+    await redis.set(dedupKey, "1", { ex: 86400 });
+
+    revalidatePath("/admin/members");
+    revalidatePath("/dashboard");
+    return { success: true, data: { checkedIn: true } };
+  } catch (error) {
+    console.error("Self Check-in Error:", error);
+    return { success: false, error: "An unexpected error occurred during self check-in." };
+  }
 }
 
 export async function getTodayCheckIns(): Promise<CheckInEntry[]> {
