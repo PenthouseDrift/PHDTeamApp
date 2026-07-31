@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import { getMembership } from "@/actions/membership";
@@ -9,7 +10,6 @@ import { isUserCheckedInToday } from "@/actions/admin/checkins";
 import { getEventTiming } from "@/lib/event-utils";
 import { QuickRSVPButton } from "@/components/QuickRSVPButton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { AITuningBanner } from "@/components/cars/AITuningBanner";
 import { QRPopover } from "@/components/QRPopover";
 
 import { getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
@@ -111,7 +111,9 @@ export default async function DashboardPage() {
     isAdminOrMod ? getCurrentWeekWinnerInfo() : Promise.resolve(null),
   ]);
 
-  const winnerSelectionPending = isAdminOrMod && Boolean(winnerInfo && !winnerInfo.shellId);
+  const day = new Date().getDay();
+  const isWeekend = day === 0 || day === 6;
+  const winnerSelectionPending = isAdminOrMod && isWeekend && Boolean(winnerInfo && !winnerInfo.shellId);
   const membership = result.success ? result.data : null;
   const wallet = walletRes.success ? walletRes.data : { dayPasses: 0, rentalHours: 0 };
   const isActive = membership?.status === "active";
@@ -128,14 +130,17 @@ export default async function DashboardPage() {
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl space-y-6">
         {/* Unified Hero Section: Welcome + Membership Status + Daily Track Check-In */}
-        <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 sm:p-6 shadow-sm space-y-4">
-          {/* Top Row: User Avatar, Welcome Text & Membership Status Badge */}
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 sm:p-6 shadow-sm space-y-5">
+          {/* Top Row: User Avatar & Welcome Text */}
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-3.5">
               {avatarUrl ? (
-                <img
+                <Image
                   src={avatarUrl}
                   alt={displayName}
+                  width={56}
+                  height={56}
+                  priority
                   className="h-14 w-14 rounded-full object-cover ring-2 ring-zinc-200 dark:ring-zinc-700 shrink-0"
                 />
               ) : (
@@ -144,17 +149,20 @@ export default async function DashboardPage() {
                 </div>
               )}
               <div>
-                <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                  Welcome back, {displayName}
+                <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 dark:text-zinc-100 leading-tight">
+                  Welcome, {displayName}
                 </h1>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 flex items-center gap-2">
                   Member Dashboard
+                  {(session.user.role === "admin" || session.user.role === "moderator") && (
+                    <span className="inline-block sm:hidden text-purple-500">({session.user.role})</span>
+                  )}
                 </p>
               </div>
             </div>
-
-            {/* Integrated Membership Status Badge */}
-            <div className="shrink-0">
+            
+            {/* Admin/Mod Badge Top Right (Desktop Only) */}
+            <div className="shrink-0 hidden sm:block">
               {session.user.role === "admin" ? (
                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-100 dark:bg-purple-950/80 border border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs font-black uppercase tracking-wider">
                   <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
@@ -165,29 +173,97 @@ export default async function DashboardPage() {
                   <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
                   Mod Access
                 </span>
-              ) : membership && isActive ? (
-                <div className="flex items-center gap-2.5 bg-green-500/10 border border-green-500/30 px-3 py-1.5 rounded-full">
-                  <StatusBadge status="active" size="sm" />
-                  <span className="text-xs font-bold text-green-700 dark:text-green-300">
-                    {remainingDays} {remainingDays === 1 ? "day" : "days"} left
-                  </span>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Account Balances Container */}
+          <div className="flex flex-col gap-3 sm:gap-4">
+            
+            {/* 1. Membership Status (Full Width) */}
+            <div className="w-full rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 p-4 sm:p-5 border border-amber-300 dark:border-orange-600 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden shadow-md">
+              <div className="absolute top-0 right-0 w-48 h-48 bg-white/20 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+              
+              <div className="relative z-10">
+                <p className="text-[10px] sm:text-[11px] font-black text-amber-900/80 uppercase tracking-widest mb-1">
+                  {membership && isActive ? "Penthouse Drift Member" : membership ? "Membership Expired" : "Unlock Full Access"}
+                </p>
+                
+                {membership && isActive ? (
+                  <>
+                    <h3 className="text-lg sm:text-xl font-black text-black leading-tight">
+                      Active
+                    </h3>
+                    <p className="text-xs font-semibold text-amber-900 mt-1">
+                      {remainingDays} {remainingDays === 1 ? "day" : "days"} of unlimited track access remaining.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-lg sm:text-xl font-black text-black leading-tight">
+                      {membership ? "Renew Your Membership" : "Become a Member"}
+                    </h3>
+                    <p className="text-xs font-semibold text-amber-900 mt-1 max-w-sm">
+                      Get unlimited track access for a full 28 days.
+                    </p>
+                  </>
+                )}
+              </div>
+              
+              <Link
+                href="/membership/purchase"
+                className="relative z-10 shrink-0 w-full sm:w-auto px-6 py-2.5 sm:py-3 rounded-xl text-sm font-black text-center transition-all active:scale-[0.98] bg-black text-white hover:bg-zinc-800 shadow-lg shadow-black/20"
+              >
+                {membership && isActive ? "Manage Membership" : membership ? "Renew Now (£40)" : "Buy Membership (£40)"}
+              </Link>
+            </div>
+
+            {/* Passes & Rentals Grid */}
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              {/* 2. Day Passes */}
+              <div className="rounded-xl bg-zinc-50 dark:bg-zinc-950/80 p-3 sm:p-4 border border-zinc-200 dark:border-zinc-800 flex flex-col justify-between space-y-3">
+                <div>
+                  <p className="text-[10px] sm:text-[11px] font-semibold text-amber-600 dark:text-amber-500 uppercase tracking-wider">Day Passes</p>
+                  <div className="flex items-baseline gap-1.5 mt-1">
+                    <span className="text-2xl sm:text-3xl font-black text-zinc-900 dark:text-white leading-none">{wallet.dayPasses}</span>
+                  </div>
                 </div>
-              ) : (
-                <div className="flex items-center gap-2.5">
-                  <StatusBadge status="expired" size="sm" />
-                  <Link
-                    href="/membership/purchase"
-                    className="inline-flex items-center justify-center rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-black transition-colors hover:bg-amber-400 shadow-xs"
-                  >
-                    {membership ? "Renew (£40)" : "Buy Membership (£40)"}
-                  </Link>
+                <Link
+                  href="/wallet"
+                  className={`w-full flex items-center justify-center py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                    wallet.dayPasses > 0 
+                      ? "bg-zinc-200/50 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                      : "bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
+                  }`}
+                >
+                  {wallet.dayPasses > 0 ? "Use Pass" : "+ Buy (£10)"}
+                </Link>
+              </div>
+
+              {/* 3. Rental Hours */}
+              <div className="rounded-xl bg-zinc-50 dark:bg-zinc-950/80 p-3 sm:p-4 border border-zinc-200 dark:border-zinc-800 flex flex-col justify-between space-y-3">
+                <div>
+                  <p className="text-[10px] sm:text-[11px] font-semibold text-amber-600 dark:text-amber-500 uppercase tracking-wider">Rental Hours</p>
+                  <div className="flex items-baseline gap-1.5 mt-1">
+                    <span className="text-2xl sm:text-3xl font-black text-zinc-900 dark:text-white leading-none">{wallet.rentalHours}</span>
+                  </div>
                 </div>
-              )}
+                <Link
+                  href="/wallet"
+                  className={`w-full flex items-center justify-center py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                    wallet.rentalHours > 0 
+                      ? "bg-zinc-200/50 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                      : "bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
+                  }`}
+                >
+                  {wallet.rentalHours > 0 ? "Use Hours" : "+ Buy (£10)"}
+                </Link>
+              </div>
             </div>
           </div>
 
           {/* Bottom Integrated Section: Daily Track Check-In Banner */}
-          <div className="border-t border-zinc-100 dark:border-zinc-800/80 pt-3.5">
+          <div className="border-t border-zinc-100 dark:border-zinc-800/80 pt-4">
             {isCheckedInToday ? (
               <div className="rounded-xl bg-gradient-to-r from-green-500/10 via-emerald-500/10 to-green-500/10 border border-green-500/30 px-3.5 py-2.5 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
@@ -199,7 +275,7 @@ export default async function DashboardPage() {
                     Checked In Today <span className="font-normal text-green-700 dark:text-green-400 hidden sm:inline">— Your track check-in is active. Have a great session!</span>
                   </p>
                 </div>
-                <span className="rounded-full bg-green-500/20 border border-green-500/30 px-2.5 py-0.5 text-[10px] font-black text-green-700 dark:text-green-300 uppercase tracking-wider shrink-0">
+                <span className="rounded-full bg-green-500/20 border border-green-500/30 px-2.5 py-0.5 text-[10px] font-black text-green-700 dark:text-green-300 uppercase tracking-wider shrink-0 hidden sm:inline-block">
                   Verified On Track
                 </span>
               </div>
@@ -208,7 +284,7 @@ export default async function DashboardPage() {
                 <div className="flex items-center gap-2.5">
                   <span className="h-2 w-2 rounded-full bg-zinc-400 dark:bg-zinc-500 flex-shrink-0" />
                   <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                    Daily Track Check-In: <span className="font-normal text-zinc-500 dark:text-zinc-400">Not checked in yet today</span>
+                    Daily Track Check-In: <span className="font-normal text-zinc-500 dark:text-zinc-400 hidden sm:inline">Not checked in yet today</span>
                   </p>
                 </div>
                 <QRPopover userId={session.user.id} variant="button" buttonText="Show QR code" />
@@ -217,15 +293,13 @@ export default async function DashboardPage() {
           </div>
         </section>
 
-        {/* AI Tuning Setup Banner Section (Top of Dashboard) */}
-        <AITuningBanner />
-
         {/* Staff Quick Links — admin & moderator only (Top of Dashboard) */}
         {isAdminOrMod && (
           <div className="space-y-3">
             {winnerSelectionPending && (
               <Link
                 href="/admin/showcase-winners"
+                prefetch={true}
                 className="flex items-center justify-between rounded-xl bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-orange-500/20 border border-amber-500/40 p-3.5 text-xs font-bold text-zinc-900 dark:text-zinc-100 hover:border-amber-500 transition-all shadow-xs group"
               >
                 <div className="flex items-center gap-2.5">
@@ -260,6 +334,7 @@ export default async function DashboardPage() {
                 {/* Dashboard */}
                 <Link
                   href="/admin"
+                  prefetch={true}
                   className="relative flex flex-col items-center gap-2 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/60 p-3 hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:border-amber-200 dark:hover:border-amber-800 transition-colors group"
                 >
                   {winnerSelectionPending && (
@@ -281,6 +356,7 @@ export default async function DashboardPage() {
                 {/* QR Scanner */}
                 <Link
                   href="/admin/check-in"
+                  prefetch={true}
                   className="flex flex-col items-center gap-2 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/60 p-3 hover:bg-green-50 dark:hover:bg-green-950/30 hover:border-green-200 dark:hover:border-green-800 transition-colors group"
                 >
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-green-100 dark:bg-green-950/60 group-hover:bg-green-200 dark:group-hover:bg-green-900/60 transition-colors">
@@ -343,10 +419,12 @@ export default async function DashboardPage() {
                   >
                     <div>
                       {event.imageUrl ? (
-                        <div className="w-full h-24 overflow-hidden relative bg-zinc-100 dark:bg-zinc-800">
-                          <img
+                        <div className="relative h-24 w-full overflow-hidden bg-zinc-100 dark:bg-zinc-800">
+                          <Image
                             src={event.imageUrl}
                             alt={event.title}
+                            fill
+                            sizes="(max-width: 640px) 240px, 256px"
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                           />
                           <div className="absolute top-2 left-2">
@@ -404,65 +482,7 @@ export default async function DashboardPage() {
         </section>
 
 
-        {/* Penthouse Drift Wallet & Pass Balances Card */}
-        <section className="rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-amber-600 dark:text-amber-500 flex items-center gap-2">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              Penthouse Drift Wallet
-            </h2>
-            <Link
-              href="/wallet"
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-500 text-black hover:bg-amber-400 transition-colors"
-            >
-              Open Wallet & QR Passes →
-            </Link>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-            <div className="rounded-xl bg-zinc-50 dark:bg-zinc-950/80 p-4 border border-zinc-200 dark:border-zinc-800 flex flex-col justify-between space-y-2">
-              <div>
-                <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-500 uppercase tracking-wider">Day Passes</p>
-                <div className="flex items-baseline gap-2 mt-1">
-                  <span className="text-3xl font-black text-zinc-900 dark:text-white">{wallet.dayPasses}</span>
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400">{wallet.dayPasses === 1 ? "Pass" : "Passes"}</span>
-                </div>
-              </div>
-              {wallet.dayPasses <= 0 ? (
-                <Link
-                  href="/wallet"
-                  className="w-full text-center py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold hover:bg-amber-500/20 transition-colors"
-                >
-                  + Buy Day Pass (£10)
-                </Link>
-              ) : (
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Valid for 1 full track day</p>
-              )}
-            </div>
-
-            <div className="rounded-xl bg-zinc-50 dark:bg-zinc-950/80 p-4 border border-zinc-200 dark:border-zinc-800 flex flex-col justify-between space-y-2">
-              <div>
-                <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-500 uppercase tracking-wider">Car Rental Hours</p>
-                <div className="flex items-baseline gap-2 mt-1">
-                  <span className="text-3xl font-black text-zinc-900 dark:text-white">{wallet.rentalHours}</span>
-                  <span className="text-xs text-zinc-500 dark:text-zinc-400">{wallet.rentalHours === 1 ? "Hour" : "Hours"}</span>
-                </div>
-              </div>
-              {wallet.rentalHours <= 0 ? (
-                <Link
-                  href="/wallet"
-                  className="w-full text-center py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-bold hover:bg-amber-500/20 transition-colors"
-                >
-                  + Buy Rental Hour (£10)
-                </Link>
-              ) : (
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">15m grace + 1hr rental</p>
-              )}
-            </div>
-          </div>
-        </section>
 
         {/* Quick Links */}
         <section>
@@ -474,6 +494,7 @@ export default async function DashboardPage() {
               <Link
                 key={link.href}
                 href={link.href}
+                prefetch={true}
                 className="flex flex-col items-center gap-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 p-5 text-zinc-700 dark:text-zinc-200 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800/80 hover:text-zinc-900 dark:hover:text-white shadow-xs group"
               >
                 {link.icon}

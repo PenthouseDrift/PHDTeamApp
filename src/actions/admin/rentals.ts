@@ -330,6 +330,101 @@ export async function startRentalTimer(
   }
 }
 
+export async function adjustRentalTime(
+  rentalId: string,
+  minutes: number
+): Promise<ActionResult<RentalSession>> {
+  try {
+    const existing = await redis.hgetall(`rental:${rentalId}`);
+    if (!existing || Object.keys(existing).length === 0) {
+      return { success: false, error: "Rental session not found" };
+    }
+
+    const deltaMs = minutes * 60 * 1000;
+    const isGrace = existing.status === "grace";
+    
+    let newGraceEndsAt = Number(existing.graceEndsAt) || 0;
+    let newSessionEndsAt = Number(existing.sessionEndsAt) || 0;
+
+    if (isGrace) {
+      newGraceEndsAt += deltaMs;
+      await redis.hset(`rental:${rentalId}`, { graceEndsAt: newGraceEndsAt });
+    } else {
+      if (newSessionEndsAt) {
+         newSessionEndsAt += deltaMs;
+         await redis.hset(`rental:${rentalId}`, { sessionEndsAt: newSessionEndsAt });
+      }
+    }
+
+    const updatedSession: RentalSession = {
+      rentalId,
+      userId: existing.userId as string,
+      memberName: (existing.memberName as string) || "Member",
+      scannedAt: Number(existing.scannedAt),
+      graceEndsAt: newGraceEndsAt,
+      timerStartedAt: existing.timerStartedAt ? Number(existing.timerStartedAt) : null,
+      sessionEndsAt: newSessionEndsAt || null,
+      status: existing.status as "grace" | "active" | "completed",
+    };
+
+    revalidatePath("/admin/check-in");
+    revalidatePath("/admin/members");
+    return { success: true, data: updatedSession };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to adjust rental time",
+    };
+  }
+}
+
+export async function setRentalTime(
+  rentalId: string,
+  minutes: number
+): Promise<ActionResult<RentalSession>> {
+  try {
+    const existing = await redis.hgetall(`rental:${rentalId}`);
+    if (!existing || Object.keys(existing).length === 0) {
+      return { success: false, error: "Rental session not found" };
+    }
+
+    const now = Date.now();
+    const newEndMs = now + (minutes * 60 * 1000);
+    const isGrace = existing.status === "grace";
+    
+    let newGraceEndsAt = Number(existing.graceEndsAt) || 0;
+    let newSessionEndsAt = Number(existing.sessionEndsAt) || 0;
+
+    if (isGrace) {
+      newGraceEndsAt = newEndMs;
+      await redis.hset(`rental:${rentalId}`, { graceEndsAt: newGraceEndsAt });
+    } else {
+      newSessionEndsAt = newEndMs;
+      await redis.hset(`rental:${rentalId}`, { sessionEndsAt: newSessionEndsAt });
+    }
+
+    const updatedSession: RentalSession = {
+      rentalId,
+      userId: existing.userId as string,
+      memberName: (existing.memberName as string) || "Member",
+      scannedAt: Number(existing.scannedAt),
+      graceEndsAt: newGraceEndsAt,
+      timerStartedAt: existing.timerStartedAt ? Number(existing.timerStartedAt) : null,
+      sessionEndsAt: newSessionEndsAt || null,
+      status: existing.status as "grace" | "active" | "completed",
+    };
+
+    revalidatePath("/admin/check-in");
+    revalidatePath("/admin/members");
+    return { success: true, data: updatedSession };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to set rental time",
+    };
+  }
+}
+
 export async function completeRental(
   rentalId: string
 ): Promise<ActionResult<null>> {

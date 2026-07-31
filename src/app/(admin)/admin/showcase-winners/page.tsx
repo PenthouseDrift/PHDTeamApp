@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { redis } from "@/lib/redis";
 import { auth } from "@/lib/auth";
 import { getShowcaseEntries } from "@/actions/showcase";
-import { getCurrentWeek, getWeeklyWinners } from "@/actions/admin/showcase";
+import { getCurrentWeek, getWeeklyWinners, getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
 import { SelectWinnerButton } from "@/components/admin/SelectWinnerButton";
 import { AutoRefresh } from "@/components/AutoRefresh";
 
@@ -38,8 +38,8 @@ export default async function AdminShowcaseWinnersPage() {
   }
   const entries = await getShowcaseEntries();
   const { year, week } = await getCurrentWeek();
-  const currentWinnerKey = `shells:winner:${year}:${week}`;
-  const currentWinnerId = await redis.get(currentWinnerKey);
+  const currentWinnerInfo = await getCurrentWeekWinnerInfo();
+  const currentWinnerId = currentWinnerInfo.shellId;
   const pastWinners = await getWeeklyWinners();
 
   // Map past winners by shell ID
@@ -62,6 +62,10 @@ export default async function AdminShowcaseWinnersPage() {
 
   const thisWeekEntries = entries.filter((e) => isSubmittedThisWeek(e.createdAt));
   const earlierEntries = entries.filter((e) => !isSubmittedThisWeek(e.createdAt));
+
+  const now = new Date();
+  const day = now.getDay();
+  const isSelectionOpen = day === 0 || day === 6;
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8">
@@ -190,15 +194,30 @@ export default async function AdminShowcaseWinnersPage() {
                         {formatDate(entry.createdAt)} • <span className="font-semibold text-amber-600 dark:text-amber-500">{entry.voteCount} votes</span>
                       </p>
                     </div>
-                    {pastWinnerInfo ? (
+                    {isCurrentWinner ? (
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/20 px-2 py-1 text-xs font-medium text-amber-400">
+                          🏆 Current Winner
+                        </span>
+                        {currentWinnerInfo.selectedByName && (
+                          <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                            Selected by {currentWinnerInfo.selectedByName}
+                          </span>
+                        )}
+                      </div>
+                    ) : pastWinnerInfo ? (
                       <span className="rounded-xl bg-amber-500/10 border border-amber-500/30 px-3.5 py-2 text-xs font-bold text-amber-600 dark:text-amber-400 shrink-0">
                         🏆 Past Winner (W{pastWinnerInfo.week})
                       </span>
-                    ) : (
+                    ) : isSelectionOpen ? (
                       <SelectWinnerButton
                         shellId={entry.shellId}
-                        isCurrentWinner={isCurrentWinner}
+                        isCurrentWinner={false}
                       />
+                    ) : (
+                      <span className="rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3.5 py-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 shrink-0">
+                        Selection opens Saturday
+                      </span>
                     )}
                   </div>
                 );
@@ -256,7 +275,18 @@ export default async function AdminShowcaseWinnersPage() {
                         {formatDate(entry.createdAt)} • <span className="font-semibold text-amber-600 dark:text-amber-500">{entry.voteCount} votes</span>
                       </p>
                     </div>
-                    {pastWinnerInfo ? (
+                    {isCurrentWinner ? (
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/20 px-2 py-1 text-xs font-medium text-amber-400">
+                          🏆 Current Winner
+                        </span>
+                        {currentWinnerInfo.selectedByName && (
+                          <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                            Selected by {currentWinnerInfo.selectedByName}
+                          </span>
+                        )}
+                      </div>
+                    ) : pastWinnerInfo ? (
                       <span className="rounded-xl bg-amber-500/10 border border-amber-500/30 px-3.5 py-2 text-xs font-bold text-amber-600 dark:text-amber-400 shrink-0">
                         🏆 Past Winner (W{pastWinnerInfo.week})
                       </span>

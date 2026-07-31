@@ -28,7 +28,15 @@ export async function selectWeeklyWinner(shellId: string): Promise<ActionResult<
 
     const adminUserId = session.user.id;
     const adminName = session.user.name || "Admin";
-    const now = Date.now();
+    
+    // Only allow selection on Saturday (6) or Sunday (0)
+    const currentDate = new Date();
+    const currentDay = currentDate.getDay();
+    if (currentDay !== 0 && currentDay !== 6) {
+      return { success: false, error: "Winners can only be selected on Saturday or Sunday." };
+    }
+
+    const now = currentDate.getTime();
 
     const { year, week } = calcCurrentWeek();
     const winnerKey = `shells:winner:${year}:${week}`;

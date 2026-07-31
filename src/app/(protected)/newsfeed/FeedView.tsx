@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect } from "react";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import {
   togglePostLike,
@@ -159,7 +160,7 @@ function PostCard({
       <div className="flex items-center justify-between p-4 pb-2">
         <div className="flex items-center gap-3">
           {post.userImage ? (
-            <img src={post.userImage} alt="" className="w-9 h-9 rounded-full object-cover" />
+            <Image src={post.userImage} alt="" width={36} height={36} className="w-9 h-9 rounded-full object-cover" />
           ) : (
             <div className="w-9 h-9 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-xs">
               {post.userName[0]}
@@ -238,9 +239,11 @@ function PostCard({
 
       {/* Images */}
       {post.images.length > 0 && (
-        <div className={`grid gap-0.5 ${post.images.length === 1 ? "" : "grid-cols-2"}`}>
+        <div className={`grid gap-[1px] bg-zinc-200 dark:bg-zinc-800 ${post.images.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
           {post.images.map((img, i) => (
-            <img key={i} src={img} alt="" className="w-full aspect-square object-cover" />
+            <div key={i} className="relative w-full aspect-square">
+              <Image src={img} alt="" fill sizes="(max-width: 768px) 100vw, 50vw" className="object-cover" />
+            </div>
           ))}
         </div>
       )}
@@ -279,7 +282,7 @@ function PostCard({
           {comments.map((c) => (
             <div key={c.commentId} className="flex gap-2">
               {c.userImage ? (
-                <img src={c.userImage} alt="" className="w-7 h-7 rounded-full object-cover shrink-0" />
+                <Image src={c.userImage} alt="" width={28} height={28} className="w-7 h-7 rounded-full object-cover shrink-0" />
               ) : (
                 <div className="w-7 h-7 rounded-full bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center text-[10px] font-bold shrink-0">
                   {c.userName[0]}
