@@ -22,7 +22,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     error: "/auth/signin",
   },
   callbacks: {
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account, trigger, session }) {
       try {
         if (user && account) {
           const stableId = account.providerAccountId;
@@ -52,6 +52,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // Existing user — use the role and theme from Redis
             token.role = (existing.role as "admin" | "moderator" | "member") || "member";
             token.theme = (existing.theme as "light" | "dark") || "light";
+            if (existing.customAvatar) {
+              token.customAvatar = existing.customAvatar;
+            }
 
             // Update name/image only (don't touch role or theme)
             await redis.hset(`member:${stableId}`, {
@@ -60,20 +63,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             });
           }
         } else if (token.sub) {
-          // Refresh role and theme from Redis on subsequent requests with fallback
-          try {
-            const [freshRole, freshTheme] = await Promise.all([
-              redis.hget(`member:${token.sub}`, "role") as Promise<string | null>,
-              redis.hget(`member:${token.sub}`, "theme") as Promise<string | null>,
-            ]);
-            if (freshRole) {
-              token.role = freshRole as "admin" | "moderator" | "member";
-            }
-            if (freshTheme) {
-              token.theme = freshTheme as "light" | "dark";
-            }
-          } catch (redisErr) {
-            console.warn("[Auth JWT] Soft Redis fetch error:", redisErr);
+          // Handle manual session updates
+          if (trigger === "update" && session) {
+            if (session.theme) token.theme = session.theme;
+            if (session.role) token.role = session.role;
+            if (session.name) token.name = session.name;
+            if (session.image) token.picture = session.image;
+            if (session.customAvatar !== undefined) token.customAvatar = session.customAvatar;
           }
         }
       } catch (err) {
@@ -86,6 +82,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (token.sub) session.user.id = token.sub;
         session.user.role = token.role as "admin" | "moderator" | "member";
         session.user.theme = token.theme as "light" | "dark";
+        if (token.customAvatar) {
+          (session.user as any).customAvatar = token.customAvatar;
+        }
         
         // Developer Mode Impersonation
         if (process.env.NODE_ENV === "development") {

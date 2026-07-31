@@ -8,7 +8,6 @@ import { getActiveRentals } from "@/actions/admin/rentals";
 import { MemberList } from "@/components/admin/MemberList";
 import { TodayCheckIns } from "@/components/admin/TodayCheckIns";
 import { ActiveRentalsWidget } from "@/components/admin/ActiveRentalsWidget";
-import { AutoRefresh } from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +15,6 @@ export default function AdminMembersPage() {
   return (
     <PullToRefresh>
       <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
-      <AutoRefresh interval={5000} />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <Link

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { ShareCalibrationButton } from "./ShareCalibrationButton";
-import { deleteCalibration } from "@/actions/calibration";
+import { deleteCalibration, duplicateCalibration } from "@/actions/calibration";
 import { useSession } from "next-auth/react";
 import type { CalibrationSetup } from "@/types";
 
@@ -14,13 +14,25 @@ interface CalibrationCardProps {
 export function CalibrationCard({ cal }: CalibrationCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDuplicateConfirm, setShowDuplicateConfirm] = useState(false);
+  const [newCalibrationName, setNewCalibrationName] = useState("");
   const [isDeleting, startDeleteTransition] = useTransition();
+  const [isDuplicating, startDuplicateTransition] = useTransition();
   const { data: session } = useSession();
 
   function handleDelete() {
     if (!session?.user?.id) return;
     startDeleteTransition(async () => {
       await deleteCalibration(cal.calibrationId, session.user.id);
+    });
+  }
+
+  function handleDuplicate() {
+    if (!session?.user?.id || !newCalibrationName.trim()) return;
+    startDuplicateTransition(async () => {
+      await duplicateCalibration(cal.calibrationId, session.user.id, newCalibrationName.trim());
+      setShowDuplicateConfirm(false);
+      setNewCalibrationName("");
     });
   }
 
@@ -38,6 +50,18 @@ export function CalibrationCard({ cal }: CalibrationCardProps) {
             <span>AI Tune</span>
           </Link>
           <ShareCalibrationButton calibrationId={cal.calibrationId} calibrationName={cal.name} />
+          <button
+            onClick={() => {
+              setNewCalibrationName(`${cal.name} (Copy)`);
+              setShowDuplicateConfirm(true);
+            }}
+            className="p-1 text-zinc-400 hover:text-amber-500 transition-colors"
+            title="Duplicate calibration"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+            </svg>
+          </button>
           <button
             onClick={() => setShowDeleteConfirm(true)}
             className="p-1 text-zinc-400 hover:text-red-500 transition-colors"
@@ -75,6 +99,41 @@ export function CalibrationCard({ cal }: CalibrationCardProps) {
                 className="flex-1 rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
               >
                 {isDeleting ? "Deleting..." : "Confirm Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate confirmation modal */}
+      {showDuplicateConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowDuplicateConfirm(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl space-y-4" onClick={(e) => e.stopPropagation()}>
+            <h4 className="text-base font-bold text-zinc-900">Duplicate Calibration</h4>
+            <p className="text-xs text-zinc-500">
+              Create a copy of <strong>"{cal.name}"</strong>. Enter a name for the new setup:
+            </p>
+            <input
+              type="text"
+              value={newCalibrationName}
+              onChange={(e) => setNewCalibrationName(e.target.value)}
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none text-zinc-900"
+              placeholder="Calibration Name"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowDuplicateConfirm(false)}
+                className="flex-1 rounded-lg bg-zinc-100 px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDuplicate}
+                disabled={isDuplicating || !newCalibrationName.trim()}
+                className="flex-1 rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-black hover:bg-amber-400 disabled:opacity-50 transition-colors"
+              >
+                {isDuplicating ? "Duplicating..." : "Duplicate"}
               </button>
             </div>
           </div>

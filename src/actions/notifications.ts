@@ -1,5 +1,7 @@
 "use server";
 
+import { cache } from "react";
+
 import { redis } from "@/lib/redis";
 import { sendPushNotification, type PushSubscriptionData } from "@/lib/push";
 import type { ActionResult } from "@/types";
@@ -147,7 +149,8 @@ export async function sendGlobalNotification(
     const targetUrl = params.url?.trim() || "/notifications";
 
     // Send in-app notifications to all target users in parallel
-    const sendPromises = targetUserIds.map(async (uid) => {
+    const notificationPipeline = redis.pipeline();
+    for (const uid of targetUserIds) {
       const notificationId = crypto.randomUUID();
       const notification: AppNotification = {
         notificationId,
@@ -161,22 +164,34 @@ export async function sendGlobalNotification(
         createdAt: Date.now(),
       };
 
-      await redis.hset(`notification:${notificationId}`, notification as unknown as Record<string, unknown>);
-      await redis.expire(`notification:${notificationId}`, 7 * 86400);
-      await redis.lpush(`notifications:${uid}`, notificationId);
-      await redis.ltrim(`notifications:${uid}`, 0, 99);
-      await redis.incr(`notifications:${uid}:unread`);
-    });
+      notificationPipeline.hset(`notification:${notificationId}`, notification as unknown as Record<string, unknown>);
+      notificationPipeline.expire(`notification:${notificationId}`, 7 * 86400);
+      notificationPipeline.lpush(`notifications:${uid}`, notificationId);
+      notificationPipeline.ltrim(`notifications:${uid}`, 0, 99);
+      notificationPipeline.incr(`notifications:${uid}:unread`);
+    }
 
-    await Promise.all(sendPromises);
+    if (targetUserIds.length > 0) {
+      await notificationPipeline.exec();
+    }
 
     // Deliver Web Push: Deduplicate subscription endpoints across ALL members & global set
     // so each browser device endpoint receives EXACTLY 1 Web Push notification!
     const uniqueSubIds = new Set<string>();
+    const subsPipeline = redis.pipeline();
+    
     for (const uid of targetUserIds) {
-      const subIds = await redis.smembers(`push:user:${uid}:subscriptions`);
-      for (const sId of subIds) {
-        uniqueSubIds.add(sId);
+      subsPipeline.smembers(`push:user:${uid}:subscriptions`);
+    }
+    
+    if (targetUserIds.length > 0) {
+      const allSubs = await subsPipeline.exec();
+      for (const subIds of allSubs) {
+        if (Array.isArray(subIds)) {
+          for (const sId of subIds) {
+            uniqueSubIds.add(sId as string);
+          }
+        }
       }
     }
 
@@ -446,14 +461,14 @@ export async function getNotifications(userId: string, limit = 30): Promise<AppN
   }
 }
 
-export async function getUnreadCount(userId: string): Promise<number> {
+export const getUnreadCount = cache(async function(userId: string): Promise<number> {
   try {
     const count = await redis.get(`notifications:${userId}:unread`);
     return Number(count) || 0;
   } catch {
     return 0;
   }
-}
+});
 
 export async function markAllRead(userId: string): Promise<void> {
   try {

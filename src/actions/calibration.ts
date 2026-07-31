@@ -337,3 +337,41 @@ export async function revokeShare(
   await redis.hset(`share:${shareId}`, { active: "false" });
   return { success: true, data: null };
 }
+
+export async function duplicateCalibration(
+  calibrationId: string,
+  userId: string,
+  newName: string
+): Promise<ActionResult<CalibrationSetup>> {
+  const data = await redis.hgetall(`calibration:${calibrationId}`);
+  if (!data || data.userId !== userId) {
+    return { success: false, error: "Calibration not found or access denied" };
+  }
+
+  const carId = data.carId as string;
+  
+  // Enforce limit
+  const count = await redis.scard(`car:${carId}:calibrations`);
+  const MAX_CALIBRATIONS_PER_CAR = 20;
+  if (count >= MAX_CALIBRATIONS_PER_CAR) {
+    return {
+      success: false,
+      error: `Maximum of ${MAX_CALIBRATIONS_PER_CAR} calibrations per car`,
+    };
+  }
+
+  const newCalibrationId = crypto.randomUUID();
+  
+  const duplicatedCalibration = {
+    ...data,
+    calibrationId: newCalibrationId,
+    name: newName,
+    createdAt: Date.now(),
+  };
+
+  await redis.hset(`calibration:${newCalibrationId}`, duplicatedCalibration);
+  await redis.sadd(`car:${carId}:calibrations`, newCalibrationId);
+
+  revalidatePath(`/cars/${carId}`);
+  return { success: true, data: duplicatedCalibration as unknown as CalibrationSetup };
+}

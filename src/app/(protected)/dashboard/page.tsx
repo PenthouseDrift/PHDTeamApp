@@ -184,42 +184,67 @@ export default async function DashboardPage() {
           <div className="flex flex-col gap-3 sm:gap-4">
             
             {/* 1. Membership Status (Full Width) */}
-            <div className="w-full rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 p-4 sm:p-5 border border-amber-300 dark:border-orange-600 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden shadow-md">
-              <div className="absolute top-0 right-0 w-48 h-48 bg-white/20 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
-              
-              <div className="relative z-10">
-                <p className="text-[10px] sm:text-[11px] font-black text-amber-900/80 uppercase tracking-widest mb-1">
-                  {membership && isActive ? "Penthouse Drift Member" : membership ? "Membership Expired" : "Unlock Full Access"}
-                </p>
+            {isAdminOrMod ? (
+              <div className="w-full rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 p-4 sm:p-5 border border-amber-300 dark:border-orange-600 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden shadow-md">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-white/20 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
                 
-                {membership && isActive ? (
-                  <>
-                    <h3 className="text-lg sm:text-xl font-black text-black leading-tight">
-                      Active
-                    </h3>
-                    <p className="text-xs font-semibold text-amber-900 mt-1">
-                      {remainingDays} {remainingDays === 1 ? "day" : "days"} of unlimited track access remaining.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <h3 className="text-lg sm:text-xl font-black text-black leading-tight">
-                      {membership ? "Renew Your Membership" : "Become a Member"}
-                    </h3>
-                    <p className="text-xs font-semibold text-amber-900 mt-1 max-w-sm">
-                      Get unlimited track access for a full 28 days.
-                    </p>
-                  </>
-                )}
+                <div className="relative z-10">
+                  <p className="text-[10px] sm:text-[11px] font-black text-amber-900/80 uppercase tracking-widest mb-1">
+                    Penthouse Drift Staff
+                  </p>
+                  <h3 className="text-lg sm:text-xl font-black text-black leading-tight">
+                    Full Track Access
+                  </h3>
+                  <p className="text-xs font-semibold text-amber-900 mt-1">
+                    You have unlimited track access.
+                  </p>
+                </div>
+                
+                <Link
+                  href="/admin"
+                  className="relative z-10 shrink-0 w-full sm:w-auto px-6 py-2.5 sm:py-3 rounded-xl text-sm font-black text-center transition-all active:scale-[0.98] bg-black text-white hover:bg-zinc-800 shadow-lg shadow-black/20"
+                >
+                  Admin Command Center
+                </Link>
               </div>
-              
-              <Link
-                href="/membership/purchase"
-                className="relative z-10 shrink-0 w-full sm:w-auto px-6 py-2.5 sm:py-3 rounded-xl text-sm font-black text-center transition-all active:scale-[0.98] bg-black text-white hover:bg-zinc-800 shadow-lg shadow-black/20"
-              >
-                {membership && isActive ? "Manage Membership" : membership ? "Renew Now (£40)" : "Buy Membership (£40)"}
-              </Link>
-            </div>
+            ) : (
+              <div className="w-full rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 p-4 sm:p-5 border border-amber-300 dark:border-orange-600 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative overflow-hidden shadow-md">
+                <div className="absolute top-0 right-0 w-48 h-48 bg-white/20 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+                
+                <div className="relative z-10">
+                  <p className="text-[10px] sm:text-[11px] font-black text-amber-900/80 uppercase tracking-widest mb-1">
+                    {membership && isActive ? "Penthouse Drift Member" : membership ? "Membership Expired" : "Unlock Full Access"}
+                  </p>
+                  
+                  {membership && isActive ? (
+                    <>
+                      <h3 className="text-lg sm:text-xl font-black text-black leading-tight">
+                        Active
+                      </h3>
+                      <p className="text-xs font-semibold text-amber-900 mt-1">
+                        {remainingDays} {remainingDays === 1 ? "day" : "days"} of unlimited track access remaining.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h3 className="text-lg sm:text-xl font-black text-black leading-tight">
+                        {membership ? "Renew Your Membership" : "Become a Member"}
+                      </h3>
+                      <p className="text-xs font-semibold text-amber-900 mt-1 max-w-sm">
+                        Get unlimited track access for a full 28 days.
+                      </p>
+                    </>
+                  )}
+                </div>
+                
+                <Link
+                  href="/membership/purchase"
+                  className="relative z-10 shrink-0 w-full sm:w-auto px-6 py-2.5 sm:py-3 rounded-xl text-sm font-black text-center transition-all active:scale-[0.98] bg-black text-white hover:bg-zinc-800 shadow-lg shadow-black/20"
+                >
+                  {membership && isActive ? "Manage Membership" : membership ? "Renew Now (£40)" : "Buy Membership (£40)"}
+                </Link>
+              </div>
+            )}
 
             {/* Passes & Rentals Grid */}
             <div className="grid grid-cols-2 gap-3 sm:gap-4">
