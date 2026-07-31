@@ -1,6 +1,7 @@
 "use server";
 
 import { redis } from "@/lib/redis";
+import { unstable_cache } from "next/cache";
 import type { Member, Membership, Wallet } from "@/types";
 
 export interface MemberWithMembership {
@@ -9,7 +10,7 @@ export interface MemberWithMembership {
   wallet: Wallet;
 }
 
-export async function getAllMembers(): Promise<MemberWithMembership[]> {
+async function _getAllMembers(): Promise<MemberWithMembership[]> {
   try {
     const membersMap = new Map<string, MemberWithMembership>();
 
@@ -93,4 +94,10 @@ export async function getAllMembers(): Promise<MemberWithMembership[]> {
     return [];
   }
 }
+
+export const getAllMembers = unstable_cache(
+  async () => _getAllMembers(),
+  ["admin-members"],
+  { revalidate: 60, tags: ["admin-members"] }
+);
 

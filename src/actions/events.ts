@@ -1,7 +1,7 @@
 "use server";
 
 import { redis } from "@/lib/redis";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_cache } from "next/cache";
 import { auth } from "@/lib/auth";
 import type { ActionResult } from "@/types";
 
@@ -85,7 +85,7 @@ export async function updateEvent(
   return { success: true, data: null };
 }
 
-export async function getUpcomingEvents(): Promise<TrackEvent[]> {
+async function _getUpcomingEvents(): Promise<TrackEvent[]> {
   const ids = await redis.lrange("events:all", 0, -1);
   if (!ids || ids.length === 0) return [];
 
@@ -125,6 +125,12 @@ export async function getUpcomingEvents(): Promise<TrackEvent[]> {
   events.sort((a, b) => a.date.localeCompare(b.date));
   return events;
 }
+
+export const getUpcomingEvents = unstable_cache(
+  async () => _getUpcomingEvents(),
+  ["events"],
+  { revalidate: 60, tags: ["events"] }
+);
 
 export async function cancelEvent(eventId: string): Promise<ActionResult<null>> {
   await redis.hset(`event:${eventId}`, { status: "cancelled" });

@@ -1,4 +1,5 @@
 import NextAuth from "next-auth";
+import { cookies } from "next/headers";
 import Google from "next-auth/providers/google";
 import { redis } from "./redis";
 
@@ -82,9 +83,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.sub!;
-        session.user.role = (token.role as "admin" | "moderator" | "member") || "member";
-        session.user.theme = (token.theme as "light" | "dark") || "light";
+        if (token.sub) session.user.id = token.sub;
+        session.user.role = token.role as "admin" | "moderator" | "member";
+        session.user.theme = token.theme as "light" | "dark";
+        
+        // Developer Mode Impersonation
+        if (process.env.NODE_ENV === "development") {
+          const cookieStore = await cookies();
+          const impersonate = cookieStore.get("dev_impersonate_role")?.value;
+          if (impersonate === "member") {
+            // Add a flag so the UI knows we are impersonating
+            (session.user as any).realRole = session.user.role;
+            session.user.role = "member";
+          }
+        }
       }
       return session;
     },

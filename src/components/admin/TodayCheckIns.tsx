@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import type { CheckInEntry } from "@/actions/admin/checkins";
 import { addNonMemberCheckIn, removeCheckIn, updateCheckInMethod } from "@/actions/admin/checkins";
 import { extendMemberRentalByUserId } from "@/actions/admin/rentals";
@@ -298,8 +299,7 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
         </div>
       )}
 
-      {/* Two-step removal confirmation */}
-      {confirmRemoveIndex !== null && (
+      {confirmRemoveIndex !== null && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setConfirmRemoveIndex(null)}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
           <div
@@ -336,7 +336,8 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </section>
   );

@@ -4,6 +4,7 @@ import { redis } from "@/lib/redis";
 import { getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
 import { ProtectedNavigation } from "@/components/ProtectedNavigation";
 import { BetaFeedbackBanner } from "@/components/BetaFeedbackBanner";
+import { PullToRefresh } from "@/components/PullToRefresh";
 
 export default async function ProtectedLayout({
   children,
@@ -32,7 +33,9 @@ export default async function ProtectedLayout({
     customAvatar = avatar;
     unreadCount = unread;
     if (isAdminOrMod && winnerInfo) {
-      winnerSelectionPending = !winnerInfo.shellId;
+      const day = new Date().getDay();
+      const isWeekend = day === 0 || day === 6;
+      winnerSelectionPending = isWeekend && !winnerInfo.shellId;
     }
   } catch {
     // Silently fail
@@ -50,11 +53,13 @@ export default async function ProtectedLayout({
         unreadNotifications={unreadCount}
         winnerSelectionPending={winnerSelectionPending}
       />
-      <main className="flex-1 overflow-y-auto pt-16 pb-16 md:pt-0 md:pb-0 flex flex-col">
+      <main className="flex-1 overflow-y-auto pt-16 md:pt-0 flex flex-col">
         <BetaFeedbackBanner />
-        <div className="flex-1 overflow-y-auto">
-          {children}
-        </div>
+        <PullToRefresh>
+          <div className="flex-1 flex flex-col pb-24 md:pb-0">
+            {children}
+          </div>
+        </PullToRefresh>
       </main>
     </div>
   );

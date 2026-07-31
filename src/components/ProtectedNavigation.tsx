@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import Image from "next/image";
 import { NotificationsPopover } from "@/components/NotificationsPopover";
 import { QRPopover } from "@/components/QRPopover";
+import { DevImpersonationToggle } from "@/components/DevImpersonationToggle";
 
 interface NavUser {
   id: string;
@@ -47,14 +49,20 @@ function getInitials(name: string | null | undefined): string {
 export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelectionPending = false }: ProtectedNavigationProps) {
   const pathname = usePathname();
 
+  const isImpersonating = Boolean((user as any).realRole);
+  const realRole = (user as any).realRole || user.role;
+
   return (
     <>
       {/* Desktop sidebar */}
       <aside className="hidden md:flex md:w-64 md:flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
         {/* Header: logo + user + notifications */}
         <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800">
-          <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-8 w-8" />
+          <Image src="/icons/icon-192.png" alt="Penthouse Drift" width={32} height={32} className="h-8 w-8" />
           <div className="flex items-center gap-2">
+            {process.env.NODE_ENV === "development" && (
+              <DevImpersonationToggle isImpersonating={isImpersonating} realRole={realRole} />
+            )}
             <QRPopover userId={user.id} />
             <NotificationsPopover userId={user.id} initialUnreadCount={unreadNotifications} />
             <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200 truncate max-w-[100px]">
@@ -82,6 +90,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={true}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
                     ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
@@ -95,6 +104,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
           })}
           <Link
             href="/profile"
+            prefetch={true}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
               pathname.startsWith("/profile")
                 ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
@@ -107,6 +117,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
           {(user.role === "admin" || user.role === "moderator") && (
             <Link
               href="/admin"
+              prefetch={true}
               className={`flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 pathname.startsWith("/admin")
                   ? "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 font-bold"
@@ -145,22 +156,29 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
           {pathname !== "/dashboard" ? (
             <Link
               href="/dashboard"
+              prefetch={true}
               className="inline-flex items-center gap-1 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:text-amber-500 transition-colors bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700"
             >
               <span>←</span> Back
             </Link>
           ) : (
-            <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-7 w-7" />
+            <Image src="/icons/icon-192.png" alt="Penthouse Drift" width={28} height={28} className="h-7 w-7" />
           )}
         </div>
         <div className="flex items-center gap-1.5 sm:gap-3">
+          {process.env.NODE_ENV === "development" && (
+            <DevImpersonationToggle isImpersonating={isImpersonating} realRole={realRole} />
+          )}
           <QRPopover userId={user.id} variant="button" buttonText="Show QR code" />
           <NotificationsPopover userId={user.id} initialUnreadCount={unreadNotifications} />
-          <Link href="/profile">
+          <Link href="/profile" prefetch={true}>
             {user.image ? (
-              <img
+              <Image
                 src={user.image}
                 alt={user.name ?? "User"}
+                width={32}
+                height={32}
+                priority
                 className="w-8 h-8 rounded-full object-cover ring-1 ring-zinc-200"
               />
             ) : (
@@ -180,6 +198,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
             <Link
               key={item.href}
               href={item.href}
+              prefetch={true}
               className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
                 isActive ? "text-zinc-900 dark:text-zinc-100" : "text-zinc-400 dark:text-zinc-500"
               }`}
@@ -192,6 +211,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
         {(user.role === "admin" || user.role === "moderator") && (
           <Link
             href="/admin"
+            prefetch={true}
             className={`relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
               pathname.startsWith("/admin") ? "text-amber-600 dark:text-amber-400 font-bold" : "text-amber-500 dark:text-amber-400"
             }`}

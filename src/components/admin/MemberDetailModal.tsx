@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useSession } from "next-auth/react";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
@@ -238,7 +239,7 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
   const isAdminViewer = viewerRole === "admin";
   const isModeratorViewer = viewerRole === "moderator";
 
-  return (
+  const modalContent = (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       onClick={onClose}
@@ -353,18 +354,22 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
 
           {/* Membership Status (Admin & Moderator) */}
           <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Membership</h3>
-            {localRole === "admin" ? (
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-100 dark:bg-purple-950/80 border border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs font-black uppercase tracking-wider">
-                <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
-                Admin Access
-              </span>
-            ) : localRole === "moderator" ? (
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-100 dark:bg-blue-950/80 border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs font-black uppercase tracking-wider">
-                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                Moderator Access
-              </span>
-            ) : localMembership ? (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Membership</h3>
+              {localRole === "admin" ? (
+                <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-100 dark:bg-purple-950/80 border border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-[10px] font-black uppercase tracking-wider">
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
+                  Admin Access
+                </span>
+              ) : localRole === "moderator" ? (
+                <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-950/80 border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-[10px] font-black uppercase tracking-wider">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                  Mod Access
+                </span>
+              ) : null}
+            </div>
+
+            {localMembership ? (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <StatusBadge status={localMembership.status} size="sm" />
@@ -397,8 +402,8 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
               <p className="text-sm text-zinc-500">No membership record</p>
             )}
 
-              {/* Membership Actions (Admin Only for Non-Staff Members) */}
-              {isAdminViewer && localRole !== "admin" && localRole !== "moderator" && (
+              {/* Membership Actions (Admin Only) */}
+              {isAdminViewer && (
                 <div className="flex flex-wrap gap-2 pt-1 border-t border-zinc-100 dark:border-zinc-800">
                   {!membershipActive ? (
                     <button
@@ -435,7 +440,7 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
                 </div>
               )}
               {/* Date Override Inline (Admin only) */}
-              {isAdminViewer && localRole !== "admin" && localRole !== "moderator" && showOverride && (
+              {isAdminViewer && showOverride && (
                 <div className="flex flex-wrap gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                   <input
                     type="date"
@@ -889,4 +894,9 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
       </div>
     </div>
   );
+
+  if (typeof document !== "undefined") {
+    return createPortal(modalContent, document.body);
+  }
+  return null;
 }

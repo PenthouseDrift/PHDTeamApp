@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { PullToRefresh } from "@/components/PullToRefresh";
 import { auth } from "@/lib/auth";
 import { getAllMembers } from "@/actions/admin/members";
 import { getTodayCheckIns } from "@/actions/admin/checkins";
 import { getUpcomingEvents } from "@/actions/events";
+import { Suspense } from "react";
 import { getCurrentWeek, getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
 import { redis } from "@/lib/redis";
 
@@ -14,8 +16,24 @@ export default async function AdminDashboardPage() {
 
   const isModerator = session.user.role === "moderator";
 
-  // Check Sunday status & current week winner
-  const isSunday = new Date().getDay() === 0;
+  return (
+    <PullToRefresh>
+      <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8 space-y-8">
+        <div className="mx-auto max-w-6xl space-y-8">
+          <Suspense fallback={<AdminDashboardSkeleton isModerator={isModerator} />}>
+            <AdminDashboardData session={session} isModerator={isModerator} />
+          </Suspense>
+        </div>
+      </div>
+    </PullToRefresh>
+  );
+}
+
+async function AdminDashboardData({ session, isModerator }: { session: any, isModerator: boolean }) {
+  // Check weekend status & current week winner
+  const day = new Date().getDay();
+  const isSunday = day === 0;
+  const isSaturday = day === 6;
   const { year, week } = await getCurrentWeek();
 
   // Fetch overview metrics in parallel
@@ -82,7 +100,9 @@ export default async function AdminDashboardPage() {
         ? `Winner selected for Week ${week}, ${year}`
         : isSunday
         ? "🚨 TODAY IS SUNDAY: Select weekly winner now!"
-        : "Pick and crown weekly shell showcase winners",
+        : isSaturday
+        ? "Select this week's showcase winner!"
+        : "Selection opens on Saturday",
       href: "/admin/showcase-winners",
       icon: "🏆",
       highlight: isSunday && !winnerChosenThisWeek,
@@ -112,9 +132,8 @@ export default async function AdminDashboardPage() {
   const quickTiles = allQuickTiles.filter((t) => !isModerator || !t.adminOnly);
 
   return (
-    <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8 space-y-8">
-      <div className="mx-auto max-w-6xl space-y-8">
-        {/* Header with Back Button */}
+    <>
+      {/* Header with Back Button */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-6">
           <div className="flex items-center gap-4">
             {avatarUrl ? (
@@ -299,6 +318,7 @@ export default async function AdminDashboardPage() {
               <Link
                 key={tile.href}
                 href={tile.href}
+                prefetch={true}
                 className={`group relative rounded-2xl bg-white dark:bg-zinc-900 border p-5 flex flex-col justify-between transition-all duration-200 hover:shadow-lg space-y-4 ${
                   tile.highlight
                     ? "border-amber-500 ring-2 ring-amber-500/40 shadow-amber-500/10 animate-pulse"
@@ -329,6 +349,40 @@ export default async function AdminDashboardPage() {
             ))}
           </div>
         </section>
+    </>
+  );
+}
+
+function AdminDashboardSkeleton({ isModerator }: { isModerator: boolean }) {
+  return (
+    <div className="space-y-8 animate-pulse">
+      {/* Header Skeleton */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-6">
+        <div className="flex items-center gap-4">
+          <div className="h-14 w-14 rounded-2xl bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+          <div>
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <div className="h-6 w-48 bg-zinc-200 dark:bg-zinc-800 rounded" />
+              <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-800 rounded-full" />
+            </div>
+            <div className="h-3 w-64 bg-zinc-200 dark:bg-zinc-800 rounded mt-1" />
+          </div>
+        </div>
+        <div className="h-9 w-40 bg-zinc-200 dark:bg-zinc-800 rounded-xl shrink-0" />
+      </div>
+
+      {/* Quick Access Tiles Skeleton */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[...Array(isModerator ? 4 : 8)].map((_, i) => (
+          <div key={i} className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm h-32 flex flex-col justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+              <div className="h-4 w-24 bg-zinc-200 dark:bg-zinc-800 rounded" />
+            </div>
+            <div className="h-3 w-full bg-zinc-200 dark:bg-zinc-800 rounded mt-3" />
+            <div className="h-3 w-2/3 bg-zinc-200 dark:bg-zinc-800 rounded mt-1.5" />
+          </div>
+        ))}
       </div>
     </div>
   );
