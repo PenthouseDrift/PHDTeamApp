@@ -11,6 +11,8 @@ import { getEventTiming } from "@/lib/event-utils";
 import { QuickRSVPButton } from "@/components/QuickRSVPButton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { QRPopover } from "@/components/QRPopover";
+import { SelfCheckInCTA } from "@/components/SelfCheckInCTA";
+import { getSelfCheckInStatus } from "@/actions/admin/checkins";
 
 import { getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
 
@@ -102,13 +104,14 @@ export default async function DashboardPage() {
   const isAdminOrMod = session.user.role === "admin" || session.user.role === "moderator";
 
   // Fetch all dashboard data in parallel
-  const [result, walletRes, memberData, upcomingEvents, isCheckedInToday, winnerInfo] = await Promise.all([
+  const [result, walletRes, memberData, upcomingEvents, isCheckedInToday, winnerInfo, selfCheckInActive] = await Promise.all([
     getMembership(session.user.id),
     getWallet(session.user.id),
     redis.hgetall(`member:${session.user.id}`),
     getUpcomingEvents(),
     isUserCheckedInToday(session.user.id),
     isAdminOrMod ? getCurrentWeekWinnerInfo() : Promise.resolve(null),
+    getSelfCheckInStatus(),
   ]);
 
   const day = new Date().getDay();
@@ -279,6 +282,8 @@ export default async function DashboardPage() {
                   Verified On Track
                 </span>
               </div>
+            ) : selfCheckInActive ? (
+              <SelfCheckInCTA />
             ) : (
               <div className="rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800 px-3.5 py-2.5 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">

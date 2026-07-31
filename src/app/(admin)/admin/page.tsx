@@ -2,7 +2,8 @@ import Link from "next/link";
 import { PullToRefresh } from "@/components/PullToRefresh";
 import { auth } from "@/lib/auth";
 import { getAllMembers } from "@/actions/admin/members";
-import { getTodayCheckIns } from "@/actions/admin/checkins";
+import { getTodayCheckIns, getSelfCheckInStatus } from "@/actions/admin/checkins";
+import { SelfCheckInToggle } from "@/components/admin/SelfCheckInToggle";
 import { getUpcomingEvents } from "@/actions/events";
 import { Suspense } from "react";
 import { getCurrentWeek, getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
@@ -37,12 +38,13 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
   const { year, week } = await getCurrentWeek();
 
   // Fetch overview metrics in parallel
-  const [members, todayCheckins, events, customAvatar, currentWinnerInfo] = await Promise.all([
+  const [members, todayCheckins, events, customAvatar, currentWinnerInfo, selfCheckInActive] = await Promise.all([
     getAllMembers(),
     getTodayCheckIns(),
     getUpcomingEvents(),
     redis.hget(`member:${session.user.id}`, "customAvatar") as Promise<string | null>,
     getCurrentWeekWinnerInfo(),
+    getSelfCheckInStatus(),
   ]);
 
   const winnerChosenThisWeek = Boolean(currentWinnerInfo.shellId);
@@ -52,6 +54,10 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
     (c) => c.method === "qr" || c.method === "manual" || c.method === "membership_cash"
   ).length;
   const avatarUrl = customAvatar || session.user.image || null;
+  const todayDate = new Date().toISOString().split("T")[0];
+  const hasEventToday = events.some(e => e.date === todayDate && e.status !== "cancelled");
+  const isDev = process.env.NODE_ENV === "development";
+  const shouldShowSelfCheckInToggle = hasEventToday || isDev;
 
   const allQuickTiles = [
     {
@@ -172,6 +178,11 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
             Back to Member Dashboard
           </Link>
         </div>
+
+        {/* Self Check-in Toggle for Event Days (and Dev) */}
+        {shouldShowSelfCheckInToggle && (
+          <SelfCheckInToggle adminId={session.user.id} initialActive={selfCheckInActive} />
+        )}
 
         {/* High Priority Sunday Winner Highlight Banner (Admin only) */}
         {!isModerator && isSunday && (
