@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { redis } from "@/lib/redis";
+import { getUnreadCount } from "@/actions/notifications";
 import { AdminNavigation } from "@/components/AdminNavigation";
 
 export default async function AdminLayout({
@@ -21,7 +21,7 @@ export default async function AdminLayout({
   let customAvatar: string | null = null;
   let unreadCount = 0;
   try {
-    const unread = await redis.get(`notifications:${session.user.id}:unread`).then((v) => Number(v) || 0);
+    const unread = await getUnreadCount(session.user.id);
     customAvatar = (session.user as any).customAvatar || null;
     unreadCount = unread;
   } catch {

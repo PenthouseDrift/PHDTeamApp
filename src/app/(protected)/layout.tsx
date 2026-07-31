@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { redis } from "@/lib/redis";
+import { getUnreadCount } from "@/actions/notifications";
 import { getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
 import { ProtectedNavigation } from "@/components/ProtectedNavigation";
 import { BetaFeedbackBanner } from "@/components/BetaFeedbackBanner";
@@ -26,7 +26,7 @@ export default async function ProtectedLayout({
     const isAdminOrMod = session.user.role === "admin" || session.user.role === "moderator";
 
     const [unread, winnerInfo] = await Promise.all([
-      redis.get(`notifications:${session.user.id}:unread`).then(v => Number(v) || 0),
+      getUnreadCount(session.user.id),
       isAdminOrMod ? getCurrentWeekWinnerInfo() : Promise.resolve(null),
     ]);
     customAvatar = (session.user as any).customAvatar || null;
