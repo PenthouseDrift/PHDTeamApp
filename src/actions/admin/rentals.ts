@@ -50,11 +50,18 @@ export async function createOrExtendRentalSession(
     let existingData: Record<string, unknown> | null = null;
 
     if (activeIds && activeIds.length > 0) {
+      const pipeline = redis.pipeline();
       for (const id of activeIds) {
-        const data = await redis.hgetall(`rental:${id}`);
+        pipeline.hgetall(`rental:${id}`);
+      }
+      const results = await pipeline.exec();
+      
+      for (let i = 0; i < activeIds.length; i++) {
+        const id = activeIds[i];
+        const data = results[i] as Record<string, unknown> | null;
         if (data && data.userId === userId && data.status !== "completed") {
           existingRentalId = id as string;
-          existingData = data as Record<string, unknown>;
+          existingData = data;
           break;
         }
       }
@@ -183,9 +190,16 @@ export async function extendMemberRentalByUserId(
     let existingRentalId: string | null = null;
 
     if (activeIds && activeIds.length > 0) {
+      const pipeline = redis.pipeline();
       for (const id of activeIds) {
-        const data = await redis.hgetall(`rental:${id}`);
-        if (data && data.userId === userId) {
+        pipeline.hgetall(`rental:${id}`);
+      }
+      const results = await pipeline.exec();
+      
+      for (let i = 0; i < activeIds.length; i++) {
+        const id = activeIds[i];
+        const data = results[i] as Record<string, unknown> | null;
+        if (data && data.userId === userId && data.status !== "completed") {
           existingRentalId = id as string;
           break;
         }
@@ -253,8 +267,15 @@ export async function getActiveRentals(): Promise<RentalSession[]> {
     const now = Date.now();
     const sessions: RentalSession[] = [];
 
+    const pipeline = redis.pipeline();
     for (const id of ids) {
-      const data = await redis.hgetall(`rental:${id}`);
+      pipeline.hgetall(`rental:${id}`);
+    }
+    const results = await pipeline.exec();
+
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      const data = results[i] as Record<string, unknown> | null;
       if (!data || Object.keys(data).length === 0) continue;
 
       let status = (data.status as "grace" | "active" | "completed") || "grace";

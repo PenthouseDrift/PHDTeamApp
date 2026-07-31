@@ -25,12 +25,11 @@ export default async function ProtectedLayout({
   try {
     const isAdminOrMod = session.user.role === "admin" || session.user.role === "moderator";
 
-    const [avatar, unread, winnerInfo] = await Promise.all([
-      redis.hget(`member:${session.user.id}`, "customAvatar") as Promise<string | null>,
+    const [unread, winnerInfo] = await Promise.all([
       redis.get(`notifications:${session.user.id}:unread`).then(v => Number(v) || 0),
       isAdminOrMod ? getCurrentWeekWinnerInfo() : Promise.resolve(null),
     ]);
-    customAvatar = avatar;
+    customAvatar = (session.user as any).customAvatar || null;
     unreadCount = unread;
     if (isAdminOrMod && winnerInfo) {
       const day = new Date().getDay();

@@ -95,6 +95,7 @@ const TUNING_GOALS = [
   { id: "better_entry_speed", label: "Better Entry Speed", description: "Faster transition into corners", icon: "🏎️", color: "from-pink-500/20 to-rose-500/20 border-pink-500/40" },
   { id: "more_drift_angle", label: "More Drift Angle", description: "More aggressive, wider slides", icon: "🌊", color: "from-indigo-500/20 to-blue-600/20 border-indigo-500/40" },
   { id: "more_stability", label: "More Stability", description: "Smoother, more consistent slides", icon: "🎛️", color: "from-teal-500/20 to-cyan-600/20 border-teal-500/40" },
+  { id: "custom", label: "Custom", description: "Type your own prompt", icon: "✍️", color: "from-zinc-500/20 to-zinc-600/20 border-zinc-500/40" },
 ];
 
 const PRIORITY_CONFIG = {
@@ -157,6 +158,7 @@ export default function TuningAdvisorClient() {
   const [selectedCalibrationId, setSelectedCalibrationId] = useState("");
   const [selectedSurface, setSelectedSurface] = useState("");
   const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
+  const [customGoalText, setCustomGoalText] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingCals, setLoadingCals] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -240,7 +242,10 @@ export default function TuningAdvisorClient() {
     setSaveSuccess(false);
     setShowSavePanel(false);
 
-    const goalLabels = selectedGoals.map((id) => TUNING_GOALS.find((g) => g.id === id)?.label ?? id);
+    const goalLabels = selectedGoals.map((id) => {
+      if (id === "custom") return `Custom Prompt: ${customGoalText}`;
+      return TUNING_GOALS.find((g) => g.id === id)?.label ?? id;
+    });
 
     try {
       const res = await fetch("/api/tuning-advisor", {
@@ -506,6 +511,21 @@ export default function TuningAdvisorClient() {
           })}
         </div>
 
+        {selectedGoals.includes("custom") && (
+          <div className="mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+            <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-2">
+              What specific issue are you facing, or what do you want to achieve?
+            </label>
+            <textarea
+              value={customGoalText}
+              onChange={(e) => setCustomGoalText(e.target.value)}
+              placeholder="e.g. The rear end kicks out too fast on corner entry, and I'm struggling to catch it before it spins..."
+              className="w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-3 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+              rows={3}
+            />
+          </div>
+        )}
+
         {selectedGoals.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-semibold text-zinc-500">Selected:</span>
@@ -521,13 +541,18 @@ export default function TuningAdvisorClient() {
           </div>
         )}
 
-        {/* Generate */}
-        <button
-          type="button"
-          onClick={generateAdvice}
-          disabled={!canGenerate || generating}
-          className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 py-3 px-4 text-sm font-bold text-black hover:from-amber-400 hover:to-orange-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
-        >
+        {/* Generate Button */}
+        <div className="pt-2">
+          <button
+            onClick={generateAdvice}
+            disabled={
+              generating ||
+              selectedGoals.length === 0 ||
+              !selectedSurface ||
+              (selectedGoals.includes("custom") && !customGoalText.trim())
+            }
+            className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 py-3 px-4 text-sm font-bold text-black hover:from-amber-400 hover:to-orange-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
+          >
           {generating ? (
             <>
               <div className="w-4 h-4 rounded-full border-2 border-black border-t-transparent animate-spin" />
@@ -540,6 +565,7 @@ export default function TuningAdvisorClient() {
             </>
           )}
         </button>
+        </div>
       </div>
 
       {/* ── Error ──────────────────────────────────────────────────────────── */}

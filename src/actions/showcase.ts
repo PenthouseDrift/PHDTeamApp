@@ -93,23 +93,29 @@ export async function getShowcaseEntries(limit = 50): Promise<ShellEntry[]> {
 
   if (!shellIds || shellIds.length === 0) return [];
 
-  const promises = shellIds.map(async (shellId) => {
-    const data = await redis.hgetall(`shell:${shellId as string}`);
+  const pipeline = redis.pipeline();
+  for (const shellId of shellIds) {
+    pipeline.hgetall(`shell:${shellId as string}`);
+  }
+
+  const rawResults = await pipeline.exec();
+  const results: ShellEntry[] = [];
+
+  for (const raw of rawResults) {
+    const data = raw as Record<string, unknown> | null;
     if (data && Object.keys(data).length > 0) {
-      return {
+      results.push({
         shellId: data.shellId as string,
         userId: data.userId as string,
         imageUrl: data.imageUrl as string,
         description: (data.description as string) || "",
         voteCount: Number(data.voteCount) || 0,
         createdAt: Number(data.createdAt),
-      };
+      });
     }
-    return null;
-  });
+  }
 
-  const results = await Promise.all(promises);
-  return results.filter((e): e is ShellEntry => e !== null);
+  return results;
 }
 
 export async function getLeaderboard(limit = 50): Promise<ShellEntry[]> {
@@ -118,23 +124,27 @@ export async function getLeaderboard(limit = 50): Promise<ShellEntry[]> {
 
   if (!shellIds || shellIds.length === 0) return [];
 
-  const promises = shellIds.map(async (shellId) => {
-    const data = await redis.hgetall(`shell:${shellId as string}`);
+  const pipeline = redis.pipeline();
+  for (const shellId of shellIds) {
+    pipeline.hgetall(`shell:${shellId as string}`);
+  }
+
+  const rawResults = await pipeline.exec();
+  const entries: ShellEntry[] = [];
+
+  for (const raw of rawResults) {
+    const data = raw as Record<string, unknown> | null;
     if (data && Object.keys(data).length > 0) {
-      return {
+      entries.push({
         shellId: data.shellId as string,
         userId: data.userId as string,
         imageUrl: data.imageUrl as string,
         description: (data.description as string) || "",
         voteCount: Number(data.voteCount) || 0,
         createdAt: Number(data.createdAt),
-      };
+      });
     }
-    return null;
-  });
-
-  const results = await Promise.all(promises);
-  const entries = results.filter((e): e is ShellEntry => e !== null);
+  }
 
   // Secondary sort for ties: highest votes first, then earlier submission
   entries.sort((a, b) => {

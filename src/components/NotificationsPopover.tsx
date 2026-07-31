@@ -50,26 +50,7 @@ export function NotificationsPopover({ userId, initialUnreadCount = 0 }: Notific
     setUnreadCount(initialUnreadCount);
   }, [initialUnreadCount]);
 
-  // Live polling for unread count
-  useEffect(() => {
-    if (!userId) return;
-    let isMounted = true;
-
-    async function poll() {
-      try {
-        const count = await getUnreadCount(userId);
-        if (isMounted) setUnreadCount(count);
-      } catch {
-        // Silently ignore poll errors
-      }
-    }
-
-    const interval = setInterval(poll, 15000);
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
-  }, [userId]);
+  // Initial load effect already handled the first fetch, and clicking the bell will trigger fetch explicitly.
 
   // Close on outside click
   useEffect(() => {
@@ -83,21 +64,42 @@ export function NotificationsPopover({ userId, initialUnreadCount = 0 }: Notific
     return () => document.removeEventListener("mousedown", handleClick);
   }, [isOpen]);
 
+  // Load notifications when opened
+  useEffect(() => {
+    if (!isOpen || !userId) return;
+    let isMounted = true;
+
+    async function load() {
+      setLoading(true);
+      try {
+        const data = await getNotifications(userId);
+        if (isMounted) {
+          setNotifications(data);
+          
+          // Also fetch fresh unread count just in case
+          const count = await getUnreadCount(userId);
+          setUnreadCount(count);
+        }
+      } catch (err) {
+        console.error("Failed to load notifications", err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    load();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, userId]);
+
   async function handleOpen() {
     if (isOpen) { setIsOpen(false); return; }
     setIsOpen(true);
     if (unreadCount > 0) {
       setUnreadCount(0);
       void markAllRead(userId);
-    }
-    setLoading(true);
-    try {
-      const list = await getNotifications(userId);
-      setNotifications(list);
-    } catch (err) {
-      console.error("Failed to load notifications:", err);
-    } finally {
-      setLoading(false);
     }
   }
 
