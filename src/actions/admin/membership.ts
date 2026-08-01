@@ -3,6 +3,7 @@
 import { redis } from "@/lib/redis";
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/types";
+import { logActivity } from "@/lib/activity";
 
 /** Returns 23:59:59.999 UTC on the day that is 28 days after `fromDate` */
 function endOfDay28(fromDate: Date): number {
@@ -56,6 +57,17 @@ export async function activateMembership(
 
     // Ensure member is in the all memberships set
     await redis.zadd("memberships:all", { score: now, member: memberId });
+
+    const memberName = (await redis.hget(`member:${memberId}`, "name")) as string || "Member";
+    await logActivity({
+      type: "purchase",
+      memberId,
+      memberName,
+      description: `[ADMIN ACTION] Activated 28-Day Membership manually${customExpiryDate ? ` (expires ${customExpiryDate})` : ""}`,
+      amount: 0,
+      currency: "GBP",
+      isDev: false, // it's an admin override, not dev test
+    });
 
     revalidatePath("/admin/members");
     return { success: true, data: { expiresAt: newExpiresAt } };
@@ -133,6 +145,21 @@ export async function adminAdjustWallet(
       dayPasses: newDayPasses,
       rentalHours: newRentalHours,
       updatedAt: Date.now(),
+    });
+
+    const memberName = (await redis.hget(`member:${memberId}`, "name")) as string || "Member";
+    const actionDesc = delta >= 0 ? "Added" : "Removed";
+    const qty = Math.abs(delta);
+    const itemName = itemType === "daypass" ? "Day Pass(es)" : "Rental Hour(s)";
+
+    await logActivity({
+      type: "purchase",
+      memberId,
+      memberName,
+      description: `[ADMIN ACTION] ${actionDesc} ${qty}x ${itemName} manually`,
+      amount: 0,
+      currency: "GBP",
+      isDev: false,
     });
 
     revalidatePath("/admin/members");
