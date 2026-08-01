@@ -1,4 +1,5 @@
 import { redis } from "@/lib/redis";
+import { logActivity } from "@/lib/activity";
 
 /** Returns 23:59:59.999 UTC on the day that is 28 days after `fromDate` */
 function endOfDay28(fromDate: Date): number {
@@ -53,7 +54,9 @@ export async function processSuccessfulMembershipPayment(
 
 export async function processSuccessfulPaymentReference(
   checkoutReference: string,
-  checkoutId: string
+  checkoutId: string,
+  amount: number = 0,
+  currency: string = "GBP"
 ): Promise<{ success: boolean; itemType: "membership" | "daypass" | "rental"; memberId: string; guestName?: string }> {
   let memberId = "";
   let itemType: "membership" | "daypass" | "rental" = "membership";
@@ -97,9 +100,26 @@ export async function processSuccessfulPaymentReference(
     throw new Error(`Unable to determine memberId for checkout ID: ${checkoutId} (ref: ${checkoutReference})`);
   }
 
+  // Fetch member name for the transaction log
+  const memberName = (await redis.hget(`member:${memberId}`, "name")) as string || "Unknown Member";
+  const finalName = guestName ? `${memberName} (for ${guestName})` : memberName;
+
+  async function recordPurchase(type: string, qty: number) {
+    const itemName = type === "membership" ? "Membership" : type === "daypass" ? "Day Pass" : "Rental Hours";
+    await logActivity({
+      type: "purchase",
+      memberId,
+      memberName: finalName,
+      description: `Purchased ${qty}x ${itemName}`,
+      amount,
+      currency,
+    });
+  }
+
   // 3. Process payment idempotently based on itemType
   if (itemType === "membership") {
     await processSuccessfulMembershipPayment(memberId, checkoutId);
+    await recordPurchase("membership", quantity);
     return { success: true, itemType: "membership", memberId, guestName };
   } else if (itemType === "daypass") {
     const key = `payment:processed:${checkoutId}`;
@@ -115,6 +135,7 @@ export async function processSuccessfulPaymentReference(
         rentalHours: currentRentals,
         updatedAt: Date.now(),
       });
+      await recordPurchase("daypass", quantity);
       await redis.set(key, "1", { ex: 86400 * 30 });
     }
     return { success: true, itemType: "daypass", memberId, guestName };
@@ -132,6 +153,7 @@ export async function processSuccessfulPaymentReference(
         rentalHours: newHours,
         updatedAt: Date.now(),
       });
+      await recordPurchase("rental", quantity);
       await redis.set(key, "1", { ex: 86400 * 30 });
     }
     return { success: true, itemType: "rental", memberId, guestName };

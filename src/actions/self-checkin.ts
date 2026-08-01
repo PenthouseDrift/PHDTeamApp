@@ -6,6 +6,7 @@ import type { ActionResult } from "@/types";
 import { isUserCheckedInToday } from "@/actions/admin/checkins";
 import { redeemDayPass, redeemRentalHour } from "@/actions/wallet";
 import { createRentalSession } from "@/actions/admin/rentals";
+import { logActivity } from "@/lib/activity";
 
 export async function performSelfCheckIn(
   userId: string,
@@ -80,6 +81,13 @@ export async function performSelfCheckIn(
 
     await redis.rpush(`checkins:${today}`, entry);
     await redis.set(`checkin:dedup:${userId}`, "1", { ex: 86400 });
+
+    await logActivity({
+      type: "checkin",
+      memberId: userId,
+      memberName: displayName,
+      description: successMessage,
+    });
 
     if (!skipRevalidate) {
       try {
