@@ -93,6 +93,17 @@ export async function revokeMembership(
 
     await redis.zrem("memberships:active", memberId);
 
+    const memberName = (await redis.hget(`member:${memberId}`, "name")) as string || "Member";
+    await logActivity({
+      type: "purchase",
+      memberId,
+      memberName,
+      description: `[ADMIN ACTION] Revoked Membership`,
+      amount: 0,
+      currency: "GBP",
+      isDev: false,
+    });
+
     revalidatePath("/admin/members");
     return { success: true, data: null };
   } catch (error) {
@@ -110,6 +121,17 @@ export async function clearMembershipRecord(
     await redis.del(`membership:${memberId}`);
     await redis.zrem("memberships:active", memberId);
     await redis.zrem("memberships:all", memberId);
+
+    const memberName = (await redis.hget(`member:${memberId}`, "name")) as string || "Member";
+    await logActivity({
+      type: "purchase",
+      memberId,
+      memberName,
+      description: `[ADMIN ACTION] Cleared Membership Record completely`,
+      amount: 0,
+      currency: "GBP",
+      isDev: false,
+    });
 
     revalidatePath("/admin/members");
     return { success: true, data: null };
