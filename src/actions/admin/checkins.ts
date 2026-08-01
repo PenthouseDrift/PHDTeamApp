@@ -4,6 +4,7 @@ import { redis } from "@/lib/redis";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import type { ActionResult } from "@/types";
 import { sendGlobalNotification } from "@/actions/notifications";
+import { logActivity } from "@/lib/activity";
 
 export interface CheckInEntry {
   userId: string;
@@ -76,6 +77,14 @@ export async function submitSelfCheckIn(memberId: string, memberName: string): P
 
     await redis.rpush(`checkins:${today}`, entry);
     await redis.set(dedupKey, "1", { ex: 86400 });
+
+    await logActivity({
+      type: "checkin",
+      memberId,
+      memberName,
+      description: "Checked in via Self Check-In",
+      isDev: false,
+    });
 
     revalidatePath("/admin/members");
     revalidatePath("/dashboard");
@@ -170,6 +179,16 @@ export async function quickCheckIn(
     await redis.rpush(`checkins:${today}`, entry);
     await redis.set(dedupKey, "1", { ex: 86400 });
 
+    const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";
+    const methodDesc = method === "membership_cash" ? "Cash Membership" : "Manual Override";
+    await logActivity({
+      type: "checkin",
+      memberId,
+      memberName,
+      description: `[ADMIN ACTION] Checked in manually by ${adminName} (${methodDesc})`,
+      isDev: false,
+    });
+
     revalidatePath("/admin/members");
     revalidatePath("/dashboard");
     return { success: true, data: { checkedIn: true } };
@@ -205,6 +224,15 @@ export async function addNonMemberCheckIn(
     });
 
     await redis.rpush(`checkins:${today}`, entry);
+
+    const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";
+    await logActivity({
+      type: "checkin",
+      memberId: guestId,
+      memberName: name,
+      description: `[ADMIN ACTION] Non-member guest checked in manually by ${adminName} (${method})`,
+      isDev: false,
+    });
 
     revalidatePath("/admin/members");
     revalidatePath("/admin/check-in");
@@ -324,6 +352,15 @@ export async function checkInWithDayPass(
     await redis.rpush(`checkins:${today}`, entry);
     await redis.set(`checkin:dedup:${memberId}`, "1", { ex: 86400 });
 
+    const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";
+    await logActivity({
+      type: "checkin",
+      memberId,
+      memberName,
+      description: `[ADMIN ACTION] Checked in with Day Pass by ${adminName} (${isPaidInPerson ? "Paid Cash" : "Redeemed from Wallet"})`,
+      isDev: false,
+    });
+
     revalidatePath("/admin/members");
     revalidatePath("/admin/check-in");
     revalidatePath("/dashboard");
@@ -368,6 +405,15 @@ export async function checkInWithRental(
 
     await redis.rpush(`checkins:${today}`, entry);
     await redis.set(`checkin:dedup:${memberId}`, "1", { ex: 86400 });
+
+    const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";
+    await logActivity({
+      type: "checkin",
+      memberId,
+      memberName,
+      description: `[ADMIN ACTION] Checked in with Rental by ${adminName} (${isPaidInPerson ? "Paid Cash" : "Redeemed from Wallet"})`,
+      isDev: false,
+    });
 
     revalidatePath("/admin/members");
     revalidatePath("/admin/check-in");
@@ -429,6 +475,15 @@ export async function checkInFriendWithPass(
     });
 
     await redis.rpush(`checkins:${today}`, entry);
+
+    const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";
+    await logActivity({
+      type: "checkin",
+      memberId: guestId,
+      memberName: `${cleanFriendName} (Guest of ${memberName})`,
+      description: `[ADMIN ACTION] Friend checked in by ${adminName} using ${memberName}'s wallet (${passType})`,
+      isDev: false,
+    });
 
     revalidatePath("/admin/members");
     revalidatePath("/admin/check-in");
