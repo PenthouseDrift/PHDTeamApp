@@ -2,6 +2,7 @@
 
 import { redis } from "@/lib/redis";
 import type { ActionResult } from "@/types";
+import { logActivity } from "@/lib/activity";
 
 export async function performCheckIn(
   memberId: string,
@@ -37,6 +38,16 @@ export async function performCheckIn(
 
     await redis.rpush(`checkins:${today}`, entry);
     await redis.set(dedupKey, "1", { ex: 3600 });
+
+    const memberName = (await redis.hget(`member:${memberId}`, "name")) as string || "Member";
+    const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";
+
+    await logActivity({
+      type: "checkin",
+      memberId,
+      memberName,
+      description: `Checked in by ${adminName} via ${method === "qr" ? "QR Scan" : "Manual Check-in"}`,
+    });
 
     return { success: true, data: { checkedIn: true } };
   } catch (error) {

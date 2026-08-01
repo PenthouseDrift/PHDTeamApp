@@ -102,6 +102,14 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
       adminOnly: true,
     },
     {
+      title: "Global Activity Log",
+      description: "View global transaction logs for purchases and check-ins",
+      href: "/admin/activity",
+      icon: "📋",
+      color: "from-indigo-500/20 to-blue-500/10 border-indigo-500/40 text-indigo-600 dark:text-indigo-400",
+      adminOnly: true,
+    },
+    {
       title: "Weekly Shell Winners",
       description: winnerChosenThisWeek
         ? `Winner selected for Week ${week}, ${year}`

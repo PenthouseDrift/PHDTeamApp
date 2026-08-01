@@ -5,6 +5,7 @@ import { getMembership } from "@/actions/membership";
 import { generateQRCode } from "@/lib/qr";
 import { getOrGeneratePassNonce } from "@/actions/qr";
 import { getCheckoutStatus } from "@/lib/sumup";
+import { logActivity } from "@/lib/activity";
 import { processSuccessfulPaymentReference } from "@/lib/membership-activation";
 import { redis } from "@/lib/redis";
 import { WalletClient } from "./WalletClient";
@@ -81,6 +82,20 @@ export default async function WalletPage({ searchParams }: PageProps) {
     } else {
       await addRentalHours(session.user.id, quantity);
     }
+
+    const memberData = await redis.hgetall(`member:${session.user.id}`);
+    const nickname = (memberData?.nickname as string) || "";
+    const displayName = nickname.trim() || session.user.name || "Member";
+
+    await logActivity({
+      type: "purchase",
+      memberId: session.user.id,
+      memberName: displayName,
+      description: `[DEV MODE] Simulated ${quantity}x ${itemType === "daypass" ? "Day Pass" : "Rental Hours"}`,
+      amount: 0,
+      currency: "GBP",
+      isDev: true,
+    });
   }
 
   const memberData = await redis.hgetall(`member:${userId}`);
