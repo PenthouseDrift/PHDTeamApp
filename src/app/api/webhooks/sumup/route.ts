@@ -5,7 +5,8 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    const { event_type, id: checkoutId, status, checkout_reference, amount, currency } = body;
+    const { event_type, id, checkout_id, status, checkout_reference, amount, currency } = body;
+    const checkoutId = checkout_id || id;
 
     // Only process successful payments (SumUp sends "PAID", "SUCCESSFUL", or event_type "checkout.completed")
     const isPaid = status === "PAID" || status === "SUCCESSFUL" || event_type === "checkout.completed";

@@ -82,17 +82,24 @@ export async function processSuccessfulPaymentReference(
   // 2. Fallback to reference string parsing if metadata was not found in Redis
   if (!memberId && checkoutReference) {
     const parts = checkoutReference.split("_");
-    if (parts[0] === "phd" && parts.length >= 4) {
-      itemType = parts[1] as "membership" | "daypass" | "rental";
-      memberId = parts[2];
-      quantity = parseInt(parts[3], 10) || 1;
-    } else if (parts.length >= 3) {
-      itemType = parts[0] as "membership" | "daypass" | "rental";
-      memberId = parts[1];
-      quantity = parseInt(parts[2], 10) || 1;
-    } else if (parts.length >= 2) {
+    
+    // Example format: phd_<userId>_<timestamp> (from createCheckout in sumup.ts)
+    // Example format: phd_daypass_<userId>_<timestamp>
+    
+    // Clean up "phd" prefix if it exists
+    const cleanParts = parts[0] === "phd" ? parts.slice(1) : parts;
+    
+    if (cleanParts.length >= 3) {
+      itemType = cleanParts[0] as "membership" | "daypass" | "rental";
+      memberId = cleanParts[1];
+      quantity = parseInt(cleanParts[2], 10) || 1;
+    } else if (cleanParts.length >= 2) {
+      // If only 2 parts, assume it's just <userId>_<timestamp> and itemType is membership
       itemType = "membership";
-      memberId = parts[1];
+      memberId = cleanParts[0];
+    } else if (cleanParts.length === 1) {
+      itemType = "membership";
+      memberId = cleanParts[0];
     }
   }
 
