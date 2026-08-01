@@ -3,6 +3,7 @@ import { PullToRefresh } from "@/components/PullToRefresh";
 import { auth } from "@/lib/auth";
 import { getAllMembers } from "@/actions/admin/members";
 import { getTodayCheckIns, getSelfCheckInStatus } from "@/actions/admin/checkins";
+import { getActiveRentals } from "@/actions/admin/rentals";
 import { SelfCheckInToggle } from "@/components/admin/SelfCheckInToggle";
 import { getUpcomingEvents } from "@/actions/events";
 import { Suspense } from "react";
@@ -38,13 +39,13 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
   const { year, week } = await getCurrentWeek();
 
   // Fetch overview metrics in parallel
-  const [members, todayCheckins, events, customAvatar, currentWinnerInfo, selfCheckInActive] = await Promise.all([
+  const [members, todayCheckins, events, currentWinnerInfo, selfCheckInActive, activeRentals] = await Promise.all([
     getAllMembers(),
     getTodayCheckIns(),
     getUpcomingEvents(),
-    redis.hget(`member:${session.user.id}`, "customAvatar") as Promise<string | null>,
     getCurrentWeekWinnerInfo(),
     getSelfCheckInStatus(),
+    getActiveRentals(),
   ]);
 
   const winnerChosenThisWeek = Boolean(currentWinnerInfo.shellId);
@@ -53,7 +54,7 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
   const memberCheckinsCount = todayCheckins.filter(
     (c) => c.method === "qr" || c.method === "manual" || c.method === "membership_cash"
   ).length;
-  const avatarUrl = customAvatar || session.user.image || null;
+  const avatarUrl = (session.user as any).customAvatar || session.user.image || null;
   const todayDate = new Date().toISOString().split("T")[0];
   const hasEventToday = events.some(e => e.date === todayDate && e.status !== "cancelled");
   const isDev = process.env.NODE_ENV === "development";
@@ -137,6 +138,32 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
 
   const quickTiles = allQuickTiles.filter((t) => !isModerator || !t.adminOnly);
 
+  // Build Actions Needed
+  const actionsNeeded: { title: string; desc: string; href: string; icon: string; urgent: boolean }[] = [];
+  
+  if (!isModerator && (isSunday || isSaturday) && !winnerChosenThisWeek) {
+    actionsNeeded.push({
+      title: "Weekly Winner Selection",
+      desc: isSunday 
+        ? "Select this week's community showcase winner from member submissions before the week resets."
+        : "Voting is closed! You can now select this week's community showcase winner.",
+      href: "/admin/showcase-winners",
+      icon: "🏆",
+      urgent: isSunday, // Critical on Sunday, Warning on Saturday
+    });
+  }
+
+  const overdueRentals = activeRentals.filter(r => r.status === "active" && r.sessionEndsAt && Date.now() > r.sessionEndsAt);
+  if (overdueRentals.length > 0) {
+    actionsNeeded.push({
+      title: "Overdue Rentals",
+      desc: `There are ${overdueRentals.length} active rental sessions that have exceeded their time limit.`,
+      href: "/admin/check-in",
+      icon: "⏱️",
+      urgent: true,
+    });
+  }
+
   return (
     <>
       {/* Header with Back Button */}
@@ -184,51 +211,44 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
           <SelfCheckInToggle adminId={session.user.id} initialActive={selfCheckInActive} />
         )}
 
-        {/* High Priority Sunday Winner Highlight Banner (Admin only) */}
-        {!isModerator && isSunday && (
-          <div
-            className={`rounded-2xl border p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-lg transition-all ${
-              winnerChosenThisWeek
-                ? "bg-gradient-to-r from-emerald-500/10 via-green-500/10 to-teal-500/10 border-emerald-500/40"
-                : "bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-orange-500/20 border-amber-500/60 ring-2 ring-amber-500/30 animate-pulse"
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <span className="text-3xl shrink-0">🏆</span>
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={`rounded-md text-[10px] font-black px-2 py-0.5 uppercase tracking-wider ${
-                      winnerChosenThisWeek
-                        ? "bg-emerald-500 text-black"
-                        : "bg-amber-500 text-black"
-                    }`}
-                  >
-                    {winnerChosenThisWeek ? (selectedByName ? `WINNER SELECTED BY ${selectedByName.toUpperCase()}` : "WINNER SELECTED") : "SUNDAY ACTION REQUIRED"}
-                  </span>
-                  <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-                    Weekly Shell Winner Selection (Week {week}, {year})
-                  </h2>
-                </div>
-                <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1">
-                  {winnerChosenThisWeek
-                    ? selectedByName
-                      ? `Selected by ${selectedByName}. A weekly shell showcase winner has been crowned for this week.`
-                      : "Great job! A weekly shell showcase winner has already been crowned for this week."
-                    : "Today is Sunday! Choose this week's community shell showcase winner from member submissions."}
-                </p>
-              </div>
+        {/* Action Needed Section */}
+        {actionsNeeded.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+              <span className="text-red-500 animate-pulse">●</span> Action Required
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {actionsNeeded.map((action, idx) => (
+                <Link
+                  key={idx}
+                  href={action.href}
+                  className={`rounded-2xl border p-4 flex flex-col gap-3 shadow-sm hover:shadow-md transition-all active:scale-[0.99] ${
+                    action.urgent
+                      ? "bg-red-500/10 border-red-500/30 hover:bg-red-500/20"
+                      : "bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{action.icon}</span>
+                    <h3 className={`text-sm font-bold ${action.urgent ? "text-red-700 dark:text-red-400" : "text-amber-700 dark:text-amber-400"}`}>
+                      {action.title}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed font-medium">
+                    {action.desc}
+                  </p>
+                  <div className={`mt-auto inline-flex items-center text-xs font-black self-start ${
+                    action.urgent ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"
+                  }`}>
+                    Review Now →
+                  </div>
+                </Link>
+              ))}
             </div>
-
-            <Link
-              href="/admin/showcase-winners"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-400 px-5 py-2.5 text-xs font-black text-black transition-all shadow-md shrink-0"
-            >
-              🏆 {winnerChosenThisWeek ? "View Winner Details" : "Select Winner Now →"}
-            </Link>
           </div>
         )}
 
+        {/* High Priority Sunday Winner Highlight Banner (Admin only) - Kept for legacy/fallback if not urgent, but we moved it to Actions */}
         {/* Fast Check-In Action Buttons */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Link

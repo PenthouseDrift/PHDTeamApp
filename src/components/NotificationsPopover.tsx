@@ -44,6 +44,7 @@ export function NotificationsPopover({ userId, initialUnreadCount = 0 }: Notific
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedNotification, setSelectedNotification] = useState<AppNotification | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -124,20 +125,24 @@ export function NotificationsPopover({ userId, initialUnreadCount = 0 }: Notific
   }
 
   function handleNotificationClick(item: AppNotification) {
-    setIsOpen(false);
     if (item.url) {
+      setIsOpen(false);
       router.push(item.url);
     } else if (
       item.targetType === "post" ||
       item.postId ||
       item.message.toLowerCase().includes("post")
     ) {
+      setIsOpen(false);
       router.push("/newsfeed");
     } else if (item.shellId || item.targetType === "shell") {
+      setIsOpen(false);
       router.push(`/showcase?open=${item.shellId}`);
     } else if (item.type === "global" || item.type === "event_reminder") {
-      router.push("/newsfeed");
+      // Show full message in a modal instead of blind routing
+      setSelectedNotification(item);
     } else {
+      setIsOpen(false);
       router.push("/dashboard");
     }
   }
@@ -254,6 +259,44 @@ export function NotificationsPopover({ userId, initialUnreadCount = 0 }: Notific
             {panelContent}
           </div>
         </>
+      )}
+
+      {/* Global Notification Details Modal */}
+      {selectedNotification && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-zinc-200 dark:border-zinc-800">
+            <div className="px-5 py-4 border-b border-zinc-100 dark:border-zinc-800/60 flex items-center gap-3">
+              <span className="text-2xl">{getIcon(selectedNotification.type)}</span>
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                  {selectedNotification.fromUserName || "Admin Notification"}
+                </h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  {formatTime(selectedNotification.createdAt)}
+                </p>
+              </div>
+            </div>
+            
+            <div className="px-5 py-6">
+              <p className="text-sm text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed font-medium">
+                {selectedNotification.message}
+              </p>
+            </div>
+            
+            <div className="px-5 py-4 border-t border-zinc-100 dark:border-zinc-800/60 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedNotification(null);
+                  setIsOpen(false);
+                }}
+                className="px-6 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-sm font-bold rounded-xl hover:opacity-90 transition-opacity w-full sm:w-auto"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
