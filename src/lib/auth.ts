@@ -63,6 +63,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             });
           }
         } else if (token.sub) {
+          // One-time lazy load for existing sessions that don't have customAvatar loaded yet
+          if (token.avatarChecked === undefined) {
+            try {
+              const avatar = await redis.hget(`member:${token.sub}`, "customAvatar");
+              if (avatar) token.customAvatar = avatar;
+              token.avatarChecked = true; // Never check again for this session
+            } catch (err) {
+              console.error("[Auth] Lazy load avatar error:", err);
+            }
+          }
+
           // Handle manual session updates
           if (trigger === "update" && session) {
             if (session.theme) token.theme = session.theme;
