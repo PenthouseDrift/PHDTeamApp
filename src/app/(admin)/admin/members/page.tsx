@@ -8,6 +8,7 @@ import { getActiveRentals } from "@/actions/admin/rentals";
 import { MemberList } from "@/components/admin/MemberList";
 import { TodayCheckIns } from "@/components/admin/TodayCheckIns";
 import { ActiveRentalsWidget } from "@/components/admin/ActiveRentalsWidget";
+import { RefreshDataButton } from "@/components/admin/RefreshDataButton";
 
 export const dynamic = "force-dynamic";
 
@@ -28,12 +29,15 @@ export default function AdminMembersPage() {
             <MembersHeaderStats />
           </Suspense>
         </div>
-        <Link
-          href="/admin/check-in"
-          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-black text-sm shadow-md transition-all active:scale-[0.99]"
-        >
-          <span>📱</span> Launch QR Scanner →
-        </Link>
+        <div className="flex items-center gap-3">
+          <RefreshDataButton path="/admin/members" />
+          <Link
+            href="/admin/check-in"
+            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-black text-sm shadow-md transition-all active:scale-[0.99]"
+          >
+            <span>📱</span> Launch QR Scanner →
+          </Link>
+        </div>
       </div>
 
       <Suspense fallback={<MembersSkeleton />}>

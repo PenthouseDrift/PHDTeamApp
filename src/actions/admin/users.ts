@@ -3,6 +3,7 @@
 import { redis } from "@/lib/redis";
 import { revalidatePath } from "next/cache";
 import type { Member, ActionResult } from "@/types";
+import { logActivity } from "@/lib/activity";
 
 export async function getAllUsers(): Promise<Member[]> {
   try {
@@ -60,6 +61,18 @@ export async function setUserRole(
     }
 
     await redis.hset(`member:${userId}`, { role: newRole });
+    
+    const memberName = (await redis.hget(`member:${userId}`, "name")) as string || "Member";
+    await logActivity({
+      type: "purchase",
+      memberId: userId,
+      memberName,
+      description: `[ADMIN ACTION] Changed user role to: ${newRole.toUpperCase()}`,
+      amount: 0,
+      currency: "GBP",
+      isDev: false,
+    });
+
     revalidatePath("/admin/users");
     revalidatePath("/admin/members");
     return { success: true, data: { role: newRole } };
