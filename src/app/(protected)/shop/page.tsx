@@ -12,10 +12,7 @@ export default async function ShopPage() {
     redirect("/");
   }
 
-  // Only admins can see this for now
-  if (session.user.role !== "admin") {
-    redirect("/dashboard");
-  }
+
 
   const products = await getProducts(true); // Active only
 
