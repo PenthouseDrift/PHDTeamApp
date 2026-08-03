@@ -2,24 +2,32 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useSession } from "next-auth/react";
-import { getEventRSVPs, setEventRSVP, type RSVPStatus } from "@/actions/events";
+import { getEventRSVPs, setEventRSVP, type RSVPStatus, type EventRSVPData } from "@/actions/events";
 
 interface QuickRSVPButtonProps {
   eventId: string;
+  initialRsvpData?: EventRSVPData;
   className?: string;
 }
 
-export function QuickRSVPButton({ eventId, className = "" }: QuickRSVPButtonProps) {
+export function QuickRSVPButton({ eventId, initialRsvpData, className = "" }: QuickRSVPButtonProps) {
   const { data: session } = useSession();
   const userId = session?.user?.id;
   const isAdminOrMod = session?.user?.role === "admin" || session?.user?.role === "moderator";
 
-  const [status, setStatus] = useState<RSVPStatus | null>(null);
-  const [goingCount, setGoingCount] = useState<number>(0);
-  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<RSVPStatus | null>(initialRsvpData?.userRSVP || null);
+  const [goingCount, setGoingCount] = useState<number>(initialRsvpData?.goingCount || 0);
+  const [loading, setLoading] = useState(!initialRsvpData);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
+    if (initialRsvpData) {
+      setStatus(initialRsvpData.userRSVP || null);
+      setGoingCount(initialRsvpData.goingCount);
+      setLoading(false);
+      return;
+    }
+    
     let isMounted = true;
     async function load() {
       if (!eventId) return;
@@ -34,7 +42,7 @@ export function QuickRSVPButton({ eventId, className = "" }: QuickRSVPButtonProp
     return () => {
       isMounted = false;
     };
-  }, [eventId, userId]);
+  }, [eventId, userId, initialRsvpData]);
 
   function handleQuickToggle(e: React.MouseEvent) {
     e.stopPropagation(); // Don't trigger parent card click / modal open

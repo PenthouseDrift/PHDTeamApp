@@ -9,6 +9,7 @@ import { getUpcomingEvents } from "@/actions/events";
 import { Suspense } from "react";
 import { getCurrentWeek, getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
 import { redis } from "@/lib/redis";
+import { getEventTiming } from "@/lib/event-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -55,10 +56,23 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
     (c) => c.method === "qr" || c.method === "manual" || c.method === "membership_cash"
   ).length;
   const avatarUrl = (session.user as any).customAvatar || session.user.image || null;
-  const todayDate = new Date().toISOString().split("T")[0];
-  const hasEventToday = events.some(e => e.date === todayDate && e.status !== "cancelled");
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" });
+  const parts = formatter.formatToParts(now);
+  const partMap: Record<string, string> = {};
+  parts.forEach((p) => { partMap[p.type] = p.value; });
+  const localToday = `${partMap.year}-${partMap.month}-${partMap.day}`;
+
+  const todaysEvents = events.filter((e) => e.date === localToday && e.status !== "cancelled");
+  const hasEventToday = todaysEvents.length > 0;
+  
+  let allEventsFinished = false;
+  if (hasEventToday) {
+    allEventsFinished = todaysEvents.every(e => getEventTiming(e).state === "finished");
+  }
+
   const isDev = process.env.NODE_ENV === "development";
-  const shouldShowSelfCheckInToggle = hasEventToday || isDev;
+  const shouldShowSelfCheckInToggle = hasEventToday && !allEventsFinished;
 
   const allQuickTiles = [
     {
@@ -132,6 +146,22 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
       href: "/admin/facebook",
       icon: "📲",
       color: "from-sky-500/20 to-blue-500/10 border-sky-500/40 text-sky-600 dark:text-sky-400",
+      adminOnly: true,
+    },
+    {
+      title: "Shop Orders",
+      description: "Manage click and collect orders",
+      href: "/admin/orders",
+      icon: "🛍️",
+      color: "from-emerald-500/20 to-teal-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
+      adminOnly: true,
+    },
+    {
+      title: "Shop Products",
+      description: "Manage inventory and store items",
+      href: "/admin/shop",
+      icon: "🏷️",
+      color: "from-teal-500/20 to-emerald-500/10 border-teal-500/40 text-teal-600 dark:text-teal-400",
       adminOnly: true,
     },
     {

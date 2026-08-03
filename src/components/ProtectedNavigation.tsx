@@ -24,9 +24,11 @@ interface ProtectedNavigationProps {
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
   { href: "/wallet", label: "Wallet & Passes", icon: WalletIcon },
+  { href: "/orders", label: "My Orders", icon: OrdersIcon },
   { href: "/cars", label: "My Cars", icon: CarIcon },
   { href: "/newsfeed", label: "Newsfeed", icon: NewsfeedIcon },
   { href: "/tuning-advisor", label: "Tuning Advisor", icon: TuningIcon },
+  { href: "/shop/visualizer", label: "Wheel Visualizer", icon: WheelIcon },
   { href: "/showcase", label: "Showcase", icon: ShowcaseIcon },
   { href: "/calculator", label: "Calculator", icon: CalculatorIcon },
   { href: "/more", label: "More Features", icon: MoreIcon },
@@ -36,7 +38,7 @@ const navItems = [
 const mobileNavItems = [
   { href: "/dashboard", label: "Home", icon: DashboardIcon },
   { href: "/wallet", label: "Wallet", icon: WalletIcon },
-  { href: "/cars", label: "Cars", icon: CarIcon },
+  { href: "/shop/visualizer", label: "Wheels", icon: WheelIcon },
   { href: "/newsfeed", label: "Newsfeed", icon: NewsfeedIcon },
   { href: "/more", label: "More", icon: MoreIcon },
 ];
@@ -114,6 +116,20 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
             <ProfileIcon className="w-5 h-5" />
             Profile
           </Link>
+          {user.role === "admin" && (
+            <Link
+              href="/shop"
+              prefetch={true}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                pathname.startsWith("/shop")
+                  ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-bold"
+                  : "text-emerald-600 dark:text-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+              }`}
+            >
+              <StoreIcon className="w-5 h-5" />
+              Store (Admin)
+            </Link>
+          )}
           {(user.role === "admin" || user.role === "moderator") && (
             <Link
               href="/admin"
@@ -208,6 +224,18 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
             </Link>
           );
         })}
+        {(user.role === "admin") && (
+          <Link
+            href="/shop"
+            prefetch={true}
+            className={`relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
+              pathname.startsWith("/shop") ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-emerald-500 dark:text-emerald-400"
+            }`}
+          >
+            <StoreIcon className="w-5 h-5" />
+            <span>Store</span>
+          </Link>
+        )}
         {(user.role === "admin" || user.role === "moderator") && (
           <Link
             href="/admin"
@@ -313,6 +341,16 @@ function LogoutIcon({ className }: { className?: string }) {
   );
 }
 
+function WheelIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="2.5" />
+      <path strokeLinecap="round" d="M12 9.5V3M12 21v-5.5M9.5 12H3M21 12h-5.5M10.1 10.1 5.7 5.7M18.3 18.3l-4.4-4.4M13.9 10.1l4.4-4.4M5.7 18.3l4.4-4.4" />
+    </svg>
+  );
+}
+
 function BellIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -325,6 +363,22 @@ function MoreIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+    </svg>
+  );
+}
+
+function OrdersIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z" />
+    </svg>
+  );
+}
+
+function StoreIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 .75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 0 0 3.75-.615A2.999 2.999 0 0 0 9.75 9.75c.896 0 1.7-.393 2.25-1.016a2.999 2.999 0 0 0 2.25 1.016c.896 0 1.7-.393 2.25-1.016a3.001 3.001 0 0 0 3.75.614m-16.5 0a3.004 3.004 0 0 1-.621-4.72L4.318 3.44A1.5 1.5 0 0 1 5.378 3h13.243a1.5 1.5 0 0 1 1.06.44l1.19 1.189a3 3 0 0 1-.621 4.72m-13.5 8.65h3.75a.75.75 0 0 0 .75-.75V13.5a.75.75 0 0 0-.75-.75H6.75a.75.75 0 0 0-.75.75v3.75c0 .415.336.75.75.75Z" />
     </svg>
   );
 }

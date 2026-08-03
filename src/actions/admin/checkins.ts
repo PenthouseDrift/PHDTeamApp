@@ -18,7 +18,40 @@ export async function getSelfCheckInStatus(): Promise<boolean> {
   noStore();
   try {
     const status = await redis.get("settings:self_checkin_active");
-    return status === "true" || status === true;
+    const isActive = status === "true" || status === true;
+
+    if (isActive) {
+      const { getUpcomingEvents } = await import("@/actions/events");
+      const { getEventTiming } = await import("@/lib/event-utils");
+      
+      const events = await getUpcomingEvents();
+      if (events.length > 0) {
+        const now = new Date();
+        const formatter = new Intl.DateTimeFormat("en-GB", {
+          timeZone: "Europe/London",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        });
+        
+        const parts = formatter.formatToParts(now);
+        const partMap: Record<string, string> = {};
+        parts.forEach((p) => { partMap[p.type] = p.value; });
+        const localToday = `${partMap.year}-${partMap.month}-${partMap.day}`;
+
+        const todaysEvents = events.filter((e) => e.date === localToday);
+        
+        if (todaysEvents.length > 0) {
+          const allFinished = todaysEvents.every(e => getEventTiming(e).state === "finished");
+          if (allFinished) {
+            await redis.set("settings:self_checkin_active", "false");
+            return false;
+          }
+        }
+      }
+    }
+
+    return isActive;
   } catch (error) {
     return false;
   }

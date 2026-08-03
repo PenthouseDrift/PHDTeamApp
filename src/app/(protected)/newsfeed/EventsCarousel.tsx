@@ -2,15 +2,17 @@
 
 import { useState } from "react";
 import type { TrackEvent } from "@/actions/events";
+import { type EventRSVPData } from "@/actions/events";
 import { getEventTiming } from "@/lib/event-utils";
 import { EventRSVPSection } from "@/components/EventRSVPSection";
 import { QuickRSVPButton } from "@/components/QuickRSVPButton";
 
 interface EventsCarouselProps {
   events: TrackEvent[];
+  bulkRsvps?: Record<string, EventRSVPData>;
 }
 
-export function EventsCarousel({ events }: EventsCarouselProps) {
+export function EventsCarousel({ events, bulkRsvps = {} }: EventsCarouselProps) {
   const [selectedEvent, setSelectedEvent] = useState<TrackEvent | null>(null);
 
   function formatDate(date: string): string {
@@ -111,7 +113,7 @@ export function EventsCarousel({ events }: EventsCarouselProps) {
                     )}
                   </div>
                   <div className="pt-1.5 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
-                    <QuickRSVPButton eventId={event.eventId} />
+                    <QuickRSVPButton eventId={event.eventId} initialRsvpData={bulkRsvps[event.eventId]} />
                   </div>
                 </div>
               </div>
@@ -178,7 +180,7 @@ export function EventsCarousel({ events }: EventsCarouselProps) {
             )}
 
             {/* Event RSVP & Attendees */}
-            <EventRSVPSection eventId={selectedEvent.eventId} />
+            <EventRSVPSection eventId={selectedEvent.eventId} initialRsvpData={bulkRsvps[selectedEvent.eventId]} />
 
             <button
               onClick={() => setSelectedEvent(null)}

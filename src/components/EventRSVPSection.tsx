@@ -11,14 +11,15 @@ import {
 
 interface EventRSVPSectionProps {
   eventId: string;
+  initialRsvpData?: EventRSVPData;
 }
 
-export function EventRSVPSection({ eventId }: EventRSVPSectionProps) {
+export function EventRSVPSection({ eventId, initialRsvpData }: EventRSVPSectionProps) {
   const { data: session } = useSession();
   const userId = session?.user?.id;
   const isAdminOrMod = session?.user?.role === "admin" || session?.user?.role === "moderator";
 
-  const [rsvpData, setRsvpData] = useState<EventRSVPData>({
+  const [rsvpData, setRsvpData] = useState<EventRSVPData>(initialRsvpData || {
     goingCount: 0,
     maybeCount: 0,
     cantGoCount: 0,
@@ -26,10 +27,16 @@ export function EventRSVPSection({ eventId }: EventRSVPSectionProps) {
     goingMembers: [],
   });
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialRsvpData);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
+    if (initialRsvpData) {
+      setRsvpData(initialRsvpData);
+      setLoading(false);
+      return;
+    }
+
     let isMounted = true;
     async function load() {
       setLoading(true);
@@ -43,7 +50,7 @@ export function EventRSVPSection({ eventId }: EventRSVPSectionProps) {
     return () => {
       isMounted = false;
     };
-  }, [eventId, userId]);
+  }, [eventId, userId, initialRsvpData]);
 
   function handleSelectStatus(targetStatus: RSVPStatus) {
     if (!userId) return;
