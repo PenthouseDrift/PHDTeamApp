@@ -116,20 +116,18 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
             <ProfileIcon className="w-5 h-5" />
             Profile
           </Link>
-          {user.role === "admin" && (
-            <Link
-              href="/shop"
-              prefetch={true}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                pathname.startsWith("/shop")
-                  ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-bold"
-                  : "text-emerald-600 dark:text-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-              }`}
-            >
-              <StoreIcon className="w-5 h-5" />
-              Store (Admin)
-            </Link>
-          )}
+          <Link
+            href="/shop"
+            prefetch={true}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              pathname.startsWith("/shop")
+                ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-bold"
+                : "text-emerald-600 dark:text-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+            }`}
+          >
+            <StoreIcon className="w-5 h-5" />
+            Store
+          </Link>
           {(user.role === "admin" || user.role === "moderator") && (
             <Link
               href="/admin"
@@ -224,18 +222,16 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
             </Link>
           );
         })}
-        {(user.role === "admin") && (
-          <Link
-            href="/shop"
-            prefetch={true}
-            className={`relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
-              pathname.startsWith("/shop") ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-emerald-500 dark:text-emerald-400"
-            }`}
-          >
-            <StoreIcon className="w-5 h-5" />
-            <span>Store</span>
-          </Link>
-        )}
+        <Link
+          href="/shop"
+          prefetch={true}
+          className={`relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
+            pathname.startsWith("/shop") ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-emerald-500 dark:text-emerald-400"
+          }`}
+        >
+          <StoreIcon className="w-5 h-5" />
+          <span>Store</span>
+        </Link>
         {(user.role === "admin" || user.role === "moderator") && (
           <Link
             href="/admin"
