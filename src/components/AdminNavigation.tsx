@@ -22,6 +22,8 @@ const adminNavItems = [
   { href: "/admin/check-in", label: "QR Scan", icon: CheckInIcon },
   { href: "/admin/members", label: "Members", icon: MembersIcon },
   { href: "/admin/events", label: "Events", icon: EventsIcon },
+  { href: "/admin/orders", label: "Shop Orders", icon: ActivityIcon, adminOnly: true },
+  { href: "/admin/shop", label: "Shop Products", icon: FeedbackIcon, adminOnly: true },
   { href: "/admin/feedback", label: "Feedback", icon: FeedbackIcon },
   { href: "/admin/activity", label: "Activity Log", icon: ActivityIcon, adminOnly: true },
   { href: "/admin/notifications", label: "Global Alerts", icon: BellIcon, adminOnly: true },

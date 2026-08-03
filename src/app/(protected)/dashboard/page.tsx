@@ -5,7 +5,7 @@ import { redis } from "@/lib/redis";
 import { getMembership } from "@/actions/membership";
 import { getWallet } from "@/actions/wallet";
 import { getRemainingDays } from "@/lib/membership-utils";
-import { getUpcomingEvents } from "@/actions/events";
+import { getUpcomingEvents, getBulkEventRSVPs } from "@/actions/events";
 import { isUserCheckedInToday } from "@/actions/admin/checkins";
 import { getEventTiming } from "@/lib/event-utils";
 import { QuickRSVPButton } from "@/components/QuickRSVPButton";
@@ -114,6 +114,7 @@ export default async function DashboardPage() {
     getSelfCheckInStatus(),
   ]);
 
+  const bulkRsvps = await getBulkEventRSVPs(upcomingEvents.map(e => e.eventId), session.user.id);
   const day = new Date().getDay();
   const isWeekend = day === 0 || day === 6;
   const winnerSelectionPending = isAdminOrMod && isWeekend && Boolean(winnerInfo && !winnerInfo.shellId);
@@ -496,7 +497,7 @@ export default async function DashboardPage() {
                     </div>
 
                     <div className="px-3 pb-3 pt-0 flex items-center justify-between">
-                      <QuickRSVPButton eventId={event.eventId} />
+                      <QuickRSVPButton eventId={event.eventId} initialRsvpData={bulkRsvps[event.eventId]} />
                       <Link
                         href="/newsfeed"
                         className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:text-amber-500"

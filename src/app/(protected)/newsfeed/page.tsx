@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { getFeedPosts, hasUserLikedPost } from "@/actions/feed";
-import { getUpcomingEvents } from "@/actions/events";
+import { getUpcomingEvents, getBulkEventRSVPs } from "@/actions/events";
 import { FeedView } from "./FeedView";
 import { EventsCarousel } from "./EventsCarousel";
 import { CreatePostForm } from "./CreatePostForm";
@@ -19,6 +19,8 @@ export default async function NewsfeedPage() {
     getUpcomingEvents(),
   ]);
 
+  const bulkRsvps = await getBulkEventRSVPs(events.map(e => e.eventId), userId);
+
   // Check likes in parallel
   const likedEntries = await Promise.all(
     posts.map(async (post) => {
@@ -34,7 +36,7 @@ export default async function NewsfeedPage() {
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Newsfeed</h1>
 
         {/* Events carousel */}
-        {events.length > 0 && <EventsCarousel events={events} />}
+        {events.length > 0 && <EventsCarousel events={events} bulkRsvps={bulkRsvps} />}
 
         {/* Create post */}
         <CreatePostForm userId={userId} userImage={session.user.image} userName={session.user.name} />

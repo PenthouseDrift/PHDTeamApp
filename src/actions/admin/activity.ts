@@ -8,13 +8,37 @@ export const getRecentActivity = unstable_cache(
   async () => {
     const records = await redis.zrange("activity:log", 0, 1999, { rev: true });
     
-    return (records || []).map(str => {
+    const parsed = (records || []).map(str => {
       try {
         return typeof str === "string" ? JSON.parse(str) : str;
       } catch {
         return null;
       }
     }).filter(Boolean);
+
+    const checkinsByMemberDate = new Map<string, any[]>();
+    for (const item of parsed) {
+      if (item.type === "checkin") {
+        const date = new Date(item.timestamp).toISOString().split("T")[0];
+        const key = `${item.memberId}_${date}`;
+        if (!checkinsByMemberDate.has(key)) {
+          checkinsByMemberDate.set(key, []);
+        }
+        checkinsByMemberDate.get(key)!.push(item);
+      }
+    }
+
+    const itemsToHide = new Set<string>();
+    for (const checkins of checkinsByMemberDate.values()) {
+      if (checkins.length > 1) {
+        checkins.sort((a, b) => (b.description?.length || 0) - (a.description?.length || 0));
+        for (let i = 1; i < checkins.length; i++) {
+          itemsToHide.add(checkins[i].id);
+        }
+      }
+    }
+
+    return parsed.filter((item: any) => !itemsToHide.has(item.id));
   },
   ["global-activity-log"],
   {
