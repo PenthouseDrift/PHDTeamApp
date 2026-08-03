@@ -64,7 +64,7 @@ export function ShopClient({ products, userId }: ShopClientProps) {
     startTransition(async () => {
       const returnUrl = `${window.location.origin}/shop/success`;
       const res = await processShopCheckout(orderItems, totalPrice, returnUrl);
-      if (res.success && res.data) {
+      if (res.success) {
         window.location.href = res.data.checkoutUrl;
       } else {
         setError(res.error || "Failed to process checkout");

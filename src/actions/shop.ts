@@ -126,7 +126,7 @@ export async function deleteProduct(id: string): Promise<ActionResult<void>> {
     revalidatePath("/shop");
     revalidatePath("/admin/shop");
 
-    return { success: true };
+    return { success: true, data: undefined };
   } catch (error) {
     console.error("Failed to delete product:", error);
     return { success: false, error: "Failed to delete product" };

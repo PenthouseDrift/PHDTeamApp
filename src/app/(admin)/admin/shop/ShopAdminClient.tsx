@@ -63,11 +63,11 @@ export function ShopAdminClient({ initialProducts }: ShopAdminClientProps) {
         });
       }
 
-      if (res?.success && res.data) {
+      if (res?.success) {
         if (isCreating) {
           setProducts([res.data, ...products]);
         } else {
-          setProducts(products.map((p) => (p.id === res.data!.id ? res.data! : p)));
+          setProducts(products.map((p) => (p.id === res.data.id ? res.data : p)));
         }
         resetForm();
       } else {
