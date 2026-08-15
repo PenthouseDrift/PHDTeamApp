@@ -55,11 +55,20 @@ export function ShareCalibrationButton({ calibrationId, calibrationName }: Share
     if (!shareUrl) return;
     try {
       await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
     } catch {
-      // fallback
+      const textArea = document.createElement("textarea");
+      textArea.value = shareUrl;
+      textArea.readOnly = true;
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.select();
+      textArea.setSelectionRange(0, textArea.value.length);
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
     }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   return (

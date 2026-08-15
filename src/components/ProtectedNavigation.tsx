@@ -13,6 +13,7 @@ interface NavUser {
   name?: string | null;
   image?: string | null;
   role?: "admin" | "moderator" | "member";
+  realRole?: "admin" | "moderator" | "member";
 }
 
 interface ProtectedNavigationProps {
@@ -51,8 +52,8 @@ function getInitials(name: string | null | undefined): string {
 export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelectionPending = false }: ProtectedNavigationProps) {
   const pathname = usePathname();
 
-  const isImpersonating = Boolean((user as any).realRole);
-  const realRole = (user as any).realRole || user.role;
+  const isImpersonating = Boolean(user.realRole);
+  const realRole = user.realRole ?? user.role ?? "member";
 
   return (
     <>
@@ -165,7 +166,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
       </aside>
 
       {/* Mobile top header */}
-      <header className="fixed top-0 left-0 right-0 z-40 flex md:hidden items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/95 backdrop-blur-sm">
+      <header className="pwa-mobile-header fixed top-0 left-0 right-0 z-40 flex md:hidden items-center justify-between px-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/95 backdrop-blur-sm">
         <div className="flex items-center gap-2">
           {pathname !== "/dashboard" ? (
             <Link
@@ -205,7 +206,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
       </header>
 
       {/* Mobile bottom tab bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/95 backdrop-blur-sm">
+      <nav className="pwa-bottom-nav fixed bottom-0 left-0 right-0 z-40 flex md:hidden border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/95 backdrop-blur-sm">
         {mobileNavItems.map((item) => {
           const isActive = pathname.startsWith(item.href);
           return (

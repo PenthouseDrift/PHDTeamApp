@@ -1,82 +1,97 @@
-const CACHE_NAME = "penthouse-drift-v1";
+const CACHE_NAME = "penthouse-drift-v2";
+const OFFLINE_URL = "/offline.html";
 const STATIC_ASSETS = [
-  "/",
-  "/dashboard",
+  OFFLINE_URL,
+  "/apple-touch-icon.png",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/logo.png",
 ];
 
-// Install - cache static assets
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
-  );
-  self.skipWaiting();
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)));
 });
 
-// Activate - clean old caches
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-// Fetch - network first, fallback to cache
+self.addEventListener("message", (event) => {
+  if (event.data === "SKIP_WAITING") self.skipWaiting();
+});
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
-
-  // Skip non-GET requests
   if (request.method !== "GET") return;
 
-  // Skip API routes (except facebook feed)
-  if (request.url.includes("/api/") && !request.url.includes("/api/facebook/feed")) return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
+
+  if (request.mode === "navigate") {
+    event.respondWith(fetch(request).catch(() => caches.match(OFFLINE_URL)));
+    return;
+  }
+
+  const isStaticAsset = url.pathname.startsWith("/_next/static/") || STATIC_ASSETS.includes(url.pathname);
+  if (!isStaticAsset) return;
 
   event.respondWith(
-    fetch(request)
-      .then((response) => {
-        // Cache successful responses for images from blob storage
-        if (response.ok && request.url.includes("blob.vercel-storage.com")) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+    caches.match(request).then((cached) => {
+      if (cached) return cached;
+      return fetch(request).then(async (response) => {
+        if (response.ok) {
+          const cache = await caches.open(CACHE_NAME);
+          await cache.put(request, response.clone());
         }
         return response;
-      })
-      .catch(() => caches.match(request).then((cached) => cached || caches.match("/")))
+      });
+    })
   );
 });
 
-// Push notifications
 self.addEventListener("push", (event) => {
   if (!event.data) return;
 
-  const data = event.data.json();
+  let data;
+  try {
+    data = event.data.json();
+  } catch {
+    data = { title: "Penthouse Drift", body: event.data.text(), url: "/dashboard" };
+  }
+
   const options = {
-    body: data.body,
-    icon: data.icon || "/favicon.png",
-    badge: data.badge || "/icons/p-badge.png",
-    data: { url: data.url || "/" },
-    vibrate: [200, 100, 200],
+    body: data.body || "You have a new update.",
+    icon: data.icon || "/icons/icon-192.png",
+    badge: data.badge || "/icons/icon-192.png",
+    data: { url: data.url || "/dashboard" },
   };
 
-  event.waitUntil(self.registration.showNotification(data.title, options));
+  event.waitUntil(self.registration.showNotification(data.title || "Penthouse Drift", options));
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || "/";
+
+  let target = new URL("/dashboard", self.location.origin);
+  try {
+    const requested = new URL(event.notification.data?.url || "/dashboard", self.location.origin);
+    if (requested.origin === self.location.origin) target = requested;
+  } catch {
+    // Keep the safe same-origin dashboard target.
+  }
 
   event.waitUntil(
-    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if (client.url.includes(url) && "focus" in client) {
-          return client.focus();
-        }
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(async (clientList) => {
+      const existingClient = clientList.find((client) => new URL(client.url).origin === self.location.origin);
+      if (existingClient) {
+        if ("navigate" in existingClient) await existingClient.navigate(target.href);
+        return existingClient.focus();
       }
-      return clients.openWindow(url);
+      return self.clients.openWindow(target.href);
     })
   );
 });

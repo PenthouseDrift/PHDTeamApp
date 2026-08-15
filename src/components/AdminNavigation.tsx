@@ -42,7 +42,7 @@ export function AdminNavigation({ user, unreadNotifications = 0 }: AdminNavigati
   return (
     <>
       {/* Mobile & Tablet top header navigation */}
-      <header className="fixed top-0 left-0 right-0 z-40 flex md:hidden items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-sm">
+      <header className="pwa-mobile-header fixed top-0 left-0 right-0 z-40 flex md:hidden items-center justify-between px-4 border-b border-zinc-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-sm">
         <div className="flex items-center gap-2">
           <Link
             href="/dashboard"
@@ -136,7 +136,7 @@ export function AdminNavigation({ user, unreadNotifications = 0 }: AdminNavigati
       </aside>
 
       {/* Mobile bottom tab bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden border-t border-zinc-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md h-14">
+      <nav className="pwa-admin-bottom-nav fixed bottom-0 left-0 right-0 z-40 flex md:hidden border-t border-zinc-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md">
         {/* Scrollable nav items list */}
         <div className="flex-1 flex items-center overflow-x-auto no-scrollbar">
           {visibleItems.map((item) => {
