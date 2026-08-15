@@ -38,7 +38,7 @@ const navItems = [
 const mobileNavItems = [
   { href: "/dashboard", label: "Home", icon: DashboardIcon },
   { href: "/wallet", label: "Wallet", icon: WalletIcon },
-  { href: "/shop/visualizer", label: "Wheels", icon: WheelIcon },
+  { href: "/cars", label: "My Cars", icon: CarIcon },
   { href: "/newsfeed", label: "Newsfeed", icon: NewsfeedIcon },
   { href: "/more", label: "More", icon: MoreIcon },
 ];
@@ -222,16 +222,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
             </Link>
           );
         })}
-        <Link
-          href="/shop"
-          prefetch={true}
-          className={`relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
-            pathname.startsWith("/shop") ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-emerald-500 dark:text-emerald-400"
-          }`}
-        >
-          <StoreIcon className="w-5 h-5" />
-          <span>Store</span>
-        </Link>
+
         {(user.role === "admin" || user.role === "moderator") && (
           <Link
             href="/admin"
