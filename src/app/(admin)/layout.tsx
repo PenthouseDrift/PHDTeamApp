@@ -22,7 +22,8 @@ export default async function AdminLayout({
   let unreadCount = 0;
   try {
     const unread = await getUnreadCount(session.user.id);
-    customAvatar = (session.user as any).customAvatar || null;
+    const sessionUser = session.user as typeof session.user & { customAvatar?: string | null };
+    customAvatar = sessionUser.customAvatar || null;
     unreadCount = unread;
   } catch {
     // Silently handle errors
@@ -36,7 +37,7 @@ export default async function AdminLayout({
   return (
     <div className="flex h-dvh bg-zinc-50 dark:bg-zinc-950">
       <AdminNavigation user={userWithAvatar} unreadNotifications={unreadCount} />
-      <main className="flex-1 overflow-y-auto pt-14 pb-16 md:pt-0 md:pb-0">
+      <main className="pwa-admin-content flex-1 overflow-y-auto md:pt-0 md:pb-0">
         {children}
       </main>
     </div>

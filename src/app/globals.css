@@ -10,3 +10,79 @@
 body {
   font-family: Arial, Helvetica, sans-serif;
 }
+
+html,
+body {
+  min-height: 100%;
+  background: #fafafa;
+}
+
+body {
+  min-height: 100dvh;
+}
+
+@media (prefers-color-scheme: dark) {
+  html,
+  body {
+    background: #09090b;
+  }
+}
+
+.pwa-mobile-header {
+  padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+  padding-bottom: 0.75rem;
+}
+
+.pwa-bottom-nav {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pwa-admin-bottom-nav {
+  height: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pwa-protected-content {
+  padding-top: calc(4rem + env(safe-area-inset-top, 0px));
+}
+
+.pwa-protected-bottom {
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+}
+
+.pwa-admin-content {
+  padding-top: calc(3.5rem + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+}
+
+.pwa-install-banner {
+  padding-top: calc(0.5rem + env(safe-area-inset-top, 0px));
+  padding-bottom: 0.5rem;
+}
+
+.pwa-modal-safe {
+  padding-top: max(1rem, env(safe-area-inset-top, 0px));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 768px) {
+  .pwa-protected-content,
+  .pwa-admin-content {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .pwa-protected-bottom {
+    padding-bottom: 0;
+  }
+}
+
+.pwa-notification-prompt {
+  bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 768px) {
+  .pwa-notification-prompt {
+    bottom: 1rem;
+  }
+}
