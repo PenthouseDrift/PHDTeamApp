@@ -8,6 +8,11 @@ export interface Member {
   qrCode: string | null;
   aiGenerations?: number;
   createdAt: number;
+  discounts?: {
+    membership: number;
+    daypass: number;
+    rental: number;
+  };
 }
 
 export interface Membership {

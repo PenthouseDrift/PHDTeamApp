@@ -9,7 +9,9 @@ import {
   revokeMembership,
   clearMembershipRecord,
   adminAdjustWallet,
+  setMemberDiscounts,
 } from "@/actions/admin/membership";
+import { BASE_PRICES, EMPTY_DISCOUNTS } from "@/lib/pricing";
 import { quickCheckIn, checkInWithDayPass, checkInWithRental } from "@/actions/admin/checkins";
 import { setUserRole } from "@/actions/admin/users";
 import { getOrCreateQRCode } from "@/actions/qr";
@@ -48,6 +50,11 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
   const [pendingRole, setPendingRole] = useState<"admin" | "moderator" | "member" | null>(null);
   const [revokeStep, setRevokeStep] = useState<1 | 2>(1);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [discounts, setDiscounts] = useState({
+    membership: String(initialMember.member.discounts?.membership ?? EMPTY_DISCOUNTS.membership),
+    daypass: String(initialMember.member.discounts?.daypass ?? EMPTY_DISCOUNTS.daypass),
+    rental: String(initialMember.member.discounts?.rental ?? EMPTY_DISCOUNTS.rental),
+  });
 
   const m = initialMember.member;
   const isAdmin = m.role === "admin";
@@ -66,6 +73,26 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
   }, [onClose]);
+
+  function handleSaveDiscounts() {
+    startTransition(async () => {
+      const res = await setMemberDiscounts(m.id, {
+        membership: Number(discounts.membership) || 0,
+        daypass: Number(discounts.daypass) || 0,
+        rental: Number(discounts.rental) || 0,
+      });
+      if (res.success) {
+        setDiscounts({
+          membership: String(res.data.membership),
+          daypass: String(res.data.daypass),
+          rental: String(res.data.rental),
+        });
+        onUpdate({ type: "success", message: `Discounts saved for ${m.name}` });
+      } else {
+        onUpdate({ type: "error", message: res.error });
+      }
+    });
+  }
 
   function handleAdjustWallet(itemType: "daypass" | "rental", delta: number) {
     startTransition(async () => {
@@ -532,6 +559,56 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Custom Discounts (Admin Viewer) */}
+          {isAdminViewer && (
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-4 space-y-3">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Custom Discounts</h3>
+                <p className="mt-0.5 text-[11px] text-zinc-400 dark:text-zinc-500">
+                  Amount off in £ per purchase. Leave 0 for full price. Shown to the member with the original price struck through.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { key: "membership", label: "Membership" },
+                  { key: "daypass", label: "Day Pass" },
+                  { key: "rental", label: "Rental / hr" },
+                ] as const).map(({ key, label }) => (
+                  <div key={key} className="space-y-1">
+                    <label className="block text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">
+                      {label}
+                      <span className="text-zinc-400 dark:text-zinc-500"> (of £{BASE_PRICES[key].toFixed(0)})</span>
+                    </label>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-zinc-400">£</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={BASE_PRICES[key]}
+                        step="0.5"
+                        inputMode="decimal"
+                        value={discounts[key]}
+                        onChange={(e) => setDiscounts((prev) => ({ ...prev, [key]: e.target.value }))}
+                        disabled={isPending}
+                        className="w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 pl-5 pr-2 py-1.5 text-sm font-bold text-zinc-900 dark:text-zinc-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 disabled:opacity-50"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleSaveDiscounts}
+                disabled={isPending}
+                className="w-full py-2 rounded-lg bg-amber-500 text-black text-xs font-extrabold hover:bg-amber-400 transition-colors disabled:opacity-50"
+              >
+                {isPending ? "Saving…" : "Save Discounts"}
+              </button>
             </div>
           )}
 

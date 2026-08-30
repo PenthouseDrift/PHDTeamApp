@@ -3,7 +3,14 @@
 import { useState } from "react";
 import Image from "next/image";
 import type { Wallet, Membership } from "@/types";
+import type { PriceBreakdown } from "@/lib/pricing";
 import { createWalletCheckout } from "@/actions/wallet";
+
+interface WalletPricing {
+  membership: PriceBreakdown;
+  daypass: PriceBreakdown;
+  rental: PriceBreakdown;
+}
 
 interface WalletClientProps {
   userId: string;
@@ -14,8 +21,13 @@ interface WalletClientProps {
   membershipQrUrl: string;
   dayPassQrUrl: string;
   rentalQrUrl: string;
+  pricing: WalletPricing;
   onPurchaseItem?: (itemType: "daypass" | "rental", quantity: number) => Promise<void>;
   onTestAddBalance?: (itemType: "daypass" | "rental", quantity: number) => Promise<void>;
+}
+
+function money(amount: number): string {
+  return `£${amount.toFixed(2)}`;
 }
 
 export function WalletClient({
@@ -26,6 +38,7 @@ export function WalletClient({
   dayPassQrUrl,
   rentalQrUrl,
   userRole,
+  pricing,
   onPurchaseItem,
   onTestAddBalance,
 }: WalletClientProps) {
@@ -81,7 +94,11 @@ export function WalletClient({
               href="/membership/purchase"
               className="w-full sm:w-auto px-4 py-2 rounded-xl bg-amber-500 text-black text-xs font-extrabold hover:bg-amber-400 transition-colors text-center shadow-sm"
             >
-              Get Membership (£40)
+              {pricing.membership.hasDiscount ? (
+                <>Get Membership (<span className="line-through opacity-70">{money(pricing.membership.original)}</span> {money(pricing.membership.final)})</>
+              ) : (
+                <>Get Membership ({money(pricing.membership.final)})</>
+              )}
             </a>
           )}
         </div>
@@ -154,10 +171,15 @@ export function WalletClient({
               <div className="space-y-1">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                   <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100">Day Pass</h3>
-                  <span className="text-xs sm:text-base font-bold text-amber-600 dark:text-amber-500">£10.00</span>
+                  <span className="flex items-baseline gap-1.5">
+                    {pricing.daypass.hasDiscount && (
+                      <span className="text-[10px] sm:text-xs font-semibold text-zinc-400 line-through">{money(pricing.daypass.original)}</span>
+                    )}
+                    <span className="text-xs sm:text-base font-bold text-amber-600 dark:text-amber-500">{money(pricing.daypass.final)}</span>
+                  </span>
                 </div>
                 <p className="text-[10px] sm:text-xs text-zinc-500 dark:text-zinc-400">
-                  Full track day access.
+                  {pricing.daypass.hasDiscount ? `Full track day access · ${money(pricing.daypass.discount)} off` : "Full track day access."}
                 </p>
               </div>
 
@@ -186,7 +208,7 @@ export function WalletClient({
                   disabled={isSubmitting}
                   className="w-full py-2 sm:py-2.5 rounded-lg bg-amber-500 text-black text-[11px] sm:text-xs font-extrabold hover:bg-amber-400 transition-colors disabled:opacity-50 text-center"
                 >
-                  Buy ({dayPassQty}) - £{(dayPassQty * 10).toFixed(0)}
+                  Buy ({dayPassQty}) - {money(dayPassQty * pricing.daypass.final)}
                 </button>
               </div>
             </div>
@@ -196,10 +218,15 @@ export function WalletClient({
               <div className="space-y-1">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                   <h3 className="text-xs sm:text-sm font-bold text-zinc-900 dark:text-zinc-100">Car Rental</h3>
-                  <span className="text-xs sm:text-base font-bold text-amber-600 dark:text-amber-500">£10.00 / hr</span>
+                  <span className="flex items-baseline gap-1.5">
+                    {pricing.rental.hasDiscount && (
+                      <span className="text-[10px] sm:text-xs font-semibold text-zinc-400 line-through">{money(pricing.rental.original)}</span>
+                    )}
+                    <span className="text-xs sm:text-base font-bold text-amber-600 dark:text-amber-500">{money(pricing.rental.final)} / hr</span>
+                  </span>
                 </div>
                 <p className="text-[10px] sm:text-xs text-zinc-500 dark:text-zinc-400">
-                  15m grace + 1hr rental.
+                  {pricing.rental.hasDiscount ? `15m grace + 1hr rental · ${money(pricing.rental.discount)} off` : "15m grace + 1hr rental."}
                 </p>
               </div>
 
@@ -228,7 +255,7 @@ export function WalletClient({
                   disabled={isSubmitting}
                   className="w-full py-2 sm:py-2.5 rounded-lg bg-amber-500 text-black text-[11px] sm:text-xs font-extrabold hover:bg-amber-400 transition-colors disabled:opacity-50 text-center"
                 >
-                  Buy ({rentalQty}) - £{(rentalQty * 10).toFixed(0)}
+                  Buy ({rentalQty}) - {money(rentalQty * pricing.rental.final)}
                 </button>
               </div>
             </div>

@@ -8,6 +8,7 @@ import { getCheckoutStatus } from "@/lib/sumup";
 import { logActivity } from "@/lib/activity";
 import { processSuccessfulPaymentReference } from "@/lib/membership-activation";
 import { redis } from "@/lib/redis";
+import { parseDiscounts, priceFor } from "@/lib/pricing";
 import { WalletClient } from "./WalletClient";
 
 export const dynamic = "force-dynamic";
@@ -102,6 +103,13 @@ export default async function WalletPage({ searchParams }: PageProps) {
   const nickname = (memberData?.nickname as string) || "";
   const displayName = nickname.trim() || session.user.name || "Member";
 
+  const discounts = parseDiscounts(memberData);
+  const pricing = {
+    membership: priceFor("membership", discounts.membership),
+    daypass: priceFor("daypass", discounts.daypass),
+    rental: priceFor("rental", discounts.rental),
+  };
+
   return (
     <WalletClient
       userId={userId}
@@ -112,6 +120,7 @@ export default async function WalletPage({ searchParams }: PageProps) {
       membershipQrUrl={membershipQr}
       dayPassQrUrl={dayPassQr}
       rentalQrUrl={rentalQr}
+      pricing={pricing}
       onPurchaseItem={handlePurchaseItem}
       onTestAddBalance={process.env.NODE_ENV === "development" ? handleTestAddBalance : undefined}
     />

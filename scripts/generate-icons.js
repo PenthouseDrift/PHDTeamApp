@@ -8,7 +8,7 @@ const BG_COLOR = { r: 26, g: 26, b: 46, alpha: 1 }; // #1a1a2e
 
 fs.mkdirSync(ICONS_DIR, { recursive: true });
 
-async function generateIcon(size, padding, outputName) {
+async function generateIcon(size, padding, outputName, background = null) {
   const logoSize = Math.floor(size * (1 - padding * 2));
 
   // Resize logo to fit within the icon with padding
@@ -16,13 +16,14 @@ async function generateIcon(size, padding, outputName) {
     .resize(logoSize, logoSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .toBuffer();
 
-  // Create background and composite logo centered
+  // Regular icons stay transparent so browser light/dark surfaces can show through.
+  // Maskable icons keep an opaque brand background because launchers crop them.
   await sharp({
     create: {
       width: size,
       height: size,
       channels: 4,
-      background: BG_COLOR,
+      background: background || { r: 0, g: 0, b: 0, alpha: 0 },
     },
   })
     .composite([
@@ -40,13 +41,17 @@ async function generateIcon(size, padding, outputName) {
 async function main() {
   console.log('Generating PWA icons from logo...\n');
 
-  // Regular icons - logo takes up ~70% of the space
-  await generateIcon(192, 0.15, 'icon-192.png');
-  await generateIcon(512, 0.15, 'icon-512.png');
+  // Stable launcher icons keep the branded dark background across platforms.
+  await generateIcon(192, 0.15, 'icon-192.png', BG_COLOR);
+  await generateIcon(512, 0.15, 'icon-512.png', BG_COLOR);
 
-  // Maskable icons - need more padding (safe zone is inner 80%, so 10% padding each side)
-  await generateIcon(192, 0.2, 'icon-maskable-192.png');
-  await generateIcon(512, 0.2, 'icon-maskable-512.png');
+  // In-app navigation can select a background that matches the active theme.
+  await generateIcon(192, 0.15, 'icon-light-192.png', { r: 255, g: 255, b: 255, alpha: 1 });
+  await generateIcon(192, 0.15, 'icon-dark-192.png', BG_COLOR);
+
+  // Maskable icons - opaque background and extra padding for launcher cropping
+  await generateIcon(192, 0.2, 'icon-maskable-192.png', BG_COLOR);
+  await generateIcon(512, 0.2, 'icon-maskable-512.png', BG_COLOR);
 
   console.log('\nDone! Icons saved to public/icons/');
 }

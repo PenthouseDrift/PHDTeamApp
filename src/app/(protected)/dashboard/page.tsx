@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import { getMembership } from "@/actions/membership";
 import { getWallet } from "@/actions/wallet";
+import { parseDiscounts, priceFor, formatGBP } from "@/lib/pricing";
 import { getRemainingDays } from "@/lib/membership-utils";
 import { getUpcomingEvents, getBulkEventRSVPs } from "@/actions/events";
 import { isUserCheckedInToday } from "@/actions/admin/checkins";
@@ -121,6 +122,12 @@ export default async function DashboardPage() {
   const membership = result.success ? result.data : null;
   const wallet = walletRes.success ? walletRes.data : { dayPasses: 0, rentalHours: 0 };
   const isActive = membership?.status === "active";
+
+  const discounts = parseDiscounts(memberData);
+  const membershipPrice = priceFor("membership", discounts.membership);
+  const dayPassPrice = priceFor("daypass", discounts.daypass);
+  const rentalPrice = priceFor("rental", discounts.rental);
+
   const customAvatar = (memberData?.customAvatar as string) || null;
   const nickname = (memberData?.nickname as string) || "";
   const avatarUrl = customAvatar || session.user.image || null;
@@ -242,7 +249,17 @@ export default async function DashboardPage() {
                   href="/membership/purchase"
                   className="relative z-10 shrink-0 w-full sm:w-auto px-6 py-2.5 sm:py-3 rounded-xl text-sm font-black text-center transition-all active:scale-[0.98] bg-black text-white hover:bg-zinc-800 shadow-lg shadow-black/20"
                 >
-                  {membership && isActive ? "Manage Membership" : membership ? "Renew Now (£40)" : "Buy Membership (£40)"}
+                  {membership && isActive ? (
+                    "Manage Membership"
+                  ) : (
+                    <>
+                      {membership ? "Renew Now" : "Buy Membership"} (
+                      {membershipPrice.hasDiscount && (
+                        <span className="line-through opacity-60 mr-1">{formatGBP(membershipPrice.original)}</span>
+                      )}
+                      {formatGBP(membershipPrice.final)})
+                    </>
+                  )}
                 </Link>
               </div>
             )}
@@ -265,7 +282,17 @@ export default async function DashboardPage() {
                       : "bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
                   }`}
                 >
-                  {wallet.dayPasses > 0 ? "Use Pass" : "+ Buy (£10)"}
+                  {wallet.dayPasses > 0 ? (
+                    "Use Pass"
+                  ) : (
+                    <>
+                      + Buy (
+                      {dayPassPrice.hasDiscount && (
+                        <span className="line-through opacity-60 mr-1">{formatGBP(dayPassPrice.original)}</span>
+                      )}
+                      {formatGBP(dayPassPrice.final)})
+                    </>
+                  )}
                 </Link>
               </div>
 
@@ -285,7 +312,17 @@ export default async function DashboardPage() {
                       : "bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
                   }`}
                 >
-                  {wallet.rentalHours > 0 ? "Use Hours" : "+ Buy (£10)"}
+                  {wallet.rentalHours > 0 ? (
+                    "Use Hours"
+                  ) : (
+                    <>
+                      + Buy (
+                      {rentalPrice.hasDiscount && (
+                        <span className="line-through opacity-60 mr-1">{formatGBP(rentalPrice.original)}</span>
+                      )}
+                      {formatGBP(rentalPrice.final)})
+                    </>
+                  )}
                 </Link>
               </div>
             </div>

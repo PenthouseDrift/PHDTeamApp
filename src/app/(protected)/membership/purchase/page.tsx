@@ -5,13 +5,10 @@ import { redis } from "@/lib/redis";
 import { getMembership } from "@/actions/membership";
 import { getRemainingDays } from "@/lib/membership-utils";
 import { processSuccessfulMembershipPayment } from "@/lib/membership-activation";
+import { getMemberDiscounts, priceFor, formatGBP, CURRENCY, MEMBERSHIP_DURATION_DAYS } from "@/lib/pricing";
 import { PurchaseButton } from "./PurchaseButton";
 
 export const dynamic = "force-dynamic";
-
-const MEMBERSHIP_PRICE = 40.0;
-const MEMBERSHIP_CURRENCY = "GBP";
-const MEMBERSHIP_DURATION_DAYS = 28;
 
 export default async function PurchaseMembershipPage() {
   const session = await auth();
@@ -26,6 +23,9 @@ export default async function PurchaseMembershipPage() {
   const remainingDays =
     membership && isActive ? getRemainingDays(membership) : 0;
 
+  const discounts = await getMemberDiscounts(session.user.id);
+  const membershipPrice = priceFor("membership", discounts.membership);
+
   async function handlePurchase() {
     "use server";
 
@@ -36,11 +36,14 @@ export default async function PurchaseMembershipPage() {
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
+    const memberDiscounts = await getMemberDiscounts(session.user.id);
+    const price = priceFor("membership", memberDiscounts.membership);
+
     // Create checkout with memberId reference
     const checkout = await createCheckout({
       memberId: session.user.id,
-      amount: MEMBERSHIP_PRICE,
-      currency: MEMBERSHIP_CURRENCY,
+      amount: price.final,
+      currency: CURRENCY,
       description: `Penthouse Drift - ${MEMBERSHIP_DURATION_DAYS}-Day Membership`,
       returnUrl: `${baseUrl}/membership/success`,
     });
@@ -128,10 +131,24 @@ export default async function PurchaseMembershipPage() {
             <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
               {MEMBERSHIP_DURATION_DAYS}-Day Track Membership
             </h2>
-            <span className="text-2xl font-bold text-amber-500">
-              £{MEMBERSHIP_PRICE.toFixed(2)}
-            </span>
+            <div className="flex items-baseline gap-2">
+              {membershipPrice.hasDiscount && (
+                <span className="text-base font-semibold text-zinc-400 line-through">
+                  {formatGBP(membershipPrice.original)}
+                </span>
+              )}
+              <span className="text-2xl font-bold text-amber-500">
+                {formatGBP(membershipPrice.final)}
+              </span>
+            </div>
           </div>
+
+          {membershipPrice.hasDiscount && (
+            <div className="-mt-2 flex items-center gap-2 rounded-lg bg-green-500/10 border border-green-500/25 px-3 py-2 text-xs font-semibold text-green-700 dark:text-green-400">
+              <span>🎉</span>
+              <span>Your account has a {formatGBP(membershipPrice.discount)} membership discount applied.</span>
+            </div>
+          )}
 
           <ul className="space-y-3 text-sm text-zinc-600 dark:text-zinc-300">
             <li className="flex items-center gap-2.5">
@@ -163,7 +180,7 @@ export default async function PurchaseMembershipPage() {
           <PurchaseButton
             userId={session.user.id}
             isActive={isActive}
-            price={MEMBERSHIP_PRICE}
+            price={membershipPrice.final}
             durationDays={MEMBERSHIP_DURATION_DAYS}
             isDisabled={isPurchaseDisabled}
             disabledReason="🛡️ Staff Accounts Have Permanent Access (Purchasing Disabled)"
