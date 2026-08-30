@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NotificationsPopover } from "@/components/NotificationsPopover";
 import { QRPopover } from "@/components/QRPopover";
+import { ThemeAppIcon } from "@/components/ThemeAppIcon";
 
 interface NavUser {
   id?: string;
@@ -74,7 +75,7 @@ export function AdminNavigation({ user, unreadNotifications = 0 }: AdminNavigati
       <aside className="hidden md:flex md:w-64 md:flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
         <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800">
           <Link href="/admin" className="flex items-center gap-2.5 min-w-0">
-            <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-8 w-8 shrink-0" />
+            <ThemeAppIcon size={32} className="h-8 w-8 rounded-lg overflow-hidden" />
             <span className="font-bold text-sm text-zinc-900 dark:text-zinc-100 truncate">
               {isModerator ? "Mod Portal" : "Admin Portal"}
             </span>

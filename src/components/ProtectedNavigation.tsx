@@ -7,6 +7,7 @@ import Image from "next/image";
 import { NotificationsPopover } from "@/components/NotificationsPopover";
 import { QRPopover } from "@/components/QRPopover";
 import { DevImpersonationToggle } from "@/components/DevImpersonationToggle";
+import { ThemeAppIcon } from "@/components/ThemeAppIcon";
 
 interface NavUser {
   id: string;
@@ -61,7 +62,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
       <aside className="hidden md:flex md:w-64 md:flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
         {/* Header: logo + user + notifications */}
         <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800">
-          <Image src="/icons/icon-192.png" alt="Penthouse Drift" width={32} height={32} className="h-8 w-8" />
+          <ThemeAppIcon size={32} className="h-8 w-8 rounded-lg overflow-hidden" />
           <div className="flex items-center gap-2">
             {process.env.NODE_ENV === "development" && (
               <DevImpersonationToggle isImpersonating={isImpersonating} realRole={realRole} />
@@ -177,7 +178,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
               <span>←</span> Back
             </Link>
           ) : (
-            <Image src="/icons/icon-192.png" alt="Penthouse Drift" width={28} height={28} className="h-7 w-7" />
+            <ThemeAppIcon size={28} className="h-7 w-7 rounded-md overflow-hidden" priority />
           )}
         </div>
         <div className="flex items-center gap-1.5 sm:gap-3">

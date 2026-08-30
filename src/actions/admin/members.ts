@@ -2,6 +2,7 @@
 
 import { redis } from "@/lib/redis";
 import { unstable_cache } from "next/cache";
+import { parseDiscounts } from "@/lib/pricing";
 import type { Member, Membership, Wallet } from "@/types";
 
 export interface MemberWithMembership {
@@ -71,6 +72,7 @@ async function _getAllMembers(): Promise<MemberWithMembership[]> {
           qrCode: null,
           aiGenerations: Number(memberData.aiGenerations) || 0,
           createdAt: Number(memberData.createdAt) || 0,
+          discounts: parseDiscounts(memberData),
         };
 
         let membership: Membership | null = null;

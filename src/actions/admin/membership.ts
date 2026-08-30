@@ -4,6 +4,11 @@ import { redis } from "@/lib/redis";
 import { revalidatePath } from "next/cache";
 import type { ActionResult } from "@/types";
 import { logActivity } from "@/lib/activity";
+import {
+  normalizeDiscount,
+  setMemberDiscounts as persistMemberDiscounts,
+  type MemberDiscounts,
+} from "@/lib/pricing";
 
 /** Returns 23:59:59.999 UTC on the day that is 28 days after `fromDate` */
 function endOfDay28(fromDate: Date): number {
@@ -194,3 +199,47 @@ export async function adminAdjustWallet(
   }
 }
 
+
+export async function setMemberDiscounts(
+  memberId: string,
+  discounts: { membership: number; daypass: number; rental: number }
+): Promise<ActionResult<MemberDiscounts>> {
+  try {
+    const { auth } = await import("@/lib/auth");
+    const session = await auth();
+    if (!session?.user || session.user.role !== "admin") {
+      return { success: false, error: "Unauthorized: Only admins can set discounts" };
+    }
+
+    const normalized: MemberDiscounts = {
+      membership: normalizeDiscount("membership", discounts.membership),
+      daypass: normalizeDiscount("daypass", discounts.daypass),
+      rental: normalizeDiscount("rental", discounts.rental),
+    };
+
+    await persistMemberDiscounts(memberId, normalized);
+
+    const memberName = ((await redis.hget(`member:${memberId}`, "name")) as string) || "Member";
+    await logActivity({
+      type: "purchase",
+      memberId,
+      memberName,
+      description: `[ADMIN ACTION] Set discounts — membership ${normalized.membership}, day pass ${normalized.daypass}, rental ${normalized.rental} (GBP)`,
+      amount: 0,
+      currency: "GBP",
+      isDev: false,
+    });
+
+    revalidatePath("/admin/members");
+    revalidatePath("/dashboard");
+    revalidatePath("/wallet");
+    revalidatePath("/membership/purchase");
+
+    return { success: true, data: normalized };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to set discounts",
+    };
+  }
+}

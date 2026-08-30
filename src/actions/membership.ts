@@ -39,16 +39,17 @@ export async function createMembershipCheckout(
 ): Promise<ActionResult<{ url: string }>> {
   try {
     const { createCheckout } = await import("@/lib/sumup");
-    const MEMBERSHIP_PRICE = 40.0;
-    const MEMBERSHIP_CURRENCY = "GBP";
-    const MEMBERSHIP_DURATION_DAYS = 28;
+    const { getMemberDiscounts, priceFor, CURRENCY, MEMBERSHIP_DURATION_DAYS } = await import("@/lib/pricing");
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const returnUrl = customReturnUrl || `${baseUrl}/membership/success`;
 
+    const discounts = await getMemberDiscounts(userId);
+    const price = priceFor("membership", discounts.membership);
+
     const checkout = await createCheckout({
       memberId: userId,
-      amount: MEMBERSHIP_PRICE,
-      currency: MEMBERSHIP_CURRENCY,
+      amount: price.final,
+      currency: CURRENCY,
       description: `Penthouse Drift - ${MEMBERSHIP_DURATION_DAYS}-Day Membership`,
       returnUrl,
     });

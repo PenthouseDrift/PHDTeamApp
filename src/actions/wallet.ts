@@ -176,8 +176,12 @@ export async function createWalletCheckout(
 ): Promise<ActionResult<{ url: string }>> {
   try {
     const { createCheckout } = await import("@/lib/sumup");
-    const unitPrice = 10.0;
-    const totalAmount = quantity * unitPrice;
+    const { getMemberDiscounts, priceFor, CURRENCY } = await import("@/lib/pricing");
+
+    const discounts = await getMemberDiscounts(userId);
+    const price = priceFor(itemType, itemType === "daypass" ? discounts.daypass : discounts.rental);
+    const unitPrice = price.final;
+    const totalAmount = Math.round(quantity * unitPrice * 100) / 100;
     const description =
       itemType === "daypass"
         ? `Penthouse Drift - ${quantity}x Day Pass`
@@ -189,7 +193,7 @@ export async function createWalletCheckout(
     const checkout = await createCheckout({
       memberId: `${itemType}_${userId}_${quantity}`,
       amount: totalAmount,
-      currency: "GBP",
+      currency: CURRENCY,
       description,
       returnUrl,
     });
