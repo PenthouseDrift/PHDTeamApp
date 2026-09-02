@@ -206,6 +206,10 @@ export async function createWalletCheckout(
         quantity,
         guestName: guestName?.trim() || undefined,
         checkoutReference: checkout.checkout_reference,
+        // Persist the exact total charged so the activity log records the real
+        // price even when the payment webhook omits/mis-reports the amount.
+        amount: totalAmount,
+        currency: CURRENCY,
         createdAt: Date.now(),
       }),
       { ex: 86400 * 30 }

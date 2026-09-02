@@ -40,6 +40,14 @@ export async function processSuccessfulMembershipPayment(
     paymentRef: checkoutId,
   });
 
+  // Mirror status onto the member profile hash so any reader of member:<id>
+  // (dashboard/wallet) sees the active membership immediately, matching the
+  // in-person activation path.
+  await redis.hset(`member:${memberId}`, {
+    membershipStatus: "active",
+    membershipExpiresAt: newExpiresAt,
+  });
+
   // Add to active memberships sorted set (score = expiresAt for cron expiry)
   await redis.zadd("memberships:active", {
     score: newExpiresAt,
@@ -62,6 +70,10 @@ export async function processSuccessfulPaymentReference(
   let itemType: "membership" | "daypass" | "rental" = "membership";
   let quantity = 1;
   let guestName: string | undefined = undefined;
+  // Amount actually charged, persisted in the checkout metadata at creation time.
+  // Preferred over the webhook amount, which can be missing or mis-reported.
+  let storedAmount: number | undefined = undefined;
+  let storedCurrency: string | undefined = undefined;
 
   // 1. First check if we have metadata stored in Redis under checkout:${checkoutId}
   if (checkoutId) {
@@ -73,6 +85,10 @@ export async function processSuccessfulPaymentReference(
         if (stored.itemType) itemType = stored.itemType;
         if (stored.quantity) quantity = Number(stored.quantity) || 1;
         if (stored.guestName) guestName = stored.guestName;
+        if (stored.amount !== undefined && Number.isFinite(Number(stored.amount))) {
+          storedAmount = Number(stored.amount);
+        }
+        if (stored.currency) storedCurrency = String(stored.currency);
       } catch (e) {
         console.error("Failed to parse stored checkout JSON:", e);
       }
@@ -111,15 +127,36 @@ export async function processSuccessfulPaymentReference(
   const memberName = (await redis.hget(`member:${memberId}`, "name")) as string || "Unknown Member";
   const finalName = guestName ? `${memberName} (for ${guestName})` : memberName;
 
-  async function recordPurchase(type: string, qty: number) {
+  // Resolve the amount to log, in order of reliability:
+  //   1. The amount persisted in the checkout metadata at creation time.
+  //   2. The amount reported by the payment webhook.
+  //   3. Cross-reference against the app's pricing config (BASE_PRICES minus
+  //      the member's discount, times quantity).
+  async function resolveAmount(type: "membership" | "daypass" | "rental", qty: number): Promise<number> {
+    if (storedAmount !== undefined && storedAmount > 0) return storedAmount;
+    if (Number.isFinite(amount) && amount > 0) return amount;
+
+    try {
+      const { getMemberDiscounts, priceFor } = await import("@/lib/pricing");
+      const discounts = await getMemberDiscounts(memberId);
+      const perUnit = priceFor(type, discounts[type]).final;
+      return Math.round(perUnit * qty * 100) / 100;
+    } catch (e) {
+      console.error("Failed to cross-reference pricing config:", e);
+      return amount;
+    }
+  }
+
+  async function recordPurchase(type: "membership" | "daypass" | "rental", qty: number) {
     const itemName = type === "membership" ? "Membership" : type === "daypass" ? "Day Pass" : "Rental Hours";
+    const resolvedAmount = await resolveAmount(type, qty);
     await logActivity({
       type: "purchase",
       memberId,
       memberName: finalName,
       description: `Purchased ${qty}x ${itemName}`,
-      amount,
-      currency,
+      amount: resolvedAmount,
+      currency: storedCurrency || currency,
     });
   }
 
