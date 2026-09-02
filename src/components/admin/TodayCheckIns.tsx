@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import type { CheckInEntry } from "@/actions/admin/checkins";
-import { addNonMemberCheckIn, removeCheckIn, updateCheckInMethod } from "@/actions/admin/checkins";
+import { addNonMemberCheckIn, removeCheckIn, updateCheckInMethod, updateCheckInName } from "@/actions/admin/checkins";
 import { extendMemberRentalByUserId } from "@/actions/admin/rentals";
 import { useSession } from "next-auth/react";
 
@@ -20,6 +20,8 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
   const [confirmRemoveIndex, setConfirmRemoveIndex] = useState<number | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [extendingIndex, setExtendingIndex] = useState<number | null>(null);
+  const [renamingIndex, setRenamingIndex] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const [isPending, startTransition] = useTransition();
 
   // Count check-in frequency for each user (to show x2, x3 badges)
@@ -84,6 +86,26 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
         setTimeout(() => setFeedback(null), 4000);
       } else {
         setFeedback(res.error);
+      }
+    });
+  }
+
+  function startRename(index: number, currentName: string) {
+    setRenamingIndex(index);
+    setRenameValue(currentName);
+  }
+
+  function handleRename(index: number) {
+    const name = renameValue.trim();
+    if (!name) return;
+    startTransition(async () => {
+      const result = await updateCheckInName(index, name);
+      if (result.success) {
+        setFeedback(`Name updated to ${name}`);
+        setRenamingIndex(null);
+        setTimeout(() => setFeedback(null), 3000);
+      } else {
+        setFeedback(result.error);
       }
     });
   }
@@ -172,6 +194,10 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
 
             const count = userCheckInCounts[entry.userId] || 1;
 
+            // Manually-added guests (people without an account) have a synthetic
+            // userId prefixed with "guest_" — only these can be renamed.
+            const isGuest = typeof entry.userId === "string" && entry.userId.startsWith("guest_");
+
             return (
               <div
                 key={`${entry.userId}-${i}`}
@@ -187,9 +213,54 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
                     {isMembershipEntry && (
                       <span className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0" title="Active Membership" />
                     )}
-                    <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
-                      {entry.memberName}
-                    </span>
+
+                    {renamingIndex === i ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleRename(i);
+                            if (e.key === "Escape") setRenamingIndex(null);
+                          }}
+                          autoFocus
+                          maxLength={60}
+                          className="rounded-lg border border-amber-500 bg-white dark:bg-zinc-800 text-sm font-bold text-zinc-900 dark:text-zinc-100 py-1 px-2 focus:outline-none shadow-sm w-40"
+                        />
+                        <button
+                          onClick={() => handleRename(i)}
+                          disabled={isPending || !renameValue.trim()}
+                          className="text-[11px] font-extrabold text-white bg-green-600 hover:bg-green-700 rounded-md px-2 py-1 disabled:opacity-50"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setRenamingIndex(null)}
+                          disabled={isPending}
+                          className="text-zinc-400 hover:text-zinc-600 text-[11px] px-1 font-bold"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="flex items-center gap-1 min-w-0">
+                        <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                          {entry.memberName}
+                        </span>
+                        {isGuest && (
+                          <button
+                            type="button"
+                            onClick={() => startRename(i, entry.memberName)}
+                            title="Edit guest name"
+                            aria-label={`Edit name for ${entry.memberName}`}
+                            className="text-[10px] text-zinc-400 hover:text-amber-500 transition-colors shrink-0 p-0.5"
+                          >
+                            ✏️
+                          </button>
+                        )}
+                      </span>
+                    )}
 
                     {/* Multiplier Badge (x2, x3, etc.) */}
                     {count > 1 && (

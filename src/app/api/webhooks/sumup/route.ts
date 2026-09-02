@@ -29,6 +29,19 @@ export async function POST(request: Request) {
       currency || "GBP"
     );
 
+    // Revalidate the app-facing pages so the purchasing member sees their new
+    // membership/wallet balance immediately instead of waiting for the cache.
+    try {
+      const { revalidatePath } = await import("next/cache");
+      revalidatePath("/dashboard");
+      revalidatePath("/wallet");
+      revalidatePath("/membership");
+      revalidatePath("/admin/members");
+      revalidatePath("/admin/activity");
+    } catch (e) {
+      console.error("SumUp webhook revalidation error:", e);
+    }
+
     return NextResponse.json({
       received: true,
       processed: true,

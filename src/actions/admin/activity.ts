@@ -2,7 +2,7 @@
 
 import { redis } from "@/lib/redis";
 import { unstable_cache } from "next/cache";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 
 export const getRecentActivity = unstable_cache(
   async () => {
@@ -48,6 +48,11 @@ export const getRecentActivity = unstable_cache(
 );
 
 export async function refreshActivityLog() {
+  // Bust the unstable_cache data entry (keyed/tagged "activity-log"). A plain
+  // revalidatePath does NOT invalidate the cached data, so the tag must be used.
+  // updateTag (Next 16) blocks until the data is fresh, giving read-your-own-writes
+  // so the admin sees the latest activity immediately after clicking Refresh.
+  updateTag("activity-log");
   revalidatePath("/admin/activity");
   return { success: true };
 }
@@ -78,6 +83,7 @@ export async function deleteActivity(id: string) {
 
     if (targetObjOrStr) {
       await redis.zrem("activity:log", targetObjOrStr);
+      updateTag("activity-log");
       revalidatePath("/admin/activity");
       return { success: true };
     }

@@ -23,31 +23,33 @@ export async function getSelfCheckInStatus(): Promise<boolean> {
     if (isActive) {
       const { getUpcomingEvents } = await import("@/actions/events");
       const { getEventTiming } = await import("@/lib/event-utils");
-      
-      const events = await getUpcomingEvents();
-      if (events.length > 0) {
-        const now = new Date();
-        const formatter = new Intl.DateTimeFormat("en-GB", {
-          timeZone: "Europe/London",
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-        });
-        
-        const parts = formatter.formatToParts(now);
-        const partMap: Record<string, string> = {};
-        parts.forEach((p) => { partMap[p.type] = p.value; });
-        const localToday = `${partMap.year}-${partMap.month}-${partMap.day}`;
 
-        const todaysEvents = events.filter((e) => e.date === localToday);
-        
-        if (todaysEvents.length > 0) {
-          const allFinished = todaysEvents.every(e => getEventTiming(e).state === "finished");
-          if (allFinished) {
-            await redis.set("settings:self_checkin_active", "false");
-            return false;
-          }
-        }
+      const now = new Date();
+      const formatter = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Europe/London",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+
+      const parts = formatter.formatToParts(now);
+      const partMap: Record<string, string> = {};
+      parts.forEach((p) => { partMap[p.type] = p.value; });
+      const localToday = `${partMap.year}-${partMap.month}-${partMap.day}`;
+
+      const events = await getUpcomingEvents();
+      const todaysEvents = events.filter((e) => e.date === localToday);
+
+      // Self check-in is only valid while there is a live event today.
+      // Deactivate when there is no event today, or all of today's events have finished.
+      const hasLiveEventToday = todaysEvents.some((e) => {
+        const state = getEventTiming(e).state;
+        return state === "today" || state === "happening_now";
+      });
+
+      if (!hasLiveEventToday) {
+        await redis.set("settings:self_checkin_active", "false");
+        return false;
       }
     }
 
@@ -320,6 +322,83 @@ export async function updateCheckInMethod(
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to update check-in type",
+    };
+  }
+}
+
+export async function updateCheckInName(
+  index: number,
+  newName: string
+): Promise<ActionResult<{ name: string }>> {
+  try {
+    const { auth } = await import("@/lib/auth");
+    const session = await auth();
+    if (
+      !session?.user ||
+      (session.user.role !== "admin" && session.user.role !== "moderator")
+    ) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const trimmed = newName.trim();
+    if (!trimmed) {
+      return { success: false, error: "Name cannot be empty" };
+    }
+    if (trimmed.length > 60) {
+      return { success: false, error: "Name is too long (max 60 characters)" };
+    }
+
+    const today = new Date().toISOString().split("T")[0];
+    const key = `checkins:${today}`;
+
+    const entries = await redis.lrange(key, 0, -1);
+    if (index < 0 || index >= entries.length) {
+      return { success: false, error: "Check-in entry not found" };
+    }
+
+    const entryStr = entries[index];
+    const parsed = typeof entryStr === "string" ? JSON.parse(entryStr) : entryStr;
+
+    // Only allow renaming manually-added guests (people without an account).
+    if (!parsed?.userId || !String(parsed.userId).startsWith("guest_")) {
+      return {
+        success: false,
+        error: "Only manually added guests (without an account) can be renamed",
+      };
+    }
+
+    const previousName = parsed.memberName;
+    parsed.memberName = trimmed;
+    await redis.lset(key, index, JSON.stringify(parsed));
+
+    // Keep any active rental session label in sync with the new guest name.
+    if (String(parsed.method || "").includes("rental")) {
+      try {
+        const { createOrExtendRentalSession } = await import("@/actions/admin/rentals");
+        await createOrExtendRentalSession(parsed.userId, trimmed);
+      } catch (e) {
+        console.error("Failed to sync rental session name:", e);
+      }
+    }
+
+    const adminName = (await redis.hget(`member:${session.user.id}`, "name")) as string || "Admin";
+    await logActivity({
+      type: "checkin",
+      memberId: parsed.userId,
+      memberName: trimmed,
+      description: `[ADMIN ACTION] Guest name updated from "${previousName}" to "${trimmed}" by ${adminName}`,
+      isDev: false,
+    });
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/members");
+    revalidatePath("/admin/check-in");
+    revalidatePath("/dashboard");
+    return { success: true, data: { name: trimmed } };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to update guest name",
     };
   }
 }
