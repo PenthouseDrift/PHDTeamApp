@@ -171,6 +171,13 @@ export const chassisPresets: ChassisPreset[] = [
   { brand: "Awesomatix", model: "A800R", internalRatio: 1.9, notes: "Belt drive — onroad/drift" },
   { brand: "Awesomatix", model: "A800MMX", internalRatio: 1.9, notes: "Mid motor belt drive" },
 
+  // ─── HPI Racing ──────────────────────────────────────────────────────────────
+  // Stage-D10 Series — 1/10 RWD drift platform (Creator kit, Brushed RTR, Flux RTR)
+  { brand: "HPI Racing", model: "Stage-D10", internalRatio: 2.6, notes: "1/10 RWD drift — confirm gear set" },
+  { brand: "HPI Racing", model: "Stage-D10 Creator Edition", internalRatio: 2.6, notes: "Roller/kit chassis — confirm gear set" },
+  { brand: "HPI Racing", model: "Stage-D10 (Brushed RTR)", internalRatio: 2.6, notes: "Brushed RTR — confirm gear set" },
+  { brand: "HPI Racing", model: "Stage-D10 Flux (Brushless RTR)", internalRatio: 2.6, notes: "Brushless Flux RTR — confirm gear set" },
+
   // ─── Yokomo (body kit reference) ─────────────────────────────────────────────
   { brand: "Yokomo", model: "GR86 / Supra Body Kit", internalRatio: 2.6, notes: "Body kit only — YD-2 based" },
 ];
