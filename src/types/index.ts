@@ -139,6 +139,15 @@ export interface ShellEntry {
   createdAt: number;
 }
 
+export interface GalleryImage {
+  id: string;
+  imageUrl: string;
+  caption: string;
+  showOnWebsite: boolean;
+  uploadedBy: string;
+  createdAt: number;
+}
+
 export interface GearRatio {
   spur: number;
   pinion: number;
