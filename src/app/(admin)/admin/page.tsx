@@ -165,6 +165,14 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
       adminOnly: true,
     },
     {
+      title: "Website Gallery",
+      description: "Upload photos featured on the public website gallery",
+      href: "/admin/gallery",
+      icon: "🖼️",
+      color: "from-rose-500/20 to-pink-500/10 border-rose-500/40 text-rose-600 dark:text-rose-400",
+      adminOnly: true,
+    },
+    {
       title: "In Development",
       description: "Admin poster generator & experimental track features",
       href: "/admin/development",
