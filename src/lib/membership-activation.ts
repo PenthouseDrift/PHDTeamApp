@@ -163,7 +163,14 @@ export async function processSuccessfulPaymentReference(
   // 3. Process payment idempotently based on itemType
   if (itemType === "membership") {
     await processSuccessfulMembershipPayment(memberId, checkoutId);
-    await recordPurchase("membership", quantity);
+    // Guard the activity log so the same checkout isn't logged twice when both
+    // the webhook and the success-page fallback run for one payment.
+    const logKey = `payment:logged:${checkoutId}`;
+    const alreadyLogged = await redis.get(logKey);
+    if (!alreadyLogged) {
+      await recordPurchase("membership", quantity);
+      await redis.set(logKey, "1", { ex: 86400 * 30 });
+    }
     return { success: true, itemType: "membership", memberId, guestName };
   } else if (itemType === "daypass") {
     const key = `payment:processed:${checkoutId}`;

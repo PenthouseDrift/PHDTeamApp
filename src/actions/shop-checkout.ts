@@ -4,6 +4,7 @@ import { createCheckout } from "@/lib/sumup";
 import { createOrder, OrderItem } from "@/actions/orders";
 import type { ActionResult } from "@/types";
 import { auth } from "@/lib/auth";
+import { redis } from "@/lib/redis";
 
 export async function processShopCheckout(
   items: OrderItem[],
@@ -36,11 +37,13 @@ export async function processShopCheckout(
     const fullReturnUrl = `${returnUrl}?orderId=${orderId}`;
 
     // 3. Create SumUp checkout
+    const buyerName = (await redis.hget(`member:${userId}`, "name")) as string | null;
+
     const sumupRes = await createCheckout({
       memberId: userId,
       amount: totalAmount,
       currency: "GBP",
-      description: `Store Order: ${orderId.slice(0, 8)}`,
+      description: `Penthouse Drift - Store Order ${orderId.slice(0, 8)} - ${buyerName || "Member"} (${userId})`,
       returnUrl: fullReturnUrl,
     });
 

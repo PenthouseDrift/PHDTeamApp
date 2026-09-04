@@ -1,11 +1,9 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { createCheckout } from "@/lib/sumup";
-import { redis } from "@/lib/redis";
 import { getMembership } from "@/actions/membership";
 import { getRemainingDays } from "@/lib/membership-utils";
 import { processSuccessfulMembershipPayment } from "@/lib/membership-activation";
-import { getMemberDiscounts, priceFor, formatGBP, CURRENCY, MEMBERSHIP_DURATION_DAYS } from "@/lib/pricing";
+import { getMemberDiscounts, priceFor, formatGBP, MEMBERSHIP_DURATION_DAYS } from "@/lib/pricing";
 import { PurchaseButton } from "./PurchaseButton";
 
 export const dynamic = "force-dynamic";
@@ -22,47 +20,11 @@ export default async function PurchaseMembershipPage() {
   const isActive = membership?.status === "active";
   const remainingDays =
     membership && isActive ? getRemainingDays(membership) : 0;
+  // Active but expires later today (remaining days floors to 0 in the last 24h).
+  const isLastDay = Boolean(membership && isActive && remainingDays === 0);
 
   const discounts = await getMemberDiscounts(session.user.id);
   const membershipPrice = priceFor("membership", discounts.membership);
-
-  async function handlePurchase() {
-    "use server";
-
-    const session = await auth();
-    if (!session?.user) {
-      redirect("/auth/signin");
-    }
-
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
-    const memberDiscounts = await getMemberDiscounts(session.user.id);
-    const price = priceFor("membership", memberDiscounts.membership);
-
-    // Create checkout with memberId reference
-    const checkout = await createCheckout({
-      memberId: session.user.id,
-      amount: price.final,
-      currency: CURRENCY,
-      description: `Penthouse Drift - ${MEMBERSHIP_DURATION_DAYS}-Day Membership`,
-      returnUrl: `${baseUrl}/membership/success`,
-    });
-
-    // Store checkout reference and user pending checkout temporarily for verification
-    await redis.set(
-      `checkout:${checkout.id}`,
-      JSON.stringify({
-        memberId: session.user.id,
-        checkoutReference: checkout.checkout_reference,
-        createdAt: Date.now(),
-      }),
-      { ex: 3600 } // expires in 1 hour
-    );
-    await redis.set(`pending_checkout:${session.user.id}`, checkout.id, { ex: 3600 });
-
-    const redirectUrl = checkout.hosted_checkout_url || `https://pay.sumup.com/b2c/Q${checkout.id}`;
-    redirect(redirectUrl);
-  }
 
   async function handleTestBypass() {
     "use server";
@@ -116,11 +78,15 @@ export default async function PurchaseMembershipPage() {
                 </h2>
               </div>
               <span className="rounded-full bg-green-200 dark:bg-green-900/80 px-3 py-0.5 text-xs font-black text-green-800 dark:text-green-200">
-                {remainingDays} {remainingDays === 1 ? "day" : "days"} remaining
+                {isLastDay ? "Last day" : `${remainingDays} ${remainingDays === 1 ? "day" : "days"} remaining`}
               </span>
             </div>
             <p className="text-xs text-green-800 dark:text-green-300 leading-relaxed">
-              You already have an active 28-Day Track Membership valid for another <strong>{remainingDays} {remainingDays === 1 ? "day" : "days"}</strong>. Purchasing below will extend your existing membership duration by an additional 28 days.
+              {isLastDay ? (
+                <>Today is the <strong>last day</strong> of your 28-Day Track Membership. Renew below to extend your access by another 28 days from today.</>
+              ) : (
+                <>You already have an active 28-Day Track Membership valid for another <strong>{remainingDays} {remainingDays === 1 ? "day" : "days"}</strong>. Purchasing below will extend your existing membership duration by an additional 28 days.</>
+              )}
             </p>
           </div>
         ) : null}
@@ -188,14 +154,23 @@ export default async function PurchaseMembershipPage() {
 
           {isActive && (
             <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3.5 text-sm text-zinc-700 dark:text-zinc-200">
-              <p>
-                You currently have an active membership with{" "}
-                <span className="font-semibold text-amber-500">
-                  {remainingDays} {remainingDays === 1 ? "day" : "days"}
-                </span>{" "}
-                remaining. Purchasing now will extend your membership by{" "}
-                {MEMBERSHIP_DURATION_DAYS} days from your current expiry.
-              </p>
+              {isLastDay ? (
+                <p>
+                  Today is the{" "}
+                  <span className="font-semibold text-amber-500">last day</span>{" "}
+                  of your membership. Renewing now will extend your access by{" "}
+                  {MEMBERSHIP_DURATION_DAYS} days.
+                </p>
+              ) : (
+                <p>
+                  You currently have an active membership with{" "}
+                  <span className="font-semibold text-amber-500">
+                    {remainingDays} {remainingDays === 1 ? "day" : "days"}
+                  </span>{" "}
+                  remaining. Purchasing now will extend your membership by{" "}
+                  {MEMBERSHIP_DURATION_DAYS} days from your current expiry.
+                </p>
+              )}
             </div>
           )}
 

@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import type { Wallet, Membership } from "@/types";
 import type { PriceBreakdown } from "@/lib/pricing";
 import { createWalletCheckout } from "@/actions/wallet";
+import { QRPopover } from "@/components/QRPopover";
 
 interface WalletPricing {
   membership: PriceBreakdown;
@@ -18,9 +18,6 @@ interface WalletClientProps {
   userRole?: "admin" | "moderator" | "member";
   wallet: Wallet;
   membership: Membership | null;
-  membershipQrUrl: string;
-  dayPassQrUrl: string;
-  rentalQrUrl: string;
   pricing: WalletPricing;
   onPurchaseItem?: (itemType: "daypass" | "rental", quantity: number) => Promise<void>;
   onTestAddBalance?: (itemType: "daypass" | "rental", quantity: number) => Promise<void>;
@@ -34,9 +31,6 @@ export function WalletClient({
   userId,
   wallet,
   membership,
-  membershipQrUrl,
-  dayPassQrUrl,
-  rentalQrUrl,
   userRole,
   pricing,
   onPurchaseItem,
@@ -47,6 +41,13 @@ export function WalletClient({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isMembershipActive = membership?.status === "active";
+  // Whole days left; floors to 0 within the final 24h.
+  const remainingDays =
+    membership && isMembershipActive
+      ? Math.max(0, Math.floor((membership.expiresAt - Date.now()) / 86_400_000))
+      : 0;
+  // Active but expiring later today → prompt an early renewal.
+  const isLastDay = isMembershipActive && remainingDays === 0;
 
   async function handleBuy(itemType: "daypass" | "rental", qty: number) {
     setIsSubmitting(true);
@@ -83,50 +84,45 @@ export function WalletClient({
         <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
           <div className="space-y-1">
             <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-              28-Day Membership Status
+              {isLastDay ? "Membership Ends Today" : "28-Day Membership Status"}
             </p>
-            <p className={`text-base font-black ${isMembershipActive ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`}>
-              {isMembershipActive ? "Active Track Member" : "No Active Membership"}
+            <p className={`text-base font-black ${isLastDay ? "text-amber-600 dark:text-amber-400" : isMembershipActive ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`}>
+              {isLastDay ? "Last Day of Membership" : isMembershipActive ? "Active Track Member" : "No Active Membership"}
             </p>
+            {isMembershipActive && (
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                {isLastDay
+                  ? "Renew now to keep your unlimited track access going."
+                  : `${remainingDays} ${remainingDays === 1 ? "day" : "days"} of unlimited track access remaining.`}
+              </p>
+            )}
           </div>
-          {!isMembershipActive && (
+          {(!isMembershipActive || isLastDay) && (
             <a
               href="/membership/purchase"
               className="w-full sm:w-auto px-4 py-2 rounded-xl bg-amber-500 text-black text-xs font-extrabold hover:bg-amber-400 transition-colors text-center shadow-sm"
             >
               {pricing.membership.hasDiscount ? (
-                <>Get Membership (<span className="line-through opacity-70">{money(pricing.membership.original)}</span> {money(pricing.membership.final)})</>
+                <>{isLastDay ? "Renew Membership" : "Get Membership"} (<span className="line-through opacity-70">{money(pricing.membership.original)}</span> {money(pricing.membership.final)})</>
               ) : (
-                <>Get Membership ({money(pricing.membership.final)})</>
+                <>{isLastDay ? "Renew Membership" : "Get Membership"} ({money(pricing.membership.final)})</>
               )}
             </a>
           )}
         </div>
         )}
 
-        {/* Your Track Pass QR Code Section */}
-        <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 space-y-4 text-center shadow-sm">
-          <div>
-            <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Your Member Account QR Code</h2>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Show this single QR code to staff at the track to check in, redeem day passes, or start car rentals</p>
-          </div>
-
-          <div className="flex flex-col items-center justify-center p-4 rounded-xl bg-white border border-zinc-200 dark:border-zinc-700 w-fit mx-auto shadow-md">
-            <Image
-              src={membershipQrUrl}
-              alt="Member Account Check-In QR Code"
-              width={220}
-              height={220}
-              className="rounded-lg"
-            />
-            <p className="mt-2 text-[11px] font-mono font-bold text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded-md border border-zinc-200 dark:border-zinc-700">
-              ID: {userId}
+        {/* Your Member Account QR Code — collapsed behind a toggle button */}
+        <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 sm:p-5 flex items-center justify-between gap-3 shadow-sm">
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">Your Member Account QR Code</h2>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+              Show to staff to check in, redeem day passes, or start car rentals.
             </p>
           </div>
-
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-xs mx-auto">
-            Staff can scan this code to verify your 28-day membership, redeem your Day Passes, start Car Rentals, or check in a friend.
-          </p>
+          <div className="shrink-0">
+            <QRPopover userId={userId} variant="button" buttonText="Show QR code" />
+          </div>
         </div>
 
         {/* Balances Summary Cards (Side-by-Side on Mobile) */}

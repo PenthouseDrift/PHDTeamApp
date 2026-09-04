@@ -2,8 +2,6 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getWallet, addDayPasses, addRentalHours, createWalletCheckout } from "@/actions/wallet";
 import { getMembership } from "@/actions/membership";
-import { generateQRCode } from "@/lib/qr";
-import { getOrGeneratePassNonce } from "@/actions/qr";
 import { getCheckoutStatus } from "@/lib/sumup";
 import { logActivity } from "@/lib/activity";
 import { processSuccessfulPaymentReference } from "@/lib/membership-activation";
@@ -41,17 +39,9 @@ export default async function WalletPage({ searchParams }: PageProps) {
     }
   }
 
-  const [walletRes, membershipRes, dayPassNonce, rentalNonce] = await Promise.all([
+  const [walletRes, membershipRes] = await Promise.all([
     getWallet(userId),
     getMembership(userId),
-    getOrGeneratePassNonce(userId, "day_pass"),
-    getOrGeneratePassNonce(userId, "rental"),
-  ]);
-
-  const [membershipQr, dayPassQr, rentalQr] = await Promise.all([
-    generateQRCode(userId, "membership"),
-    generateQRCode(userId, "day_pass", dayPassNonce),
-    generateQRCode(userId, "rental", rentalNonce),
   ]);
 
   const wallet = walletRes.success
@@ -117,9 +107,6 @@ export default async function WalletPage({ searchParams }: PageProps) {
       userRole={session.user.role}
       wallet={wallet}
       membership={membership}
-      membershipQrUrl={membershipQr}
-      dayPassQrUrl={dayPassQr}
-      rentalQrUrl={rentalQr}
       pricing={pricing}
       onPurchaseItem={handlePurchaseItem}
       onTestAddBalance={process.env.NODE_ENV === "development" ? handleTestAddBalance : undefined}
