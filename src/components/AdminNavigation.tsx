@@ -31,7 +31,7 @@ const adminNavItems = [
   { href: "/admin/history", label: "History", icon: HistoryIcon },
   { href: "/admin/showcase-winners", label: "Winners", icon: TrophyIcon, adminOnly: true },
   { href: "/admin/facebook", label: "Facebook", icon: ShareIcon, adminOnly: true },
-  { href: "/admin/development", label: "Dev Lab", icon: LabIcon, adminOnly: true },
+  { href: "/admin/gallery", label: "Website Gallery", icon: GalleryIcon, adminOnly: true },
 ];
 
 export function AdminNavigation({ user, unreadNotifications = 0 }: AdminNavigationProps) {
@@ -252,14 +252,6 @@ function BellIcon({ className }: { className?: string }) {
   );
 }
 
-function LabIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5.059 14.45A3.75 3.75 0 0 0 7.71 20.25h8.58a3.75 3.75 0 0 0 2.651-5.801l-4.032-4.041a2.25 2.25 0 0 1-.659-1.591V3.104M9.75 3.104c.2-.02.404-.031.611-.031h3.278c.207 0 .41.01.611.031M9.75 3.104h4.5M10.5 11.25h3" />
-    </svg>
-  );
-}
-
 function FeedbackIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -272,6 +264,14 @@ function ActivityIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" />
+    </svg>
+  );
+}
+
+function GalleryIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
     </svg>
   );
 }

@@ -173,12 +173,12 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
       adminOnly: true,
     },
     {
-      title: "In Development",
-      description: "Admin poster generator & experimental track features",
-      href: "/admin/development",
-      icon: "🧪",
-      color: "from-purple-500/20 to-indigo-500/10 border-purple-500/40 text-purple-600 dark:text-purple-400",
-      adminOnly: true,
+      title: "Feedback & Moderation",
+      description: "Review user feedback, flagged uploads, and reported posts",
+      href: "/admin/feedback",
+      icon: "🛡️",
+      color: "from-red-500/20 to-rose-500/10 border-red-500/40 text-red-600 dark:text-red-400",
+      adminOnly: false,
     },
   ];
 

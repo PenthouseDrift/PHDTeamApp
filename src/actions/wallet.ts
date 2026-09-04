@@ -182,10 +182,12 @@ export async function createWalletCheckout(
     const price = priceFor(itemType, itemType === "daypass" ? discounts.daypass : discounts.rental);
     const unitPrice = price.final;
     const totalAmount = Math.round(quantity * unitPrice * 100) / 100;
-    const description =
-      itemType === "daypass"
-        ? `Penthouse Drift - ${quantity}x Day Pass`
-        : `Penthouse Drift - ${quantity}x Car Rental Hour`;
+    const memberName = (await redis.hget(`member:${userId}`, "name")) as string | null;
+    const buyerLabel = guestName?.trim()
+      ? `${memberName || "Member"} for ${guestName.trim()}`
+      : memberName || "Member";
+    const itemLabel = itemType === "daypass" ? "Day Pass" : "Car Rental Hour";
+    const description = `Penthouse Drift - ${quantity}x ${itemLabel} - ${buyerLabel} (${userId})`;
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const returnUrl = customReturnUrl || `${baseUrl}/wallet`;

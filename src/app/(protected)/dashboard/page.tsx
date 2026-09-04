@@ -136,6 +136,10 @@ export default async function DashboardPage() {
     ? displayName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
     : "?";
   const remainingDays = membership && isActive ? getRemainingDays(membership) : 0;
+  // Active but expires later today (getRemainingDays floors to 0 within the
+  // final 24h). Treat this as the "last day" so we prompt an early renewal
+  // instead of showing a confusing "0 days remaining".
+  const isLastDay = Boolean(membership && isActive && remainingDays === 0);
 
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
@@ -221,16 +225,18 @@ export default async function DashboardPage() {
                 
                 <div className="relative z-10">
                   <p className="text-[10px] sm:text-[11px] font-black text-amber-900/80 uppercase tracking-widest mb-1">
-                    {membership && isActive ? "Penthouse Drift Member" : membership ? "Membership Expired" : "Unlock Full Access"}
+                    {isLastDay ? "Membership Ends Today" : membership && isActive ? "Penthouse Drift Member" : membership ? "Membership Expired" : "Unlock Full Access"}
                   </p>
-                  
+
                   {membership && isActive ? (
                     <>
                       <h3 className="text-lg sm:text-xl font-black text-black leading-tight">
-                        Active
+                        {isLastDay ? "Last Day of Membership" : "Active"}
                       </h3>
                       <p className="text-xs font-semibold text-amber-900 mt-1">
-                        {remainingDays} {remainingDays === 1 ? "day" : "days"} of unlimited track access remaining.
+                        {isLastDay
+                          ? "Today is the final day of your unlimited track access. Renew now to keep it going."
+                          : `${remainingDays} ${remainingDays === 1 ? "day" : "days"} of unlimited track access remaining.`}
                       </p>
                     </>
                   ) : (
@@ -249,7 +255,7 @@ export default async function DashboardPage() {
                   href="/membership/purchase"
                   className="relative z-10 shrink-0 w-full sm:w-auto px-6 py-2.5 sm:py-3 rounded-xl text-sm font-black text-center transition-all active:scale-[0.98] bg-black text-white hover:bg-zinc-800 shadow-lg shadow-black/20"
                 >
-                  {membership && isActive ? (
+                  {membership && isActive && !isLastDay ? (
                     "Manage Membership"
                   ) : (
                     <>

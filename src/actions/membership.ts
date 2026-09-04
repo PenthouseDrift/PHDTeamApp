@@ -14,8 +14,7 @@ export async function getMembership(
 
     const membership: Membership = {
       userId: data.userId as string,
-      status:
-        (data.expiresAt as number) > Date.now() ? "active" : "expired",
+      status: Number(data.expiresAt) > Date.now() ? "active" : "expired",
       purchasedAt: Number(data.purchasedAt),
       expiresAt: Number(data.expiresAt),
       paymentRef: (data.paymentRef as string) || "",
@@ -46,11 +45,13 @@ export async function createMembershipCheckout(
     const discounts = await getMemberDiscounts(userId);
     const price = priceFor("membership", discounts.membership);
 
+    const memberName = (await redis.hget(`member:${userId}`, "name")) as string | null;
+
     const checkout = await createCheckout({
       memberId: userId,
       amount: price.final,
       currency: CURRENCY,
-      description: `Penthouse Drift - ${MEMBERSHIP_DURATION_DAYS}-Day Membership`,
+      description: `Penthouse Drift - ${MEMBERSHIP_DURATION_DAYS}-Day Membership - ${memberName || "Member"} (${userId})`,
       returnUrl,
     });
 
