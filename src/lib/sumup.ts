@@ -34,11 +34,21 @@ export async function createCheckout(
   const cleanId = params.memberId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 48);
   const checkoutRef = `phd_${cleanId}_${Date.now()}`;
 
+  // Sanitise the description: some payment methods (e.g. Google Pay) derive a
+  // statement descriptor from it and reject characters like parentheses or
+  // non-ASCII. Keep it to a safe, short set of characters. The user ID is NOT
+  // included here — it lives in checkout_reference for reconciliation.
+  const safeDescription = params.description
+    .replace(/[^a-zA-Z0-9 .,'&#-]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 100);
+
   const payload: Record<string, unknown> = {
     checkout_reference: checkoutRef,
     amount: Number(params.amount.toFixed(2)),
     currency: params.currency.toUpperCase(),
-    description: params.description.slice(0, 255),
+    description: safeDescription,
     merchant_code: merchantCode,
     redirect_url: params.returnUrl,
     hosted_checkout: {
