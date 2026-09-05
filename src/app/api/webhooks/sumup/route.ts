@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { after } from "next/server";
 import { processSuccessfulPaymentReference } from "@/lib/membership-activation";
 
 export async function POST(request: Request) {
@@ -22,32 +23,32 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await processSuccessfulPaymentReference(
-      checkout_reference || "",
-      checkoutId || "",
-      Number(amount) || 0,
-      currency || "GBP"
-    );
+    // Acknowledge SumUp IMMEDIATELY, then finalize the payment after the
+    // response is sent. SumUp's callback has a short timeout; doing the Redis
+    // writes, pricing lookups, logging, and revalidation inline (plus any cold
+    // start) can exceed it and surface as "callback timed out". The work below
+    // is idempotent, so if SumUp retries the callback nothing is double-applied.
+    after(async () => {
+      try {
+        await processSuccessfulPaymentReference(
+          checkout_reference || "",
+          checkoutId || "",
+          Number(amount) || 0,
+          currency || "GBP"
+        );
 
-    // Revalidate the app-facing pages so the purchasing member sees their new
-    // membership/wallet balance immediately instead of waiting for the cache.
-    try {
-      const { revalidatePath } = await import("next/cache");
-      revalidatePath("/dashboard");
-      revalidatePath("/wallet");
-      revalidatePath("/membership");
-      revalidatePath("/admin/members");
-      revalidatePath("/admin/activity");
-    } catch (e) {
-      console.error("SumUp webhook revalidation error:", e);
-    }
-
-    return NextResponse.json({
-      received: true,
-      processed: true,
-      itemType: result.itemType,
-      memberId: result.memberId,
+        const { revalidatePath } = await import("next/cache");
+        revalidatePath("/dashboard");
+        revalidatePath("/wallet");
+        revalidatePath("/membership");
+        revalidatePath("/admin/members");
+        revalidatePath("/admin/activity");
+      } catch (e) {
+        console.error("SumUp webhook async processing error:", e);
+      }
     });
+
+    return NextResponse.json({ received: true });
   } catch (error) {
     console.error("SumUp webhook error:", error);
     return NextResponse.json(
