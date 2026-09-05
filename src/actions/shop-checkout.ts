@@ -43,7 +43,7 @@ export async function processShopCheckout(
       memberId: userId,
       amount: totalAmount,
       currency: "GBP",
-      description: `Penthouse Drift - Store Order ${orderId.slice(0, 8)} - ${buyerName || "Member"} (${userId})`,
+      description: `Penthouse Drift - Store Order ${orderId.slice(0, 8)} - ${buyerName || "Member"}`,
       returnUrl: fullReturnUrl,
     });
 

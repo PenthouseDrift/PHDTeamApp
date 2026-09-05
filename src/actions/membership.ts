@@ -51,7 +51,7 @@ export async function createMembershipCheckout(
       memberId: userId,
       amount: price.final,
       currency: CURRENCY,
-      description: `Penthouse Drift - ${MEMBERSHIP_DURATION_DAYS}-Day Membership - ${memberName || "Member"} (${userId})`,
+      description: `Penthouse Drift - ${MEMBERSHIP_DURATION_DAYS}-Day Membership - ${memberName || "Member"}`,
       returnUrl,
     });
 
