@@ -64,13 +64,18 @@ export async function activateMembership(
     await redis.zadd("memberships:all", { score: now, member: memberId });
 
     const memberName = (await redis.hget(`member:${memberId}`, "name")) as string || "Member";
+    // Cross-reference the membership price (respecting any per-member discount)
+    // so the sale shows an amount and counts toward revenue.
+    const { priceFor, getMemberDiscounts, CURRENCY } = await import("@/lib/pricing");
+    const membershipDiscounts = await getMemberDiscounts(memberId);
+    const membershipAmount = priceFor("membership", membershipDiscounts.membership).final;
     await logActivity({
       type: "purchase",
       memberId,
       memberName,
       description: `[ADMIN ACTION] Activated 28-Day Membership manually${customExpiryDate ? ` (expires ${customExpiryDate})` : ""}`,
-      amount: 0,
-      currency: "GBP",
+      amount: membershipAmount,
+      currency: CURRENCY,
       isDev: false, // it's an admin override, not dev test
     });
 

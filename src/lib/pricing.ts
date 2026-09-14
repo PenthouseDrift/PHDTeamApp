@@ -1,17 +1,29 @@
 import { redis } from "@/lib/redis";
+import {
+  CURRENCY,
+  BASE_PRICES,
+  formatGBP,
+  checkInMethodToItem,
+  resolveActivityAmount,
+  resolveActivityItem,
+  type DiscountItem,
+  type ActivityAmountInput,
+  type ActivityItem,
+} from "@/lib/activity-pricing";
 
-export const CURRENCY = "GBP";
-
-/** Base prices in GBP. Single source of truth for all purchase flows. */
-export const BASE_PRICES = {
-  membership: 40.0,
-  daypass: 10.0,
-  rental: 10.0,
-} as const;
+// Re-export the pure, client-safe pricing helpers so `@/lib/pricing` remains the
+// single import surface for pricing (redis-backed helpers stay server-only here).
+export {
+  CURRENCY,
+  BASE_PRICES,
+  formatGBP,
+  checkInMethodToItem,
+  resolveActivityAmount,
+  resolveActivityItem,
+};
+export type { DiscountItem, ActivityAmountInput, ActivityItem };
 
 export const MEMBERSHIP_DURATION_DAYS = 28;
-
-export type DiscountItem = "membership" | "daypass" | "rental";
 
 /** Redis hash fields on `member:<id>` that store the per-user discount amount (in GBP). */
 const DISCOUNT_FIELDS: Record<DiscountItem, string> = {
@@ -84,7 +96,25 @@ export function priceFor(item: DiscountItem, perUnitDiscount: number): PriceBrea
   return { original, discount, final, hasDiscount: discount > 0 };
 }
 
-/** Format a GBP amount for display, e.g. 40 -> "£40.00". */
-export function formatGBP(amount: number): string {
-  return `£${amount.toFixed(2)}`;
+/**
+ * Resolve the GBP amount to charge/record for an in-person check-in of the
+ * given method, cross-referencing the app's pricing config and the member's
+ * per-user discount. Returns null for methods that are not door revenue.
+ */
+export async function priceForCheckInMethod(
+  method: string | undefined,
+  userId: string
+): Promise<number | null> {
+  const item = checkInMethodToItem(method);
+  if (!item) return null;
+  try {
+    const discounts = await getMemberDiscounts(userId);
+    return priceFor(item, discounts[item]).final;
+  } catch (e) {
+    console.error("Failed to resolve check-in price:", e);
+    // Fall back to the undiscounted base price rather than losing the revenue.
+    return BASE_PRICES[item];
+  }
 }
+
+

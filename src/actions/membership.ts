@@ -126,16 +126,37 @@ export async function activateMembershipInPerson(
       await redis.set(dedupKey, "1", { ex: 86400 });
     }
 
+    // 4. Log the in-person cash membership sale to the global activity log with
+    //    the cross-referenced price (respecting any per-member discount) so it
+    //    shows an amount in the log and counts toward door revenue. Logged even
+    //    if already checked in today, because the sale still happened.
+    const { priceForCheckInMethod, CURRENCY, formatGBP } = await import("@/lib/pricing");
+    const { logActivity } = await import("@/lib/activity");
+    const amount = await priceForCheckInMethod("membership_cash", memberId);
+    const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";
+    await logActivity({
+      type: "checkin",
+      memberId,
+      memberName,
+      description: `[ADMIN ACTION] 28-Day Membership activated (Paid Cash/Card) by ${adminName}`,
+      method: "membership_cash",
+      ...(amount !== null ? { amount, currency: CURRENCY } : {}),
+      isDev: false,
+    });
+
+    const priceLabel = amount !== null ? formatGBP(amount) : "£40.00";
+
     const { revalidatePath } = await import("next/cache");
     revalidatePath("/admin/members");
     revalidatePath("/admin/check-in");
+    revalidatePath("/admin/activity");
     revalidatePath("/dashboard");
     revalidatePath("/wallet");
 
     return {
       success: true,
       data: {
-        message: `28-Day Membership Activated (£40 Paid Cash/Card) & ${memberName} Checked In! 🟢`,
+        message: `28-Day Membership Activated (${priceLabel} Paid Cash/Card) & ${memberName} Checked In! 🟢`,
         expiresAt,
       },
     };

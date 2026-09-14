@@ -8,6 +8,12 @@ export interface ActivityEntry {
   description: string;
   amount?: number;
   currency?: string;
+  /**
+   * Check-in method for `type: "checkin"` entries (e.g. "day_pass_cash").
+   * Used to distinguish door revenue (cash/in-person) from wallet redemptions
+   * (already counted at online purchase time) on the revenue report.
+   */
+  method?: string;
   isDev?: boolean;
   timestamp: number;
 }

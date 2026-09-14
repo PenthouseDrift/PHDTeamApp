@@ -87,6 +87,10 @@ export async function performSelfCheckIn(
       memberId: userId,
       memberName: displayName,
       description: successMessage,
+      // Wallet redemptions (day_pass_wallet/rental_wallet) and membership qr
+      // check-ins carry no new charge — the method lets the revenue resolver
+      // avoid double-counting money already taken at purchase time.
+      method: checkInMethod,
     });
 
     if (!skipRevalidate) {

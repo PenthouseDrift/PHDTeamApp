@@ -10,7 +10,7 @@ export interface CheckInEntry {
   userId: string;
   adminId: string;
   timestamp: number;
-  method: "qr" | "manual" | "day_pass" | "day_pass_wallet" | "day_pass_cash" | "rental" | "rental_wallet" | "rental_cash" | "membership_cash" | "self_checkin";
+  method: "qr" | "manual" | "membership" | "day_pass" | "day_pass_wallet" | "day_pass_cash" | "rental" | "rental_wallet" | "rental_cash" | "membership_cash" | "self_checkin";
   memberName: string;
 }
 
@@ -189,7 +189,7 @@ export async function quickCheckIn(
   memberId: string,
   memberName: string,
   adminId: string,
-  method: "manual" | "membership_cash" = "manual"
+  method: "manual" | "membership_cash" | "membership" = "manual"
 ): Promise<ActionResult<{ checkedIn: boolean }>> {
   try {
     // No membership check required — admin override for manual tracking
@@ -215,12 +215,21 @@ export async function quickCheckIn(
     await redis.set(dedupKey, "1", { ex: 86400 });
 
     const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";
-    const methodDesc = method === "membership_cash" ? "Cash Membership" : "Manual Override";
+    const methodDesc =
+      method === "membership_cash"
+        ? "Cash Membership"
+        : method === "membership"
+        ? "Membership Track Access"
+        : "Manual Override";
+    const { priceForCheckInMethod, CURRENCY } = await import("@/lib/pricing");
+    const amount = await priceForCheckInMethod(method, memberId);
     await logActivity({
       type: "checkin",
       memberId,
       memberName,
-      description: `[ADMIN ACTION] Checked in manually by ${adminName} (${methodDesc})`,
+      description: `[ADMIN ACTION] Checked in by ${adminName} (${methodDesc})`,
+      method,
+      ...(amount !== null ? { amount, currency: CURRENCY } : {}),
       isDev: false,
     });
 
@@ -261,11 +270,16 @@ export async function addNonMemberCheckIn(
     await redis.rpush(`checkins:${today}`, entry);
 
     const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";
+    const checkinMethod = method === "day_pass" ? "day_pass_cash" : method === "rental" ? "rental_cash" : "manual";
+    const { priceForCheckInMethod, CURRENCY } = await import("@/lib/pricing");
+    const amount = await priceForCheckInMethod(checkinMethod, guestId);
     await logActivity({
       type: "checkin",
       memberId: guestId,
       memberName: name,
       description: `[ADMIN ACTION] Non-member guest checked in manually by ${adminName} (${method})`,
+      method: checkinMethod,
+      ...(amount !== null ? { amount, currency: CURRENCY } : {}),
       isDev: false,
     });
 
@@ -283,7 +297,7 @@ export async function addNonMemberCheckIn(
 
 export async function updateCheckInMethod(
   index: number,
-  newMethod: "manual" | "day_pass" | "day_pass_wallet" | "day_pass_cash" | "rental" | "rental_wallet" | "rental_cash" | "membership_cash" | "qr"
+  newMethod: "manual" | "membership" | "day_pass" | "day_pass_wallet" | "day_pass_cash" | "rental" | "rental_wallet" | "rental_cash" | "membership_cash" | "qr"
 ): Promise<ActionResult<{ success: boolean }>> {
   try {
     const { auth } = await import("@/lib/auth");
@@ -465,11 +479,16 @@ export async function checkInWithDayPass(
     await redis.set(`checkin:dedup:${memberId}`, "1", { ex: 86400 });
 
     const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";
+    const method = isPaidInPerson ? "day_pass_cash" : "day_pass_wallet";
+    const { priceForCheckInMethod, CURRENCY } = await import("@/lib/pricing");
+    const amount = await priceForCheckInMethod(method, memberId);
     await logActivity({
       type: "checkin",
       memberId,
       memberName,
       description: `[ADMIN ACTION] Checked in with Day Pass by ${adminName} (${isPaidInPerson ? "Paid Cash" : "Redeemed from Wallet"})`,
+      method,
+      ...(amount !== null ? { amount, currency: CURRENCY } : {}),
       isDev: false,
     });
 
@@ -519,11 +538,16 @@ export async function checkInWithRental(
     await redis.set(`checkin:dedup:${memberId}`, "1", { ex: 86400 });
 
     const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";
+    const method = isPaidInPerson ? "rental_cash" : "rental_wallet";
+    const { priceForCheckInMethod, CURRENCY } = await import("@/lib/pricing");
+    const amount = await priceForCheckInMethod(method, memberId);
     await logActivity({
       type: "checkin",
       memberId,
       memberName,
       description: `[ADMIN ACTION] Checked in with Rental by ${adminName} (${isPaidInPerson ? "Paid Cash" : "Redeemed from Wallet"})`,
+      method,
+      ...(amount !== null ? { amount, currency: CURRENCY } : {}),
       isDev: false,
     });
 

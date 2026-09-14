@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { refreshActivityLog, deleteActivity } from "@/actions/admin/activity";
 import type { ActivityEntry } from "@/lib/activity";
+import { resolveActivityAmount } from "@/lib/activity-pricing";
 
 export default function ActivityTableClient({ initialData }: { initialData: ActivityEntry[] }) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -154,11 +155,14 @@ export default function ActivityTableClient({ initialData }: { initialData: Acti
                       <span className="leading-snug">{item.description}</span>
                     </td>
                     <td className="px-3 sm:px-5 py-3 sm:py-4 text-right font-black text-emerald-600 dark:text-emerald-400 text-base">
-                      {item.type === "purchase" && item.amount !== undefined
-                        ? item.isDev 
-                          ? <span className="text-zinc-400 font-medium text-sm">Simulated</span>
-                          : new Intl.NumberFormat("en-GB", { style: "currency", currency: item.currency || "GBP" }).format(item.amount)
-                        : "—"}
+                      {item.isDev ? (
+                        <span className="text-zinc-400 font-medium text-sm">Simulated</span>
+                      ) : (() => {
+                        const resolved = resolveActivityAmount(item);
+                        return resolved !== null
+                          ? new Intl.NumberFormat("en-GB", { style: "currency", currency: item.currency || "GBP" }).format(resolved)
+                          : "—";
+                      })()}
                     </td>
                     <td className="px-3 sm:px-5 py-3 sm:py-4 text-right">
                       <button
