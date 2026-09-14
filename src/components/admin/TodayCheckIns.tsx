@@ -133,6 +133,8 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
         return "💵 Membership (£40 Cash)";
       case "qr":
         return "📱 QR - Membership Track Access";
+      case "membership":
+        return "🟢 Membership Track Access";
       default:
         return "🟢 Membership Track Access";
     }
@@ -190,6 +192,7 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
             const isMembershipEntry =
               entry.method === "qr" ||
               entry.method === "manual" ||
+              entry.method === "membership" ||
               entry.method === "membership_cash";
 
             const count = userCheckInCounts[entry.userId] || 1;

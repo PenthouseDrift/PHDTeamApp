@@ -20,13 +20,14 @@ interface AdminNavigationProps {
 
 const adminNavItems = [
   { href: "/admin", label: "Admin Home", icon: HomeIcon, exact: true },
-  { href: "/admin/check-in", label: "QR Scan", icon: CheckInIcon },
+  { href: "/admin/check-in", label: "Check In", icon: CheckInIcon },
   { href: "/admin/members", label: "Members", icon: MembersIcon },
   { href: "/admin/events", label: "Events", icon: EventsIcon },
   { href: "/admin/orders", label: "Shop Orders", icon: ActivityIcon, adminOnly: true },
   { href: "/admin/shop", label: "Shop Products", icon: FeedbackIcon, adminOnly: true },
   { href: "/admin/feedback", label: "Feedback", icon: FeedbackIcon },
   { href: "/admin/activity", label: "Activity Log", icon: ActivityIcon, adminOnly: true },
+  { href: "/admin/activity/revenue", label: "Revenue", icon: RevenueIcon, adminOnly: true },
   { href: "/admin/notifications", label: "Global Alerts", icon: BellIcon, adminOnly: true },
   { href: "/admin/history", label: "History", icon: HistoryIcon },
   { href: "/admin/showcase-winners", label: "Winners", icon: TrophyIcon, adminOnly: true },
@@ -39,6 +40,20 @@ export function AdminNavigation({ user, unreadNotifications = 0 }: AdminNavigati
   const isModerator = user.role === "moderator";
   const roleLabel = user.role === "moderator" ? "Moderator" : user.role === "admin" ? "Admin" : "Staff";
   const visibleItems = adminNavItems.filter((item) => !isModerator || !item.adminOnly);
+
+  // Determine the single active nav href. An item matches when the path equals
+  // its href or is a sub-path of it; when several match (e.g. /admin/activity vs
+  // its child /admin/activity/revenue which isn't a nav item), the most specific
+  // (longest) matching href wins so parents don't stay highlighted on child
+  // pages that have their own — or no — nav entry.
+  const activeHref = visibleItems
+    .filter((item) =>
+      item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/")
+    )
+    .reduce<string | null>(
+      (best, item) => (best === null || item.href.length > best.length ? item.href : best),
+      null
+    );
 
   return (
     <>
@@ -98,7 +113,7 @@ export function AdminNavigation({ user, unreadNotifications = 0 }: AdminNavigati
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {visibleItems.map((item) => {
-            const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href);
+            const isActive = item.href === activeHref;
             const isSundayWinnerItem = item.href === "/admin/showcase-winners" && new Date().getDay() === 0;
             return (
               <Link
@@ -141,7 +156,7 @@ export function AdminNavigation({ user, unreadNotifications = 0 }: AdminNavigati
         {/* Scrollable nav items list */}
         <div className="flex-1 flex items-center overflow-x-auto no-scrollbar">
           {visibleItems.map((item) => {
-            const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href);
+            const isActive = item.href === activeHref;
             return (
               <Link
                 key={item.href}
@@ -272,6 +287,14 @@ function GalleryIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+    </svg>
+  );
+}
+
+function RevenueIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z" />
     </svg>
   );
 }

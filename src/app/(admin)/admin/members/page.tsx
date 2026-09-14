@@ -6,7 +6,6 @@ import { getAllMembers } from "@/actions/admin/members";
 import { getTodayCheckIns } from "@/actions/admin/checkins";
 import { getActiveRentals } from "@/actions/admin/rentals";
 import { MemberList } from "@/components/admin/MemberList";
-import { TodayCheckIns } from "@/components/admin/TodayCheckIns";
 import { ActiveRentalsWidget } from "@/components/admin/ActiveRentalsWidget";
 import { RefreshDataButton } from "@/components/admin/RefreshDataButton";
 
@@ -24,7 +23,7 @@ export default function AdminMembersPage() {
           >
             ← Back to Admin Dashboard
           </Link>
-          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Members &amp; Check-In</h1>
+          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Members</h1>
           <Suspense fallback={<div className="h-5 w-48 bg-zinc-200 dark:bg-zinc-800 rounded animate-pulse mt-1" />}>
             <MembersHeaderStats />
           </Suspense>
@@ -32,10 +31,10 @@ export default function AdminMembersPage() {
         <div className="flex items-center gap-3">
           <RefreshDataButton path="/admin/members" />
           <Link
-            href="/admin/check-in"
-            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-black text-sm shadow-md transition-all active:scale-[0.99]"
+            href="/admin/check-in?open=1"
+            className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-black text-sm shadow-md transition-all active:scale-[0.99]"
           >
-            <span>📱</span> Launch QR Scanner →
+            <span>✅</span> Check Customer In →
           </Link>
         </div>
       </div>
@@ -75,7 +74,6 @@ async function MembersData() {
   return (
     <>
       <ActiveRentalsWidget initialRentals={activeRentals} />
-      <TodayCheckIns checkIns={todayCheckIns} />
       <div>
         <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-3">All Members</h2>
         <MemberList members={members} checkedInMembers={checkedInMembers} userRole={userRole} />

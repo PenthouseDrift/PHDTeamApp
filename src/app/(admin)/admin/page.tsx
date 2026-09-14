@@ -53,7 +53,11 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
   const selectedByName = currentWinnerInfo.selectedByName;
   const activeMemberships = members.filter((m) => m.membership?.status === "active").length;
   const memberCheckinsCount = todayCheckins.filter(
-    (c) => c.method === "qr" || c.method === "manual" || c.method === "membership_cash"
+    (c) =>
+      c.method === "qr" ||
+      c.method === "manual" ||
+      c.method === "membership" ||
+      c.method === "membership_cash"
   ).length;
   const avatarUrl = (session.user as any).customAvatar || session.user.image || null;
   const now = new Date();
@@ -76,11 +80,11 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
 
   const allQuickTiles = [
     {
-      title: "QR Scanner",
-      description: "Scan member QR codes for daily track check-in",
+      title: "Check Customer In",
+      description: "Check members and guests in for the track",
       href: "/admin/check-in",
-      icon: "📱",
-      color: "from-amber-500/20 to-orange-500/10 border-amber-500/40 text-amber-600 dark:text-amber-400",
+      icon: "✅",
+      color: "from-green-500/20 to-emerald-500/10 border-green-500/40 text-green-600 dark:text-green-400",
       adminOnly: false,
     },
     {
@@ -298,16 +302,10 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
         {/* Fast Check-In Action Buttons */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Link
-            href="/admin/check-in"
-            className="py-4 px-5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-black text-base flex items-center justify-center gap-3 shadow-md hover:shadow-lg transition-all active:scale-[0.99] border border-amber-400/40"
+            href="/admin/check-in?open=1"
+            className="sm:col-span-2 py-6 px-6 rounded-2xl bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-black text-lg sm:text-xl flex items-center justify-center gap-3 shadow-md hover:shadow-lg transition-all active:scale-[0.99] border border-green-500/40"
           >
-            <span className="text-2xl">📱</span> QR Code Check-In →
-          </Link>
-          <Link
-            href="/admin/members"
-            className="py-4 px-5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-base flex items-center justify-center gap-3 shadow-md hover:shadow-lg transition-all active:scale-[0.99] border border-blue-500/40"
-          >
-            <span className="text-2xl">👤</span> User Check-In →
+            <span className="text-3xl">✅</span> Check Customer In →
           </Link>
         </div>
 
