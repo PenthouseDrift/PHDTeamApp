@@ -3,6 +3,7 @@
 import { redis } from "@/lib/redis";
 import type { ActionResult } from "@/types";
 import { logActivity } from "@/lib/activity";
+import { recordCheckInCount } from "@/lib/checkin-count";
 
 export async function performCheckIn(
   memberId: string,
@@ -38,6 +39,7 @@ export async function performCheckIn(
 
     await redis.rpush(`checkins:${today}`, entry);
     await redis.set(dedupKey, "1", { ex: 3600 });
+    await recordCheckInCount(memberId, now);
 
     const memberName = (await redis.hget(`member:${memberId}`, "name")) as string || "Member";
     const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";

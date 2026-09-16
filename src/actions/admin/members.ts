@@ -3,7 +3,7 @@
 import { redis } from "@/lib/redis";
 import { unstable_cache } from "next/cache";
 import { parseDiscounts } from "@/lib/pricing";
-import type { Member, Membership, Wallet } from "@/types";
+import type { Member, Membership, Wallet, ActionResult } from "@/types";
 
 export interface MemberWithMembership {
   member: Member;
@@ -72,6 +72,8 @@ async function _getAllMembers(): Promise<MemberWithMembership[]> {
           qrCode: null,
           aiGenerations: Number(memberData.aiGenerations) || 0,
           createdAt: Number(memberData.createdAt) || 0,
+          checkinCount: Number(memberData.checkinCount) || 0,
+          lastCheckIn: Number(memberData.lastCheckIn) || 0,
           discounts: parseDiscounts(memberData),
         };
 
@@ -115,3 +117,92 @@ export const getAllMembers = unstable_cache(
   { revalidate: 60, tags: ["admin-members"] }
 );
 
+
+// ── Check-in counter backfill ──────────────────────────────────────────────
+
+import { auth } from "@/lib/auth";
+import { revalidateTag } from "next/cache";
+
+/**
+ * Recompute every member's lifetime check-in counter (checkinCount + lastCheckIn)
+ * from the historical `checkins:<YYYY-MM-DD>` daily lists.
+ *
+ * Idempotent: it counts from scratch and OVERWRITES the stored values, so it can
+ * be run repeatedly without double-counting. Guests (guest_* ids) are ignored.
+ *
+ * There's no index of which date lists exist, so we walk backwards from today
+ * and stop after a run of consecutive empty days (default 60) — enough to skip
+ * quiet gaps between events without scanning forever.
+ */
+export async function backfillCheckInCounts(
+  maxEmptyRunDays = 60
+): Promise<ActionResult<{ membersUpdated: number; daysScanned: number; totalCheckIns: number }>> {
+  try {
+    const session = await auth();
+    if (!session?.user || session.user.role !== "admin") {
+      return { success: false, error: "Unauthorized: only admins can run the backfill" };
+    }
+
+    const counts = new Map<string, number>();
+    const lastSeen = new Map<string, number>();
+
+    let cursor = new Date();
+    let consecutiveEmpty = 0;
+    let daysScanned = 0;
+    let totalCheckIns = 0;
+
+    // Walk backwards day by day until we hit a long empty streak.
+    while (consecutiveEmpty < maxEmptyRunDays) {
+      const dateKey = cursor.toISOString().split("T")[0];
+      const entries = await redis.lrange(`checkins:${dateKey}`, 0, -1);
+      daysScanned++;
+
+      if (!entries || entries.length === 0) {
+        consecutiveEmpty++;
+      } else {
+        consecutiveEmpty = 0;
+        for (const raw of entries) {
+          let parsed: { userId?: string; timestamp?: number; memberName?: string } | null = null;
+          try {
+            parsed = typeof raw === "string" ? JSON.parse(raw) : (raw as any);
+          } catch {
+            parsed = null;
+          }
+          const userId = parsed?.userId;
+          // Skip guests and removed placeholders.
+          if (!userId || userId.startsWith("guest_") || userId === "__REMOVED__") continue;
+          counts.set(userId, (counts.get(userId) || 0) + 1);
+          totalCheckIns++;
+          const ts = Number(parsed?.timestamp) || 0;
+          if (ts > (lastSeen.get(userId) || 0)) lastSeen.set(userId, ts);
+        }
+      }
+
+      // Step back one day.
+      cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000);
+    }
+
+    // Write the recomputed totals onto each member hash.
+    let membersUpdated = 0;
+    for (const [userId, count] of counts) {
+      const fields: Record<string, number> = { checkinCount: count };
+      const last = lastSeen.get(userId);
+      if (last) fields.lastCheckIn = last;
+      await redis.hset(`member:${userId}`, fields);
+      membersUpdated++;
+    }
+
+    // Bust the cached members list so the new counts show immediately.
+    revalidateTag("admin-members", "max");
+
+    return {
+      success: true,
+      data: { membersUpdated, daysScanned, totalCheckIns },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Backfill failed",
+    };
+  }
+}

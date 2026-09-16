@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import { redeemDayPass, redeemRentalHour } from "@/actions/wallet";
 import { createOrExtendRentalSession } from "@/actions/admin/rentals";
+import { recordCheckInCount } from "@/lib/checkin-count";
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -166,6 +167,8 @@ export async function POST(request: Request) {
 
       await redis.rpush(`checkins:${today}`, entry);
       await redis.set(`checkin:dedup:${memberId}`, "1", { ex: 86400 });
+      // Only count a fresh rental as a visit, not a +1hr extension.
+      if (!isExtension) await recordCheckInCount(memberId, now);
 
       return NextResponse.json({
         status: "active",
@@ -205,6 +208,7 @@ export async function POST(request: Request) {
 
       await redis.rpush(`checkins:${today}`, entry);
       await redis.set(`checkin:dedup:${memberId}`, "1", { ex: 86400 });
+      await recordCheckInCount(memberId, now);
 
       return NextResponse.json({
         status: "active",
@@ -287,6 +291,7 @@ export async function POST(request: Request) {
 
     await redis.rpush(`checkins:${today}`, entry);
     await redis.set(dedupKey, "1", { ex: 86400 });
+    await recordCheckInCount(memberId, now);
 
     return NextResponse.json({
       status: "active",
