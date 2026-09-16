@@ -124,6 +124,8 @@ export async function activateMembershipInPerson(
 
       await redis.rpush(`checkins:${today}`, entry);
       await redis.set(dedupKey, "1", { ex: 86400 });
+      const { recordCheckInCount } = await import("@/lib/checkin-count");
+      await recordCheckInCount(memberId, now);
     }
 
     // 4. Log the in-person cash membership sale to the global activity log with

@@ -7,6 +7,7 @@ import { isUserCheckedInToday } from "@/actions/admin/checkins";
 import { redeemDayPass, redeemRentalHour } from "@/actions/wallet";
 import { createRentalSession } from "@/actions/admin/rentals";
 import { logActivity } from "@/lib/activity";
+import { recordCheckInCount } from "@/lib/checkin-count";
 
 export async function performSelfCheckIn(
   userId: string,
@@ -81,6 +82,7 @@ export async function performSelfCheckIn(
 
     await redis.rpush(`checkins:${today}`, entry);
     await redis.set(`checkin:dedup:${userId}`, "1", { ex: 86400 });
+    await recordCheckInCount(userId, now);
 
     await logActivity({
       type: "checkin",

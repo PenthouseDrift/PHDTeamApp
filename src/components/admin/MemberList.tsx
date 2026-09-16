@@ -83,6 +83,14 @@ export function MemberList({ members, checkedInMembers, userRole }: MemberListPr
               (&quot;{m.member.nickname}&quot;)
             </span>
           )}
+          {(m.member.checkinCount ?? 0) > 0 && (
+            <span
+              title={`${m.member.checkinCount} total check-in${m.member.checkinCount !== 1 ? "s" : ""}`}
+              className="ml-2 inline-flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[10px] font-bold px-1.5 py-0.5 align-middle"
+            >
+              ✅ {m.member.checkinCount}
+            </span>
+          )}
         </td>
         <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400 hidden sm:table-cell">
           {m.member.email}

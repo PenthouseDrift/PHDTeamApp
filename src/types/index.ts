@@ -8,6 +8,10 @@ export interface Member {
   qrCode: string | null;
   aiGenerations?: number;
   createdAt: number;
+  /** Total number of track check-ins recorded for this member. */
+  checkinCount?: number;
+  /** Timestamp (ms) of the member's most recent check-in. */
+  lastCheckIn?: number;
   discounts?: {
     membership: number;
     daypass: number;

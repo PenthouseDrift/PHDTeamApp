@@ -5,6 +5,7 @@ import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import type { ActionResult } from "@/types";
 import { sendGlobalNotification } from "@/actions/notifications";
 import { logActivity } from "@/lib/activity";
+import { recordCheckInCount } from "@/lib/checkin-count";
 
 export interface CheckInEntry {
   userId: string;
@@ -215,6 +216,7 @@ export async function quickCheckIn(
 
     await redis.rpush(`checkins:${today}`, entry);
     await redis.set(dedupKey, "1", { ex: 86400 });
+    await recordCheckInCount(memberId, now);
 
     const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";
     const methodDesc =
@@ -544,6 +546,7 @@ export async function checkInWithDayPass(
 
     await redis.rpush(`checkins:${today}`, entry);
     await redis.set(`checkin:dedup:${memberId}`, "1", { ex: 86400 });
+    await recordCheckInCount(memberId, now);
 
     const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";
     const { priceForCheckInMethod, CURRENCY } = await import("@/lib/pricing");
@@ -610,6 +613,7 @@ export async function checkInWithRental(
 
     await redis.rpush(`checkins:${today}`, entry);
     await redis.set(`checkin:dedup:${memberId}`, "1", { ex: 86400 });
+    await recordCheckInCount(memberId, now);
 
     const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";
     const { priceForCheckInMethod, CURRENCY } = await import("@/lib/pricing");
