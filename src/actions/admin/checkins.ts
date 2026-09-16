@@ -12,6 +12,8 @@ export interface CheckInEntry {
   timestamp: number;
   method: "qr" | "manual" | "membership" | "day_pass" | "day_pass_wallet" | "day_pass_cash" | "rental" | "rental_wallet" | "rental_cash" | "membership_cash" | "self_checkin";
   memberName: string;
+  /** True when a cash/in-person check-in has not been paid for yet. */
+  unpaid?: boolean;
 }
 
 export async function getSelfCheckInStatus(): Promise<boolean> {
@@ -247,7 +249,8 @@ export async function quickCheckIn(
 export async function addNonMemberCheckIn(
   name: string,
   adminId: string,
-  method: "manual" | "day_pass" | "rental" = "manual"
+  method: "manual" | "day_pass" | "rental" = "manual",
+  isUnpaid: boolean = false
 ): Promise<ActionResult<{ checkedIn: boolean }>> {
   try {
     const now = Date.now();
@@ -259,27 +262,32 @@ export async function addNonMemberCheckIn(
       await createRentalSession(guestId, name);
     }
 
+    const checkinMethod = method === "day_pass" ? "day_pass_cash" : method === "rental" ? "rental_cash" : "manual";
+    // "Unpaid" only applies to cash pass/rental guest check-ins, not free manual.
+    const unpaid = isUnpaid && (method === "day_pass" || method === "rental");
+
     const entry = JSON.stringify({
       userId: guestId,
       adminId,
       timestamp: now,
-      method: method === "day_pass" ? "day_pass_cash" : method === "rental" ? "rental_cash" : "manual",
+      method: checkinMethod,
       memberName: name,
+      ...(unpaid ? { unpaid: true } : {}),
     });
 
     await redis.rpush(`checkins:${today}`, entry);
 
     const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";
-    const checkinMethod = method === "day_pass" ? "day_pass_cash" : method === "rental" ? "rental_cash" : "manual";
     const { priceForCheckInMethod, CURRENCY } = await import("@/lib/pricing");
     const amount = await priceForCheckInMethod(checkinMethod, guestId);
     await logActivity({
       type: "checkin",
       memberId: guestId,
       memberName: name,
-      description: `[ADMIN ACTION] Non-member guest checked in manually by ${adminName} (${method})`,
+      description: `[ADMIN ACTION] Non-member guest checked in manually by ${adminName} (${method}${unpaid ? ", Not Paid Yet" : ""})`,
       method: checkinMethod,
-      ...(amount !== null ? { amount, currency: CURRENCY } : {}),
+      timestamp: now,
+      ...(unpaid ? { unpaid: true } : amount !== null ? { amount, currency: CURRENCY } : {}),
       isDev: false,
     });
 
@@ -449,14 +457,68 @@ export async function removeCheckIn(
   }
 }
 
+export async function markCheckInPaid(
+  index: number
+): Promise<ActionResult<{ amount: number }>> {
+  try {
+    const { auth } = await import("@/lib/auth");
+    const session = await auth();
+    if (!session?.user || (session.user.role !== "admin" && session.user.role !== "moderator")) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const today = new Date().toISOString().split("T")[0];
+    const key = `checkins:${today}`;
+    const entries = await redis.lrange(key, 0, -1);
+    if (index < 0 || index >= entries.length) {
+      return { success: false, error: "Check-in not found" };
+    }
+
+    const raw = entries[index];
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!parsed?.unpaid) {
+      return { success: false, error: "This check-in is already paid" };
+    }
+
+    // Cross-reference the price for this check-in's method (respects discount).
+    const { priceForCheckInMethod, CURRENCY } = await import("@/lib/pricing");
+    const resolved = await priceForCheckInMethod(parsed.method, parsed.userId);
+    const amount = resolved ?? 0;
+
+    // 1) Update the check-in list entry: clear the unpaid flag.
+    const updatedEntry = { ...parsed, unpaid: false };
+    await redis.lset(key, index, JSON.stringify(updatedEntry));
+
+    // 2) Update the matching activity-log entry: set amount + clear unpaid so
+    //    it now counts toward revenue.
+    const { markActivityCheckInPaid } = await import("@/actions/admin/activity");
+    await markActivityCheckInPaid(parsed.userId, Number(parsed.timestamp), amount, CURRENCY);
+
+    revalidatePath("/admin/members");
+    revalidatePath("/admin/check-in");
+    revalidatePath("/admin/activity");
+    revalidatePath("/admin/activity/revenue");
+    revalidatePath("/dashboard");
+    return { success: true, data: { amount } };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to mark as paid",
+    };
+  }
+}
+
 export async function checkInWithDayPass(
   memberId: string,
   memberName: string,
   adminId: string,
-  isPaidInPerson: boolean
+  isPaidInPerson: boolean,
+  isUnpaid: boolean = false
 ): Promise<ActionResult<{ checkedIn: boolean }>> {
   try {
     const { redeemDayPass } = await import("@/actions/wallet");
+    // Only redeem a wallet pass for the actual wallet path. Cash (paid or
+    // unpaid) never touches the wallet.
     if (!isPaidInPerson) {
       const redeemRes = await redeemDayPass(memberId);
       if (!redeemRes.success) {
@@ -464,31 +526,38 @@ export async function checkInWithDayPass(
       }
     }
 
+    // "Unpaid" only applies to the cash/in-person path.
+    const unpaid = isPaidInPerson && isUnpaid;
+
     const now = Date.now();
     const today = new Date().toISOString().split("T")[0];
+    const method = isPaidInPerson ? "day_pass_cash" : "day_pass_wallet";
 
     const entry = JSON.stringify({
       userId: memberId,
       adminId,
       timestamp: now,
-      method: isPaidInPerson ? "day_pass_cash" : "day_pass_wallet",
+      method,
       memberName,
+      ...(unpaid ? { unpaid: true } : {}),
     });
 
     await redis.rpush(`checkins:${today}`, entry);
     await redis.set(`checkin:dedup:${memberId}`, "1", { ex: 86400 });
 
     const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";
-    const method = isPaidInPerson ? "day_pass_cash" : "day_pass_wallet";
     const { priceForCheckInMethod, CURRENCY } = await import("@/lib/pricing");
     const amount = await priceForCheckInMethod(method, memberId);
+    const paidLabel = isPaidInPerson ? (unpaid ? "Not Paid Yet" : "Paid Cash") : "Redeemed from Wallet";
     await logActivity({
       type: "checkin",
       memberId,
       memberName,
-      description: `[ADMIN ACTION] Checked in with Day Pass by ${adminName} (${isPaidInPerson ? "Paid Cash" : "Redeemed from Wallet"})`,
+      description: `[ADMIN ACTION] Checked in with Day Pass by ${adminName} (${paidLabel})`,
       method,
-      ...(amount !== null ? { amount, currency: CURRENCY } : {}),
+      timestamp: now,
+      // Unpaid entries carry no amount (no revenue until marked paid).
+      ...(unpaid ? { unpaid: true } : amount !== null ? { amount, currency: CURRENCY } : {}),
       isDev: false,
     });
 
@@ -508,7 +577,8 @@ export async function checkInWithRental(
   memberId: string,
   memberName: string,
   adminId: string,
-  isPaidInPerson: boolean
+  isPaidInPerson: boolean,
+  isUnpaid: boolean = false
 ): Promise<ActionResult<{ checkedIn: boolean }>> {
   try {
     const { redeemRentalHour } = await import("@/actions/wallet");
@@ -523,31 +593,36 @@ export async function checkInWithRental(
 
     await createRentalSession(memberId, memberName);
 
+    const unpaid = isPaidInPerson && isUnpaid;
+
     const now = Date.now();
     const today = new Date().toISOString().split("T")[0];
+    const method = isPaidInPerson ? "rental_cash" : "rental_wallet";
 
     const entry = JSON.stringify({
       userId: memberId,
       adminId,
       timestamp: now,
-      method: isPaidInPerson ? "rental_cash" : "rental_wallet",
+      method,
       memberName,
+      ...(unpaid ? { unpaid: true } : {}),
     });
 
     await redis.rpush(`checkins:${today}`, entry);
     await redis.set(`checkin:dedup:${memberId}`, "1", { ex: 86400 });
 
     const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";
-    const method = isPaidInPerson ? "rental_cash" : "rental_wallet";
     const { priceForCheckInMethod, CURRENCY } = await import("@/lib/pricing");
     const amount = await priceForCheckInMethod(method, memberId);
+    const paidLabel = isPaidInPerson ? (unpaid ? "Not Paid Yet" : "Paid Cash") : "Redeemed from Wallet";
     await logActivity({
       type: "checkin",
       memberId,
       memberName,
-      description: `[ADMIN ACTION] Checked in with Rental by ${adminName} (${isPaidInPerson ? "Paid Cash" : "Redeemed from Wallet"})`,
+      description: `[ADMIN ACTION] Checked in with Rental by ${adminName} (${paidLabel})`,
       method,
-      ...(amount !== null ? { amount, currency: CURRENCY } : {}),
+      timestamp: now,
+      ...(unpaid ? { unpaid: true } : amount !== null ? { amount, currency: CURRENCY } : {}),
       isDev: false,
     });
 

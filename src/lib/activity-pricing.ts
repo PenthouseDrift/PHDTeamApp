@@ -47,6 +47,8 @@ export interface ActivityAmountInput {
   description?: string;
   method?: string;
   amount?: number;
+  /** Unpaid cash check-in: no revenue until it's marked paid. */
+  unpaid?: boolean;
   isDev?: boolean;
 }
 
@@ -105,6 +107,8 @@ function purchaseItemFromDescription(description: string): ActivityItem | null {
  */
 export function resolveActivityItem(entry: ActivityAmountInput): ActivityItem | null {
   if (entry.isDev) return null;
+  // Unpaid cash check-ins carry no revenue until marked paid.
+  if (entry.unpaid) return null;
 
   if (entry.type === "checkin") {
     const item = checkInMethodToItem(entry.method);
@@ -159,6 +163,8 @@ export function resolveActivityItem(entry: ActivityAmountInput): ActivityItem | 
  */
 export function resolveActivityAmount(entry: ActivityAmountInput): number | null {
   if (entry.isDev) return null;
+  // Unpaid cash check-ins show no amount until marked paid.
+  if (entry.unpaid) return null;
 
   // A real charged amount already reflects any discount applied at the time.
   if (typeof entry.amount === "number" && entry.amount > 0) {

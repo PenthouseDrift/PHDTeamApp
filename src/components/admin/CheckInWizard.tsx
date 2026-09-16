@@ -62,6 +62,8 @@ function WizardModal({
   const [visibleCount, setVisibleCount] = useState(50);
   const [guestName, setGuestName] = useState("");
   const [guestMethod, setGuestMethod] = useState<"manual" | "day_pass" | "rental">("day_pass");
+  // "Not paid yet" toggle for the cash options (member options step + guest step).
+  const [notPaid, setNotPaid] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -135,12 +137,15 @@ function WizardModal({
 
   function checkInDayPass(m: MemberWithMembership, isPaidInPerson: boolean) {
     if (!adminId) return;
+    const unpaid = isPaidInPerson && notPaid;
     setError(null);
     startTransition(async () => {
-      const res = await checkInWithDayPass(m.member.id, m.member.name, adminId, isPaidInPerson);
+      const res = await checkInWithDayPass(m.member.id, m.member.name, adminId, isPaidInPerson, unpaid);
       if (res.success)
         finish(
-          `${m.member.name} checked in with Day Pass ${isPaidInPerson ? "(£10 Paid)" : "(Wallet)"} 🎫`
+          `${m.member.name} checked in with Day Pass ${
+            isPaidInPerson ? (unpaid ? "(Not paid yet)" : "(£10 Paid)") : "(Wallet)"
+          } 🎫`
         );
       else fail(res.error);
     });
@@ -148,12 +153,15 @@ function WizardModal({
 
   function checkInRental(m: MemberWithMembership, isPaidInPerson: boolean) {
     if (!adminId) return;
+    const unpaid = isPaidInPerson && notPaid;
     setError(null);
     startTransition(async () => {
-      const res = await checkInWithRental(m.member.id, m.member.name, adminId, isPaidInPerson);
+      const res = await checkInWithRental(m.member.id, m.member.name, adminId, isPaidInPerson, unpaid);
       if (res.success)
         finish(
-          `${m.member.name} checked in with Car Rental ${isPaidInPerson ? "(£10 Paid)" : "(Wallet)"} 🏎️`
+          `${m.member.name} checked in with Car Rental ${
+            isPaidInPerson ? (unpaid ? "(Not paid yet)" : "(£10 Paid)") : "(Wallet)"
+          } 🏎️`
         );
       else fail(res.error);
     });
@@ -163,9 +171,10 @@ function WizardModal({
     if (!adminId) return;
     const name = guestName.trim();
     if (!name) return;
+    const unpaid = (guestMethod === "day_pass" || guestMethod === "rental") && notPaid;
     setError(null);
     startTransition(async () => {
-      const res = await addNonMemberCheckIn(name, adminId, guestMethod);
+      const res = await addNonMemberCheckIn(name, adminId, guestMethod, unpaid);
       if (res.success) finish(`${name} checked in! ✅`);
       else fail(res.error);
     });
@@ -332,6 +341,8 @@ function WizardModal({
               <MemberOptions
                 m={selected}
                 isPending={isPending}
+                notPaid={notPaid}
+                onNotPaidChange={setNotPaid}
                 onMembership={() => checkInMembership(selected)}
                 onActivate={() => activateAndCheckIn(selected)}
                 onDayPassWallet={() => checkInDayPass(selected, false)}
@@ -378,6 +389,25 @@ function WizardModal({
                   </button>
                 ))}
               </div>
+
+              {/* Not-paid-yet toggle for cash guest check-ins */}
+              {(guestMethod === "day_pass" || guestMethod === "rental") && (
+                <label className="flex items-center justify-between gap-2 rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50/60 dark:bg-amber-950/20 px-3 py-2.5 cursor-pointer">
+                  <span className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                    🕗 Not paid yet
+                    <span className="block text-[10px] font-medium text-amber-600 dark:text-amber-400/80">
+                      Check in now, collect payment later
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={notPaid}
+                    onChange={(e) => setNotPaid(e.target.checked)}
+                    className="h-4 w-4 accent-amber-500"
+                  />
+                </label>
+              )}
+
               <div className="flex gap-2 pt-1">
                 <button
                   onClick={() => setStep("account")}
@@ -418,6 +448,8 @@ function WizardModal({
 function MemberOptions({
   m,
   isPending,
+  notPaid,
+  onNotPaidChange,
   onMembership,
   onActivate,
   onDayPassWallet,
@@ -428,6 +460,8 @@ function MemberOptions({
 }: {
   m: MemberWithMembership;
   isPending: boolean;
+  notPaid: boolean;
+  onNotPaidChange: (v: boolean) => void;
   onMembership: () => void;
   onActivate: () => void;
   onDayPassWallet: () => void;
@@ -500,13 +534,29 @@ function MemberOptions({
         />
       )}
 
+      {/* Not-paid-yet toggle — applies to the cash options below */}
+      <label className="flex items-center justify-between gap-2 rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50/60 dark:bg-amber-950/20 px-3 py-2.5 cursor-pointer">
+        <span className="text-xs font-bold text-amber-800 dark:text-amber-300">
+          🕗 Not paid yet
+          <span className="block text-[10px] font-medium text-amber-600 dark:text-amber-400/80">
+            Check in now, collect payment later
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          checked={notPaid}
+          onChange={(e) => onNotPaidChange(e.target.checked)}
+          className="h-4 w-4 accent-amber-500"
+        />
+      </label>
+
       {/* Day pass £10 cash */}
       <OptionRow
         onClick={onDayPassCash}
         disabled={isPending}
         title="💵 Day Pass (£10 Cash/Card)"
-        subtitle="Paid in person at the desk"
-        tone="plain"
+        subtitle={notPaid ? "⚠️ Will be marked NOT PAID" : "Paid in person at the desk"}
+        tone={notPaid ? "amber" : "plain"}
       />
 
       {/* Wallet rental */}
@@ -525,8 +575,8 @@ function MemberOptions({
         onClick={onRentalCash}
         disabled={isPending}
         title="🏎️ Car Rental (£10 Cash/Card)"
-        subtitle="Car rental session paid at desk"
-        tone="plain"
+        subtitle={notPaid ? "⚠️ Will be marked NOT PAID" : "Car rental session paid at desk"}
+        tone={notPaid ? "amber" : "plain"}
       />
 
       <button
