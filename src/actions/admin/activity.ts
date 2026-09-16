@@ -90,7 +90,16 @@ export async function markActivityCheckInPaid(
         // Remove the old member (matching the exact stored form) and re-add the
         // updated one at the same score.
         await redis.zrem("activity:log", item as any);
-        const updated = { ...parsed, unpaid: false, amount, currency };
+        // Rewrite the description so it no longer reads "Not Paid Yet".
+        // Handles both "(Not Paid Yet)" (member cash) and ", Not Paid Yet)"
+        // (guest, e.g. "(day_pass, Not Paid Yet)").
+        const newDescription =
+          typeof parsed.description === "string"
+            ? parsed.description
+                .replace(/\(Not Paid Yet\)/i, "(Paid Cash)")
+                .replace(/,\s*Not Paid Yet\)/i, ", Paid)")
+            : parsed.description;
+        const updated = { ...parsed, unpaid: false, amount, currency, description: newDescription };
         await redis.zadd("activity:log", {
           score: Number(parsed.timestamp),
           member: JSON.stringify(updated),
