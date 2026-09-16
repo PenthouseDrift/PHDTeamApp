@@ -18,6 +18,9 @@ body {
 }
 
 body {
+  /* vh fallback first for older browsers (e.g. Chrome 103), then dvh for
+     modern browsers which handle mobile browser chrome more accurately. */
+  min-height: 100vh;
   min-height: 100dvh;
 }
 
