@@ -35,7 +35,7 @@ export default async function AdminLayout({
   };
 
   return (
-    <div className="flex h-dvh bg-zinc-50 dark:bg-zinc-950">
+    <div className="flex h-screen bg-zinc-50 dark:bg-zinc-950">
       <AdminNavigation user={userWithAvatar} unreadNotifications={unreadCount} />
       <main className="pwa-admin-content flex-1 overflow-y-auto md:pt-0 md:pb-0">
         {children}
