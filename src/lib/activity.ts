@@ -14,13 +14,23 @@ export interface ActivityEntry {
    * (already counted at online purchase time) on the revenue report.
    */
   method?: string;
+  /**
+   * True when a cash/in-person check-in has NOT been paid for yet. Unpaid
+   * entries carry no `amount` and are excluded from revenue until marked paid.
+   */
+  unpaid?: boolean;
   isDev?: boolean;
   timestamp: number;
 }
 
-export async function logActivity(params: Omit<ActivityEntry, "id" | "timestamp">) {
+export async function logActivity(
+  params: Omit<ActivityEntry, "id" | "timestamp"> & { timestamp?: number }
+) {
   try {
-    const timestamp = Date.now();
+    // Allow callers to pass an explicit timestamp so a check-in list entry and
+    // its activity-log entry share the same timestamp (used to match them when
+    // marking an unpaid check-in as paid). Falls back to now.
+    const timestamp = params.timestamp ?? Date.now();
     const id = `act_${timestamp}_${Math.random().toString(36).substring(7)}`;
     
     const entry: ActivityEntry = {

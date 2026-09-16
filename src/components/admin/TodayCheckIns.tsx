@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import type { CheckInEntry } from "@/actions/admin/checkins";
-import { addNonMemberCheckIn, removeCheckIn, updateCheckInMethod, updateCheckInName } from "@/actions/admin/checkins";
+import { addNonMemberCheckIn, removeCheckIn, updateCheckInMethod, updateCheckInName, markCheckInPaid } from "@/actions/admin/checkins";
 import { extendMemberRentalByUserId } from "@/actions/admin/rentals";
 import { useSession } from "next-auth/react";
 
@@ -74,6 +74,19 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
         setFeedback(result.error);
       }
       setEditingIndex(null);
+    });
+  }
+
+  function handleMarkPaid(index: number) {
+    startTransition(async () => {
+      const result = await markCheckInPaid(index);
+      if (result.success) {
+        setFeedback(`Marked as paid (£${result.data.amount.toFixed(2)})`);
+        setTimeout(() => setFeedback(null), 3000);
+      } else {
+        setFeedback(result.error);
+        setTimeout(() => setFeedback(null), 3000);
+      }
     });
   }
 
@@ -274,6 +287,16 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
                         x{count}
                       </span>
                     )}
+
+                    {/* Unpaid badge */}
+                    {entry.unpaid && (
+                      <span
+                        title="Payment not collected yet"
+                        className="rounded-md bg-red-500 text-white text-[10px] font-black uppercase tracking-wide px-1.5 py-0.5 shadow-xs shrink-0"
+                      >
+                        Unpaid
+                      </span>
+                    )}
                   </div>
                   <span className="text-[11px] text-zinc-500 dark:text-zinc-400 font-medium shrink-0 sm:hidden">
                     {formatTime(entry.timestamp)}
@@ -282,6 +305,18 @@ export function TodayCheckIns({ checkIns }: TodayCheckInsProps) {
 
                 {/* Right: Method Badge + Rental Extension + Timestamp + Remove */}
                 <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-green-200/50 dark:border-green-800/30">
+                  {/* Mark Paid (unpaid cash check-ins only) */}
+                  {entry.unpaid && (
+                    <button
+                      onClick={() => handleMarkPaid(i)}
+                      disabled={isPending}
+                      title="Mark this check-in as paid"
+                      className="text-[11px] font-black text-white bg-green-600 hover:bg-green-700 rounded-lg px-2.5 py-1 transition-colors flex items-center gap-1 shadow-xs disabled:opacity-50"
+                    >
+                      <span>💷</span> Mark Paid
+                    </button>
+                  )}
+
                   {/* Extension Popover Controls (Car Rentals only) */}
                   {entry.method.includes("rental") && (
                     extendingIndex === i ? (

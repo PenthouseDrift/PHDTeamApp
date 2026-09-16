@@ -157,6 +157,8 @@ export default function ActivityTableClient({ initialData }: { initialData: Acti
                     <td className="px-3 sm:px-5 py-3 sm:py-4 text-right font-black text-emerald-600 dark:text-emerald-400 text-base">
                       {item.isDev ? (
                         <span className="text-zinc-400 font-medium text-sm">Simulated</span>
+                      ) : item.unpaid ? (
+                        <span className="text-red-500 font-black text-xs uppercase tracking-wide">Unpaid</span>
                       ) : (() => {
                         const resolved = resolveActivityAmount(item);
                         return resolved !== null

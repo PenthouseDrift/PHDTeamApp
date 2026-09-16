@@ -66,6 +66,47 @@ export async function refreshActivityLog() {
   return { success: true };
 }
 
+/**
+ * Mark the check-in activity entry identified by (memberId, timestamp) as paid:
+ * clears its `unpaid` flag and sets the given amount so it counts toward
+ * revenue. Called when an admin marks an unpaid check-in as paid.
+ */
+export async function markActivityCheckInPaid(
+  memberId: string,
+  timestamp: number,
+  amount: number,
+  currency: string
+): Promise<{ success: boolean }> {
+  try {
+    const records = await redis.zrange("activity:log", 0, 1999, { rev: true });
+    for (const item of records) {
+      const parsed = typeof item === "string" ? JSON.parse(item) : (item as any);
+      if (
+        parsed &&
+        parsed.type === "checkin" &&
+        parsed.memberId === memberId &&
+        Number(parsed.timestamp) === Number(timestamp)
+      ) {
+        // Remove the old member (matching the exact stored form) and re-add the
+        // updated one at the same score.
+        await redis.zrem("activity:log", item as any);
+        const updated = { ...parsed, unpaid: false, amount, currency };
+        await redis.zadd("activity:log", {
+          score: Number(parsed.timestamp),
+          member: JSON.stringify(updated),
+        });
+        updateTag("activity-log");
+        revalidatePath("/admin/activity");
+        return { success: true };
+      }
+    }
+    return { success: false };
+  } catch (error) {
+    console.error("[Activity] markActivityCheckInPaid failed:", error);
+    return { success: false };
+  }
+}
+
 export async function deleteActivity(id: string) {
   try {
     // Only admins may delete activity log entries.
