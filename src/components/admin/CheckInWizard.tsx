@@ -178,7 +178,7 @@ function WizardModal({
     >
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
-        className="relative w-full max-w-md mx-auto flex flex-col max-h-[85dvh] rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden"
+        className="relative w-full max-w-md mx-auto flex flex-col max-h-[85vh] max-h-[85dvh] rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
