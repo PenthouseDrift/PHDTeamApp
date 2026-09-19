@@ -88,6 +88,18 @@ export async function activateMembershipInPerson(
   adminId: string
 ): Promise<ActionResult<{ message: string; expiresAt: number }>> {
   try {
+    // Resolve the admin id server-side if the client didn't pass one (avoids
+    // the whole action silently no-op'ing when the client session is still
+    // loading). Also enforces that only staff can activate memberships.
+    if (!adminId) {
+      const { auth } = await import("@/lib/auth");
+      const session = await auth();
+      if (!session?.user || (session.user.role !== "admin" && session.user.role !== "moderator")) {
+        return { success: false, error: "Unauthorized" };
+      }
+      adminId = session.user.id;
+    }
+
     const now = Date.now();
     const TWENTY_EIGHT_DAYS = 28 * 24 * 60 * 60 * 1000;
     const expiresAt = now + TWENTY_EIGHT_DAYS;

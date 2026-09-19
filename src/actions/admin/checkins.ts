@@ -195,6 +195,17 @@ export async function quickCheckIn(
   method: "manual" | "membership_cash" | "membership" = "manual"
 ): Promise<ActionResult<{ checkedIn: boolean }>> {
   try {
+    // Resolve the admin id from the session if the client didn't pass one
+    // (session can be briefly unavailable client-side).
+    if (!adminId) {
+      const { auth } = await import("@/lib/auth");
+      const session = await auth();
+      if (!session?.user || (session.user.role !== "admin" && session.user.role !== "moderator")) {
+        return { success: false, error: "Unauthorized" };
+      }
+      adminId = session.user.id;
+    }
+
     // No membership check required — admin override for manual tracking
     const now = Date.now();
     const today = new Date().toISOString().split("T")[0];

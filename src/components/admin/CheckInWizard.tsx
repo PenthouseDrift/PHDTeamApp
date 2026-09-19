@@ -115,32 +115,33 @@ function WizardModal({
   }
 
   // ── Check-in handlers (mirror the members-modal call patterns) ──────────
+  // Note: adminId may briefly be undefined while the client session loads. The
+  // server actions resolve/authorize the admin from the session when it's blank,
+  // so we pass adminId ?? "" instead of silently returning (which looked like
+  // "the button does nothing").
   function checkInMembership(m: MemberWithMembership) {
-    if (!adminId) return;
     setError(null);
     startTransition(async () => {
-      const res = await quickCheckIn(m.member.id, m.member.name, adminId, "membership");
+      const res = await quickCheckIn(m.member.id, m.member.name, adminId ?? "", "membership");
       if (res.success) finish(`${m.member.name} checked in with membership! 🟢`);
       else fail(res.error);
     });
   }
 
   function activateAndCheckIn(m: MemberWithMembership) {
-    if (!adminId) return;
     setError(null);
     startTransition(async () => {
-      const res = await activateMembershipInPerson(m.member.id, m.member.name, adminId);
+      const res = await activateMembershipInPerson(m.member.id, m.member.name, adminId ?? "");
       if (res.success) finish(res.data.message);
       else fail(res.error);
     });
   }
 
   function checkInDayPass(m: MemberWithMembership, isPaidInPerson: boolean) {
-    if (!adminId) return;
     const unpaid = isPaidInPerson && notPaid;
     setError(null);
     startTransition(async () => {
-      const res = await checkInWithDayPass(m.member.id, m.member.name, adminId, isPaidInPerson, unpaid);
+      const res = await checkInWithDayPass(m.member.id, m.member.name, adminId ?? "", isPaidInPerson, unpaid);
       if (res.success)
         finish(
           `${m.member.name} checked in with Day Pass ${
@@ -152,11 +153,10 @@ function WizardModal({
   }
 
   function checkInRental(m: MemberWithMembership, isPaidInPerson: boolean) {
-    if (!adminId) return;
     const unpaid = isPaidInPerson && notPaid;
     setError(null);
     startTransition(async () => {
-      const res = await checkInWithRental(m.member.id, m.member.name, adminId, isPaidInPerson, unpaid);
+      const res = await checkInWithRental(m.member.id, m.member.name, adminId ?? "", isPaidInPerson, unpaid);
       if (res.success)
         finish(
           `${m.member.name} checked in with Car Rental ${
@@ -168,13 +168,12 @@ function WizardModal({
   }
 
   function checkInGuest() {
-    if (!adminId) return;
     const name = guestName.trim();
     if (!name) return;
     const unpaid = (guestMethod === "day_pass" || guestMethod === "rental") && notPaid;
     setError(null);
     startTransition(async () => {
-      const res = await addNonMemberCheckIn(name, adminId, guestMethod, unpaid);
+      const res = await addNonMemberCheckIn(name, adminId ?? "", guestMethod, unpaid);
       if (res.success) finish(`${name} checked in! ✅`);
       else fail(res.error);
     });
