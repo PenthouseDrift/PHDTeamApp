@@ -12,6 +12,7 @@
     "@google/genai": "^2.15.0",
     "@google/generative-ai": "^0.24.1",
     "@upstash/redis": "^1.38.1",
+    "@vercel/analytics": "^2.0.1",
     "@vercel/blob": "^2.6.1",
     "dotenv": "^17.4.2",
     "html5-qrcode": "^2.3.8",
