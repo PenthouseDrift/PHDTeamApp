@@ -4,7 +4,6 @@ import { auth } from "@/lib/auth";
 import { getAllMembers } from "@/actions/admin/members";
 import { getTodayCheckIns, getSelfCheckInStatus } from "@/actions/admin/checkins";
 import { getActiveRentals } from "@/actions/admin/rentals";
-import { SelfCheckInToggle } from "@/components/admin/SelfCheckInToggle";
 import { getUpcomingEvents } from "@/actions/events";
 import { Suspense } from "react";
 import { getCurrentWeek, getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
@@ -75,9 +74,6 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
     allEventsFinished = todaysEvents.every(e => getEventTiming(e).state === "finished");
   }
 
-  const isDev = process.env.NODE_ENV === "development";
-  const shouldShowSelfCheckInToggle = hasEventToday && !allEventsFinished;
-
   const allQuickTiles = [
     {
       title: "Check Customer In",
@@ -120,8 +116,8 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
       adminOnly: true,
     },
     {
-      title: "Global Activity Log",
-      description: "View global transaction logs for purchases and check-ins",
+      title: "Reports",
+      description: "Activity log and monthly revenue",
       href: "/admin/activity",
       icon: "📋",
       color: "from-indigo-500/20 to-blue-500/10 border-indigo-500/40 text-indigo-600 dark:text-indigo-400",
@@ -153,19 +149,11 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
       adminOnly: true,
     },
     {
-      title: "Shop Orders",
-      description: "Manage click and collect orders",
-      href: "/admin/orders",
+      title: "Shop",
+      description: "Orders and product inventory",
+      href: "/admin/shop",
       icon: "🛍️",
       color: "from-emerald-500/20 to-teal-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
-      adminOnly: true,
-    },
-    {
-      title: "Shop Products",
-      description: "Manage inventory and store items",
-      href: "/admin/shop",
-      icon: "🏷️",
-      color: "from-teal-500/20 to-emerald-500/10 border-teal-500/40 text-teal-600 dark:text-teal-400",
       adminOnly: true,
     },
     {
@@ -175,14 +163,6 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
       icon: "🖼️",
       color: "from-rose-500/20 to-pink-500/10 border-rose-500/40 text-rose-600 dark:text-rose-400",
       adminOnly: true,
-    },
-    {
-      title: "Feedback & Moderation",
-      description: "Review user feedback, flagged uploads, and reported posts",
-      href: "/admin/feedback",
-      icon: "🛡️",
-      color: "from-red-500/20 to-rose-500/10 border-red-500/40 text-red-600 dark:text-red-400",
-      adminOnly: false,
     },
   ];
 
@@ -256,9 +236,48 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
           </Link>
         </div>
 
-        {/* Self Check-in Toggle for Event Days (and Dev) */}
-        {shouldShowSelfCheckInToggle && (
-          <SelfCheckInToggle adminId={session.user.id} initialActive={selfCheckInActive} />
+        {/* Self Check-in status — automated from event open/close times */}
+        {hasEventToday && (
+          <div
+            className={`rounded-2xl border p-4 flex items-start gap-3 ${
+              selfCheckInActive
+                ? "border-emerald-400/50 bg-emerald-50 dark:border-emerald-500/40 dark:bg-emerald-950/30"
+                : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+            }`}
+          >
+            <span
+              className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg ${
+                selfCheckInActive
+                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                  : "bg-zinc-200/70 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+              }`}
+            >
+              {selfCheckInActive ? "🏁" : "🔒"}
+            </span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                  Member Self Check-In
+                </h3>
+                <span
+                  className={`rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                    selfCheckInActive
+                      ? "bg-emerald-500 text-black"
+                      : "bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                  }`}
+                >
+                  {selfCheckInActive ? "Open" : "Closed"}
+                </span>
+              </div>
+              <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                {selfCheckInActive
+                  ? "An event is running now, so members can check themselves in. This opens and closes automatically with today's event times."
+                  : allEventsFinished
+                  ? "Today's events have finished — self check-in is closed until the next event opens."
+                  : "Self check-in opens automatically when today's event reaches its open time."}
+              </p>
+            </div>
+          </div>
         )}
 
         {/* Action Needed Section */}

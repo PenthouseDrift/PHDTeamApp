@@ -143,6 +143,36 @@ export interface ShellEntry {
   createdAt: number;
 }
 
+export interface MarketplaceListing {
+  listingId: string;
+  /** Google providerAccountId of the member who posted the listing. */
+  userId: string;
+  title: string;
+  description: string;
+  /** Price in GBP. Stored/displayed as a plain number; 0 means "free" / offers. */
+  price: number;
+  images: string[];
+  /** Optional free-text location/pickup note (e.g. "collect at the track"). */
+  location: string;
+  /**
+   * Seller-provided public contact details for this listing. These are chosen
+   * per listing by the seller (NOT their private account email), so they
+   * control exactly what appears on the public website.
+   */
+  contactName: string;
+  contactMethod: "email" | "phone" | "facebook" | "instagram" | "other";
+  contactValue: string;
+  status: "available" | "sold";
+  /**
+   * Whether the listing is allowed to appear on the public marketing website.
+   * Member listings default to true; admins can hide a listing by setting this
+   * to false (mirrors GalleryImage.showOnWebsite curation).
+   */
+  showOnWebsite: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface GalleryImage {
   id: string;
   imageUrl: string;

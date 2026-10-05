@@ -133,7 +133,7 @@ export function GlobalNotificationForm({ adminId }: { adminId: string }) {
           type="text"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="/newsfeed or /showcase or /wallet"
+          placeholder="/showcase or /marketplace or /wallet"
           className="w-full rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3.5 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
         />
       </div>

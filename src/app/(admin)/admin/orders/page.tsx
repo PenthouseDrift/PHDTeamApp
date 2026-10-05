@@ -20,10 +20,10 @@ export default async function AdminOrdersPage() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Link
-              href="/admin"
+              href="/admin/shop"
               className="inline-flex items-center gap-1 text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
             >
-              <span>←</span> Admin
+              <span>←</span> Shop
             </Link>
             <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Click & Collect Fulfillment</h1>
           </div>

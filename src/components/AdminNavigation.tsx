@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { NotificationsPopover } from "@/components/NotificationsPopover";
 import { QRPopover } from "@/components/QRPopover";
@@ -18,19 +19,32 @@ interface AdminNavigationProps {
   unreadNotifications?: number;
 }
 
-const adminNavItems = [
+interface AdminNavItem {
+  href: string;
+  label: string;
+  icon: (props: { className?: string }) => React.ReactElement;
+  exact?: boolean;
+  adminOnly?: boolean;
+  /** Extra path prefixes that should also mark this item active (for combined entries). */
+  match?: string[];
+}
+
+// Primary nav — the day-to-day items.
+const adminNavItems: AdminNavItem[] = [
   { href: "/admin", label: "Admin Home", icon: HomeIcon, exact: true },
   { href: "/admin/check-in", label: "Check In", icon: CheckInIcon },
   { href: "/admin/members", label: "Members", icon: MembersIcon },
+  // Shop hub (orders + products).
+  { href: "/admin/shop", label: "Shop", icon: ShopIcon, adminOnly: true, match: ["/admin/orders"] },
+  // Reports hub (activity log + revenue + check-in history).
+  { href: "/admin/activity", label: "Reports", icon: ActivityIcon, adminOnly: true, match: ["/admin/history"] },
+];
+
+// Secondary nav — grouped under "More".
+const adminMoreItems: AdminNavItem[] = [
   { href: "/admin/events", label: "Events", icon: EventsIcon },
-  { href: "/admin/orders", label: "Shop Orders", icon: ActivityIcon, adminOnly: true },
-  { href: "/admin/shop", label: "Shop Products", icon: FeedbackIcon, adminOnly: true },
-  { href: "/admin/feedback", label: "Feedback", icon: FeedbackIcon },
   { href: "/admin/notes", label: "Notes", icon: NotesIcon },
-  { href: "/admin/activity", label: "Activity Log", icon: ActivityIcon, adminOnly: true },
-  { href: "/admin/activity/revenue", label: "Revenue", icon: RevenueIcon, adminOnly: true },
   { href: "/admin/notifications", label: "Global Alerts", icon: BellIcon, adminOnly: true },
-  { href: "/admin/history", label: "History", icon: HistoryIcon },
   { href: "/admin/showcase-winners", label: "Winners", icon: TrophyIcon, adminOnly: true },
   { href: "/admin/facebook", label: "Facebook", icon: ShareIcon, adminOnly: true },
   { href: "/admin/gallery", label: "Website Gallery", icon: GalleryIcon, adminOnly: true },
@@ -38,23 +52,31 @@ const adminNavItems = [
 
 export function AdminNavigation({ user, unreadNotifications = 0 }: AdminNavigationProps) {
   const pathname = usePathname();
+  const [moreOpen, setMoreOpen] = useState(false);
   const isModerator = user.role === "moderator";
   const roleLabel = user.role === "moderator" ? "Moderator" : user.role === "admin" ? "Admin" : "Staff";
   const visibleItems = adminNavItems.filter((item) => !isModerator || !item.adminOnly);
+  const visibleMoreItems = adminMoreItems.filter((item) => !isModerator || !item.adminOnly);
 
-  // Determine the single active nav href. An item matches when the path equals
-  // its href or is a sub-path of it; when several match (e.g. /admin/activity vs
-  // its child /admin/activity/revenue which isn't a nav item), the most specific
-  // (longest) matching href wins so parents don't stay highlighted on child
-  // pages that have their own — or no — nav entry.
+  // Does an item match the current path? Considers its own href (exact or
+  // sub-path) plus any extra `match` prefixes (used by combined entries).
+  const itemMatches = (item: AdminNavItem): boolean => {
+    const hrefs = [item.href, ...(item.match ?? [])];
+    return hrefs.some((h) =>
+      item.exact ? pathname === h : pathname === h || pathname.startsWith(h + "/")
+    );
+  };
+
+  // Determine the single active primary nav href. The most specific (longest)
+  // matching href wins so parents don't stay highlighted on child pages.
   const activeHref = visibleItems
-    .filter((item) =>
-      item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/")
-    )
+    .filter(itemMatches)
     .reduce<string | null>(
       (best, item) => (best === null || item.href.length > best.length ? item.href : best),
       null
     );
+
+  const isMoreActive = visibleMoreItems.some(itemMatches);
 
   return (
     <>
@@ -139,6 +161,67 @@ export function AdminNavigation({ user, unreadNotifications = 0 }: AdminNavigati
               </Link>
             );
           })}
+
+          {/* More (collapsible) */}
+          {visibleMoreItems.length > 0 && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setMoreOpen((v) => !v)}
+                aria-expanded={moreOpen}
+                className={`flex w-full items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  isMoreActive
+                    ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold"
+                    : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <MoreIcon className="w-5 h-5" />
+                  <span>More</span>
+                </div>
+                <svg
+                  className={`w-4 h-4 transition-transform ${moreOpen || isMoreActive ? "rotate-180" : ""}`}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                </svg>
+              </button>
+
+              {(moreOpen || isMoreActive) && (
+                <div className="mt-1 space-y-1 pl-3">
+                  {visibleMoreItems.map((item) => {
+                    const isActive = itemMatches(item);
+                    const isSundayWinnerItem = item.href === "/admin/showcase-winners" && new Date().getDay() === 0;
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        prefetch={true}
+                        className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                          isActive
+                            ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold"
+                            : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <item.icon className="w-5 h-5" />
+                          <span>{item.label}</span>
+                        </div>
+                        {isSundayWinnerItem && (
+                          <span className="rounded-md bg-amber-500 text-black text-[9px] font-black px-1.5 py-0.5 uppercase tracking-wider animate-pulse">
+                            Sunday
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </nav>
         <div className="p-3 border-t border-zinc-200 dark:border-zinc-800">
           <Link
@@ -172,6 +255,21 @@ export function AdminNavigation({ user, unreadNotifications = 0 }: AdminNavigati
               </Link>
             );
           })}
+
+          {/* More tab — opens an upward sheet with the secondary items */}
+          {visibleMoreItems.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setMoreOpen((v) => !v)}
+              aria-expanded={moreOpen}
+              className={`flex flex-shrink-0 flex-col items-center justify-center gap-1 py-2 px-3 text-[10px] font-medium transition-colors min-w-[64px] ${
+                isMoreActive || moreOpen ? "text-amber-500 font-bold" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+              }`}
+            >
+              <MoreIcon className="w-5 h-5" />
+              <span className="truncate max-w-[68px] text-center">More</span>
+            </button>
+          )}
         </div>
 
         {/* Fixed Right-Side Exit/Back Button */}
@@ -183,6 +281,40 @@ export function AdminNavigation({ user, unreadNotifications = 0 }: AdminNavigati
           <span className="truncate">Exit</span>
         </Link>
       </nav>
+
+      {/* Mobile "More" sheet (opens above the bottom bar) */}
+      {moreOpen && visibleMoreItems.length > 0 && (
+        <div className="md:hidden">
+          <div
+            className="fixed inset-0 z-40 bg-black/40"
+            onClick={() => setMoreOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="pwa-admin-more-sheet fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] left-0 right-0 z-40 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-2 shadow-2xl">
+            <div className="grid grid-cols-3 gap-2">
+              {visibleMoreItems.map((item) => {
+                const isActive = itemMatches(item);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    prefetch={true}
+                    onClick={() => setMoreOpen(false)}
+                    className={`flex flex-col items-center justify-center gap-1 rounded-xl p-3 text-[11px] font-medium transition-colors ${
+                      isActive
+                        ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold"
+                        : "text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    }`}
+                  >
+                    <item.icon className="w-6 h-6" />
+                    <span className="truncate text-center">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -236,14 +368,6 @@ function UsersIcon({ className }: { className?: string }) {
   );
 }
 
-function HistoryIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-    </svg>
-  );
-}
-
 function EventsIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -268,10 +392,18 @@ function BellIcon({ className }: { className?: string }) {
   );
 }
 
-function FeedbackIcon({ className }: { className?: string }) {
+function ShopIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12A1.125 1.125 0 0 1 19.743 21H4.257a1.125 1.125 0 0 1-1.126-1.243l1.264-12A1.125 1.125 0 0 1 5.513 6.75h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+    </svg>
+  );
+}
+
+function MoreIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM12.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM18.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
     </svg>
   );
 }
@@ -292,13 +424,7 @@ function GalleryIcon({ className }: { className?: string }) {
   );
 }
 
-function RevenueIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z" />
-    </svg>
-  );
-}
+
 
 function NotesIcon({ className }: { className?: string }) {
   return (

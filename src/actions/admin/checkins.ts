@@ -3,7 +3,6 @@
 import { redis } from "@/lib/redis";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import type { ActionResult } from "@/types";
-import { sendGlobalNotification } from "@/actions/notifications";
 import { logActivity } from "@/lib/activity";
 import { recordCheckInCount } from "@/lib/checkin-count";
 
@@ -17,75 +16,50 @@ export interface CheckInEntry {
   unpaid?: boolean;
 }
 
+/**
+ * Whether members may self check-in right now. Fully automated: self check-in
+ * is open only while a (non-cancelled) event scheduled for today is currently
+ * within its open/close window — i.e. its timing state is "happening_now".
+ * There is no manual admin toggle; it follows the event schedule.
+ */
 export async function getSelfCheckInStatus(): Promise<boolean> {
   noStore();
   try {
-    const status = await redis.get("settings:self_checkin_active");
-    const isActive = status === "true" || status === true;
-
-    if (isActive) {
-      const { getUpcomingEvents } = await import("@/actions/events");
-      const { getEventTiming } = await import("@/lib/event-utils");
-
-      const now = new Date();
-      const formatter = new Intl.DateTimeFormat("en-GB", {
-        timeZone: "Europe/London",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      });
-
-      const parts = formatter.formatToParts(now);
-      const partMap: Record<string, string> = {};
-      parts.forEach((p) => { partMap[p.type] = p.value; });
-      const localToday = `${partMap.year}-${partMap.month}-${partMap.day}`;
-
-      const events = await getUpcomingEvents();
-      const todaysEvents = events.filter((e) => e.date === localToday);
-
-      // Self check-in is only valid while there is a live event today.
-      // Deactivate when there is no event today, or all of today's events have finished.
-      const hasLiveEventToday = todaysEvents.some((e) => {
-        const state = getEventTiming(e).state;
-        return state === "today" || state === "happening_now";
-      });
-
-      if (!hasLiveEventToday) {
-        await redis.set("settings:self_checkin_active", "false");
-        return false;
-      }
+    // Dev-only override: force self check-in open for local testing,
+    // regardless of the event schedule.
+    if (process.env.NODE_ENV === "development") {
+      const { getForceSelfCheckIn } = await import("@/actions/dev");
+      if (await getForceSelfCheckIn()) return true;
     }
 
-    return isActive;
-  } catch (error) {
+    const { getUpcomingEvents } = await import("@/actions/events");
+    const { getEventTiming } = await import("@/lib/event-utils");
+
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/London",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+
+    const parts = formatter.formatToParts(now);
+    const partMap: Record<string, string> = {};
+    parts.forEach((p) => { partMap[p.type] = p.value; });
+    const localToday = `${partMap.year}-${partMap.month}-${partMap.day}`;
+
+    const events = await getUpcomingEvents();
+
+    // Open only while an event today is actively running (between its open
+    // and close times). Pre-open ("today") and finished events do not count.
+    return events.some(
+      (e) =>
+        e.date === localToday &&
+        e.status !== "cancelled" &&
+        getEventTiming(e).state === "happening_now"
+    );
+  } catch {
     return false;
-  }
-}
-
-export async function toggleSelfCheckInStatus(adminId: string): Promise<ActionResult<{ active: boolean }>> {
-  try {
-    const current = await getSelfCheckInStatus();
-    const next = !current;
-    
-    // Use string representation for explicit parsing later
-    await redis.set("settings:self_checkin_active", next ? "true" : "false");
-    
-    if (next) {
-      // Background the notification dispatch so it doesn't block the UI response
-      sendGlobalNotification({
-        title: "Track Check-In Open! 🏁",
-        message: "Self check-in is now active. You can check yourself in from your dashboard to skip the queue at the gates.",
-        url: "/track-checkin"
-      }, adminId).catch(console.error);
-    }
-    
-    revalidatePath("/admin", "page");
-    revalidatePath("/dashboard", "page");
-    
-    return { success: true, data: { active: next } };
-  } catch (error) {
-    console.error("toggle fail:", error);
-    return { success: false, error: "Failed to toggle self check-in" };
   }
 }
 

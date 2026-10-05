@@ -35,16 +35,10 @@ export function NotificationList({ notifications }: NotificationListProps) {
   function handleClick(n: AppNotification) {
     if (n.url) {
       router.push(n.url);
-    } else if (
-      n.targetType === "post" ||
-      n.postId ||
-      n.message.toLowerCase().includes("post")
-    ) {
-      router.push("/newsfeed");
     } else if (n.shellId || n.targetType === "shell") {
       router.push(`/showcase?open=${n.shellId}`);
     } else {
-      router.push("/newsfeed");
+      router.push("/notifications");
     }
   }
 

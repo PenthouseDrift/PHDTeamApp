@@ -79,7 +79,7 @@ export async function createNotification(params: {
       shellId: params.shellId || params.postId || "",
       postId: params.postId || "",
       targetType: params.targetType || (params.postId ? "post" : "shell"),
-      url: params.url || (params.postId ? "/newsfeed" : params.shellId ? `/showcase?open=${params.shellId}` : "/newsfeed"),
+      url: params.url || (params.shellId ? `/showcase?open=${params.shellId}` : "/notifications"),
       message: params.message,
       read: false,
       createdAt: now,
@@ -370,7 +370,7 @@ export async function sendDailyEventReminders(): Promise<{ sentCount: number }> 
         {
           title: "🏎️ Upcoming Track Event Today!",
           message: `Join us today for ${eventTitle} at ${eventData.time || "the track"}!`,
-          url: "/newsfeed",
+          url: "/dashboard",
         },
         "system"
       );
@@ -443,7 +443,7 @@ export async function getNotifications(userId: string, limit = 30): Promise<AppN
           shellId: (data.shellId as string) || "",
           postId: (data.postId as string) || "",
           targetType: (data.targetType as "post" | "shell") || (data.postId ? "post" : "shell"),
-          url: (data.url as string) || (data.postId ? "/newsfeed" : data.shellId ? `/showcase?open=${data.shellId}` : "/newsfeed"),
+          url: (data.url as string) || (data.shellId ? `/showcase?open=${data.shellId}` : "/notifications"),
           message: (data.message as string) || "",
           read: String(data.read) === "true",
           createdAt: Number(data.createdAt),

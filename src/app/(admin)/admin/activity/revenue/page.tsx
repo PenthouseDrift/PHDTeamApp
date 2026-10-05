@@ -36,7 +36,7 @@ export default async function AdminRevenuePage() {
             href="/admin/activity"
             className="inline-flex items-center gap-1.5 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:text-indigo-500 transition-colors bg-zinc-100 dark:bg-zinc-800 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 self-start"
           >
-            ← Activity Log
+            ← Reports
           </Link>
         </div>
 

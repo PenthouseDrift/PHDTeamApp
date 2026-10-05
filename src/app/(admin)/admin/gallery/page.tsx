@@ -23,7 +23,7 @@ export default async function AdminGalleryPage() {
               href="/admin"
               className="inline-flex items-center gap-1 text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
             >
-              <span>←</span> Admin
+              <span>←</span> Back to Admin Dashboard
             </Link>
             <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Website Gallery</h1>
           </div>
