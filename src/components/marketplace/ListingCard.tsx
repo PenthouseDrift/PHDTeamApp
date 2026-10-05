@@ -83,6 +83,11 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
             {listing.images.length} photos
           </span>
         )}
+        {listing.atTrack && status !== "sold" && (
+          <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-md bg-amber-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-black shadow">
+            📍 At the track
+          </span>
+        )}
       </Link>
 
       <div className="flex flex-1 flex-col gap-1 p-3">

@@ -77,19 +77,33 @@ export const shellSubmissionSchema = z.object({
   description: z.string().max(500).optional().default(""),
 });
 
-export const marketplaceListingSchema = z.object({
-  title: z.string().min(2).max(80),
-  description: z.string().max(1000).optional().default(""),
-  price: z.number().min(0).max(100000),
-  images: z.array(z.string().url()).min(1).max(6),
-  location: z.string().max(80).optional().default(""),
-  contactName: z.string().max(60).optional().default(""),
-  contactMethod: z
-    .enum(["email", "phone", "facebook", "instagram", "other"])
-    .optional()
-    .default("other"),
-  contactValue: z.string().min(1).max(120),
-});
+export const marketplaceListingSchema = z
+  .object({
+    title: z.string().min(2).max(80),
+    description: z.string().max(1000).optional().default(""),
+    price: z.number().min(0).max(100000),
+    images: z.array(z.string().url()).min(1).max(6),
+    location: z.string().max(80).optional().default(""),
+    contactName: z.string().max(60).optional().default(""),
+    contactMethod: z
+      .enum(["email", "phone", "facebook", "instagram", "other"])
+      .optional()
+      .default("other"),
+    // Optional at the schema level; required-unless-meetAtTrack is enforced below.
+    contactValue: z.string().max(120).optional().default(""),
+    atTrack: z.boolean().optional().default(false),
+    meetAtTrack: z.boolean().optional().default(false),
+  })
+  .superRefine((data, ctx) => {
+    // A contact detail is required unless the seller opts to meet at the track.
+    if (!data.meetAtTrack && !data.contactValue.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["contactValue"],
+        message: "Add contact details, or tick 'Meet at the track'.",
+      });
+    }
+  });
 
 export const gearRatioSchema = z.object({
   spur: z.number().int().min(30).max(130),
