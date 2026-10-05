@@ -35,6 +35,8 @@ export function ListingForm({ mode, listing }: ListingFormProps) {
     listing?.contactMethod ?? "email"
   );
   const [contactValue, setContactValue] = useState(listing?.contactValue ?? "");
+  const [atTrack, setAtTrack] = useState(listing?.atTrack ?? false);
+  const [meetAtTrack, setMeetAtTrack] = useState(listing?.meetAtTrack ?? false);
   const [error, setError] = useState<string | null>(null);
 
   const isEdit = mode === "edit";
@@ -61,8 +63,8 @@ export function ListingForm({ mode, listing }: ListingFormProps) {
       setError("Please enter a valid price (0 for free / offers).");
       return;
     }
-    if (!contactValue.trim()) {
-      setError("Please add contact details so buyers can reach you.");
+    if (!meetAtTrack && !contactValue.trim()) {
+      setError("Add contact details, or tick 'Meet at the track'.");
       return;
     }
     if (!session?.user?.id) {
@@ -79,6 +81,8 @@ export function ListingForm({ mode, listing }: ListingFormProps) {
       contactName: contactName.trim() || undefined,
       contactMethod,
       contactValue: contactValue.trim(),
+      atTrack,
+      meetAtTrack,
     };
 
     startTransition(async () => {
@@ -165,6 +169,33 @@ export function ListingForm({ mode, listing }: ListingFormProps) {
         </div>
       </div>
 
+      {/* At the track */}
+      <label
+        htmlFor="atTrack"
+        className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors ${
+          atTrack
+            ? "border-amber-400 bg-amber-50 dark:border-amber-500/50 dark:bg-amber-500/10"
+            : "border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/50"
+        }`}
+      >
+        <input
+          id="atTrack"
+          type="checkbox"
+          checked={atTrack}
+          onChange={(e) => setAtTrack(e.target.checked)}
+          className="mt-0.5 h-5 w-5 shrink-0 rounded border-zinc-300 text-amber-500 focus:ring-amber-500 dark:border-zinc-600"
+        />
+        <span>
+          <span className="block text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+            This item is at Penthouse Drift
+          </span>
+          <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+            The item is at the track and can be bought in person. Buyers will see an
+            &ldquo;Available at the track&rdquo; badge on your listing.
+          </span>
+        </span>
+      </label>
+
       {/* Description */}
       <div className="space-y-2">
         <label htmlFor="description" className="block text-sm font-medium text-zinc-600 dark:text-zinc-300">
@@ -201,6 +232,33 @@ export function ListingForm({ mode, listing }: ListingFormProps) {
           </p>
         </div>
 
+        {/* Meet at track — no personal contact needed */}
+        <label
+          htmlFor="meetAtTrack"
+          className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${
+            meetAtTrack
+              ? "border-amber-400 bg-amber-50 dark:border-amber-500/50 dark:bg-amber-500/10"
+              : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-800/40 dark:hover:bg-zinc-800"
+          }`}
+        >
+          <input
+            id="meetAtTrack"
+            type="checkbox"
+            checked={meetAtTrack}
+            onChange={(e) => setMeetAtTrack(e.target.checked)}
+            className="mt-0.5 h-5 w-5 shrink-0 rounded border-zinc-300 text-amber-500 focus:ring-amber-500 dark:border-zinc-600"
+          />
+          <span>
+            <span className="block text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+              Meet at the track
+            </span>
+            <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+              Buyers arrange the sale with you in person at Penthouse Drift. No email or phone
+              needed — you can still add a contact below if you&apos;d like.
+            </span>
+          </span>
+        </label>
+
         <div className="space-y-2">
           <label htmlFor="contactName" className="block text-sm font-medium text-zinc-600 dark:text-zinc-300">
             Contact name <span className="text-zinc-500 dark:text-zinc-400">(optional)</span>
@@ -236,7 +294,7 @@ export function ListingForm({ mode, listing }: ListingFormProps) {
           </div>
           <div className="space-y-2 sm:col-span-2">
             <label htmlFor="contactValue" className="block text-sm font-medium text-zinc-600 dark:text-zinc-300">
-              Contact details
+              Contact details {meetAtTrack && <span className="text-zinc-500 dark:text-zinc-400">(optional)</span>}
             </label>
             <input
               id="contactValue"

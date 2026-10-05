@@ -125,6 +125,13 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
               {listing.createdAt > 0 && <span>· Listed {formatDate(listing.createdAt)}</span>}
             </div>
 
+            {listing.atTrack && (
+              <div className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
+                <span>📍</span>
+                <span>At Penthouse Drift — buy in person at the track</span>
+              </div>
+            )}
+
             {listing.status === "sold" && (
               <div className="rounded-lg bg-red-500/10 px-4 py-3">
                 <p className="text-sm font-medium text-red-500 dark:text-red-400">
@@ -142,19 +149,31 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
               </div>
             )}
 
-            {listing.contactValue && listing.status !== "sold" && (
+            {listing.status !== "sold" && (listing.contactValue || listing.meetAtTrack) && (
               <div className="space-y-2 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
                 <h2 className="text-sm font-semibold text-zinc-600 dark:text-zinc-300">
                   Contact the seller
                 </h2>
-                <p className="text-sm text-zinc-700 dark:text-zinc-300">
-                  {listing.contactName || authorName}
-                  <span className="text-zinc-400"> · {listing.contactMethod}</span>
-                </p>
-                <ContactButton method={listing.contactMethod} value={listing.contactValue} />
-                <p className="break-words text-center text-xs text-zinc-400 dark:text-zinc-500">
-                  {listing.contactValue}
-                </p>
+
+                {listing.meetAtTrack && (
+                  <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+                    <span>🤝</span>
+                    <span>Meet {listing.contactName || authorName} at the track to arrange the sale.</span>
+                  </div>
+                )}
+
+                {listing.contactValue && (
+                  <>
+                    <p className="text-sm text-zinc-700 dark:text-zinc-300">
+                      {listing.contactName || authorName}
+                      <span className="text-zinc-400"> · {listing.contactMethod}</span>
+                    </p>
+                    <ContactButton method={listing.contactMethod} value={listing.contactValue} />
+                    <p className="break-words text-center text-xs text-zinc-400 dark:text-zinc-500">
+                      {listing.contactValue}
+                    </p>
+                  </>
+                )}
               </div>
             )}
 

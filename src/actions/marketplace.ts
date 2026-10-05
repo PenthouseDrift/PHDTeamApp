@@ -46,6 +46,8 @@ function toListing(data: Record<string, unknown> | null): MarketplaceListing | n
     contactName: asString(data.contactName),
     contactMethod,
     contactValue: asString(data.contactValue),
+    atTrack: String(data.atTrack) === "true",
+    meetAtTrack: String(data.meetAtTrack) === "true",
     status,
     showOnWebsite: String(data.showOnWebsite) === "true",
     createdAt: Number(data.createdAt) || 0,
@@ -83,7 +85,9 @@ export async function createListing(
     location?: string;
     contactName?: string;
     contactMethod?: "email" | "phone" | "facebook" | "instagram" | "other";
-    contactValue: string;
+    contactValue?: string;
+    atTrack?: boolean;
+    meetAtTrack?: boolean;
   }
 ): Promise<ActionResult<MarketplaceListing>> {
   const parsed = marketplaceListingSchema.safeParse(data);
@@ -110,6 +114,8 @@ export async function createListing(
       contactName: parsed.data.contactName.trim(),
       contactMethod: parsed.data.contactMethod,
       contactValue: parsed.data.contactValue.trim(),
+      atTrack: parsed.data.atTrack,
+      meetAtTrack: parsed.data.meetAtTrack,
       status: "available",
       showOnWebsite: true,
       createdAt: now,
@@ -122,6 +128,8 @@ export async function createListing(
         ...listing,
         images: JSON.stringify(listing.images),
         showOnWebsite: String(listing.showOnWebsite),
+        atTrack: String(listing.atTrack),
+        meetAtTrack: String(listing.meetAtTrack),
       })
       // Negative timestamp => newest first on a plain zrange.
       .zadd(MARKETPLACE_INDEX, { score: -now, member: listingId })
@@ -242,7 +250,9 @@ export async function updateListing(
     location?: string;
     contactName?: string;
     contactMethod?: "email" | "phone" | "facebook" | "instagram" | "other";
-    contactValue: string;
+    contactValue?: string;
+    atTrack?: boolean;
+    meetAtTrack?: boolean;
   }
 ): Promise<ActionResult<MarketplaceListing>> {
   const parsed = marketplaceListingSchema.safeParse(data);
@@ -278,6 +288,8 @@ export async function updateListing(
       contactName: parsed.data.contactName.trim(),
       contactMethod: parsed.data.contactMethod,
       contactValue: parsed.data.contactValue.trim(),
+      atTrack: parsed.data.atTrack,
+      meetAtTrack: parsed.data.meetAtTrack,
       updatedAt: Date.now(),
     };
 
@@ -285,6 +297,8 @@ export async function updateListing(
       ...updated,
       images: JSON.stringify(updated.images),
       showOnWebsite: String(updated.showOnWebsite),
+      atTrack: String(updated.atTrack),
+      meetAtTrack: String(updated.meetAtTrack),
     });
 
     // Clean up any images that were removed during the edit (best-effort).

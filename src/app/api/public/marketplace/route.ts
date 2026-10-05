@@ -49,6 +49,8 @@ type PublicListing = {
   cover: string;
   location: string;
   seller: string;
+  atTrack: boolean;
+  meetAtTrack: boolean;
   contact: {
     name: string;
     method: "email" | "phone" | "facebook" | "instagram" | "other";
@@ -98,6 +100,8 @@ export async function GET(request: Request) {
         cover: l.images[0],
         location: l.location,
         seller: names.get(l.userId) || "Member",
+        atTrack: l.atTrack,
+        meetAtTrack: l.meetAtTrack,
         contact: {
           name: l.contactName || names.get(l.userId) || "Member",
           method: l.contactMethod,

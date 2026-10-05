@@ -162,6 +162,16 @@ export interface MarketplaceListing {
   contactName: string;
   contactMethod: "email" | "phone" | "facebook" | "instagram" | "other";
   contactValue: string;
+  /**
+   * Seller flag: the item is physically at the Penthouse Drift track and can be
+   * bought in person there.
+   */
+  atTrack: boolean;
+  /**
+   * Seller flag: buyers should just meet the seller at the track to arrange the
+   * sale (no email/phone/social needed). When true, contactValue may be empty.
+   */
+  meetAtTrack: boolean;
   status: "available" | "sold";
   /**
    * Whether the listing is allowed to appear on the public marketing website.
