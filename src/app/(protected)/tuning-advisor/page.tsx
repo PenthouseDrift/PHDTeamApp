@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import TuningAdvisorClient from "./TuningAdvisorClient";
@@ -12,6 +13,14 @@ export default async function TuningAdvisorPage() {
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl space-y-6">
+        {/* Back to hub */}
+        <Link
+          href="/tuning"
+          className="inline-flex items-center gap-1 text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+        >
+          <span>←</span> Tuning
+        </Link>
+
         {/* Header */}
         <div className="space-y-1">
           <div className="flex items-center gap-3">

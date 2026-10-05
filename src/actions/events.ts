@@ -57,7 +57,7 @@ export async function createEvent(
   await redis.hset(`event:${eventId}`, event as unknown as Record<string, unknown>);
   await redis.lpush("events:all", eventId);
 
-  revalidatePath("/newsfeed");
+  revalidatePath("/dashboard");
   revalidatePath("/admin/events");
   return { success: true, data: event };
 }
@@ -80,7 +80,7 @@ export async function updateEvent(
     imageUrl: data.imageUrl || "",
   } as Record<string, unknown>);
 
-  revalidatePath("/newsfeed");
+  revalidatePath("/dashboard");
   revalidatePath("/admin/events");
   return { success: true, data: null };
 }
@@ -134,14 +134,14 @@ export const getUpcomingEvents = unstable_cache(
 
 export async function cancelEvent(eventId: string): Promise<ActionResult<null>> {
   await redis.hset(`event:${eventId}`, { status: "cancelled" });
-  revalidatePath("/newsfeed");
+  revalidatePath("/dashboard");
   revalidatePath("/admin/events");
   return { success: true, data: null };
 }
 
 export async function uncancelEvent(eventId: string): Promise<ActionResult<null>> {
   await redis.hset(`event:${eventId}`, { status: "upcoming" });
-  revalidatePath("/newsfeed");
+  revalidatePath("/dashboard");
   revalidatePath("/admin/events");
   return { success: true, data: null };
 }
@@ -149,7 +149,7 @@ export async function uncancelEvent(eventId: string): Promise<ActionResult<null>
 export async function deleteEvent(eventId: string): Promise<ActionResult<null>> {
   await redis.del(`event:${eventId}`);
   await redis.lrem("events:all", 1, eventId);
-  revalidatePath("/newsfeed");
+  revalidatePath("/dashboard");
   revalidatePath("/admin/events");
   return { success: true, data: null };
 }
@@ -295,7 +295,6 @@ export async function setEventRSVP(
       await redis.hset(key, { [userId]: status });
     }
 
-    revalidatePath("/newsfeed");
     revalidatePath("/dashboard");
 
     const updatedData = await getEventRSVPs(eventId, userId);

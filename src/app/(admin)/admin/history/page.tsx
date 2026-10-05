@@ -17,10 +17,10 @@ export default async function CheckInHistoryPage({
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
       <div>
         <Link
-          href="/admin"
+          href="/admin/activity"
           className="inline-flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-amber-500 transition-colors mb-1"
         >
-          ← Back to Admin Dashboard
+          ← Reports
         </Link>
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Check-In History</h1>
         <p className="text-sm text-zinc-500 mt-1">

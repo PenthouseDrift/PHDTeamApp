@@ -128,6 +128,12 @@ export default function CalculatorPage() {
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-2xl space-y-6">
+        <Link
+          href="/tuning"
+          className="inline-flex items-center gap-1 text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+        >
+          <span>←</span> Tuning
+        </Link>
         <div>
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
             Gear Ratio Calculator

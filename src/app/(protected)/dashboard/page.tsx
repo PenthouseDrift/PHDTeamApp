@@ -48,15 +48,6 @@ const quickLinks = [
     ),
   },
   {
-    title: "Newsfeed",
-    href: "/newsfeed",
-    icon: (
-      <svg className="w-6 h-6 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 0 1-2.25 2.25M16.5 7.5V18a2.25 2.25 0 0 0 2.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 0 0 2.25 2.25h13.5" />
-      </svg>
-    ),
-  },
-  {
     title: "AI Tuning Advisor",
     href: "/tuning-advisor",
     icon: (
@@ -461,12 +452,6 @@ export default async function DashboardPage() {
                 </p>
               </div>
             </div>
-            <Link
-              href="/newsfeed"
-              className="text-xs font-bold text-amber-600 dark:text-amber-500 hover:underline flex items-center gap-1"
-            >
-              <span>Newsfeed</span> →
-            </Link>
           </div>
 
           {upcomingEvents.length === 0 ? (
@@ -539,14 +524,8 @@ export default async function DashboardPage() {
                       </div>
                     </div>
 
-                    <div className="px-3 pb-3 pt-0 flex items-center justify-between">
+                    <div className="px-3 pb-3 pt-0">
                       <QuickRSVPButton eventId={event.eventId} initialRsvpData={bulkRsvps[event.eventId]} />
-                      <Link
-                        href="/newsfeed"
-                        className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:text-amber-500"
-                      >
-                        <span>Details</span> →
-                      </Link>
                     </div>
                   </div>
                 );

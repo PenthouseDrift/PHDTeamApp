@@ -117,6 +117,108 @@ export function SelfCheckInClient({
     });
   }
 
+  // Build the entry options and figure out which one to recommend. Priority:
+  // free membership → an owned day pass → an owned rental hour → cheapest buy.
+  type EntryOption = {
+    key: string;
+    owned: boolean;
+    emoji: string;
+    title: string;
+    subtitle: string;
+    accent: "green" | "amber" | "purple";
+    onClick: () => void;
+    /** Highlight this option in the secondary list as a value upsell. */
+    upsell?: boolean;
+  };
+
+  const options: EntryOption[] = [];
+
+  if (isMembershipActive) {
+    options.push({
+      key: "membership",
+      owned: true,
+      emoji: "🟢",
+      title: "Check In Free with Membership",
+      subtitle: membershipExpiresAt
+        ? `Unlimited access · expires ${new Date(membershipExpiresAt).toLocaleDateString("en-GB")}`
+        : "28-day unlimited membership active",
+      accent: "green",
+      onClick: () => handleCheckIn("membership"),
+    });
+  }
+  if (dayPasses > 0) {
+    options.push({
+      key: "daypass-owned",
+      owned: true,
+      emoji: "🎫",
+      title: "Redeem 1 Day Pass & Check In",
+      subtitle: `You have ${dayPasses} day pass${dayPasses > 1 ? "es" : ""} in your wallet`,
+      accent: "amber",
+      onClick: () => handleCheckIn("day_pass"),
+    });
+  }
+  if (rentalHours > 0) {
+    options.push({
+      key: "rental-owned",
+      owned: true,
+      emoji: "🏎️",
+      title: "Start 1-Hr Car Rental & Check In",
+      subtitle: `You have ${rentalHours} rental hour${rentalHours > 1 ? "s" : ""} in your wallet`,
+      accent: "purple",
+      onClick: () => handleCheckIn("rental"),
+    });
+  }
+  // Paid options — only show the "buy" variant when the user doesn't already own it.
+  if (!isMembershipActive) {
+    options.push({
+      key: "membership-buy",
+      owned: false,
+      emoji: "⭐",
+      title: "Buy 28-Day Membership (£40) & Check In",
+      subtitle: "Secure card payment · activates & checks you in immediately",
+      accent: "amber",
+      onClick: () => handleBuyAndCheckIn("membership"),
+      upsell: true,
+    });
+  }
+  if (dayPasses === 0) {
+    options.push({
+      key: "daypass-buy",
+      owned: false,
+      emoji: "💳",
+      title: "Buy 1 Day Pass (£10) & Check In",
+      subtitle: "Secure card payment · redeems & checks you in immediately",
+      accent: "amber",
+      onClick: () => handleBuyAndCheckIn("day_pass"),
+    });
+  }
+  if (rentalHours === 0) {
+    options.push({
+      key: "rental-buy",
+      owned: false,
+      emoji: "🏎️",
+      title: "Buy 1-Hr Car Rental (£10) & Check In",
+      subtitle: "Starts a rental session + checks you in immediately",
+      accent: "purple",
+      onClick: () => handleBuyAndCheckIn("rental"),
+    });
+  }
+
+  // The recommended option is the first owned one, else the first (cheapest buy).
+  const primary = options[0];
+  // Order the rest so the membership upsell sits at the top of the secondaries.
+  const secondary = options
+    .slice(1)
+    .sort((a, b) => (b.upsell ? 1 : 0) - (a.upsell ? 1 : 0));
+
+  const accentPrimary: Record<EntryOption["accent"], string> = {
+    green: "bg-emerald-500 hover:bg-emerald-400 text-black",
+    amber: "bg-amber-500 hover:bg-amber-400 text-black",
+    purple: "bg-purple-500 hover:bg-purple-400 text-white",
+  };
+
+  const hasBalance = dayPasses > 0 || rentalHours > 0 || isMembershipActive;
+
   return (
     <div className="space-y-6">
       {/* Header Banner */}
@@ -128,6 +230,18 @@ export function SelfCheckInClient({
         <p className="text-sm font-semibold opacity-90">
           Welcome to Penthouse Drift, <span className="underline decoration-black/40 font-extrabold">{userName}</span>!
         </p>
+        {hasBalance && (
+          <p className="text-xs font-bold opacity-80">
+            In your wallet:{" "}
+            {[
+              isMembershipActive ? "Active membership" : null,
+              dayPasses > 0 ? `${dayPasses} day pass${dayPasses > 1 ? "es" : ""}` : null,
+              rentalHours > 0 ? `${rentalHours} rental hr${rentalHours > 1 ? "s" : ""}` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        )}
       </div>
 
       {/* Feedback Banner */}
@@ -147,123 +261,91 @@ export function SelfCheckInClient({
       {!alreadyCheckedIn ? (
         <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 sm:p-6 space-y-5 shadow-sm">
           <div>
-            <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Select Your Entry Option</h2>
+            <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Check in for today</h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Choose how you&apos;d like to check in for today&apos;s track session:
+              {primary?.owned
+                ? "Your quickest way in is ready — just tap below."
+                : "Choose how you'd like to check in for today's track session."}
             </p>
           </div>
 
-          <div className="space-y-3">
-            {/* 1. Active 28-Day Membership */}
-            {isMembershipActive ? (
-              <button
-                onClick={() => handleCheckIn("membership")}
-                disabled={isPending}
-                className="w-full text-left rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black p-4 font-extrabold transition-all shadow-md flex items-center justify-between group"
-              >
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">🟢</span>
-                    <span className="text-base">Check In Free with Membership</span>
-                  </div>
-                  <p className="text-xs opacity-90 font-medium">
-                    28-Day Unlimited Membership Active
-                    {membershipExpiresAt && (
-                      <span className="ml-1">
-                        (Expires {new Date(membershipExpiresAt).toLocaleDateString("en-GB")})
-                      </span>
-                    )}
-                  </p>
+          {/* Primary (recommended) option — big and bold */}
+          {primary && (
+            <button
+              onClick={primary.onClick}
+              disabled={isPending}
+              className={`w-full text-left rounded-xl p-4 font-extrabold transition-all shadow-md flex items-center justify-between group disabled:opacity-50 ${accentPrimary[primary.accent]}`}
+            >
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{primary.emoji}</span>
+                  <span className="text-base">{primary.title}</span>
                 </div>
-                <span className="text-lg group-hover:translate-x-1 transition-transform">→</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => handleBuyAndCheckIn("membership")}
-                disabled={isPending}
-                className="w-full text-left rounded-xl bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 p-4 font-bold transition-all shadow-sm flex items-center justify-between group"
-              >
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">⭐</span>
-                    <span className="text-base font-extrabold">Buy 28-Day Membership (£40) &amp; Check In</span>
-                  </div>
-                  <p className="text-xs opacity-80">SumUp Secure Payment • Activates &amp; checks you in immediately</p>
-                </div>
-                <span className="text-lg group-hover:translate-x-1 transition-transform">→</span>
-              </button>
-            )}
+                <p className="text-xs font-medium opacity-90">{primary.subtitle}</p>
+              </div>
+              <span className="text-lg group-hover:translate-x-1 transition-transform">→</span>
+            </button>
+          )}
 
-            {/* 2. Wallet Day Pass */}
-            {dayPasses > 0 ? (
-              <button
-                onClick={() => handleCheckIn("day_pass")}
-                disabled={isPending}
-                className="w-full text-left rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-900 dark:text-amber-200 p-4 font-bold transition-all shadow-xs flex items-center justify-between group"
-              >
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">🎫</span>
-                    <span className="text-base font-extrabold">Redeem 1 Day Pass &amp; Check In</span>
-                  </div>
-                  <p className="text-xs text-amber-700 dark:text-amber-300">
-                    You have <span className="font-extrabold">{dayPasses}</span> Day Pass{dayPasses > 1 ? "es" : ""} in your wallet
-                  </p>
-                </div>
-                <span className="text-lg group-hover:translate-x-1 transition-transform">→</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => handleBuyAndCheckIn("day_pass")}
-                disabled={isPending}
-                className="w-full text-left rounded-xl bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 p-4 font-bold transition-all shadow-sm flex items-center justify-between group"
-              >
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">💳</span>
-                    <span className="text-base font-extrabold">Buy 1 Day Pass (£10) &amp; Check In</span>
-                  </div>
-                  <p className="text-xs opacity-80">Instant card payment • Redeems &amp; checks you in immediately</p>
-                </div>
-                <span className="text-lg group-hover:translate-x-1 transition-transform">→</span>
-              </button>
-            )}
+          {/* Secondary options — quieter, with a divider */}
+          {secondary.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <span className="h-px flex-1 bg-zinc-100 dark:bg-zinc-800" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+                  or
+                </span>
+                <span className="h-px flex-1 bg-zinc-100 dark:bg-zinc-800" />
+              </div>
 
-            {/* 3. Wallet Car Rental Session */}
-            {rentalHours > 0 ? (
-              <button
-                onClick={() => handleCheckIn("rental")}
-                disabled={isPending}
-                className="w-full text-left rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/40 text-purple-900 dark:text-purple-200 p-4 font-bold transition-all shadow-xs flex items-center justify-between group"
-              >
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">🏎️</span>
-                    <span className="text-base font-extrabold">Start 1-Hr Car Rental &amp; Check In</span>
-                  </div>
-                  <p className="text-xs text-purple-700 dark:text-purple-300">
-                    You have <span className="font-extrabold">{rentalHours}</span> Car Rental Hour{rentalHours > 1 ? "s" : ""} in your wallet
-                  </p>
-                </div>
-                <span className="text-lg group-hover:translate-x-1 transition-transform">→</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => handleBuyAndCheckIn("rental")}
-                disabled={isPending}
-                className="w-full text-left rounded-xl bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 p-4 font-bold transition-all shadow-sm flex items-center justify-between group"
-              >
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">🏎️</span>
-                    <span className="text-base font-extrabold">Buy 1-Hr Car Rental (£10) &amp; Check In</span>
-                  </div>
-                  <p className="text-xs opacity-80">Instant car rental session start + track check-in</p>
-                </div>
-                <span className="text-lg group-hover:translate-x-1 transition-transform">→</span>
-              </button>
-            )}
-          </div>
+              {secondary.map((opt) =>
+                opt.upsell ? (
+                  /* Membership upsell — highlighted even as a secondary option */
+                  <button
+                    key={opt.key}
+                    onClick={opt.onClick}
+                    disabled={isPending}
+                    className="w-full text-left rounded-xl border border-amber-400 bg-gradient-to-r from-amber-50 to-amber-100/60 p-4 transition-colors hover:from-amber-100 hover:to-amber-100 disabled:opacity-50 dark:border-amber-500/40 dark:from-amber-500/10 dark:to-amber-500/5 dark:hover:from-amber-500/20 flex items-center justify-between group"
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-base">{opt.emoji}</span>
+                        <span className="text-sm font-extrabold text-amber-900 dark:text-amber-200">{opt.title}</span>
+                        <span className="rounded bg-amber-500 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-black">
+                          Best value
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-medium text-amber-700 dark:text-amber-300/90">
+                        Unlimited track access for 28 days · {opt.subtitle}
+                      </p>
+                    </div>
+                    <span className="text-base text-amber-600 dark:text-amber-400 group-hover:translate-x-1 transition-transform">→</span>
+                  </button>
+                ) : (
+                  <button
+                    key={opt.key}
+                    onClick={opt.onClick}
+                    disabled={isPending}
+                    className="w-full text-left rounded-xl border border-zinc-200 bg-zinc-50 p-3.5 transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-800/40 dark:hover:bg-zinc-800 flex items-center justify-between group"
+                  >
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">{opt.emoji}</span>
+                        <span className="text-sm font-bold text-zinc-800 dark:text-zinc-100">{opt.title}</span>
+                        {opt.owned && (
+                          <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+                            In wallet
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">{opt.subtitle}</p>
+                    </div>
+                    <span className="text-base text-zinc-400 group-hover:translate-x-1 transition-transform">→</span>
+                  </button>
+                )
+              )}
+            </div>
+          )}
         </div>
       ) : (
         /* User Already Checked In Today Banner */

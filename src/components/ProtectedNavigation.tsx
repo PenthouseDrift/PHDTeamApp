@@ -6,7 +6,6 @@ import { signOut } from "next-auth/react";
 import Image from "next/image";
 import { NotificationsPopover } from "@/components/NotificationsPopover";
 import { QRPopover } from "@/components/QRPopover";
-import { DevImpersonationToggle } from "@/components/DevImpersonationToggle";
 import { ThemeAppIcon } from "@/components/ThemeAppIcon";
 
 interface NavUser {
@@ -26,22 +25,17 @@ interface ProtectedNavigationProps {
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
   { href: "/wallet", label: "Wallet & Passes", icon: WalletIcon },
-  { href: "/orders", label: "My Orders", icon: OrdersIcon },
-  { href: "/cars", label: "My Cars", icon: CarIcon },
-  { href: "/newsfeed", label: "Newsfeed", icon: NewsfeedIcon },
-  { href: "/tuning-advisor", label: "Tuning Advisor", icon: TuningIcon },
-  { href: "/shop/visualizer", label: "Wheel Visualizer", icon: WheelIcon },
-  { href: "/showcase", label: "Showcase", icon: ShowcaseIcon },
-  { href: "/calculator", label: "Calculator", icon: CalculatorIcon },
+  { href: "/tuning", label: "Tuning", icon: TuningIcon },
+  { href: "/marketplace", label: "Marketplace", icon: MarketplaceIcon },
   { href: "/more", label: "More Features", icon: MoreIcon },
 ];
 
-// Mobile tab items (5 main tabs)
+// Mobile tab items (5 main tabs). Labels are kept short to fit the bar.
 const mobileNavItems = [
-  { href: "/dashboard", label: "Home", icon: DashboardIcon },
+  { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
   { href: "/wallet", label: "Wallet", icon: WalletIcon },
-  { href: "/cars", label: "My Cars", icon: CarIcon },
-  { href: "/newsfeed", label: "Newsfeed", icon: NewsfeedIcon },
+  { href: "/tuning", label: "Tuning", icon: TuningIcon },
+  { href: "/marketplace", label: "Market", icon: MarketplaceIcon },
   { href: "/more", label: "More", icon: MoreIcon },
 ];
 
@@ -53,9 +47,6 @@ function getInitials(name: string | null | undefined): string {
 export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelectionPending = false }: ProtectedNavigationProps) {
   const pathname = usePathname();
 
-  const isImpersonating = Boolean(user.realRole);
-  const realRole = user.realRole ?? user.role ?? "member";
-
   return (
     <>
       {/* Desktop sidebar */}
@@ -64,9 +55,6 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
         <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800">
           <ThemeAppIcon size={32} className="h-8 w-8 rounded-lg overflow-hidden" />
           <div className="flex items-center gap-2">
-            {process.env.NODE_ENV === "development" && (
-              <DevImpersonationToggle isImpersonating={isImpersonating} realRole={realRole} />
-            )}
             <QRPopover userId={user.id} />
             <NotificationsPopover userId={user.id} initialUnreadCount={unreadNotifications} />
             <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200 truncate max-w-[100px]">
@@ -117,18 +105,6 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
           >
             <ProfileIcon className="w-5 h-5" />
             Profile
-          </Link>
-          <Link
-            href="/shop"
-            prefetch={true}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-              pathname.startsWith("/shop")
-                ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-bold"
-                : "text-emerald-600 dark:text-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-            }`}
-          >
-            <StoreIcon className="w-5 h-5" />
-            Store
           </Link>
           {(user.role === "admin" || user.role === "moderator") && (
             <Link
@@ -182,9 +158,6 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
           )}
         </div>
         <div className="flex items-center gap-1.5 sm:gap-3">
-          {process.env.NODE_ENV === "development" && (
-            <DevImpersonationToggle isImpersonating={isImpersonating} realRole={realRole} />
-          )}
           <QRPopover userId={user.id} variant="button" buttonText="Show QR code" />
           <NotificationsPopover userId={user.id} initialUnreadCount={unreadNotifications} />
           <Link href="/profile" prefetch={true}>
@@ -273,18 +246,11 @@ function DashboardIcon({ className }: { className?: string }) {
   );
 }
 
-function CarIcon({ className }: { className?: string }) {
+function MarketplaceIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 0 0-10.026 0 1.106 1.106 0 0 0-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
-    </svg>
-  );
-}
-
-function ShowcaseIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6Z" />
     </svg>
   );
 }
@@ -293,14 +259,6 @@ function CalculatorIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 15.75V18m-7.5-6.75h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25V13.5Zm0 2.25h.008v.008H8.25v-.008Zm0 2.25h.008v.008H8.25V18Zm2.498-6.75h.007v.008h-.007v-.008Zm0 2.25h.007v.008h-.007V13.5Zm0 2.25h.007v.008h-.007v-.008Zm0 2.25h.007v.008h-.007V18Zm2.504-6.75h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V13.5Zm0 2.25h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V18Zm2.498-6.75h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V13.5ZM8.25 6h7.5v2.25h-7.5V6ZM12 2.25c-1.892 0-3.758.11-5.593.322C5.307 2.7 4.5 3.65 4.5 4.757V19.5a2.25 2.25 0 0 0 2.25 2.25h10.5a2.25 2.25 0 0 0 2.25-2.25V4.757c0-1.108-.806-2.057-1.907-2.185A48.507 48.507 0 0 0 12 2.25Z" />
-    </svg>
-  );
-}
-
-function NewsfeedIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 0 1-2.25 2.25M16.5 7.5V18a2.25 2.25 0 0 0 2.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 0 0 2.25 2.25h13.5M6 7.5h3v3H6v-3Z" />
     </svg>
   );
 }
@@ -364,10 +322,4 @@ function OrdersIcon({ className }: { className?: string }) {
   );
 }
 
-function StoreIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 .75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 0 0 3.75-.615A2.999 2.999 0 0 0 9.75 9.75c.896 0 1.7-.393 2.25-1.016a2.999 2.999 0 0 0 2.25 1.016c.896 0 1.7-.393 2.25-1.016a3.001 3.001 0 0 0 3.75.614m-16.5 0a3.004 3.004 0 0 1-.621-4.72L4.318 3.44A1.5 1.5 0 0 1 5.378 3h13.243a1.5 1.5 0 0 1 1.06.44l1.19 1.189a3 3 0 0 1-.621 4.72m-13.5 8.65h3.75a.75.75 0 0 0 .75-.75V13.5a.75.75 0 0 0-.75-.75H6.75a.75.75 0 0 0-.75.75v3.75c0 .415.336.75.75.75Z" />
-    </svg>
-  );
-}
+

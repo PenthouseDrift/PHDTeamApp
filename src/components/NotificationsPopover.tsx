@@ -128,13 +128,6 @@ export function NotificationsPopover({ userId, initialUnreadCount = 0 }: Notific
     if (item.url) {
       setIsOpen(false);
       router.push(item.url);
-    } else if (
-      item.targetType === "post" ||
-      item.postId ||
-      item.message.toLowerCase().includes("post")
-    ) {
-      setIsOpen(false);
-      router.push("/newsfeed");
     } else if (item.shellId || item.targetType === "shell") {
       setIsOpen(false);
       router.push(`/showcase?open=${item.shellId}`);

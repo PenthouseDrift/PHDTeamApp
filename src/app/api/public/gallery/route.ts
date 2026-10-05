@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getWeeklyWinners } from "@/actions/admin/showcase";
 import { getShowcaseEntries } from "@/actions/showcase";
-import { getFeedPosts } from "@/actions/feed";
 import { getWebsiteGalleryImages } from "@/actions/admin/gallery";
 
 export const dynamic = "force-dynamic";
@@ -9,10 +8,9 @@ export const dynamic = "force-dynamic";
 /**
  * Public, cross-origin gallery feed for the marketing website.
  *
- * Aggregates images from three sources:
+ * Aggregates images from two sources:
  *   - admin-curated website gallery (getWebsiteGalleryImages)
  *   - shell showcase (weekly winners, falling back to recent entries)
- *   - newsfeed post images
  *
  * No auth: this route lives under /api/public/* which is excluded from the
  * auth middleware. CORS is added manually since the app has no global CORS.
@@ -56,7 +54,7 @@ function corsHeaders(origin: string | null): Record<string, string> {
 type GalleryItem = {
   src: string;
   alt: string;
-  source: "gallery" | "showcase" | "newsfeed";
+  source: "gallery" | "showcase";
 };
 
 export async function OPTIONS(request: Request) {
@@ -70,11 +68,10 @@ export async function GET(request: Request) {
   const cors = corsHeaders(request.headers.get("origin"));
 
   try {
-    const [gallery, winners, entries, posts] = await Promise.all([
+    const [gallery, winners, entries] = await Promise.all([
       getWebsiteGalleryImages(),
       getWeeklyWinners(20).catch(() => []),
       getShowcaseEntries(20).catch(() => []),
-      getFeedPosts(20).catch(() => []),
     ]);
 
     const items: GalleryItem[] = [];
@@ -99,19 +96,6 @@ export async function GET(request: Request) {
           alt: shell.description || "Shell showcase build",
           source: "showcase",
         });
-      }
-    }
-
-    // 3. Newsfeed post images (flatten the images[] arrays).
-    for (const post of posts) {
-      for (const url of post.images || []) {
-        if (url) {
-          items.push({
-            src: url,
-            alt: post.text?.slice(0, 120) || "Track newsfeed photo",
-            source: "newsfeed",
-          });
-        }
       }
     }
 
