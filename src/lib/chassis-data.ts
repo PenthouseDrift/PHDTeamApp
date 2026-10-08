@@ -69,8 +69,8 @@ export const chassisPresets: ChassisPreset[] = [
   { brand: "MST", model: "RMX 2.5S", internalRatio: 3.0, notes: "2.5 S-spec" },
   { brand: "MST", model: "RMX 3.0", internalRatio: 2.6, notes: "High-end KMW competition" },
   { brand: "MST", model: "RMX 3.0 KMW", internalRatio: 2.6, notes: "Limited KMW edition" },
-  { brand: "MST", model: "RMX 4", internalRatio: 2.6, notes: "Modular subframe — adj. wheelbase" },
-  { brand: "MST", model: "RMX 4 S PRO", internalRatio: 2.6, notes: "Pro spec — modular subframe" },
+  { brand: "MST", model: "RMX 4", internalRatio: 3.1, notes: "Modular subframe — adj. wheelbase" },
+  { brand: "MST", model: "RMX 4 S PRO", internalRatio: 3.1, notes: "Pro spec — modular subframe" },
   { brand: "MST", model: "RMX EX", internalRatio: 2.6, notes: "High-performance EX variant" },
   { brand: "MST", model: "RMX-M", internalRatio: 2.6, notes: "M-chassis short wheelbase drift" },
 
