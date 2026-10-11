@@ -43,7 +43,7 @@ function Stat({
  * the detail (per-item stock, RRP, settlement) lives on the full report page.
  */
 export function AsboRcReportsSummary({ report, detailHref }: AsboRcReportsSummaryProps) {
-  const { inStockTotals, overall, outstandingToAsboRc } = report;
+  const { inStockTotals, outstandingToAsboRc, paidToAsboRc } = report;
 
   return (
     <section className="rounded-2xl border border-teal-200 dark:border-teal-900/60 bg-gradient-to-br from-teal-50/80 to-white dark:from-teal-950/20 dark:to-zinc-900 p-5 sm:p-6 shadow-sm space-y-4">
@@ -70,8 +70,8 @@ export function AsboRcReportsSummary({ report, detailHref }: AsboRcReportsSummar
       {/* Quick numbers — always shown (zeros when there's no stock yet). */}
       <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
         <Stat label="In stock" value={String(inStockTotals.unitCount)} tone="teal" />
-        <Stat label="Owed to ASBO-RC" value={formatGBP(overall.owedToAsboRc)} tone="teal" />
         <Stat label="Outstanding" value={formatGBP(outstandingToAsboRc)} tone="red" />
+        <Stat label="Paid to you" value={formatGBP(paidToAsboRc)} tone="emerald" />
       </div>
 
       {report.overall.itemCount === 0 && (
