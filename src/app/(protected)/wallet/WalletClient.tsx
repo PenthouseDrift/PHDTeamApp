@@ -15,7 +15,7 @@ interface WalletPricing {
 interface WalletClientProps {
   userId: string;
   userName: string;
-  userRole?: "admin" | "moderator" | "member";
+  userRole?: "admin" | "moderator" | "member" | "asbo-rc";
   wallet: Wallet;
   membership: Membership | null;
   pricing: WalletPricing;

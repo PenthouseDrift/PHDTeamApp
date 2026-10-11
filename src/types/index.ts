@@ -4,7 +4,7 @@ export interface Member {
   name: string;
   nickname?: string | null;
   image: string | null;
-  role: "admin" | "moderator" | "member";
+  role: "admin" | "moderator" | "member" | "asbo-rc";
   qrCode: string | null;
   aiGenerations?: number;
   createdAt: number;
@@ -179,6 +179,49 @@ export interface MarketplaceListing {
    * to false (mirrors GalleryImage.showOnWebsite curation).
    */
   showOnWebsite: boolean;
+  /**
+   * Total units of this item in the listing. Defaults to 1 for classic
+   * single-item listings.
+   */
+  quantity: number;
+  /**
+   * How many units have been sold so far (0..quantity). Remaining stock is
+   * quantity - soldCount. When none remain the listing status auto-flips to
+   * "sold".
+   */
+  soldCount: number;
+  /**
+   * Timestamps (ms) for each sold unit, in the order they were marked sold.
+   * Length tracks soldCount: incrementing appends Date.now(), decrementing pops
+   * the most recent. Lets the ASBO-RC settlement report group sales by date.
+   */
+  soldAt: number[];
+  /**
+   * Consignment flag: this item is stock provided by the ASBO-RC partner and
+   * sold on their behalf at Penthouse Drift. Only admins and ASBO-RC users can
+   * set this. ASBO-RC listings appear in the ASBO-RC Reports.
+   */
+  soldByAsboRc: boolean;
+  /**
+   * Penthouse Drift's commission percentage on an ASBO-RC consignment sale.
+   * Stored per-listing so historical reports stay accurate if the rate ever
+   * changes. Defaults to 7 (%). Ignored for non-ASBO-RC listings.
+   */
+  penthouseCutPct: number;
+  /**
+   * Legacy whole-listing settlement flag. Superseded by asboRcPaidUnits, but
+   * retained so older records are read correctly (a true value is treated as
+   * "all sold units paid"). Only meaningful when soldByAsboRc is true.
+   */
+  asboRcPaid: boolean;
+  /**
+   * How many of the sold units have been settled (paid to ASBO-RC). This lets
+   * each individual sale be marked paid independently: a listing with 2 units
+   * sold and 1 paid has asboRcPaidUnits = 1. Clamped to 0..soldCount.
+   */
+  asboRcPaidUnits: number;
+  /** Timestamp (ms) of the most recent settlement action (if any). */
+  asboRcPaidAt?: number;
   createdAt: number;
   updatedAt: number;
 }

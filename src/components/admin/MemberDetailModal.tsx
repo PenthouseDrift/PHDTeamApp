@@ -41,13 +41,13 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
   const [isPending, startTransition] = useTransition();
   const [localWallet, setLocalWallet] = useState(initialMember.wallet);
   const [localMembership, setLocalMembership] = useState(initialMember.membership);
-  const [localRole, setLocalRole] = useState<"admin" | "moderator" | "member">(initialMember.member.role);
+  const [localRole, setLocalRole] = useState<"admin" | "moderator" | "member" | "asbo-rc">(initialMember.member.role);
   const [overrideDate, setOverrideDate] = useState("");
   const [showOverride, setShowOverride] = useState(false);
   const [showRevoke, setShowRevoke] = useState(false);
   const [showCheckInModal, setShowCheckInModal] = useState(false);
   const [confirmingInPersonMembership, setConfirmingInPersonMembership] = useState(false);
-  const [pendingRole, setPendingRole] = useState<"admin" | "moderator" | "member" | null>(null);
+  const [pendingRole, setPendingRole] = useState<"admin" | "moderator" | "member" | "asbo-rc" | null>(null);
   const [revokeStep, setRevokeStep] = useState<1 | 2>(1);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [discounts, setDiscounts] = useState({
@@ -247,7 +247,7 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
     });
   }
 
-  function handleSetRole(newRole: "admin" | "moderator" | "member") {
+  function handleSetRole(newRole: "admin" | "moderator" | "member" | "asbo-rc") {
     startTransition(async () => {
       const res = await setUserRole(m.id, newRole);
       if (res.success) {
@@ -304,6 +304,10 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
                 ) : localRole === "moderator" ? (
                   <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-[10px] font-black uppercase">
                     Moderator
+                  </span>
+                ) : localRole === "asbo-rc" ? (
+                  <span className="px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-950 border border-teal-300 dark:border-teal-800 text-teal-700 dark:text-teal-300 text-[10px] font-black uppercase">
+                    ASBO-RC
                   </span>
                 ) : membershipActive ? (
                   <span className="px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-950 border border-green-300 dark:border-green-800 text-green-700 dark:text-green-300 text-[10px] font-black uppercase">
@@ -392,6 +396,11 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
                 <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-950/80 border border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-[10px] font-black uppercase tracking-wider">
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
                   Mod Access
+                </span>
+              ) : localRole === "asbo-rc" ? (
+                <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-100 dark:bg-teal-950/80 border border-teal-300 dark:border-teal-800 text-teal-700 dark:text-teal-300 text-[10px] font-black uppercase tracking-wider">
+                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+                  ASBO-RC Partner
                 </span>
               ) : null}
             </div>
@@ -650,6 +659,8 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
                       ? "⚠️ Grants full admin control over users, roles, and settings."
                       : pendingRole === "moderator"
                       ? "ℹ️ Grants moderator access to members, check-ins, and events."
+                      : pendingRole === "asbo-rc"
+                      ? "🏷️ ASBO-RC partner. Normal member access plus the ASBO-RC consignment Reports section on their dashboard."
                       : "ℹ️ Standard user level without staff permissions."}
                   </p>
                   <div className="flex gap-2 pt-1">
@@ -675,8 +686,8 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-3 gap-2 pt-1">
-                  {(["member", "moderator", "admin"] as const).map((r) => (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  {(["member", "moderator", "admin", "asbo-rc"] as const).map((r) => (
                     <button
                       key={r}
                       type="button"
@@ -688,11 +699,13 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
                             ? "bg-purple-600 text-white shadow-md ring-2 ring-purple-400"
                             : r === "moderator"
                             ? "bg-blue-600 text-white shadow-md ring-2 ring-blue-400"
+                            : r === "asbo-rc"
+                            ? "bg-teal-600 text-white shadow-md ring-2 ring-teal-400"
                             : "bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 shadow-md"
                           : "bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700"
                       } disabled:opacity-50 text-center`}
                     >
-                      {r}
+                      {r === "asbo-rc" ? "ASBO-RC" : r}
                     </button>
                   ))}
                 </div>

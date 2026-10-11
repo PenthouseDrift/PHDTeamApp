@@ -32,6 +32,13 @@ export default async function AdminReportsPage() {
       icon: "🗓️",
       color: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
     },
+    {
+      title: "ASBO-RC",
+      description: "Consignment stock, RRP, Penthouse 7% cut and settlement for the ASBO-RC partnership",
+      href: "/admin/asbo-rc",
+      icon: "🏷️",
+      color: "border-teal-500/40 bg-teal-500/10 text-teal-600 dark:text-teal-400",
+    },
   ];
 
   return (

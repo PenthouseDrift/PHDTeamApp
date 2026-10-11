@@ -16,6 +16,8 @@ import { SelfCheckInCTA } from "@/components/SelfCheckInCTA";
 import { getSelfCheckInStatus } from "@/actions/admin/checkins";
 
 import { getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
+import { getAsboRcReport } from "@/actions/asbo-rc";
+import { AsboRcReportsSummary } from "@/components/asbo-rc/AsboRcReportsSummary";
 
 export const dynamic = "force-dynamic";
 
@@ -94,9 +96,10 @@ export default async function DashboardPage() {
   }
 
   const isAdminOrMod = session.user.role === "admin" || session.user.role === "moderator";
+  const isAsboRc = session.user.role === "asbo-rc";
 
   // Fetch all dashboard data in parallel
-  const [result, walletRes, memberData, upcomingEvents, isCheckedInToday, winnerInfo, selfCheckInActive] = await Promise.all([
+  const [result, walletRes, memberData, upcomingEvents, isCheckedInToday, winnerInfo, selfCheckInActive, asboRcReport] = await Promise.all([
     getMembership(session.user.id),
     getWallet(session.user.id),
     redis.hgetall(`member:${session.user.id}`),
@@ -104,6 +107,7 @@ export default async function DashboardPage() {
     isUserCheckedInToday(session.user.id),
     isAdminOrMod ? getCurrentWeekWinnerInfo() : Promise.resolve(null),
     getSelfCheckInStatus(),
+    isAsboRc ? getAsboRcReport() : Promise.resolve(null),
   ]);
 
   const bulkRsvps = await getBulkEventRSVPs(upcomingEvents.map(e => e.eventId), session.user.id);
@@ -135,6 +139,11 @@ export default async function DashboardPage() {
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl space-y-6">
+        {/* ASBO-RC Reports — only for ASBO-RC partner accounts, pinned to the top */}
+        {isAsboRc && asboRcReport && (
+          <AsboRcReportsSummary report={asboRcReport} detailHref="/asbo-rc" />
+        )}
+
         {/* Unified Hero Section: Welcome + Membership Status + Daily Track Check-In */}
         <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 sm:p-6 shadow-sm space-y-5">
           {/* Top Row: User Avatar & Welcome Text */}

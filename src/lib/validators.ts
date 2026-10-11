@@ -93,6 +93,12 @@ export const marketplaceListingSchema = z
     contactValue: z.string().max(120).optional().default(""),
     atTrack: z.boolean().optional().default(false),
     meetAtTrack: z.boolean().optional().default(false),
+    // Available units. Defaults to 1 (classic single-item listing).
+    quantity: z.number().int().min(1).max(10000).optional().default(1),
+    // ASBO-RC consignment flag (admins / ASBO-RC users only; enforced in the action).
+    soldByAsboRc: z.boolean().optional().default(false),
+    // Penthouse Drift commission % on ASBO-RC sales. Default 7%.
+    penthouseCutPct: z.number().min(0).max(100).optional().default(7),
   })
   .superRefine((data, ctx) => {
     // A contact detail is required unless the seller opts to meet at the track.

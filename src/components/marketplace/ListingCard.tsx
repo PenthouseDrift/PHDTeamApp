@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { MarketplaceListing } from "@/types";
-import { deleteListing, setListingStatus } from "@/actions/marketplace";
+import { deleteListing, setListingStatus, setListingSoldCount, sellAsboRcUnits } from "@/actions/marketplace";
 
 
 interface ListingCardProps {
@@ -29,10 +29,18 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [status, setStatus] = useState(listing.status);
+  const [soldCount, setSoldCount] = useState(listing.soldCount);
   const [manageOpen, setManageOpen] = useState(false);
 
   const canManage = viewerId === listing.userId || isStaff;
   const cover = listing.images[0];
+  const isAsbo = listing.soldByAsboRc;
+  // For ASBO-RC listings, quantity IS the live available stock (sold units live
+  // in the ledger, not soldCount). For normal listings, available = quantity - sold.
+  const quantity = Math.max(0, listing.quantity || 0);
+  const available = isAsbo ? quantity : Math.max(0, quantity - soldCount);
+  // "multiUnit" only tweaks wording for normal listings.
+  const multiUnit = Math.max(1, listing.quantity || 1) > 1;
 
   const handleToggleSold = () => {
     const next = status === "sold" ? "available" : "sold";
@@ -40,7 +48,36 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
       const result = await setListingStatus(listing.listingId, next);
       if (result.success) {
         setStatus(result.data.status);
+        setSoldCount(next === "sold" ? quantity : 0);
         router.refresh();
+      }
+    });
+  };
+
+  const adjustSold = (delta: number) => {
+    const target = Math.min(quantity, Math.max(0, soldCount + delta));
+    if (target === soldCount) return;
+    startTransition(async () => {
+      const result = await setListingSoldCount(listing.listingId, target);
+      if (result.success) {
+        setSoldCount(result.data.soldCount);
+        setStatus(result.data.status);
+        router.refresh();
+      } else {
+        alert(result.error);
+      }
+    });
+  };
+
+  // ASBO-RC: record a sale of one unit (decrements available + logs a ledger sale).
+  const sellOne = () => {
+    startTransition(async () => {
+      const result = await sellAsboRcUnits(listing.listingId, 1);
+      if (result.success) {
+        setStatus(result.data.status);
+        router.refresh();
+      } else {
+        alert(result.error);
       }
     });
   };
@@ -74,7 +111,7 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
         {status === "sold" && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50">
             <span className="rounded-md bg-red-500 px-3 py-1 text-sm font-bold uppercase tracking-wide text-white">
-              Sold
+              {multiUnit ? "Sold out" : "Sold"}
             </span>
           </div>
         )}
@@ -86,6 +123,11 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
         {listing.atTrack && status !== "sold" && (
           <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-md bg-amber-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-black shadow">
             📍 At the track
+          </span>
+        )}
+        {listing.soldByAsboRc && status !== "sold" && (
+          <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md bg-teal-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white shadow">
+            Sold by PHD
           </span>
         )}
       </Link>
@@ -103,6 +145,11 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
         <p className="mt-0.5 line-clamp-1 text-xs text-zinc-500 dark:text-zinc-400">
           {authorName}
           {listing.location ? ` · ${listing.location}` : ""}
+        </p>
+        <p className={`mt-0.5 text-xs font-semibold ${status === "sold" ? "text-red-500 dark:text-red-400" : "text-zinc-600 dark:text-zinc-300"}`}>
+          {status === "sold"
+            ? isAsbo || multiUnit ? "Sold out" : "Sold"
+            : `${available} available`}
         </p>
 
         {canManage && (
@@ -133,14 +180,66 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
                 >
                   Edit
                 </Link>
-                <button
-                  type="button"
-                  onClick={handleToggleSold}
-                  disabled={isPending}
-                  className="rounded-lg border border-zinc-300 py-2.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 active:bg-zinc-200 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                >
-                  {status === "sold" ? "Mark available" : "Mark as sold"}
-                </button>
+                {isAsbo ? (
+                  <>
+                    <div className="flex items-center justify-between gap-2 rounded-lg border border-teal-200 bg-teal-50/50 px-3 py-2 dark:border-teal-900/50 dark:bg-teal-950/20">
+                      <span className="text-xs font-semibold text-teal-700 dark:text-teal-300">
+                        {available} available
+                      </span>
+                      <button
+                        type="button"
+                        onClick={sellOne}
+                        disabled={isPending || available <= 0}
+                        className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-teal-500 disabled:opacity-40"
+                      >
+                        Record a sale
+                      </button>
+                    </div>
+                    <p className="text-[10px] leading-snug text-zinc-400 dark:text-zinc-500">
+                      Logs a sale to the ASBO-RC ledger and drops available by 1. Manage stock in Admin
+                      → Reports → ASBO-RC.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-300 px-2 py-1.5 dark:border-zinc-700">
+                      <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Sold</span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          aria-label="Fewer sold"
+                          onClick={() => adjustSold(-1)}
+                          disabled={isPending || soldCount <= 0}
+                          className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-300 text-sm font-bold text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                        >
+                          −
+                        </button>
+                        <span className="min-w-[3.5rem] text-center text-xs font-bold tabular-nums text-zinc-800 dark:text-zinc-200">
+                          {soldCount}/{quantity}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label="More sold"
+                          onClick={() => adjustSold(1)}
+                          disabled={isPending || soldCount >= quantity}
+                          className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-300 text-sm font-bold text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleToggleSold}
+                      disabled={isPending}
+                      className="rounded-lg border border-zinc-300 py-2.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 active:bg-zinc-200 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    >
+                      {status === "sold"
+                        ? multiUnit ? "Restock (mark available)" : "Mark available"
+                        : multiUnit ? "Mark all sold" : "Mark as sold"}
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={handleDelete}

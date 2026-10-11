@@ -50,7 +50,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             });
           } else {
             // Existing user — use the role and theme from Redis
-            token.role = (existing.role as "admin" | "moderator" | "member") || "member";
+            token.role = (existing.role as "admin" | "moderator" | "member" | "asbo-rc") || "member";
             token.theme = (existing.theme as "light" | "dark") || "light";
             if (existing.customAvatar) {
               token.customAvatar = existing.customAvatar;
@@ -91,7 +91,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       if (session.user) {
         if (token.sub) session.user.id = token.sub;
-        session.user.role = token.role as "admin" | "moderator" | "member";
+        session.user.role = token.role as "admin" | "moderator" | "member" | "asbo-rc";
         session.user.theme = token.theme as "light" | "dark";
         if (token.customAvatar) {
           (session.user as any).customAvatar = token.customAvatar;

@@ -32,7 +32,7 @@ export async function getAllUsers(): Promise<Member[]> {
             email: (data.email as string) || "",
             name: (data.name as string) || "Unknown",
             image: (data.customAvatar as string) || (data.image as string) || null,
-            role: (data.role as "admin" | "moderator" | "member") || "member",
+            role: (data.role as "admin" | "moderator" | "member" | "asbo-rc") || "member",
             qrCode: null,
             createdAt: Number(data.createdAt) || 0,
           });
@@ -51,8 +51,8 @@ export async function getAllUsers(): Promise<Member[]> {
 
 export async function setUserRole(
   userId: string,
-  newRole: "admin" | "moderator" | "member"
-): Promise<ActionResult<{ role: "admin" | "moderator" | "member" }>> {
+  newRole: "admin" | "moderator" | "member" | "asbo-rc"
+): Promise<ActionResult<{ role: "admin" | "moderator" | "member" | "asbo-rc" }>> {
   try {
     const { auth } = await import("@/lib/auth");
     const session = await auth();
@@ -87,6 +87,6 @@ export async function setUserRole(
 export async function toggleAdminRole(
   userId: string,
   makeAdmin: boolean
-): Promise<ActionResult<{ role: "admin" | "moderator" | "member" }>> {
+): Promise<ActionResult<{ role: "admin" | "moderator" | "member" | "asbo-rc" }>> {
   return setUserRole(userId, makeAdmin ? "admin" : "member");
 }
