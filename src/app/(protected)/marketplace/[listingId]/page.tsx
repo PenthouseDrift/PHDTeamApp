@@ -117,6 +117,19 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
               <p className="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">
                 {formatPrice(listing.price)}
               </p>
+              <p
+                className={`mt-1 text-sm font-semibold ${
+                  listing.status === "sold"
+                    ? "text-red-500 dark:text-red-400"
+                    : "text-zinc-600 dark:text-zinc-300"
+                }`}
+              >
+                {listing.status === "sold"
+                  ? "Sold out"
+                  : listing.soldByAsboRc
+                  ? `${listing.quantity} available`
+                  : `${Math.max(0, listing.quantity - listing.soldCount)} available`}
+              </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
@@ -125,17 +138,27 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
               {listing.createdAt > 0 && <span>· Listed {formatDate(listing.createdAt)}</span>}
             </div>
 
-            {listing.atTrack && (
-              <div className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
-                <span>📍</span>
-                <span>At Penthouse Drift — buy in person at the track</span>
-              </div>
-            )}
+            <div className="flex flex-wrap gap-2">
+              {listing.atTrack && (
+                <div className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
+                  <span>📍</span>
+                  <span>At Penthouse Drift — buy in person at the track</span>
+                </div>
+              )}
+              {listing.soldByAsboRc && (
+                <div className="inline-flex items-center gap-2 rounded-lg border border-teal-300 bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-800 dark:border-teal-500/40 dark:bg-teal-500/10 dark:text-teal-300">
+                  <span>🏷️</span>
+                  <span>Sold by PHD</span>
+                </div>
+              )}
+            </div>
 
             {listing.status === "sold" && (
               <div className="rounded-lg bg-red-500/10 px-4 py-3">
                 <p className="text-sm font-medium text-red-500 dark:text-red-400">
-                  This item has been marked as sold.
+                  {listing.quantity > 1
+                    ? "All units of this item have sold."
+                    : "This item has been marked as sold."}
                 </p>
               </div>
             )}
@@ -182,7 +205,13 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
                 <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
                   {viewerId === listing.userId ? "Manage your listing" : "Moderator controls"}
                 </p>
-                <ListingDetailActions listingId={listing.listingId} initialStatus={listing.status} />
+                <ListingDetailActions
+                  listingId={listing.listingId}
+                  initialStatus={listing.status}
+                  quantity={listing.quantity}
+                  initialSoldCount={listing.soldCount}
+                  soldByAsboRc={listing.soldByAsboRc}
+                />
               </div>
             )}
           </div>

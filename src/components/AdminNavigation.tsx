@@ -11,7 +11,7 @@ interface NavUser {
   id?: string;
   name?: string | null;
   image?: string | null;
-  role?: "admin" | "moderator" | "member";
+  role?: "admin" | "moderator" | "member" | "asbo-rc";
 }
 
 interface AdminNavigationProps {
@@ -36,8 +36,8 @@ const adminNavItems: AdminNavItem[] = [
   { href: "/admin/members", label: "Members", icon: MembersIcon },
   // Shop hub (orders + products).
   { href: "/admin/shop", label: "Shop", icon: ShopIcon, adminOnly: true, match: ["/admin/orders"] },
-  // Reports hub (activity log + revenue + check-in history).
-  { href: "/admin/activity", label: "Reports", icon: ActivityIcon, adminOnly: true, match: ["/admin/history"] },
+  // Reports hub (activity log + revenue + check-in history + ASBO-RC).
+  { href: "/admin/activity", label: "Reports", icon: ActivityIcon, adminOnly: true, match: ["/admin/history", "/admin/asbo-rc"] },
 ];
 
 // Secondary nav — grouped under "More".

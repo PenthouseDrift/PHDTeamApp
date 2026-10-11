@@ -37,9 +37,16 @@ export function ListingForm({ mode, listing }: ListingFormProps) {
   const [contactValue, setContactValue] = useState(listing?.contactValue ?? "");
   const [atTrack, setAtTrack] = useState(listing?.atTrack ?? false);
   const [meetAtTrack, setMeetAtTrack] = useState(listing?.meetAtTrack ?? false);
+  const [quantity, setQuantity] = useState(
+    listing?.quantity && listing.quantity > 0 ? String(listing.quantity) : "1"
+  );
+  const [soldByAsboRc, setSoldByAsboRc] = useState(listing?.soldByAsboRc ?? false);
   const [error, setError] = useState<string | null>(null);
 
   const isEdit = mode === "edit";
+  // Only admins and ASBO-RC partners may flag an item as ASBO-RC consignment.
+  const canSellForAsboRc =
+    session?.user?.role === "admin" || session?.user?.role === "asbo-rc";
 
   const handleUploadComplete = (urls: string[]) => {
     setImages(urls);
@@ -63,6 +70,11 @@ export function ListingForm({ mode, listing }: ListingFormProps) {
       setError("Please enter a valid price (0 for free / offers).");
       return;
     }
+    const quantityNum = Math.max(1, Math.floor(Number(quantity) || 1));
+    if (Number.isNaN(quantityNum) || quantityNum < 1) {
+      setError("Quantity must be at least 1.");
+      return;
+    }
     if (!meetAtTrack && !contactValue.trim()) {
       setError("Add contact details, or tick 'Meet at the track'.");
       return;
@@ -83,6 +95,10 @@ export function ListingForm({ mode, listing }: ListingFormProps) {
       contactValue: contactValue.trim(),
       atTrack,
       meetAtTrack,
+      quantity: quantityNum,
+      // Only send the flag when the viewer is allowed to set it; the server
+      // also re-checks the role before trusting this.
+      soldByAsboRc: canSellForAsboRc ? soldByAsboRc : undefined,
     };
 
     startTransition(async () => {
@@ -169,6 +185,45 @@ export function ListingForm({ mode, listing }: ListingFormProps) {
         </div>
       </div>
 
+      {/* Quantity — available to everyone, defaults to 1 */}
+      <div className="space-y-2">
+        <label htmlFor="quantity" className="block text-sm font-medium text-zinc-600 dark:text-zinc-300">
+          Quantity
+        </label>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-label="Decrease quantity"
+            onClick={() => setQuantity((q) => String(Math.max(1, (Number(q) || 1) - 1)))}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-300 text-lg font-bold text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            −
+          </button>
+          <input
+            id="quantity"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            step={1}
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            onBlur={() => setQuantity((q) => String(Math.max(1, Math.floor(Number(q) || 1))))}
+            className="h-11 w-24 rounded-lg border border-zinc-300 bg-white px-4 text-center text-sm font-semibold text-zinc-900 transition-colors focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+          />
+          <button
+            type="button"
+            aria-label="Increase quantity"
+            onClick={() => setQuantity((q) => String(Math.max(1, (Number(q) || 1) + 1)))}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-300 text-lg font-bold text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            +
+          </button>
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+            How many units are available (defaults to 1).
+          </span>
+        </div>
+      </div>
+
       {/* At the track */}
       <label
         htmlFor="atTrack"
@@ -195,6 +250,36 @@ export function ListingForm({ mode, listing }: ListingFormProps) {
           </span>
         </span>
       </label>
+
+      {/* Sold by ASBO-RC — admins & ASBO-RC partners only */}
+      {canSellForAsboRc && (
+        <label
+          htmlFor="soldByAsboRc"
+          className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors ${
+            soldByAsboRc
+              ? "border-teal-400 bg-teal-50 dark:border-teal-500/50 dark:bg-teal-500/10"
+              : "border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/50"
+          }`}
+        >
+          <input
+            id="soldByAsboRc"
+            type="checkbox"
+            checked={soldByAsboRc}
+            onChange={(e) => setSoldByAsboRc(e.target.checked)}
+            className="mt-0.5 h-5 w-5 shrink-0 rounded border-zinc-300 text-teal-500 focus:ring-teal-500 dark:border-zinc-600"
+          />
+          <span>
+            <span className="block text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+              Sold by ASBO-RC
+            </span>
+            <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+              ASBO-RC consignment stock sold on their behalf. The price above is the RRP;
+              Penthouse Drift keeps 7% and the rest is owed to ASBO-RC. These items appear in
+              the ASBO-RC Reports.
+            </span>
+          </span>
+        </label>
+      )}
 
       {/* Description */}
       <div className="space-y-2">

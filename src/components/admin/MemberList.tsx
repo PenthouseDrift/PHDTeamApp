@@ -8,7 +8,7 @@ import type { MemberWithMembership } from "@/actions/admin/members";
 interface MemberListProps {
   members: MemberWithMembership[];
   checkedInMembers: MemberWithMembership[];
-  userRole?: "admin" | "moderator" | "member";
+  userRole?: "admin" | "moderator" | "member" | "asbo-rc";
 }
 
 export function MemberList({ members, checkedInMembers, userRole }: MemberListProps) {
@@ -103,6 +103,10 @@ export function MemberList({ members, checkedInMembers, userRole }: MemberListPr
           ) : m.member.role === "moderator" ? (
             <span className="inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
               Moderator
+            </span>
+          ) : m.member.role === "asbo-rc" ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+              ASBO-RC
             </span>
           ) : isModerator ? (
             <span className="inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">

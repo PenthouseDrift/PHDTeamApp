@@ -318,13 +318,19 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
         )}
 
         {/* High Priority Sunday Winner Highlight Banner (Admin only) - Kept for legacy/fallback if not urgent, but we moved it to Actions */}
-        {/* Fast Check-In Action Buttons */}
+        {/* Fast Action Buttons */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Link
             href="/admin/check-in?open=1"
-            className="sm:col-span-2 py-6 px-6 rounded-2xl bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-black text-lg sm:text-xl flex items-center justify-center gap-3 shadow-md hover:shadow-lg transition-all active:scale-[0.99] border border-green-500/40"
+            className="py-6 px-6 rounded-2xl bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-black text-lg sm:text-xl flex items-center justify-center gap-3 shadow-md hover:shadow-lg transition-all active:scale-[0.99] border border-green-500/40"
           >
             <span className="text-3xl">✅</span> Check Customer In →
+          </Link>
+          <Link
+            href="/marketplace"
+            className="py-6 px-6 rounded-2xl bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-500 hover:to-cyan-500 text-white font-black text-lg sm:text-xl flex items-center justify-center gap-3 shadow-md hover:shadow-lg transition-all active:scale-[0.99] border border-teal-500/40"
+          >
+            <span className="text-3xl">🏷️</span> Mark Item as Sold →
           </Link>
         </div>
 
