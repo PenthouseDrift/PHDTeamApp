@@ -1,13 +1,25 @@
 "use server";
 
 import { redis } from "@/lib/redis";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { auth } from "@/lib/auth";
 import { deleteImage } from "@/lib/blob";
 import type { ActionResult, GalleryImage } from "@/types";
 import { randomUUID } from "crypto";
 
 const GALLERY_INDEX = "gallery:all";
+
+/** Cache tag for the cached public gallery feed. */
+const GALLERY_TAG = "gallery";
+
+/** Bust the cached public gallery feed. Call after any gallery mutation. */
+function bustGalleryCache() {
+  try {
+    revalidateTag(GALLERY_TAG, "max");
+  } catch {
+    /* only valid in request/render contexts */
+  }
+}
 
 function toGalleryImage(data: Record<string, unknown> | null): GalleryImage | null {
   if (!data || Object.keys(data).length === 0) return null;
@@ -49,10 +61,21 @@ export async function getGalleryImages(): Promise<GalleryImage[]> {
  * Only images flagged to show on the public website. Newest first.
  * Used by the public aggregate API — no auth guard.
  */
-export async function getWebsiteGalleryImages(): Promise<GalleryImage[]> {
+async function _getWebsiteGalleryImages(): Promise<GalleryImage[]> {
   const all = await getGalleryImages();
   return all.filter((img) => img.showOnWebsite);
 }
+
+/**
+ * Cached public gallery feed (used by the public /api/public/gallery route).
+ * Collapses the lrange + per-image hgetall fan-out to one Redis read per
+ * minute regardless of public traffic; gallery mutations bust it immediately.
+ */
+export const getWebsiteGalleryImages = unstable_cache(
+  async () => _getWebsiteGalleryImages(),
+  ["gallery-website-images"],
+  { revalidate: 60, tags: [GALLERY_TAG] }
+);
 
 export async function addGalleryImage(data: {
   imageUrl: string;
@@ -89,6 +112,7 @@ export async function addGalleryImage(data: {
       .exec();
 
     revalidatePath("/admin/gallery");
+    bustGalleryCache();
     return { success: true, data: image };
   } catch (error) {
     return {
@@ -116,6 +140,7 @@ export async function toggleGalleryVisibility(
     await redis.hset(`gallery:${id}`, { showOnWebsite: String(next) });
 
     revalidatePath("/admin/gallery");
+    bustGalleryCache();
     return { success: true, data: { showOnWebsite: next } };
   } catch (error) {
     return {
@@ -147,6 +172,7 @@ export async function deleteGalleryImage(id: string): Promise<ActionResult<null>
     }
 
     revalidatePath("/admin/gallery");
+    bustGalleryCache();
     return { success: true, data: null };
   } catch (error) {
     return {

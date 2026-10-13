@@ -1,12 +1,28 @@
 "use server";
 
 import { redis } from "@/lib/redis";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { auth } from "@/lib/auth";
 import { deleteImage } from "@/lib/blob";
 import { marketplaceListingSchema } from "@/lib/validators";
 import type { ActionResult, MarketplaceListing } from "@/types";
 import { randomUUID } from "crypto";
+
+/**
+ * Cache tag for all cached marketplace reads (public website feed + author
+ * names). Any listing mutation calls revalidateTag(MARKETPLACE_TAG) so the
+ * public feed refreshes immediately instead of waiting for the TTL.
+ */
+const MARKETPLACE_TAG = "marketplace";
+
+/** Bust every cached marketplace read. Call after any listing mutation. */
+function bustMarketplaceCache() {
+  try {
+    revalidateTag(MARKETPLACE_TAG, "max");
+  } catch {
+    // revalidateTag is only valid in request/render contexts; ignore otherwise.
+  }
+}
 
 /** Sorted set of all listing IDs. Score encodes status + recency so a plain
  * ascending zrange yields: available (newest-first) then sold (newest-first).
@@ -249,6 +265,7 @@ export async function createListing(
       .exec();
 
     revalidatePath("/marketplace");
+    bustMarketplaceCache();
     revalidatePath("/admin/asbo-rc");
     return { success: true, data: listing };
   } catch (error) {
@@ -387,10 +404,22 @@ export async function getListingsPage(
  * greyed/marked "Sold" on the site); the index ordering already places sold
  * ones after available ones. No auth guard — used by the public aggregate API.
  */
-export async function getWebsiteListings(limit = 60): Promise<MarketplaceListing[]> {
+async function _getWebsiteListings(limit = 60): Promise<MarketplaceListing[]> {
   const all = await getListings(limit, { includeSold: true });
   return all.filter((l) => l.showOnWebsite);
 }
+
+/**
+ * Cached public website feed. This is a public, high-traffic endpoint that
+ * otherwise fans out to a zrange + many hgetall on every request. Caching it
+ * for 60s collapses that to one Redis read per minute regardless of traffic;
+ * listing mutations bust the cache immediately via the marketplace tag.
+ */
+export const getWebsiteListings = unstable_cache(
+  async (limit = 60) => _getWebsiteListings(limit),
+  ["marketplace-website-listings"],
+  { revalidate: 60, tags: [MARKETPLACE_TAG] }
+);
 
 export async function getListingById(listingId: string): Promise<MarketplaceListing | null> {
   try {
@@ -464,6 +493,7 @@ export async function setListingStatus(
     });
 
     revalidatePath("/marketplace");
+    bustMarketplaceCache();
     revalidatePath(`/marketplace/${listingId}`);
     revalidatePath("/admin/asbo-rc");
     revalidatePath("/asbo-rc");
@@ -544,6 +574,7 @@ export async function setListingSoldCount(
     });
 
     revalidatePath("/marketplace");
+    bustMarketplaceCache();
     revalidatePath(`/marketplace/${listingId}`);
     revalidatePath("/admin/asbo-rc");
     revalidatePath("/asbo-rc");
@@ -616,6 +647,7 @@ export async function setListingQuantity(
     });
 
     revalidatePath("/marketplace");
+    bustMarketplaceCache();
     revalidatePath(`/marketplace/${listingId}`);
     revalidatePath("/admin/asbo-rc");
     revalidatePath("/asbo-rc");
@@ -692,6 +724,7 @@ export async function sellAsboRcUnits(
     await createAsboRcSales(listing, toSell);
 
     revalidatePath("/marketplace");
+    bustMarketplaceCache();
     revalidatePath(`/marketplace/${listingId}`);
     revalidatePath("/admin/asbo-rc");
     revalidatePath("/asbo-rc");
@@ -842,6 +875,7 @@ export async function updateListing(
     }
 
     revalidatePath("/marketplace");
+    bustMarketplaceCache();
     revalidatePath(`/marketplace/${listingId}`);
     revalidatePath("/admin/asbo-rc");
     revalidatePath("/asbo-rc");
@@ -894,6 +928,7 @@ export async function deleteListing(listingId: string): Promise<ActionResult<nul
     }
 
     revalidatePath("/marketplace");
+    bustMarketplaceCache();
     return { success: true, data: null };
   } catch (error) {
     return {
@@ -924,6 +959,7 @@ export async function toggleListingWebsiteVisibility(
     await redis.hset(`listing:${listingId}`, { showOnWebsite: String(next) });
 
     revalidatePath("/marketplace");
+    bustMarketplaceCache();
     return { success: true, data: { showOnWebsite: next } };
   } catch (error) {
     return {
@@ -934,7 +970,7 @@ export async function toggleListingWebsiteVisibility(
 }
 
 /** Resolve a member's display name for showing on a listing. */
-export async function getListingAuthorName(userId: string): Promise<string> {
+async function _getListingAuthorName(userId: string): Promise<string> {
   try {
     const member = await redis.hgetall(`member:${userId}`);
     const name = (member?.nickname as string)?.trim() || (member?.name as string);
@@ -943,3 +979,14 @@ export async function getListingAuthorName(userId: string): Promise<string> {
     return "Member";
   }
 }
+
+/**
+ * Cached seller display-name lookup. Called once per unique seller on the
+ * marketplace list/feed — caching avoids an hgetall per seller on every render.
+ * Member names change rarely, so a 5-minute TTL is plenty.
+ */
+export const getListingAuthorName = unstable_cache(
+  async (userId: string) => _getListingAuthorName(userId),
+  ["marketplace-author-name"],
+  { revalidate: 300, tags: [MARKETPLACE_TAG] }
+);
