@@ -1,6 +1,10 @@
+import { auth } from "@/lib/auth";
 import { ListingForm } from "@/components/marketplace/ListingForm";
 
-export default function SubmitListingPage() {
+export const dynamic = "force-dynamic";
+
+export default async function SubmitListingPage() {
+  const session = await auth();
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-2xl space-y-6">
@@ -12,7 +16,7 @@ export default function SubmitListingPage() {
           </p>
         </div>
 
-        <ListingForm mode="create" />
+        <ListingForm mode="create" viewerRole={session?.user?.role} />
       </div>
     </div>
   );

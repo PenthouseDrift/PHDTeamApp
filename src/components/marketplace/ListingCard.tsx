@@ -125,7 +125,7 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
             📍 At the track
           </span>
         )}
-        {listing.soldByAsboRc && status !== "sold" && (
+        {(listing.soldByPhd || listing.soldByAsboRc) && status !== "sold" && (
           <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md bg-teal-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white shadow">
             Sold by PHD
           </span>

@@ -145,7 +145,7 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
                   <span>At Penthouse Drift — buy in person at the track</span>
                 </div>
               )}
-              {listing.soldByAsboRc && (
+              {(listing.soldByPhd || listing.soldByAsboRc) && (
                 <div className="inline-flex items-center gap-2 rounded-lg border border-teal-300 bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-800 dark:border-teal-500/40 dark:bg-teal-500/10 dark:text-teal-300">
                   <span>🏷️</span>
                   <span>Sold by PHD</span>

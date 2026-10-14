@@ -71,6 +71,12 @@ export async function createMembershipCheckout(
     );
     await redis.set(`pending_checkout:${userId}`, checkout.id, { ex: 3600 });
 
+    // Register in the durable reconciliation index so a scheduled sweep can
+    // finalize this payment even if the webhook fails and the buyer never
+    // returns to the site.
+    const { registerPendingCheckout } = await import("@/lib/pending-checkouts");
+    await registerPendingCheckout(checkout.id);
+
     const redirectUrl = checkout.hosted_checkout_url || `https://pay.sumup.com/b2c/Q${checkout.id}`;
     return { success: true, data: { url: redirectUrl } };
   } catch (error) {
