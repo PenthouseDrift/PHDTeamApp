@@ -203,6 +203,13 @@ export interface MarketplaceListing {
    */
   soldByAsboRc: boolean;
   /**
+   * Display-only flag: show a "Sold by PHD" badge on the advert (first-party
+   * items Penthouse Drift sells itself). Purely cosmetic — it has NO effect on
+   * the ASBO-RC consignment report/ledger. The "Sold by PHD" badge is shown
+   * whenever this OR soldByAsboRc is true. Admin/ASBO-RC only.
+   */
+  soldByPhd: boolean;
+  /**
    * Penthouse Drift's commission percentage on an ASBO-RC consignment sale.
    * Stored per-listing so historical reports stay accurate if the rate ever
    * changes. Defaults to 7 (%). Ignored for non-ASBO-RC listings.

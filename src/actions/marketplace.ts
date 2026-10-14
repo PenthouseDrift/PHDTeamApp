@@ -127,6 +127,7 @@ function toListing(data: Record<string, unknown> | null): MarketplaceListing | n
     soldCount: soldCountVal,
     soldAt,
     soldByAsboRc: String(data.soldByAsboRc) === "true",
+    soldByPhd: String(data.soldByPhd) === "true",
     penthouseCutPct:
       data.penthouseCutPct === null || data.penthouseCutPct === undefined || data.penthouseCutPct === ""
         ? 7
@@ -181,6 +182,7 @@ export async function createListing(
     meetAtTrack?: boolean;
     quantity?: number;
     soldByAsboRc?: boolean;
+    soldByPhd?: boolean;
     penthouseCutPct?: number;
   }
 ): Promise<ActionResult<MarketplaceListing>> {
@@ -195,10 +197,14 @@ export async function createListing(
 
   try {
     const session = await auth();
+    const role = session?.user?.role;
     // Only admins or ASBO-RC partners may flag a listing as ASBO-RC consignment.
-    const canSellForAsboRc =
-      session?.user?.role === "admin" || session?.user?.role === "asbo-rc";
+    const canSellForAsboRc = role === "admin" || role === "asbo-rc";
     const soldByAsboRc = Boolean(parsed.data.soldByAsboRc) && canSellForAsboRc;
+    // "Sold by PHD" is a display badge admins can set on first-party items. It
+    // is ALSO implied by ASBO consignment (PHD sells it on their behalf), so an
+    // ASBO item always carries the badge. Only admins may set it standalone.
+    const soldByPhd = soldByAsboRc || (role === "admin" && Boolean(parsed.data.soldByPhd));
 
     const listingId = randomUUID();
     const now = Date.now();
@@ -222,6 +228,7 @@ export async function createListing(
       soldCount: 0,
       soldAt: [],
       soldByAsboRc,
+      soldByPhd,
       penthouseCutPct: parsed.data.penthouseCutPct,
       asboRcPaid: false,
       asboRcPaidUnits: 0,
@@ -250,6 +257,7 @@ export async function createListing(
       soldCount: String(listing.soldCount),
       soldAt: JSON.stringify(listing.soldAt),
       soldByAsboRc: String(listing.soldByAsboRc),
+      soldByPhd: String(listing.soldByPhd),
       penthouseCutPct: String(listing.penthouseCutPct),
       asboRcPaid: String(listing.asboRcPaid),
       asboRcPaidUnits: String(listing.asboRcPaidUnits),
@@ -758,6 +766,7 @@ export async function updateListing(
     meetAtTrack?: boolean;
     quantity?: number;
     soldByAsboRc?: boolean;
+    soldByPhd?: boolean;
     penthouseCutPct?: number;
   }
 ): Promise<ActionResult<MarketplaceListing>> {
@@ -791,6 +800,13 @@ export async function updateListing(
     const soldByAsboRc = canSellForAsboRc
       ? Boolean(parsed.data.soldByAsboRc)
       : existing.soldByAsboRc;
+    // "Sold by PHD" badge: implied by ASBO consignment; otherwise only admins
+    // may set it standalone. Non-admin/ASBO editors preserve the existing value.
+    const soldByPhd = soldByAsboRc
+      ? true
+      : session.user.role === "admin"
+      ? Boolean(parsed.data.soldByPhd)
+      : existing.soldByPhd;
 
     // Editing quantity can't un-sell units: clamp the existing soldCount to the
     // new quantity. Status is then kept consistent (sold out when none remain).
@@ -820,6 +836,7 @@ export async function updateListing(
       soldAt: nextSoldAt,
       status: nextStatus,
       soldByAsboRc,
+      soldByPhd,
       penthouseCutPct: parsed.data.penthouseCutPct,
       asboRcPaidUnits: nextPaidUnits,
       updatedAt: Date.now(),
@@ -847,6 +864,7 @@ export async function updateListing(
       soldCount: String(updated.soldCount),
       soldAt: JSON.stringify(updated.soldAt),
       soldByAsboRc: String(updated.soldByAsboRc),
+      soldByPhd: String(updated.soldByPhd),
       penthouseCutPct: String(updated.penthouseCutPct),
       asboRcPaid: String(updated.asboRcPaid),
       asboRcPaidUnits: String(updated.asboRcPaidUnits),

@@ -16,9 +16,15 @@ interface ListingFormProps {
   mode: "create" | "edit";
   /** Required in edit mode: the listing being edited. */
   listing?: MarketplaceListing;
+  /**
+   * Viewer's role resolved on the SERVER (honours dev impersonation reliably,
+   * unlike the client useSession() which can be stale). Drives which
+   * admin/ASBO-RC-only controls are shown. The server actions re-check anyway.
+   */
+  viewerRole?: "admin" | "moderator" | "member" | "asbo-rc";
 }
 
-export function ListingForm({ mode, listing }: ListingFormProps) {
+export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
   const router = useRouter();
   const { data: session } = useSession();
   const [isPending, startTransition] = useTransition();
@@ -41,12 +47,26 @@ export function ListingForm({ mode, listing }: ListingFormProps) {
     listing?.quantity && listing.quantity > 0 ? String(listing.quantity) : "1"
   );
   const [soldByAsboRc, setSoldByAsboRc] = useState(listing?.soldByAsboRc ?? false);
+  const [soldByPhd, setSoldByPhd] = useState(listing?.soldByPhd ?? false);
   const [error, setError] = useState<string | null>(null);
 
   const isEdit = mode === "edit";
+  // Prefer the server-resolved role (reliable under impersonation); fall back
+  // to the client session only if a role wasn't passed in.
+  const role = viewerRole ?? session?.user?.role;
   // Only admins and ASBO-RC partners may flag an item as ASBO-RC consignment.
-  const canSellForAsboRc =
-    session?.user?.role === "admin" || session?.user?.role === "asbo-rc";
+  const canSellForAsboRc = role === "admin" || role === "asbo-rc";
+  // Only admins control the standalone "Sold by PHD" badge. ASBO-RC partners
+  // don't see it — PHD facilitates the sale, so it's set for them automatically.
+  const isAdmin = role === "admin";
+  // ASBO consignment always implies the "Sold by PHD" badge.
+  const effectiveSoldByPhd = soldByPhd || soldByAsboRc;
+
+  // Ticking "Provided by ASBO-RC" auto-selects "Sold by PHD".
+  const handleToggleAsboRc = (checked: boolean) => {
+    setSoldByAsboRc(checked);
+    if (checked) setSoldByPhd(true);
+  };
 
   const handleUploadComplete = (urls: string[]) => {
     setImages(urls);
@@ -96,9 +116,11 @@ export function ListingForm({ mode, listing }: ListingFormProps) {
       atTrack,
       meetAtTrack,
       quantity: quantityNum,
-      // Only send the flag when the viewer is allowed to set it; the server
-      // also re-checks the role before trusting this.
+      // Only send the flags when the viewer is allowed to set them; the server
+      // re-checks the role before trusting these.
       soldByAsboRc: canSellForAsboRc ? soldByAsboRc : undefined,
+      // Admins set the badge directly; ASBO implies it (server enforces too).
+      soldByPhd: isAdmin ? effectiveSoldByPhd : undefined,
     };
 
     startTransition(async () => {
@@ -252,6 +274,7 @@ export function ListingForm({ mode, listing }: ListingFormProps) {
       </label>
 
       {/* Sold by ASBO-RC — admins & ASBO-RC partners only */}
+      {/* Provided by ASBO-RC (consignment) — admins & ASBO-RC partners */}
       {canSellForAsboRc && (
         <label
           htmlFor="soldByAsboRc"
@@ -265,17 +288,50 @@ export function ListingForm({ mode, listing }: ListingFormProps) {
             id="soldByAsboRc"
             type="checkbox"
             checked={soldByAsboRc}
-            onChange={(e) => setSoldByAsboRc(e.target.checked)}
+            onChange={(e) => handleToggleAsboRc(e.target.checked)}
             className="mt-0.5 h-5 w-5 shrink-0 rounded border-zinc-300 text-teal-500 focus:ring-teal-500 dark:border-zinc-600"
           />
           <span>
             <span className="block text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-              Sold by ASBO-RC
+              Provided by ASBO-RC
             </span>
             <span className="block text-xs text-zinc-500 dark:text-zinc-400">
               ASBO-RC consignment stock sold on their behalf. The price above is the RRP;
               Penthouse Drift keeps 7% and the rest is owed to ASBO-RC. These items appear in
-              the ASBO-RC Reports.
+              the ASBO-RC Reports{isAdmin ? " and are shown as \u201cSold by PHD\u201d to customers." : "."}
+            </span>
+          </span>
+        </label>
+      )}
+
+      {/* Sold by PHD badge — admins only (ASBO consignment implies it) */}
+      {isAdmin && (
+        <label
+          htmlFor="soldByPhd"
+          className={`flex items-start gap-3 rounded-lg border p-4 transition-colors ${
+            soldByAsboRc ? "cursor-not-allowed opacity-70" : "cursor-pointer"
+          } ${
+            effectiveSoldByPhd
+              ? "border-teal-400 bg-teal-50 dark:border-teal-500/50 dark:bg-teal-500/10"
+              : "border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/50"
+          }`}
+        >
+          <input
+            id="soldByPhd"
+            type="checkbox"
+            checked={effectiveSoldByPhd}
+            disabled={soldByAsboRc}
+            onChange={(e) => setSoldByPhd(e.target.checked)}
+            className="mt-0.5 h-5 w-5 shrink-0 rounded border-zinc-300 text-teal-500 focus:ring-teal-500 disabled:opacity-60 dark:border-zinc-600"
+          />
+          <span>
+            <span className="block text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+              Sold by PHD
+            </span>
+            <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+              Shows a &ldquo;Sold by PHD&rdquo; badge on the advert — for items Penthouse Drift
+              sells itself.
+              {soldByAsboRc && " Automatically on for ASBO-RC consignment items."}
             </span>
           </span>
         </label>

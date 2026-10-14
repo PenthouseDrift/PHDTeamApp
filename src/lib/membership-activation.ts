@@ -1,5 +1,6 @@
 import { redis } from "@/lib/redis";
 import { logActivity } from "@/lib/activity";
+import { clearPendingCheckout } from "@/lib/pending-checkouts";
 
 /** Returns 23:59:59.999 UTC on the day that is 28 days after `fromDate` */
 function endOfDay28(fromDate: Date): number {
@@ -171,6 +172,7 @@ export async function processSuccessfulPaymentReference(
       await recordPurchase("membership", quantity);
       await redis.set(logKey, "1", { ex: 86400 * 30 });
     }
+    await clearPendingCheckout(checkoutId);
     return { success: true, itemType: "membership", memberId, guestName };
   } else if (itemType === "daypass") {
     const key = `payment:processed:${checkoutId}`;
@@ -189,6 +191,7 @@ export async function processSuccessfulPaymentReference(
       await recordPurchase("daypass", quantity);
       await redis.set(key, "1", { ex: 86400 * 30 });
     }
+    await clearPendingCheckout(checkoutId);
     return { success: true, itemType: "daypass", memberId, guestName };
   } else if (itemType === "rental") {
     const key = `payment:processed:${checkoutId}`;
@@ -207,6 +210,7 @@ export async function processSuccessfulPaymentReference(
       await recordPurchase("rental", quantity);
       await redis.set(key, "1", { ex: 86400 * 30 });
     }
+    await clearPendingCheckout(checkoutId);
     return { success: true, itemType: "rental", memberId, guestName };
   }
 

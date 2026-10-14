@@ -33,7 +33,11 @@ export default async function WalletPage({ searchParams }: PageProps) {
 
   if (targetCheckoutId) {
     const checkout = await getCheckoutStatus(targetCheckoutId);
-    if (checkout && (checkout.status === "PAID" || checkout.status === "SUCCESSFUL")) {
+    // Uppercase the status before comparing: SumUp may return it in lower/mixed
+    // case, and a case-sensitive check would silently skip crediting the wallet
+    // (matches the handling in track-checkin).
+    const statusUpper = (checkout?.status || "").toUpperCase();
+    if (checkout && (statusUpper === "PAID" || statusUpper === "SUCCESSFUL")) {
       await processSuccessfulPaymentReference(checkout.checkout_reference, checkout.id);
       await redis.del(`pending_wallet_checkout:${userId}`);
     }

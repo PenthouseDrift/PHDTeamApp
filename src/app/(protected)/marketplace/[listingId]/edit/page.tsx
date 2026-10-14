@@ -47,7 +47,7 @@ export default async function EditListingPage({ params }: EditListingPageProps) 
           </p>
         </div>
 
-        <ListingForm mode="edit" listing={listing} />
+        <ListingForm mode="edit" listing={listing} viewerRole={session?.user?.role} />
       </div>
     </div>
   );

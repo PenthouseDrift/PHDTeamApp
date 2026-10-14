@@ -53,6 +53,8 @@ type PublicListing = {
   meetAtTrack: boolean;
   /** True when the item is ASBO-RC consignment stock sold by Penthouse Drift. */
   soldByAsboRc: boolean;
+  /** True when the "Sold by PHD" badge should show (first-party or ASBO). */
+  soldByPhd: boolean;
   /** Listing status — "sold" items are shown greyed/marked on the website. */
   status: "available" | "sold";
   /** Total units in the listing. */
@@ -111,6 +113,7 @@ export async function GET(request: Request) {
         atTrack: l.atTrack,
         meetAtTrack: l.meetAtTrack,
         soldByAsboRc: l.soldByAsboRc,
+        soldByPhd: l.soldByPhd || l.soldByAsboRc,
         status: l.status,
         quantity: l.quantity,
         available: Math.max(0, l.quantity - l.soldCount),
