@@ -102,6 +102,13 @@ export interface AsboRcReport {
   outstandingToAsboRc: number;
   /** Owed to ASBO-RC for sold items already paid. */
   paidToAsboRc: number;
+  /**
+   * Draft ("stocked but not yet published") consignment items. Kept separate
+   * from the live in-stock/overall figures so those stay accurate; surfaced
+   * inline on the Products and Total RRP cards. unitCount = draft units,
+   * totalRrp = sum of price*quantity across draft ASBO-RC listings.
+   */
+  draftTotals: AsboRcTotals;
 }
 
 export const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
