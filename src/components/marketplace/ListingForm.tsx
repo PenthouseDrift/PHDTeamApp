@@ -48,6 +48,7 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
   );
   const [soldByAsboRc, setSoldByAsboRc] = useState(listing?.soldByAsboRc ?? false);
   const [soldByPhd, setSoldByPhd] = useState(listing?.soldByPhd ?? false);
+  const [saveAsDraft, setSaveAsDraft] = useState(listing?.isDraft ?? false);
   const [error, setError] = useState<string | null>(null);
 
   const isEdit = mode === "edit";
@@ -121,6 +122,9 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
       soldByAsboRc: canSellForAsboRc ? soldByAsboRc : undefined,
       // Admins set the badge directly; ASBO implies it (server enforces too).
       soldByPhd: isAdmin ? effectiveSoldByPhd : undefined,
+      // Draft is only meaningful at creation (editing never flips draft/live —
+      // that's done via Publish). Admin/ASBO-RC only; server re-checks.
+      isDraft: !isEdit && canSellForAsboRc ? saveAsDraft : undefined,
     };
 
     startTransition(async () => {
@@ -337,6 +341,36 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
         </label>
       )}
 
+      {/* Save as draft — admins & ASBO-RC only, create mode only. Lets staff
+          stock an item privately now and publish it later. */}
+      {canSellForAsboRc && !isEdit && (
+        <label
+          htmlFor="saveAsDraft"
+          className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors ${
+            saveAsDraft
+              ? "border-amber-400 bg-amber-50 dark:border-amber-500/50 dark:bg-amber-500/10"
+              : "border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/50"
+          }`}
+        >
+          <input
+            id="saveAsDraft"
+            type="checkbox"
+            checked={saveAsDraft}
+            onChange={(e) => setSaveAsDraft(e.target.checked)}
+            className="mt-0.5 h-5 w-5 shrink-0 rounded border-zinc-300 text-amber-500 focus:ring-amber-500 dark:border-zinc-600"
+          />
+          <span>
+            <span className="block text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+              Save as draft (stock now, publish later)
+            </span>
+            <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+              The item is stocked but stays hidden from members and the public website until
+              you publish it. You can publish any time from the marketplace.
+            </span>
+          </span>
+        </label>
+      )}
+
       {/* Description */}
       <div className="space-y-2">
         <label htmlFor="description" className="block text-sm font-medium text-zinc-600 dark:text-zinc-300">
@@ -487,9 +521,13 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
           {isPending
             ? isEdit
               ? "Saving..."
+              : saveAsDraft
+              ? "Saving draft..."
               : "Posting..."
             : isEdit
             ? "Save Changes"
+            : saveAsDraft
+            ? "Save Draft"
             : "Post Listing"}
         </button>
       </div>

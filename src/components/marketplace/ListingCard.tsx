@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { MarketplaceListing } from "@/types";
-import { deleteListing, setListingStatus, setListingSoldCount, sellAsboRcUnits } from "@/actions/marketplace";
+import { deleteListing, setListingStatus, setListingSoldCount, sellAsboRcUnits, publishListing } from "@/actions/marketplace";
 
 
 interface ListingCardProps {
@@ -82,6 +82,18 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
     });
   };
 
+  const handlePublish = () => {
+    if (!confirm("Publish this listing? It will become visible to members and on the website.")) return;
+    startTransition(async () => {
+      const result = await publishListing(listing.listingId);
+      if (result.success) {
+        router.refresh();
+      } else {
+        alert(result.error);
+      }
+    });
+  };
+
   const handleDelete = () => {
     if (!confirm("Delete this listing? This cannot be undone.")) return;
     startTransition(async () => {
@@ -120,7 +132,12 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
             {listing.images.length} photos
           </span>
         )}
-        {listing.atTrack && status !== "sold" && (
+        {listing.isDraft && (
+          <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-md bg-zinc-900/85 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-300 shadow ring-1 ring-amber-400/50">
+            Draft
+          </span>
+        )}
+        {listing.atTrack && status !== "sold" && !listing.isDraft && (
           <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-md bg-amber-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-black shadow">
             📍 At the track
           </span>
@@ -174,6 +191,16 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
 
             {manageOpen && (
               <div className="mt-2 flex flex-col gap-2">
+                {listing.isDraft && (
+                  <button
+                    type="button"
+                    onClick={handlePublish}
+                    disabled={isPending}
+                    className="rounded-lg bg-amber-500 py-2.5 text-center text-sm font-bold text-black transition-colors hover:bg-amber-400 active:bg-amber-600 disabled:opacity-50"
+                  >
+                    Publish
+                  </button>
+                )}
                 <Link
                   href={`/marketplace/${listing.listingId}/edit`}
                   className="rounded-lg border border-zinc-300 py-2.5 text-center text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 active:bg-zinc-200 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"

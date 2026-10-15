@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getListingById, getListingAuthorName } from "@/actions/marketplace";
+import { getListingById, getListingAuthorName, canViewDraft } from "@/actions/marketplace";
 import { ListingDetailActions } from "@/components/marketplace/ListingDetailActions";
 import { ListingGallery } from "@/components/marketplace/ListingGallery";
 
@@ -83,6 +83,12 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
   const [session, listing] = await Promise.all([auth(), getListingById(listingId)]);
 
   if (!listing) {
+    notFound();
+  }
+
+  // Draft listings are only viewable by admins (any draft) or the ASBO-RC owner
+  // of that draft. Everyone else gets a 404 so drafts stay invisible by URL.
+  if (!(await canViewDraft(listing))) {
     notFound();
   }
 

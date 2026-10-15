@@ -99,6 +99,9 @@ export const marketplaceListingSchema = z
     soldByAsboRc: z.boolean().optional().default(false),
     // Display-only "Sold by PHD" badge (admins / ASBO-RC users only; enforced in the action).
     soldByPhd: z.boolean().optional().default(false),
+    // Draft / "stock first, publish later" flag (admins / ASBO-RC users only;
+    // enforced in the action). Draft listings stay out of the public index.
+    isDraft: z.boolean().optional().default(false),
     // Penthouse Drift commission % on ASBO-RC sales. Default 7%.
     penthouseCutPct: z.number().min(0).max(100).optional().default(7),
   })

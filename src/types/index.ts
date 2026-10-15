@@ -174,6 +174,14 @@ export interface MarketplaceListing {
   meetAtTrack: boolean;
   status: "available" | "sold";
   /**
+   * Draft flag: the listing has been stocked but NOT yet published. Draft
+   * listings are kept OUT of the public browse index (marketplace:all), so they
+   * never appear in the in-app marketplace, the website feed, or the public API.
+   * Only admins and ASBO-RC users can create drafts and publish them. On
+   * publish, isDraft is cleared and the listing enters the public index.
+   */
+  isDraft: boolean;
+  /**
    * Whether the listing is allowed to appear on the public marketing website.
    * Member listings default to true; admins can hide a listing by setting this
    * to false (mirrors GalleryImage.showOnWebsite curation).
