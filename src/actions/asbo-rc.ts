@@ -3,7 +3,7 @@
 import { redis } from "@/lib/redis";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { getListings, getDraftListings } from "@/actions/marketplace";
+import { getListings, getAsboRcDraftListings } from "@/actions/marketplace";
 import { logActivity } from "@/lib/activity";
 import {
   DEFAULT_PENTHOUSE_CUT_PCT,
@@ -288,14 +288,15 @@ export async function getAsboRcReport(): Promise<AsboRcReport | null> {
 
   const [all, drafts, sales] = await Promise.all([
     getListings(1000, { includeSold: true }),
-    // Draft listings the viewer may see (admins: all; ASBO-RC: own). Scoped
-    // server-side by getDraftListings. Drafts live outside marketplace:all, so
-    // they must be fetched separately to appear in the report.
-    getDraftListings(1000),
+    // ASBO-RC consignment drafts, regardless of which account created them, so
+    // a partner sees all their consignment drafts (typically created by staff
+    // on their behalf). Drafts live outside marketplace:all, so they must be
+    // fetched separately to appear in the report.
+    getAsboRcDraftListings(1000),
     listAllSales(),
   ]);
   const asboListings = all.filter((l) => l.soldByAsboRc);
-  const asboDrafts = drafts.filter((l) => l.soldByAsboRc);
+  const asboDrafts = drafts; // already filtered to soldByAsboRc drafts
 
   const inStock: AsboRcReportItem[] = [];
   for (const l of asboListings) {

@@ -606,6 +606,35 @@ export async function getDraftListings(limit = 60): Promise<MarketplaceListing[]
 }
 
 /**
+ * Draft listings flagged as ASBO-RC consignment (`soldByAsboRc`), regardless of
+ * which account created them. Used by the ASBO-RC report so a partner sees ALL
+ * their consignment drafts — these are typically created by admin/staff on
+ * ASBO's behalf, so the per-owner scoping of getDraftListings would wrongly
+ * hide them. Gated to admin + asbo-rc. Newest-first.
+ */
+export async function getAsboRcDraftListings(limit = 1000): Promise<MarketplaceListing[]> {
+  try {
+    const session = await auth();
+    const role = session?.user?.role;
+    if (role !== "admin" && role !== "asbo-rc") return [];
+
+    const ids = await redis.zrange(MARKETPLACE_DRAFTS_INDEX, 0, limit - 1);
+    if (!ids || ids.length === 0) return [];
+
+    const pipeline = redis.pipeline();
+    for (const id of ids) pipeline.hgetall(`listing:${id as string}`);
+    const rawResults = await pipeline.exec();
+
+    return rawResults
+      .map((raw) => toListing(raw as Record<string, unknown> | null))
+      .filter((l): l is MarketplaceListing => l !== null && l.isDraft && l.soldByAsboRc);
+  } catch (error) {
+    console.error("Failed to get ASBO-RC draft listings:", error);
+    return [];
+  }
+}
+
+/**
  * Publish a draft: clear the draft flag, move it from the drafts index into the
  * public browse index, and refresh all surfaces. Admins may publish any draft;
  * ASBO-RC users may publish only their own. No-op if the listing isn't a draft.

@@ -43,7 +43,7 @@ function Stat({
  * the detail (per-item stock, RRP, settlement) lives on the full report page.
  */
 export function AsboRcReportsSummary({ report, detailHref }: AsboRcReportsSummaryProps) {
-  const { inStockTotals, outstandingToAsboRc, paidToAsboRc } = report;
+  const { inStockTotals, outstandingToAsboRc, paidToAsboRc, draftTotals } = report;
 
   return (
     <section className="rounded-2xl border border-teal-200 dark:border-teal-900/60 bg-gradient-to-br from-teal-50/80 to-white dark:from-teal-950/20 dark:to-zinc-900 p-5 sm:p-6 shadow-sm space-y-4">
@@ -73,6 +73,19 @@ export function AsboRcReportsSummary({ report, detailHref }: AsboRcReportsSummar
         <Stat label="Outstanding" value={formatGBP(outstandingToAsboRc)} tone="red" />
         <Stat label="Paid to you" value={formatGBP(paidToAsboRc)} tone="emerald" />
       </div>
+
+      {/* Draft consignment — items stocked but not yet published/live. Shown
+          only when there are any, so the quick view stays clean otherwise. */}
+      {draftTotals.unitCount > 0 && (
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-dashed border-amber-300 dark:border-amber-500/40 bg-amber-50/60 dark:bg-amber-500/5 px-3.5 py-2.5">
+          <span className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+            <span>📝</span> In draft (not live yet)
+          </span>
+          <span className="text-sm font-black text-amber-700 dark:text-amber-300">
+            {draftTotals.unitCount} {draftTotals.unitCount === 1 ? "item" : "items"}
+          </span>
+        </div>
+      )}
 
       {report.overall.itemCount === 0 && (
         <p className="text-center text-xs text-zinc-500 dark:text-zinc-400">
