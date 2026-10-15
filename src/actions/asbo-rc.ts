@@ -3,7 +3,7 @@
 import { redis } from "@/lib/redis";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { getListings } from "@/actions/marketplace";
+import { getListings, getDraftListings } from "@/actions/marketplace";
 import { logActivity } from "@/lib/activity";
 import {
   DEFAULT_PENTHOUSE_CUT_PCT,
@@ -197,17 +197,31 @@ export async function getAsboRcReport(): Promise<AsboRcReport | null> {
     return null;
   }
 
-  const [all, sales] = await Promise.all([
+  const [all, drafts, sales] = await Promise.all([
     getListings(1000, { includeSold: true }),
+    // Draft listings the viewer may see (admins: all; ASBO-RC: own). Scoped
+    // server-side by getDraftListings. Drafts live outside marketplace:all, so
+    // they must be fetched separately to appear in the report.
+    getDraftListings(1000),
     listAllSales(),
   ]);
   const asboListings = all.filter((l) => l.soldByAsboRc);
+  const asboDrafts = drafts.filter((l) => l.soldByAsboRc);
 
   const inStock: AsboRcReportItem[] = [];
   for (const l of asboListings) {
     const line = stockLine(l);
     if (line) inStock.push(line);
   }
+
+  // Draft stock totals (units + RRP), kept separate from live figures. A fresh
+  // draft has nothing sold, so stockLine yields its full quantity as units.
+  const draftLines: AsboRcReportItem[] = [];
+  for (const l of asboDrafts) {
+    const line = stockLine(l);
+    if (line) draftLines.push(line);
+  }
+  const draftTotals = sumTotals(draftLines);
 
   // Sold rows come from the ledger (newest first), independent of listings.
   const sold = sales.map(saleToRow);
@@ -235,6 +249,7 @@ export async function getAsboRcReport(): Promise<AsboRcReport | null> {
     soldTotals: sumTotals(sold),
     outstandingToAsboRc,
     paidToAsboRc,
+    draftTotals,
   };
 }
 

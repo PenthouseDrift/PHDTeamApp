@@ -286,9 +286,21 @@ export function AsboRcReportClient({ report, readOnly = false }: AsboRcReportCli
         <Headline
           label="Products"
           value={String(report.overall.itemCount)}
-          sub={`${report.inStockTotals.unitCount} in stock`}
+          sub={
+            report.draftTotals.unitCount > 0
+              ? `${report.inStockTotals.unitCount} in stock · ${report.draftTotals.unitCount} in draft`
+              : `${report.inStockTotals.unitCount} in stock`
+          }
         />
-        <Headline label="Total RRP (all)" value={formatGBP(report.overall.totalRrp)} />
+        <Headline
+          label="Total RRP (all)"
+          value={formatGBP(report.overall.totalRrp)}
+          sub={
+            report.draftTotals.totalRrp > 0
+              ? `${formatGBP(report.draftTotals.totalRrp)} in draft`
+              : undefined
+          }
+        />
         {/* Penthouse's cut is internal — hidden from the ASBO-RC partner view. */}
         {!readOnly && (
           <Headline label="Penthouse 7% (all)" value={formatGBP(report.overall.penthouseCut)} tone="amber" />
