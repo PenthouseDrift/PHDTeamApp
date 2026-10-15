@@ -34,14 +34,16 @@ const adminNavItems: AdminNavItem[] = [
   { href: "/admin", label: "Admin Home", icon: HomeIcon, exact: true },
   { href: "/admin/check-in", label: "Check In", icon: CheckInIcon },
   { href: "/admin/members", label: "Members", icon: MembersIcon },
-  // Shop hub (orders + products).
-  { href: "/admin/shop", label: "Shop", icon: ShopIcon, adminOnly: true, match: ["/admin/orders"] },
+  // Marketplace (member listings + ASBO-RC consignment stock/drafts).
+  { href: "/marketplace", label: "Marketplace", icon: TagIcon, adminOnly: true, match: ["/marketplace"] },
   // Reports hub (activity log + revenue + check-in history + ASBO-RC).
   { href: "/admin/activity", label: "Reports", icon: ActivityIcon, adminOnly: true, match: ["/admin/history", "/admin/asbo-rc"] },
 ];
 
 // Secondary nav — grouped under "More".
 const adminMoreItems: AdminNavItem[] = [
+  // Shop hub (orders + products) — moved out of the primary nav.
+  { href: "/admin/shop", label: "Shop", icon: ShopIcon, adminOnly: true, match: ["/admin/orders"] },
   { href: "/admin/events", label: "Events", icon: EventsIcon },
   { href: "/admin/notes", label: "Notes", icon: NotesIcon },
   { href: "/admin/notifications", label: "Global Alerts", icon: BellIcon, adminOnly: true },
@@ -396,6 +398,15 @@ function ShopIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12A1.125 1.125 0 0 1 19.743 21H4.257a1.125 1.125 0 0 1-1.126-1.243l1.264-12A1.125 1.125 0 0 1 5.513 6.75h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+    </svg>
+  );
+}
+
+function TagIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6Z" />
     </svg>
   );
 }

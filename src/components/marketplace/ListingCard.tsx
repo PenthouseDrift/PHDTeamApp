@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { MarketplaceListing } from "@/types";
-import { deleteListing, setListingStatus, setListingSoldCount, sellAsboRcUnits, publishListing } from "@/actions/marketplace";
+import { deleteListing, setListingStatus, setListingSoldCount, sellAsboRcUnits, publishListing, adjustVariantSold } from "@/actions/marketplace";
 
 
 interface ListingCardProps {
@@ -30,7 +30,27 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
   const [isPending, startTransition] = useTransition();
   const [status, setStatus] = useState(listing.status);
   const [soldCount, setSoldCount] = useState(listing.soldCount);
+  const [variants, setVariants] = useState(listing.variants);
   const [manageOpen, setManageOpen] = useState(false);
+
+  const hasVariations = listing.hasVariations;
+
+  const adjustVariant = (variantId: string, delta: number) => {
+    startTransition(async () => {
+      const result = await adjustVariantSold(listing.listingId, variantId, delta);
+      if (result.success) {
+        setVariants((vs) =>
+          vs.map((v) =>
+            v.id === variantId ? { ...v, soldCount: result.data.variantSoldCount } : v
+          )
+        );
+        setStatus(result.data.status);
+        router.refresh();
+      } else {
+        alert(result.error);
+      }
+    });
+  };
 
   const canManage = viewerId === listing.userId || isStaff;
   const cover = listing.images[0];
@@ -158,7 +178,15 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
             {listing.title}
           </Link>
         </div>
-        <p className="text-base font-bold text-amber-600 dark:text-amber-400">{formatPrice(listing.price)}</p>
+        <p className="text-base font-bold text-amber-600 dark:text-amber-400">
+          {hasVariations ? `from ${formatPrice(listing.price)}` : formatPrice(listing.price)}
+        </p>
+        {hasVariations && (
+          <p className="mt-0.5 line-clamp-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+            {variants.length} {listing.variationLabel || "option"}
+            {variants.length === 1 ? "" : "s"}
+          </p>
+        )}
         <p className="mt-0.5 line-clamp-1 text-xs text-zinc-500 dark:text-zinc-400">
           {authorName}
           {listing.location ? ` · ${listing.location}` : ""}
@@ -207,7 +235,55 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
                 >
                   Edit
                 </Link>
-                {isAsbo ? (
+                {hasVariations ? (
+                  <div className="flex flex-col gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                      {listing.variationLabel || "Variations"}
+                    </span>
+                    {variants.map((v) => {
+                      const vAvail = Math.max(0, v.quantity - v.soldCount);
+                      return (
+                        <div
+                          key={v.id}
+                          className="flex items-center justify-between gap-2 rounded-lg border border-zinc-300 px-2 py-1.5 dark:border-zinc-700"
+                        >
+                          <span className="min-w-0 flex-1 truncate text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                            {v.name}
+                            <span className="ml-1 text-zinc-400">{formatPrice(v.price)}</span>
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              aria-label={`One fewer ${v.name} sold`}
+                              onClick={() => adjustVariant(v.id, -1)}
+                              disabled={isPending || v.soldCount <= 0}
+                              className="flex h-6 w-6 items-center justify-center rounded border border-zinc-300 text-sm font-bold text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                            >
+                              −
+                            </button>
+                            <span className="min-w-[3rem] text-center text-[11px] font-bold tabular-nums text-zinc-800 dark:text-zinc-200">
+                              {vAvail} left
+                            </span>
+                            <button
+                              type="button"
+                              aria-label={`One more ${v.name} sold`}
+                              onClick={() => adjustVariant(v.id, 1)}
+                              disabled={isPending || vAvail <= 0}
+                              className="flex h-6 w-6 items-center justify-center rounded border border-zinc-300 text-sm font-bold text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <p className="text-[10px] leading-snug text-zinc-400 dark:text-zinc-500">
+                      {isAsbo
+                        ? "Selling a variation logs it to the ASBO-RC ledger at that variation's price."
+                        : "Adjust how many of each variation have sold."}
+                    </p>
+                  </div>
+                ) : isAsbo ? (
                   <>
                     <div className="flex items-center justify-between gap-2 rounded-lg border border-teal-200 bg-teal-50/50 px-3 py-2 dark:border-teal-900/50 dark:bg-teal-950/20">
                       <span className="text-xs font-semibold text-teal-700 dark:text-teal-300">

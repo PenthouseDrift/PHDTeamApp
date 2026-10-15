@@ -61,6 +61,17 @@ type PublicListing = {
   quantity: number;
   /** Units still available for sale (quantity - soldCount). */
   available: number;
+  /** True when the listing offers selectable variants (each with own price/stock). */
+  hasVariations: boolean;
+  /** Label for the variations, e.g. "Colour" (empty when none). */
+  variationLabel: string;
+  /** Variant options for the website to render (price + remaining stock each). */
+  variants: {
+    name: string;
+    price: number;
+    priceLabel: string;
+    available: number;
+  }[];
   contact: {
     name: string;
     method: "email" | "phone" | "facebook" | "instagram" | "other";
@@ -117,11 +128,25 @@ export async function GET(request: Request) {
         status: l.status,
         quantity: l.quantity,
         available: Math.max(0, l.quantity - l.soldCount),
-        contact: {
-          name: l.contactName || names.get(l.userId) || "Member",
-          method: l.contactMethod,
-          value: l.contactValue,
-        },
+        hasVariations: l.hasVariations,
+        variationLabel: l.variationLabel,
+        variants: l.hasVariations
+          ? l.variants.map((v) => ({
+              name: v.name,
+              price: v.price,
+              priceLabel: priceLabel(v.price),
+              available: Math.max(0, v.quantity - v.soldCount),
+            }))
+          : [],
+        // Sold-by-PHD items are bought in person at the track, so expose no
+        // seller contact — the website shows a "come to the track" note instead.
+        contact: l.soldByPhd
+          ? { name: "", method: "other" as const, value: "" }
+          : {
+              name: l.contactName || names.get(l.userId) || "Member",
+              method: l.contactMethod,
+              value: l.contactValue,
+            },
         createdAt: l.createdAt,
       }));
 

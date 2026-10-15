@@ -82,6 +82,9 @@ export const marketplaceListingSchema = z
     title: z.string().min(2).max(80),
     description: z.string().max(1000).optional().default(""),
     price: z.number().min(0).max(100000),
+    // ASBO-RC consignment base (the 7% split is calculated on this). Optional:
+    // unset falls back to `price`. Enforced in the action/superRefine.
+    consignmentPrice: z.number().min(0).max(100000).optional(),
     images: z.array(z.string().url()).min(1).max(6),
     location: z.string().max(80).optional().default(""),
     contactName: z.string().max(60).optional().default(""),
@@ -102,17 +105,107 @@ export const marketplaceListingSchema = z
     // Draft / "stock first, publish later" flag (admins / ASBO-RC users only;
     // enforced in the action). Draft listings stay out of the public index.
     isDraft: z.boolean().optional().default(false),
+    // Variants: when hasVariations is true, `variants` must have >=1 entry and
+    // variationLabel must be non-empty (enforced in superRefine below). Each
+    // variant carries its own price + stock.
+    hasVariations: z.boolean().optional().default(false),
+    variationLabel: z.string().max(40).optional().default(""),
+    variants: z
+      .array(
+        z.object({
+          id: z.string().optional(),
+          name: z.string().min(1).max(60),
+          price: z.number().min(0).max(100000),
+          // Per-variant ASBO consignment base; unset falls back to the variant price.
+          consignmentPrice: z.number().min(0).max(100000).optional(),
+          quantity: z.number().int().min(0).max(10000),
+          soldCount: z.number().int().min(0).max(10000).optional().default(0),
+        })
+      )
+      .max(50)
+      .optional()
+      .default([]),
     // Penthouse Drift commission % on ASBO-RC sales. Default 7%.
     penthouseCutPct: z.number().min(0).max(100).optional().default(7),
   })
   .superRefine((data, ctx) => {
-    // A contact detail is required unless the seller opts to meet at the track.
-    if (!data.meetAtTrack && !data.contactValue.trim()) {
+    // A contact detail is required unless the seller opts to meet at the track,
+    // OR the item is Sold by PHD / ASBO-RC consignment (bought in person at the
+    // track — no seller contact needed).
+    const boughtAtTrack = data.soldByPhd || data.soldByAsboRc;
+    if (!boughtAtTrack && !data.meetAtTrack && !data.contactValue.trim()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["contactValue"],
         message: "Add contact details, or tick 'Meet at the track'.",
       });
+    }
+
+    // ASBO consignment pricing: the sell price must be >= the consignment base
+    // (the normal path never sells below what we owe ASBO). Only checked when a
+    // consignment price is explicitly set.
+    if (data.soldByAsboRc) {
+      if (
+        !data.hasVariations &&
+        data.consignmentPrice != null &&
+        data.consignmentPrice > data.price
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["consignmentPrice"],
+          message: "Consignment price can't be higher than the sell price.",
+        });
+      }
+      if (data.hasVariations && data.variants) {
+        data.variants.forEach((v, i) => {
+          if (v.consignmentPrice != null && v.consignmentPrice > v.price) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["variants", i, "consignmentPrice"],
+              message: "Consignment price can't be higher than the sell price.",
+            });
+          }
+        });
+      }
+    }
+
+    // When variations are enabled, require a label and at least one variant;
+    // variant names must be unique (they're the user-facing option values).
+    if (data.hasVariations) {
+      if (!data.variationLabel.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["variationLabel"],
+          message: "Add a label for your variations (e.g. 'Colour').",
+        });
+      }
+      if (!data.variants || data.variants.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["variants"],
+          message: "Add at least one variation, or turn variations off.",
+        });
+      } else {
+        const seen = new Set<string>();
+        data.variants.forEach((v, i) => {
+          const key = v.name.trim().toLowerCase();
+          if (seen.has(key)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["variants", i, "name"],
+              message: `Duplicate variation "${v.name}".`,
+            });
+          }
+          seen.add(key);
+          if (v.soldCount != null && v.soldCount > v.quantity) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["variants", i, "soldCount"],
+              message: "Sold count can't exceed quantity.",
+            });
+          }
+        });
+      }
     }
   });
 

@@ -34,6 +34,11 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
   const [price, setPrice] = useState(
     listing ? String(listing.price) : ""
   );
+  // ASBO consignment base (the 7% split runs on this; uplift above it is kept
+  // by Penthouse). Empty => falls back to the sell price.
+  const [consignmentPrice, setConsignmentPrice] = useState(
+    listing?.consignmentPrice != null ? String(listing.consignmentPrice) : ""
+  );
   const [location, setLocation] = useState(listing?.location ?? "");
   const [description, setDescription] = useState(listing?.description ?? "");
   const [contactName, setContactName] = useState(listing?.contactName ?? "");
@@ -49,7 +54,35 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
   const [soldByAsboRc, setSoldByAsboRc] = useState(listing?.soldByAsboRc ?? false);
   const [soldByPhd, setSoldByPhd] = useState(listing?.soldByPhd ?? false);
   const [saveAsDraft, setSaveAsDraft] = useState(listing?.isDraft ?? false);
+
+  // Variants (available to all sellers). Each has its own price + stock.
+  const [hasVariations, setHasVariations] = useState(listing?.hasVariations ?? false);
+  const [variationLabel, setVariationLabel] = useState(listing?.variationLabel ?? "");
+  const [variants, setVariants] = useState<
+    { id?: string; name: string; price: string; consignmentPrice: string; quantity: string }[]
+  >(
+    listing?.variants?.length
+      ? listing.variants.map((v) => ({
+          id: v.id,
+          name: v.name,
+          price: String(v.price),
+          consignmentPrice: v.consignmentPrice != null ? String(v.consignmentPrice) : "",
+          quantity: String(v.quantity),
+        }))
+      : [{ name: "", price: "", consignmentPrice: "", quantity: "1" }]
+  );
+
   const [error, setError] = useState<string | null>(null);
+
+  const addVariant = () =>
+    setVariants((vs) => [...vs, { name: "", price: "", consignmentPrice: "", quantity: "1" }]);
+  const removeVariant = (i: number) =>
+    setVariants((vs) => (vs.length > 1 ? vs.filter((_, idx) => idx !== i) : vs));
+  const updateVariant = (
+    i: number,
+    field: "name" | "price" | "consignmentPrice" | "quantity",
+    value: string
+  ) => setVariants((vs) => vs.map((v, idx) => (idx === i ? { ...v, [field]: value } : v)));
 
   const isEdit = mode === "edit";
   // Prefer the server-resolved role (reliable under impersonation); fall back
@@ -91,12 +124,78 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
       setError("Please enter a valid price (0 for free / offers).");
       return;
     }
+    // ASBO consignment base (non-variant): must be valid and not above sell price.
+    const consignmentNum = consignmentPrice.trim() === "" ? undefined : Number(consignmentPrice);
+    if (
+      soldByAsboRc &&
+      !hasVariations &&
+      consignmentNum != null &&
+      (Number.isNaN(consignmentNum) || consignmentNum < 0 || consignmentNum > priceNum)
+    ) {
+      setError("Consignment price can't be higher than the sell price.");
+      return;
+    }
     const quantityNum = Math.max(1, Math.floor(Number(quantity) || 1));
-    if (Number.isNaN(quantityNum) || quantityNum < 1) {
+    if (!hasVariations && (Number.isNaN(quantityNum) || quantityNum < 1)) {
       setError("Quantity must be at least 1.");
       return;
     }
-    if (!meetAtTrack && !contactValue.trim()) {
+
+    // Validate variants when enabled.
+    let cleanVariants: {
+      id?: string;
+      name: string;
+      price: number;
+      consignmentPrice?: number;
+      quantity: number;
+    }[] = [];
+    if (hasVariations) {
+      if (!variationLabel.trim()) {
+        setError("Add a label for your variations (e.g. 'Colour').");
+        return;
+      }
+      const rows = variants
+        .map((v) => ({
+          id: v.id,
+          name: v.name.trim(),
+          price: Number(v.price),
+          consignmentPrice: v.consignmentPrice.trim() === "" ? undefined : Number(v.consignmentPrice),
+          quantity: Math.floor(Number(v.quantity)),
+        }))
+        .filter((v) => v.name.length > 0);
+      if (rows.length === 0) {
+        setError("Add at least one variation, or turn variations off.");
+        return;
+      }
+      for (const r of rows) {
+        if (Number.isNaN(r.price) || r.price < 0) {
+          setError(`Enter a valid price for "${r.name}".`);
+          return;
+        }
+        if (Number.isNaN(r.quantity) || r.quantity < 0) {
+          setError(`Enter a valid quantity for "${r.name}".`);
+          return;
+        }
+        if (
+          soldByAsboRc &&
+          r.consignmentPrice != null &&
+          (Number.isNaN(r.consignmentPrice) || r.consignmentPrice > r.price)
+        ) {
+          setError(`Consignment price for "${r.name}" can't be higher than its sell price.`);
+          return;
+        }
+      }
+      const names = rows.map((r) => r.name.toLowerCase());
+      if (new Set(names).size !== names.length) {
+        setError("Each variation must have a unique name.");
+        return;
+      }
+      cleanVariants = rows;
+    }
+    // Sold-by-PHD / ASBO consignment items are bought in person at the track,
+    // so no seller contact is required.
+    const boughtAtTrack = effectiveSoldByPhd || soldByAsboRc;
+    if (!boughtAtTrack && !meetAtTrack && !contactValue.trim()) {
       setError("Add contact details, or tick 'Meet at the track'.");
       return;
     }
@@ -125,6 +224,14 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
       // Draft is only meaningful at creation (editing never flips draft/live —
       // that's done via Publish). Admin/ASBO-RC only; server re-checks.
       isDraft: !isEdit && canSellForAsboRc ? saveAsDraft : undefined,
+      // Variants (any seller). When off, send false so an edit can also clear them.
+      hasVariations,
+      variationLabel: hasVariations ? variationLabel.trim() : "",
+      variants: hasVariations ? cleanVariants : [],
+      // ASBO consignment base (non-variant). Only sent for ASBO items; omitted
+      // (undefined) when blank so it falls back to the sell price server-side.
+      consignmentPrice:
+        soldByAsboRc && !hasVariations && consignmentNum != null ? consignmentNum : undefined,
     };
 
     startTransition(async () => {
@@ -211,7 +318,35 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
         </div>
       </div>
 
-      {/* Quantity — available to everyone, defaults to 1 */}
+      {/* Consignment price — ASBO consignment items only, non-variant. The 7%
+          split is based on this; anything the sell price is above it is kept by
+          Penthouse. Blank => uses the sell price (no uplift). */}
+      {canSellForAsboRc && soldByAsboRc && !hasVariations && (
+        <div className="space-y-2 rounded-lg border border-teal-200 bg-teal-50/40 p-4 dark:border-teal-500/30 dark:bg-teal-500/5">
+          <label htmlFor="consignmentPrice" className="block text-sm font-medium text-zinc-700 dark:text-zinc-200">
+            Consignment price (ASBO) <span className="text-zinc-500 dark:text-zinc-400">(optional)</span>
+          </label>
+          <input
+            id="consignmentPrice"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="0.01"
+            value={consignmentPrice}
+            onChange={(e) => setConsignmentPrice(e.target.value)}
+            placeholder={price ? `Defaults to £${price}` : "Defaults to the sell price"}
+            className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder-zinc-400 transition-colors focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+          />
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            The price the ASBO-RC 7% split is based on. ASBO is owed 93% of this; anything the
+            sell price above is kept entirely by Penthouse. Leave blank to use the sell price.
+          </p>
+        </div>
+      )}
+
+      {/* Quantity — available to everyone, defaults to 1. Hidden when the
+          listing uses variations (stock is then tracked per-variant). */}
+      {!hasVariations && (
       <div className="space-y-2">
         <label htmlFor="quantity" className="block text-sm font-medium text-zinc-600 dark:text-zinc-300">
           Quantity
@@ -249,6 +384,159 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
           </span>
         </div>
       </div>
+      )}
+
+      {/* Variations — available to everyone. Each variant has its own price +
+          stock. When on, the single Price/Quantity above are replaced by the
+          per-variant rows below. */}
+      <label
+        htmlFor="hasVariations"
+        className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors ${
+          hasVariations
+            ? "border-amber-400 bg-amber-50 dark:border-amber-500/50 dark:bg-amber-500/10"
+            : "border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/50"
+        }`}
+      >
+        <input
+          id="hasVariations"
+          type="checkbox"
+          checked={hasVariations}
+          onChange={(e) => setHasVariations(e.target.checked)}
+          className="mt-0.5 h-5 w-5 shrink-0 rounded border-zinc-300 text-amber-500 focus:ring-amber-500 dark:border-zinc-600"
+        />
+        <span>
+          <span className="block text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+            Add variations
+          </span>
+          <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+            Offer options like colour or size, each with its own price and stock.
+            When on, the single price and quantity above are replaced by the rows below.
+          </span>
+        </span>
+      </label>
+
+      {hasVariations && (
+        <div className="space-y-4 rounded-lg border border-amber-200 bg-amber-50/40 p-4 dark:border-amber-500/30 dark:bg-amber-500/5">
+          {/* Variation label */}
+          <div className="space-y-2">
+            <label htmlFor="variationLabel" className="block text-sm font-medium text-zinc-600 dark:text-zinc-300">
+              Variation label
+            </label>
+            <input
+              id="variationLabel"
+              type="text"
+              value={variationLabel}
+              onChange={(e) => setVariationLabel(e.target.value.slice(0, 40))}
+              placeholder="e.g. Colour"
+              className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder-zinc-400 transition-colors focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              maxLength={40}
+            />
+          </div>
+
+          {/* Variant rows */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
+                {variationLabel.trim() || "Variations"}
+              </span>
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                {variants.length} option{variants.length === 1 ? "" : "s"}
+              </span>
+            </div>
+
+            {variants.map((v, i) => (
+              <div key={v.id ?? i} className="flex items-end gap-2">
+                <div className="flex-1 space-y-1">
+                  {i === 0 && (
+                    <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+                      Name
+                    </label>
+                  )}
+                  <input
+                    type="text"
+                    value={v.name}
+                    onChange={(e) => updateVariant(i, "name", e.target.value.slice(0, 60))}
+                    placeholder="e.g. Black"
+                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                    maxLength={60}
+                  />
+                </div>
+                <div className="w-24 space-y-1">
+                  {i === 0 && (
+                    <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+                      Price (£)
+                    </label>
+                  )}
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="0.01"
+                    value={v.price}
+                    onChange={(e) => updateVariant(i, "price", e.target.value)}
+                    placeholder="0.00"
+                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                  />
+                </div>
+                {canSellForAsboRc && soldByAsboRc && (
+                  <div className="w-24 space-y-1">
+                    {i === 0 && (
+                      <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+                        Consign. (£)
+                      </label>
+                    )}
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step="0.01"
+                      value={v.consignmentPrice}
+                      onChange={(e) => updateVariant(i, "consignmentPrice", e.target.value)}
+                      placeholder={v.price ? v.price : "sell"}
+                      title="ASBO consignment base for this variation (defaults to its sell price)"
+                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                    />
+                  </div>
+                )}
+                <div className="w-20 space-y-1">
+                  {i === 0 && (
+                    <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+                      Qty
+                    </label>
+                  )}
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    step={1}
+                    value={v.quantity}
+                    onChange={(e) => updateVariant(i, "quantity", e.target.value)}
+                    placeholder="1"
+                    className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                  />
+                </div>
+                <button
+                  type="button"
+                  aria-label="Remove variation"
+                  onClick={() => removeVariant(i)}
+                  disabled={variants.length <= 1}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-300 text-lg font-bold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-40 dark:border-zinc-700 dark:hover:bg-red-950/40"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+
+            <button
+              type="button"
+              onClick={addVariant}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400 px-3 py-2 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-500/10"
+            >
+              + Add another
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* At the track */}
       <label
@@ -394,7 +682,13 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
         </p>
       </div>
 
-      {/* Seller contact */}
+      {/* Seller contact — hidden for Sold-by-PHD items (bought at the track). */}
+      {effectiveSoldByPhd ? (
+        <div className="rounded-lg border border-teal-200 bg-teal-50/50 p-4 text-sm text-teal-800 dark:border-teal-500/40 dark:bg-teal-500/10 dark:text-teal-200">
+          <span className="font-semibold">Sold by PHD:</span> buyers come to the track to buy in
+          person, so no seller contact is shown on this listing.
+        </div>
+      ) : (
       <div className="space-y-4 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
         <div>
           <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
@@ -493,6 +787,7 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
           </div>
         </div>
       </div>
+      )}
 
       {/* Error */}
       {error && (

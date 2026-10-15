@@ -20,13 +20,28 @@ export interface AsboRcSale {
   /** Product name at the time of sale. */
   title: string;
   image: string | null;
-  /** Per-unit RRP at the time of sale. */
+  /**
+   * Consignment base price at the time of sale — the figure the 7% split and
+   * the amount owed to ASBO-RC are calculated on. (Historically this field held
+   * "RRP"; for legacy sales with no separate consignment/sell prices it equals
+   * both.) ASBO-facing reports use ONLY this, never the sell price.
+   */
   rrp: number;
-  /** Penthouse Drift commission % applied to this sale. */
+  /**
+   * The SELL price the customer actually paid (admin-only figure). For legacy
+   * sales this is absent and treated as equal to `rrp`.
+   */
+  sellPrice?: number;
+  /**
+   * Penthouse uplift kept on top of the 7% (sellPrice − rrp), admin-only. 0 for
+   * legacy/no-uplift sales.
+   */
+  uplift?: number;
+  /** Penthouse Drift commission % applied to this sale (of the consignment base). */
   cutPct: number;
-  /** Penthouse Drift's cut in £ (rrp * cutPct/100). */
+  /** Penthouse Drift's TOTAL take in £ (rrp*cutPct/100 + uplift). */
   penthouseCut: number;
-  /** Owed to ASBO-RC in £ (rrp - penthouseCut). */
+  /** Owed to ASBO-RC in £ (rrp − rrp*cutPct/100). */
   owedToAsboRc: number;
   /** When the unit was marked sold (ms). */
   soldAt: number;
@@ -46,16 +61,29 @@ export interface AsboRcReportItem {
   title: string;
   image: string | null;
   quantity: number;
-  /** Per-unit recommended retail price (the listing price). */
+  /**
+   * Per-unit consignment base price (the ASBO-facing figure the 7% split runs
+   * on). ASBO-facing views use this; it is NOT the customer sell price.
+   */
   rrp: number;
   /** Commission percentage Penthouse Drift keeps on this item. */
   cutPct: number;
-  /** Total RRP across all units in this line (rrp * quantity). */
+  /**
+   * Total consignment value across all units in this line (consignment × qty).
+   * This is the ASBO-facing "stock value" / sold value.
+   */
   totalRrp: number;
-  /** Total Penthouse Drift commission across all units in this line. */
+  /** Total Penthouse Drift take across all units (7% of consignment + any uplift). */
   penthouseCut: number;
-  /** Total owed to ASBO-RC across all units in this line (totalRrp - penthouseCut). */
+  /** Total owed to ASBO-RC across all units (consignment × 93%). */
   owedToAsboRc: number;
+  /**
+   * Admin-only: total SELL value across all units (sell price × qty). Equals
+   * totalRrp when there's no uplift. Hidden from the ASBO partner view.
+   */
+  totalSell?: number;
+  /** Admin-only: total Penthouse uplift across all units (sell − consignment). */
+  totalUplift?: number;
   status: "available" | "sold";
   /** Whether Penthouse Drift has settled (paid) ASBO-RC for this line. */
   paid: boolean;
@@ -82,9 +110,14 @@ export interface AsboRcReportItem {
 export interface AsboRcTotals {
   itemCount: number;
   unitCount: number;
+  /** Consignment-based total (ASBO-facing). */
   totalRrp: number;
   penthouseCut: number;
   owedToAsboRc: number;
+  /** Admin-only: total SELL value (sell price × qty). */
+  totalSell: number;
+  /** Admin-only: total Penthouse uplift (sell − consignment). */
+  totalUplift: number;
 }
 
 export interface AsboRcReport {

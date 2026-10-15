@@ -57,6 +57,62 @@ function indexScore(createdAt: number, status: "available" | "sold"): number {
 }
 
 /**
+ * Parse the stored variants array (JSON string or already-array) into typed
+ * ListingVariant records, coercing numbers and clamping soldCount to quantity.
+ */
+function parseVariants(raw: unknown): import("@/types").ListingVariant[] {
+  let arr: unknown[] = [];
+  if (Array.isArray(raw)) arr = raw;
+  else if (typeof raw === "string" && raw.trim()) {
+    try {
+      const p = JSON.parse(raw);
+      if (Array.isArray(p)) arr = p;
+    } catch {
+      /* ignore malformed */
+    }
+  }
+  return arr
+    .map((v) => {
+      const o = (v ?? {}) as Record<string, unknown>;
+      const quantity = Math.max(0, Math.floor(Number(o.quantity) || 0));
+      const soldCount = Math.min(quantity, Math.max(0, Math.floor(Number(o.soldCount) || 0)));
+      const cp =
+        o.consignmentPrice === undefined || o.consignmentPrice === null || o.consignmentPrice === ""
+          ? undefined
+          : Math.max(0, Number(o.consignmentPrice) || 0);
+      return {
+        id: o.id ? String(o.id) : randomUUID(),
+        name: String(o.name ?? "").trim(),
+        price: Math.max(0, Number(o.price) || 0),
+        consignmentPrice: cp,
+        quantity,
+        soldCount,
+      };
+    })
+    .filter((v) => v.name.length > 0);
+}
+
+/**
+ * Derive listing-level price/quantity/soldCount/status from a set of variants.
+ * price = min variant price; quantity/soldCount = sums; status = "sold" only
+ * when every unit across all variants is gone. Falsy/empty variants yield a
+ * zeroed derivation (caller should only use this when hasVariations is true).
+ */
+function deriveFromVariants(variants: import("@/types").ListingVariant[]): {
+  price: number;
+  quantity: number;
+  soldCount: number;
+  status: "available" | "sold";
+} {
+  if (!variants.length) return { price: 0, quantity: 0, soldCount: 0, status: "sold" };
+  const price = Math.min(...variants.map((v) => v.price));
+  const quantity = variants.reduce((s, v) => s + v.quantity, 0);
+  const soldCount = variants.reduce((s, v) => s + v.soldCount, 0);
+  const status: "available" | "sold" = quantity - soldCount <= 0 ? "sold" : "available";
+  return { price, quantity, soldCount, status };
+}
+
+/**
  * Convert a raw Redis hash into a typed MarketplaceListing. Redis stores
  * everything as strings, so booleans/numbers/arrays are coerced here.
  */
@@ -117,12 +173,23 @@ function toListing(data: Record<string, unknown> | null): MarketplaceListing | n
 
   // string. Coerce every text field with asString() so the typed object never
   // lies and consumers can safely call string methods like .replace().
+  // Variants. When present, the listing's price/quantity/soldCount/status are
+  // DERIVED from them (overriding the stored scalar fields) so a single source
+  // of truth drives both the variant UI and the aggregate listing figures.
+  const hasVariations = String(data.hasVariations) === "true";
+  const variants = hasVariations ? parseVariants(data.variants) : [];
+  const derived = hasVariations ? deriveFromVariants(variants) : null;
+
   return {
     listingId: asString(data.listingId),
     userId: asString(data.userId),
     title: asString(data.title),
     description: asString(data.description),
-    price: Number(data.price) || 0,
+    price: derived ? derived.price : Number(data.price) || 0,
+    consignmentPrice:
+      data.consignmentPrice === undefined || data.consignmentPrice === null || data.consignmentPrice === ""
+        ? undefined
+        : Math.max(0, Number(data.consignmentPrice) || 0),
     images,
     location: asString(data.location),
     contactName: asString(data.contactName),
@@ -130,14 +197,17 @@ function toListing(data: Record<string, unknown> | null): MarketplaceListing | n
     contactValue: asString(data.contactValue),
     atTrack: String(data.atTrack) === "true",
     meetAtTrack: String(data.meetAtTrack) === "true",
-    status,
+    status: derived ? derived.status : status,
     showOnWebsite: String(data.showOnWebsite) === "true",
-    quantity: qty,
-    soldCount: soldCountVal,
+    quantity: derived ? derived.quantity : qty,
+    soldCount: derived ? derived.soldCount : soldCountVal,
     soldAt,
     soldByAsboRc: String(data.soldByAsboRc) === "true",
     soldByPhd: String(data.soldByPhd) === "true",
     isDraft: String(data.isDraft) === "true",
+    hasVariations,
+    variationLabel: asString(data.variationLabel),
+    variants,
     penthouseCutPct:
       data.penthouseCutPct === null || data.penthouseCutPct === undefined || data.penthouseCutPct === ""
         ? 7
@@ -183,6 +253,7 @@ export async function createListing(
     title: string;
     description?: string;
     price: number;
+    consignmentPrice?: number;
     images: string[];
     location?: string;
     contactName?: string;
@@ -194,6 +265,9 @@ export async function createListing(
     soldByAsboRc?: boolean;
     soldByPhd?: boolean;
     isDraft?: boolean;
+    hasVariations?: boolean;
+    variationLabel?: string;
+    variants?: { id?: string; name: string; price: number; consignmentPrice?: number; quantity: number; soldCount?: number }[];
     penthouseCutPct?: number;
   }
 ): Promise<ActionResult<MarketplaceListing>> {
@@ -220,6 +294,21 @@ export async function createListing(
     // Anyone else always creates a live listing regardless of the flag.
     const isDraft = canSellForAsboRc && Boolean(parsed.data.isDraft);
 
+    // Variants (available to all sellers). When present, listing price/quantity/
+    // soldCount/status are derived from them.
+    const hasVariations = Boolean(parsed.data.hasVariations) && (parsed.data.variants?.length ?? 0) > 0;
+    const variants: import("@/types").ListingVariant[] = hasVariations
+      ? parsed.data.variants!.map((v) => ({
+          id: v.id || randomUUID(),
+          name: v.name.trim(),
+          price: v.price,
+          consignmentPrice: v.consignmentPrice,
+          quantity: v.quantity,
+          soldCount: Math.min(v.quantity, Math.max(0, v.soldCount ?? 0)),
+        }))
+      : [];
+    const derived = hasVariations ? deriveFromVariants(variants) : null;
+
     const listingId = randomUUID();
     const now = Date.now();
 
@@ -228,7 +317,11 @@ export async function createListing(
       userId,
       title: parsed.data.title.trim(),
       description: parsed.data.description.trim(),
-      price: parsed.data.price,
+      price: derived ? derived.price : parsed.data.price,
+      // Only meaningful for ASBO items; stored for everyone but ignored unless
+      // soldByAsboRc. For variant listings the per-variant consignment prices
+      // drive the ledger, so the listing-level value is left unset there.
+      consignmentPrice: hasVariations ? undefined : parsed.data.consignmentPrice,
       images: parsed.data.images,
       location: parsed.data.location.trim(),
       contactName: parsed.data.contactName.trim(),
@@ -236,11 +329,14 @@ export async function createListing(
       contactValue: parsed.data.contactValue.trim(),
       atTrack: parsed.data.atTrack,
       meetAtTrack: parsed.data.meetAtTrack,
-      status: "available",
+      status: derived ? derived.status : "available",
       isDraft,
+      hasVariations,
+      variationLabel: hasVariations ? parsed.data.variationLabel.trim() : "",
+      variants,
       showOnWebsite: true,
-      quantity: parsed.data.quantity,
-      soldCount: 0,
+      quantity: derived ? derived.quantity : parsed.data.quantity,
+      soldCount: derived ? derived.soldCount : 0,
       soldAt: [],
       soldByAsboRc,
       soldByPhd,
@@ -259,6 +355,7 @@ export async function createListing(
       title: listing.title,
       description: listing.description,
       price: String(listing.price),
+      consignmentPrice: listing.consignmentPrice != null ? String(listing.consignmentPrice) : "",
       images: JSON.stringify(listing.images),
       location: listing.location,
       contactName: listing.contactName,
@@ -266,6 +363,9 @@ export async function createListing(
       contactValue: listing.contactValue,
       status: listing.status,
       isDraft: String(listing.isDraft),
+      hasVariations: String(listing.hasVariations),
+      variationLabel: listing.variationLabel,
+      variants: JSON.stringify(listing.variants),
       showOnWebsite: String(listing.showOnWebsite),
       atTrack: String(listing.atTrack),
       meetAtTrack: String(listing.meetAtTrack),
@@ -586,6 +686,11 @@ export async function setListingStatus(
       return { success: false, error: "You can only update your own listings" };
     }
 
+    // Variant listings track stock per-variant; use adjustVariantSold instead.
+    if (listing.hasVariations) {
+      return { success: false, error: "This listing uses variations — manage stock per variation." };
+    }
+
     // Keep per-unit stock consistent with the whole-listing flag: marking sold
     // sells out every unit; marking available restocks all of them.
     const soldCount = status === "sold" ? listing.quantity : 0;
@@ -664,6 +769,11 @@ export async function setListingSoldCount(
     const isStaff = session.user.role === "admin" || session.user.role === "moderator";
     if (!isOwner && !isStaff) {
       return { success: false, error: "You can only update your own listings" };
+    }
+
+    // Variant listings track stock per-variant; use adjustVariantSold instead.
+    if (listing.hasVariations) {
+      return { success: false, error: "This listing uses variations — manage stock per variation." };
     }
 
     const clamped = Math.min(listing.quantity, Math.max(0, Math.floor(soldCount)));
@@ -751,6 +861,12 @@ export async function setListingQuantity(
       return { success: false, error: "You can only update your own listings" };
     }
 
+    // Variant listings track stock per-variant; edit quantities via the listing
+    // editor (per variant) rather than this whole-listing quantity setter.
+    if (listing.hasVariations) {
+      return { success: false, error: "This listing uses variations — edit stock per variation." };
+    }
+
     const requested = Math.max(0, Math.floor(Number(quantity) || 0));
     let nextQuantity: number;
     let available: number;
@@ -830,6 +946,11 @@ export async function sellAsboRcUnits(
       return { success: false, error: "You can only update your own listings" };
     }
 
+    // Variant listings sell per-variant via adjustVariantSold.
+    if (listing.hasVariations) {
+      return { success: false, error: "This listing uses variations — record sales per variation." };
+    }
+
     const available = listing.quantity; // ASBO: quantity == available stock
     const toSell = Math.min(available, Math.max(1, Math.floor(count)));
     if (toSell <= 0) {
@@ -870,6 +991,105 @@ export async function sellAsboRcUnits(
 }
 
 /**
+ * Adjust the sold count of ONE variant of a variant listing by `delta`
+ * (+1 sells one, -1 un-sells one), clamped to 0..variant.quantity. Recomputes
+ * the listing's derived totals/status, re-persists the variants, and keeps the
+ * browse index ordered. For ASBO-RC listings, a positive delta appends ledger
+ * sales snapshotting THAT variant's price + name; a negative delta does not
+ * remove ledger history (corrections are made in the ASBO report). Owner or
+ * staff only. This is the variant counterpart to setListingSoldCount.
+ */
+export async function adjustVariantSold(
+  listingId: string,
+  variantId: string,
+  delta: number
+): Promise<ActionResult<{ variantSoldCount: number; status: "available" | "sold" }>> {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return { success: false, error: "You must be logged in" };
+    }
+
+    const data = await redis.hgetall(`listing:${listingId}`);
+    const listing = toListing(data as Record<string, unknown> | null);
+    if (!listing) {
+      return { success: false, error: "Listing not found" };
+    }
+    if (!listing.hasVariations) {
+      return { success: false, error: "This listing does not use variations" };
+    }
+
+    const isOwner = listing.userId === session.user.id;
+    const isStaff = session.user.role === "admin" || session.user.role === "moderator";
+    if (!isOwner && !isStaff) {
+      return { success: false, error: "You can only update your own listings" };
+    }
+
+    const idx = listing.variants.findIndex((v) => v.id === variantId);
+    if (idx < 0) {
+      return { success: false, error: "Variation not found" };
+    }
+
+    const variant = listing.variants[idx];
+    const target = Math.min(variant.quantity, Math.max(0, variant.soldCount + Math.trunc(delta)));
+    const soldDelta = target - variant.soldCount;
+    if (soldDelta === 0) {
+      return { success: true, data: { variantSoldCount: variant.soldCount, status: listing.status } };
+    }
+
+    const nextVariants = listing.variants.map((v, i) =>
+      i === idx ? { ...v, soldCount: target } : v
+    );
+    const derived = deriveFromVariants(nextVariants);
+    const now = Date.now();
+
+    await redis.hset(`listing:${listingId}`, {
+      variants: JSON.stringify(nextVariants),
+      // Keep the derived scalar fields in the hash in sync (toListing re-derives
+      // anyway, but storing them keeps the hash internally consistent).
+      price: String(derived.price),
+      quantity: String(derived.quantity),
+      soldCount: String(derived.soldCount),
+      status: derived.status,
+      updatedAt: now,
+    });
+    // Draft listings live in the drafts index; live ones in the public index.
+    if (listing.isDraft) {
+      await redis.zadd(MARKETPLACE_DRAFTS_INDEX, { score: -listing.createdAt, member: listingId });
+    } else {
+      await redis.zadd(MARKETPLACE_INDEX, {
+        score: indexScore(listing.createdAt, derived.status),
+        member: listingId,
+      });
+    }
+
+    // ASBO-RC: a positive delta logs ledger sales for that variant. Un-selling
+    // does not delete ledger history.
+    if (listing.soldByAsboRc && soldDelta > 0) {
+      const { createAsboRcSales } = await import("@/actions/asbo-rc");
+      await createAsboRcSales(listing, soldDelta, undefined, {
+        price: variant.price,
+        consignmentPrice: variant.consignmentPrice,
+        name: variant.name,
+      });
+    }
+
+    revalidatePath("/marketplace");
+    bustMarketplaceCache();
+    revalidatePath(`/marketplace/${listingId}`);
+    revalidatePath("/admin/asbo-rc");
+    revalidatePath("/asbo-rc");
+    revalidatePath("/dashboard");
+    return { success: true, data: { variantSoldCount: target, status: derived.status } };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to update variation stock",
+    };
+  }
+}
+
+/**
  * Edit an existing listing. Only the owner (or staff) can edit. Preserves
  * ownership, status, website-visibility and createdAt; bumps updatedAt. Any
  * images removed from the listing are cleaned up from blob storage.
@@ -880,6 +1100,7 @@ export async function updateListing(
     title: string;
     description?: string;
     price: number;
+    consignmentPrice?: number;
     images: string[];
     location?: string;
     contactName?: string;
@@ -890,6 +1111,9 @@ export async function updateListing(
     quantity?: number;
     soldByAsboRc?: boolean;
     soldByPhd?: boolean;
+    hasVariations?: boolean;
+    variationLabel?: string;
+    variants?: { id?: string; name: string; price: number; consignmentPrice?: number; quantity: number; soldCount?: number }[];
     penthouseCutPct?: number;
   }
 ): Promise<ActionResult<MarketplaceListing>> {
@@ -931,12 +1155,37 @@ export async function updateListing(
       ? Boolean(parsed.data.soldByPhd)
       : existing.soldByPhd;
 
-    // Editing quantity can't un-sell units: clamp the existing soldCount to the
-    // new quantity. Status is then kept consistent (sold out when none remain).
-    const nextQuantity = parsed.data.quantity;
-    const nextSoldCount = Math.min(existing.soldCount, nextQuantity);
-    const nextStatus: "available" | "sold" =
-      nextQuantity - nextSoldCount <= 0 ? "sold" : "available";
+    // Variants. Editing may add/remove/retitle/reprice variants or change their
+    // quantity, but must NOT un-sell: preserve each variant's soldCount by
+    // matching on id (clamped to the possibly-reduced quantity). New variants
+    // start at soldCount 0.
+    const hasVariations = Boolean(parsed.data.hasVariations) && (parsed.data.variants?.length ?? 0) > 0;
+    const existingVariantById = new Map(existing.variants.map((v) => [v.id, v]));
+    const nextVariants: import("@/types").ListingVariant[] = hasVariations
+      ? parsed.data.variants!.map((v) => {
+          const prior = v.id ? existingVariantById.get(v.id) : undefined;
+          const priorSold = prior ? prior.soldCount : 0;
+          return {
+            id: v.id || randomUUID(),
+            name: v.name.trim(),
+            price: v.price,
+            consignmentPrice: v.consignmentPrice,
+            quantity: v.quantity,
+            soldCount: Math.min(v.quantity, Math.max(0, priorSold)),
+          };
+        })
+      : [];
+    const derivedV = hasVariations ? deriveFromVariants(nextVariants) : null;
+
+    // Non-variant path: editing quantity can't un-sell units — clamp existing
+    // soldCount to the new quantity and keep status consistent.
+    const nextQuantity = derivedV ? derivedV.quantity : parsed.data.quantity;
+    const nextSoldCount = derivedV ? derivedV.soldCount : Math.min(existing.soldCount, nextQuantity);
+    const nextStatus: "available" | "sold" = derivedV
+      ? derivedV.status
+      : nextQuantity - nextSoldCount <= 0
+      ? "sold"
+      : "available";
     // Settled units can never exceed sold units.
     const nextPaidUnits = Math.min(existing.asboRcPaidUnits, nextSoldCount);
     // Clamp the sold-timestamp list to the (possibly reduced) sold count.
@@ -949,7 +1198,8 @@ export async function updateListing(
       isDraft: existing.isDraft,
       title: parsed.data.title.trim(),
       description: parsed.data.description.trim(),
-      price: parsed.data.price,
+      price: derivedV ? derivedV.price : parsed.data.price,
+      consignmentPrice: hasVariations ? undefined : parsed.data.consignmentPrice,
       images: parsed.data.images,
       location: parsed.data.location.trim(),
       contactName: parsed.data.contactName.trim(),
@@ -957,6 +1207,9 @@ export async function updateListing(
       contactValue: parsed.data.contactValue.trim(),
       atTrack: parsed.data.atTrack,
       meetAtTrack: parsed.data.meetAtTrack,
+      hasVariations,
+      variationLabel: hasVariations ? parsed.data.variationLabel.trim() : "",
+      variants: nextVariants,
       quantity: nextQuantity,
       soldCount: nextSoldCount,
       soldAt: nextSoldAt,
@@ -977,6 +1230,7 @@ export async function updateListing(
       title: updated.title,
       description: updated.description,
       price: String(updated.price),
+      consignmentPrice: updated.consignmentPrice != null ? String(updated.consignmentPrice) : "",
       images: JSON.stringify(updated.images),
       location: updated.location,
       contactName: updated.contactName,
@@ -984,6 +1238,9 @@ export async function updateListing(
       contactValue: updated.contactValue,
       status: updated.status,
       isDraft: String(updated.isDraft),
+      hasVariations: String(updated.hasVariations),
+      variationLabel: updated.variationLabel,
+      variants: JSON.stringify(updated.variants),
       showOnWebsite: String(updated.showOnWebsite),
       atTrack: String(updated.atTrack),
       meetAtTrack: String(updated.meetAtTrack),

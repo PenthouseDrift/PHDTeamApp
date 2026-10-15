@@ -293,7 +293,7 @@ export function AsboRcReportClient({ report, readOnly = false }: AsboRcReportCli
           }
         />
         <Headline
-          label="Total RRP (all)"
+          label="Consignment value (all)"
           value={formatGBP(report.overall.totalRrp)}
           sub={
             report.draftTotals.totalRrp > 0
@@ -301,14 +301,34 @@ export function AsboRcReportClient({ report, readOnly = false }: AsboRcReportCli
               : undefined
           }
         />
-        {/* Penthouse's cut is internal — hidden from the ASBO-RC partner view. */}
+        {/* Owed to ASBO (93% of consignment) — shown to both ASBO and admin. */}
+        <Headline label="Owed to ASBO-RC (all)" value={formatGBP(report.overall.owedToAsboRc)} tone="teal" />
+        {/* Penthouse's take + uplift are internal — admin only. */}
         {!readOnly && (
-          <Headline label="Penthouse 7% (all)" value={formatGBP(report.overall.penthouseCut)} tone="amber" />
-        )}
-        {!readOnly && (
-          <Headline label="Owed to ASBO-RC (all)" value={formatGBP(report.overall.owedToAsboRc)} tone="teal" />
+          <Headline
+            label="Penthouse margin (all)"
+            value={formatGBP(report.overall.penthouseCut)}
+            sub={
+              report.overall.totalUplift > 0
+                ? `incl. ${formatGBP(report.overall.totalUplift)} uplift`
+                : undefined
+            }
+            tone="amber"
+          />
         )}
       </div>
+
+      {/* Admin-only: total customer sell value vs consignment basis. */}
+      {!readOnly && report.overall.totalUplift > 0 && (
+        <div className="grid grid-cols-2 gap-2.5">
+          <Headline label="Sell value (all)" value={formatGBP(report.overall.totalSell)} />
+          <Headline
+            label="Uplift kept (all)"
+            value={formatGBP(report.overall.totalUplift)}
+            tone="emerald"
+          />
+        </div>
+      )}
 
       {/* Settlement progress for sold items */}
       <div className="grid grid-cols-2 gap-2.5">
