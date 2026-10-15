@@ -31,15 +31,19 @@ function TotalsBar({
   return (
     <div
       className={`grid grid-cols-2 gap-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-3 sm:p-4 ${
-        readOnly ? "sm:grid-cols-4" : "sm:grid-cols-5"
+        readOnly ? "sm:grid-cols-2" : "sm:grid-cols-5"
       }`}
     >
       <Cell label={label} value={`${totals.itemCount} (${totals.unitCount} units)`} />
-      <Cell label="Total RRP" value={formatGBP(totals.totalRrp)} />
-      {/* Penthouse's cut is internal — hidden from the ASBO-RC partner view. */}
+      {/* Product value figures (Total RRP, Avg unit RRP) + Penthouse's cut are
+          internal — hidden from the ASBO-RC partner view. They only see what
+          they're owed. */}
+      {!readOnly && <Cell label="Total RRP" value={formatGBP(totals.totalRrp)} />}
       {!readOnly && <Cell label="Penthouse 7%" value={formatGBP(totals.penthouseCut)} tone="amber" />}
       <Cell label="To ASBO-RC" value={formatGBP(totals.owedToAsboRc)} tone="teal" />
-      <Cell label="Avg unit RRP" value={formatGBP(totals.unitCount ? totals.totalRrp / totals.unitCount : 0)} />
+      {!readOnly && (
+        <Cell label="Avg unit RRP" value={formatGBP(totals.unitCount ? totals.totalRrp / totals.unitCount : 0)} />
+      )}
     </div>
   );
 }
@@ -130,9 +134,10 @@ export function AsboRcReportClient({ report, readOnly = false }: AsboRcReportCli
   const items = tab === "stock" ? report.inStock : report.sold;
   const totals = tab === "stock" ? report.inStockTotals : report.soldTotals;
 
-  // Column span of the data columns after the Product cell (Qty, RRP, Total,
-  // [Penthouse 7% unless read-only], To ASBO-RC) — used for date section rows.
-  const dataColSpan = readOnly ? 4 : 5;
+  // Column span of the data columns after the Product cell — used for date
+  // section rows. Read-only (ASBO): Qty, RRP, To ASBO-RC = 3 (Total RRP and
+  // Penthouse 7% hidden). Admin: Qty, RRP, Total RRP, Penthouse 7%, To ASBO = 5.
+  const dataColSpan = readOnly ? 3 : 5;
 
   // Group sold rows into date sections (newest day first). Each group carries a
   // subtotal of units + money owed for that day.
@@ -264,9 +269,12 @@ export function AsboRcReportClient({ report, readOnly = false }: AsboRcReportCli
         <td className={`px-3 py-3 text-right tabular-nums ${struck ? "line-through" : ""}`}>
           {formatGBP(item.rrp)}
         </td>
-        <td className={`px-3 py-3 text-right tabular-nums font-semibold ${struck ? "line-through" : ""}`}>
-          {formatGBP(item.totalRrp)}
-        </td>
+        {/* Total value column is internal — hidden from the ASBO partner view. */}
+        {!readOnly && (
+          <td className={`px-3 py-3 text-right tabular-nums font-semibold ${struck ? "line-through" : ""}`}>
+            {formatGBP(item.totalRrp)}
+          </td>
+        )}
         {!readOnly && (
           <td className={`px-3 py-3 text-right tabular-nums text-amber-600 dark:text-amber-400 ${struck ? "line-through" : ""}`}>
             {formatGBP(item.penthouseCut)}
@@ -282,36 +290,16 @@ export function AsboRcReportClient({ report, readOnly = false }: AsboRcReportCli
   return (
     <div className="space-y-5">
       {/* Overall headline totals */}
-      <div className={`grid grid-cols-2 gap-2.5 ${readOnly ? "sm:grid-cols-2" : "sm:grid-cols-4"}`}>
+      <div className={`grid grid-cols-2 gap-2.5 ${readOnly ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
         <Headline
           label="Products"
           value={String(report.overall.itemCount)}
-          sub={(() => {
-            const base =
-              report.draftTotals.unitCount > 0
-                ? `${report.inStockTotals.unitCount} in stock · ${report.draftTotals.unitCount} in draft`
-                : `${report.inStockTotals.unitCount} in stock`;
-            // The Consignment value card (which carries the draft £) is hidden
-            // from the ASBO read-only view, so surface the draft £ here instead.
-            if (readOnly && report.draftTotals.totalRrp > 0) {
-              return `${base} (${formatGBP(report.draftTotals.totalRrp)})`;
-            }
-            return base;
-          })()}
+          sub={
+            report.draftTotals.unitCount > 0
+              ? `${report.inStockTotals.unitCount} in stock · ${report.draftTotals.unitCount} in draft`
+              : `${report.inStockTotals.unitCount} in stock`
+          }
         />
-        {/* Consignment value — admin only. (ASBO still sees draft units/£ on the
-            Products card and what they're owed below.) */}
-        {!readOnly && (
-          <Headline
-            label="Consignment value (all)"
-            value={formatGBP(report.overall.totalRrp)}
-            sub={
-              report.draftTotals.totalRrp > 0
-                ? `${formatGBP(report.draftTotals.totalRrp)} in draft`
-                : undefined
-            }
-          />
-        )}
         {/* Owed to ASBO (93% of consignment) — shown to both ASBO and admin. */}
         <Headline label="Owed to ASBO-RC (all)" value={formatGBP(report.overall.owedToAsboRc)} tone="teal" />
         {/* Penthouse's take + uplift are internal — admin only. */}
@@ -383,7 +371,7 @@ export function AsboRcReportClient({ report, readOnly = false }: AsboRcReportCli
                 <th className="px-3 py-3 font-medium">Product</th>
                 <th className="px-3 py-3 font-medium text-right">{tab === "stock" ? "Stock" : "Qty"}</th>
                 <th className="px-3 py-3 font-medium text-right">RRP</th>
-                <th className="px-3 py-3 font-medium text-right">Total RRP</th>
+                {!readOnly && <th className="px-3 py-3 font-medium text-right">Total RRP</th>}
                 {!readOnly && <th className="px-3 py-3 font-medium text-right">Penthouse 7%</th>}
                 <th className="px-3 py-3 font-medium text-right">To ASBO-RC</th>
               </tr>
@@ -422,7 +410,9 @@ export function AsboRcReportClient({ report, readOnly = false }: AsboRcReportCli
                 <td className="px-3 py-3 text-zinc-900 dark:text-zinc-100">Totals</td>
                 <td className="px-3 py-3 text-right tabular-nums">{totals.unitCount}</td>
                 <td className="px-3 py-3" />
-                <td className="px-3 py-3 text-right tabular-nums">{formatGBP(totals.totalRrp)}</td>
+                {!readOnly && (
+                  <td className="px-3 py-3 text-right tabular-nums">{formatGBP(totals.totalRrp)}</td>
+                )}
                 {!readOnly && (
                   <td className="px-3 py-3 text-right tabular-nums text-amber-600 dark:text-amber-400">
                     {formatGBP(totals.penthouseCut)}
