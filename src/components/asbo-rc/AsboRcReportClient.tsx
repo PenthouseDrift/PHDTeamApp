@@ -286,21 +286,32 @@ export function AsboRcReportClient({ report, readOnly = false }: AsboRcReportCli
         <Headline
           label="Products"
           value={String(report.overall.itemCount)}
-          sub={
-            report.draftTotals.unitCount > 0
-              ? `${report.inStockTotals.unitCount} in stock · ${report.draftTotals.unitCount} in draft`
-              : `${report.inStockTotals.unitCount} in stock`
-          }
+          sub={(() => {
+            const base =
+              report.draftTotals.unitCount > 0
+                ? `${report.inStockTotals.unitCount} in stock · ${report.draftTotals.unitCount} in draft`
+                : `${report.inStockTotals.unitCount} in stock`;
+            // The Consignment value card (which carries the draft £) is hidden
+            // from the ASBO read-only view, so surface the draft £ here instead.
+            if (readOnly && report.draftTotals.totalRrp > 0) {
+              return `${base} (${formatGBP(report.draftTotals.totalRrp)})`;
+            }
+            return base;
+          })()}
         />
-        <Headline
-          label="Consignment value (all)"
-          value={formatGBP(report.overall.totalRrp)}
-          sub={
-            report.draftTotals.totalRrp > 0
-              ? `${formatGBP(report.draftTotals.totalRrp)} in draft`
-              : undefined
-          }
-        />
+        {/* Consignment value — admin only. (ASBO still sees draft units/£ on the
+            Products card and what they're owed below.) */}
+        {!readOnly && (
+          <Headline
+            label="Consignment value (all)"
+            value={formatGBP(report.overall.totalRrp)}
+            sub={
+              report.draftTotals.totalRrp > 0
+                ? `${formatGBP(report.draftTotals.totalRrp)} in draft`
+                : undefined
+            }
+          />
+        )}
         {/* Owed to ASBO (93% of consignment) — shown to both ASBO and admin. */}
         <Headline label="Owed to ASBO-RC (all)" value={formatGBP(report.overall.owedToAsboRc)} tone="teal" />
         {/* Penthouse's take + uplift are internal — admin only. */}
