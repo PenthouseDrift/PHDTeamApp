@@ -320,9 +320,17 @@ export function AsboRcReportClient({ report, readOnly = false }: AsboRcReportCli
             label="Penthouse margin (all)"
             value={formatGBP(report.overall.penthouseCut)}
             sub={
-              report.overall.totalUplift > 0
-                ? `incl. ${formatGBP(report.overall.totalUplift)} uplift`
-                : undefined
+              [
+                report.overall.totalUplift > 0
+                  ? `incl. ${formatGBP(report.overall.totalUplift)} uplift`
+                  : null,
+                // Estimated margin if all current draft stock sold (admin view).
+                report.draftTotals.penthouseCut > 0
+                  ? `+ ${formatGBP(report.draftTotals.penthouseCut)} est. in draft`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || undefined
             }
             tone="amber"
           />
