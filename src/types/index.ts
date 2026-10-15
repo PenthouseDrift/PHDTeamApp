@@ -143,14 +143,54 @@ export interface ShellEntry {
   createdAt: number;
 }
 
+/**
+ * A single purchasable variant of a listing (e.g. one colour). Each variant
+ * carries its own price and stock, so a listing can offer, say, "Colour: Black
+ * £3.99 (2 left), Red £3.99 (0 left)". Only used when the listing has
+ * `hasVariations` set; otherwise the listing's own price/quantity apply.
+ */
+export interface ListingVariant {
+  /** Stable id for the variant (used as the React key and for stock edits). */
+  id: string;
+  /** The variant value shown under the listing's variationLabel (e.g. "Black"). */
+  name: string;
+  /** This variant's price in GBP (the SELL price the customer pays). */
+  price: number;
+  /**
+   * ASBO-RC consignment base price for this variant — the figure the 7% split
+   * is calculated on. Any amount of `price` above this is kept entirely by
+   * Penthouse (the "uplift"). Optional: when unset (undefined), the consignment
+   * base falls back to this variant's `price` (so uplift is £0). Only meaningful
+   * for ASBO-RC consignment listings.
+   */
+  consignmentPrice?: number;
+  /** Total units of this variant. */
+  quantity: number;
+  /** Units of this variant sold so far (0..quantity). */
+  soldCount: number;
+}
+
 export interface MarketplaceListing {
   listingId: string;
   /** Google providerAccountId of the member who posted the listing. */
   userId: string;
   title: string;
   description: string;
-  /** Price in GBP. Stored/displayed as a plain number; 0 means "free" / offers. */
+  /**
+   * Price in GBP — the SELL price the customer pays (and what's shown
+   * everywhere a buyer looks). 0 means "free" / offers. For variant listings
+   * this is the derived minimum variant sell price.
+   */
   price: number;
+  /**
+   * ASBO-RC consignment base price — the figure the Penthouse 7% split is
+   * calculated on. ASBO is owed `consignmentPrice × (1 − cutPct/100)`; any
+   * amount of `price` above `consignmentPrice` (the "uplift") is kept entirely
+   * by Penthouse. Optional: when unset, the base falls back to `price` (uplift
+   * £0, i.e. the classic behaviour). Only meaningful when `soldByAsboRc`.
+   * Never exposed to buyers or the public website.
+   */
+  consignmentPrice?: number;
   images: string[];
   /** Optional free-text location/pickup note (e.g. "collect at the track"). */
   location: string;
@@ -181,6 +221,21 @@ export interface MarketplaceListing {
    * publish, isDraft is cleared and the listing enters the public index.
    */
   isDraft: boolean;
+  /**
+   * Whether this listing offers selectable variants (e.g. different colours),
+   * each with its own price and stock. When true, the listing's own `price`,
+   * `quantity`, `soldCount` and `status` are DERIVED from `variants`:
+   *   - price    = minimum variant price (shown as "from £X")
+   *   - quantity = sum of variant quantities
+   *   - soldCount= sum of variant soldCounts
+   *   - status   = "sold" only when every variant is sold out
+   * When false, `variants` is empty and the listing behaves as a single item.
+   */
+  hasVariations: boolean;
+  /** The label describing what the variants represent, e.g. "Colour". */
+  variationLabel: string;
+  /** The variants on offer. Empty unless `hasVariations` is true. */
+  variants: ListingVariant[];
   /**
    * Whether the listing is allowed to appear on the public marketing website.
    * Member listings default to true; admins can hide a listing by setting this

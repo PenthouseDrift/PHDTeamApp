@@ -35,6 +35,13 @@ function toSale(data: Record<string, unknown> | null): AsboRcSale | null {
     title: str(data.title),
     image: data.image ? str(data.image) : null,
     rrp: num(data.rrp),
+    // Legacy sales have no separate sellPrice/uplift: treat sell = consignment,
+    // uplift = 0 so historical records read correctly.
+    sellPrice:
+      data.sellPrice === "" || data.sellPrice === undefined || data.sellPrice === null
+        ? num(data.rrp)
+        : num(data.sellPrice),
+    uplift: data.uplift === "" || data.uplift === undefined || data.uplift === null ? 0 : num(data.uplift),
     cutPct: data.cutPct === "" || data.cutPct === undefined ? DEFAULT_PENTHOUSE_CUT_PCT : num(data.cutPct),
     penthouseCut: num(data.penthouseCut),
     owedToAsboRc: num(data.owedToAsboRc),
@@ -51,6 +58,8 @@ function saleHash(sale: AsboRcSale): Record<string, string> {
     title: sale.title,
     image: sale.image ?? "",
     rrp: String(sale.rrp),
+    sellPrice: String(sale.sellPrice ?? sale.rrp),
+    uplift: String(sale.uplift ?? 0),
     cutPct: String(sale.cutPct),
     penthouseCut: String(sale.penthouseCut),
     owedToAsboRc: String(sale.owedToAsboRc),
@@ -70,14 +79,33 @@ function saleHash(sale: AsboRcSale): Record<string, string> {
 export async function createAsboRcSales(
   listing: MarketplaceListing,
   count: number,
-  soldAtTimestamps?: number[]
+  soldAtTimestamps?: number[],
+  // For variant listings: snapshot the specific variant's sell price, consignment
+  // base + name so the ledger records what was actually sold.
+  variantOverride?: { price: number; consignmentPrice?: number; name: string }
 ): Promise<void> {
   if (!listing.soldByAsboRc || count <= 0) return;
 
-  const rrp = listing.price || 0;
+  // Sell price = what the customer paid. Consignment base = what the 7% split
+  // and the amount owed to ASBO are calculated on (falls back to sell price
+  // when unset). Uplift = sell − consignment, kept entirely by Penthouse.
+  const sellPrice = variantOverride ? variantOverride.price : listing.price || 0;
+  const consignment =
+    (variantOverride
+      ? variantOverride.consignmentPrice != null && variantOverride.consignmentPrice > 0
+        ? variantOverride.consignmentPrice
+        : variantOverride.price
+      : listing.consignmentPrice != null && listing.consignmentPrice > 0
+      ? listing.consignmentPrice
+      : listing.price) || 0;
   const cutPct = listing.penthouseCutPct ?? DEFAULT_PENTHOUSE_CUT_PCT;
-  const penthouseCut = round2(rrp * (cutPct / 100));
-  const owedToAsboRc = round2(rrp - penthouseCut);
+  const baseCut = round2(consignment * (cutPct / 100));
+  const uplift = round2(Math.max(0, sellPrice - consignment));
+  const owedToAsboRc = round2(consignment - baseCut);
+  const penthouseCut = round2(baseCut + uplift);
+  const title = variantOverride
+    ? `${listing.title} — ${variantOverride.name}`
+    : listing.title;
 
   const pipeline = redis.pipeline();
   for (let i = 0; i < count; i += 1) {
@@ -86,9 +114,11 @@ export async function createAsboRcSales(
     const sale: AsboRcSale = {
       saleId,
       listingId: listing.listingId,
-      title: listing.title,
+      title,
       image: listing.images[0] ?? null,
-      rrp,
+      rrp: consignment, // consignment base (ASBO-facing figure)
+      sellPrice,
+      uplift,
       cutPct,
       penthouseCut,
       owedToAsboRc,
@@ -129,31 +159,88 @@ function sumTotals(items: AsboRcReportItem[]): AsboRcTotals {
       totalRrp: round2(acc.totalRrp + i.totalRrp),
       penthouseCut: round2(acc.penthouseCut + i.penthouseCut),
       owedToAsboRc: round2(acc.owedToAsboRc + i.owedToAsboRc),
+      totalSell: round2(acc.totalSell + (i.totalSell ?? i.totalRrp)),
+      totalUplift: round2(acc.totalUplift + (i.totalUplift ?? 0)),
     }),
-    { itemCount: 0, unitCount: 0, totalRrp: 0, penthouseCut: 0, owedToAsboRc: 0 }
+    { itemCount: 0, unitCount: 0, totalRrp: 0, penthouseCut: 0, owedToAsboRc: 0, totalSell: 0, totalUplift: 0 }
   );
 }
 
-/** In-stock line (remaining units) for a listing, aggregated. */
+/** Consignment base for a listing/variant: explicit consignmentPrice (when set
+ *  and positive) else the sell price. Mirrors effectiveConsignmentPrice in the
+ *  marketplace actions (inlined to keep this pure helper out of "use server"). */
+function consignmentOf(item: { price: number; consignmentPrice?: number }): number {
+  return item.consignmentPrice != null && item.consignmentPrice > 0
+    ? item.consignmentPrice
+    : item.price || 0;
+}
+
+/** In-stock line (remaining units) for a listing, aggregated. Figures are
+ *  CONSIGNMENT-based (ASBO-facing); totalSell/totalUplift carry the admin-only
+ *  sell-price view. */
 function stockLine(l: MarketplaceListing): AsboRcReportItem | null {
+  const cutPct = l.penthouseCutPct ?? DEFAULT_PENTHOUSE_CUT_PCT;
+
+  // Variant listings: sum per-variant remaining units, consignment value and
+  // sell value (each variant at its own prices).
+  if (l.hasVariations && l.variants.length > 0) {
+    let stockUnits = 0;
+    let totalConsign = 0;
+    let totalSell = 0;
+    for (const v of l.variants) {
+      const remaining = Math.max(0, v.quantity - v.soldCount);
+      stockUnits += remaining;
+      totalConsign += consignmentOf(v) * remaining;
+      totalSell += v.price * remaining;
+    }
+    if (stockUnits <= 0) return null;
+    totalConsign = round2(totalConsign);
+    totalSell = round2(totalSell);
+    const owedToAsboRc = round2(totalConsign * (1 - cutPct / 100));
+    const totalUplift = round2(Math.max(0, totalSell - totalConsign));
+    const penthouseCut = round2(totalConsign * (cutPct / 100) + totalUplift);
+    return {
+      listingId: l.listingId,
+      title: l.title,
+      image: l.images[0] ?? null,
+      quantity: stockUnits,
+      rrp: l.consignmentPrice != null && l.consignmentPrice > 0 ? l.consignmentPrice : l.price || 0,
+      cutPct,
+      totalRrp: totalConsign,
+      penthouseCut,
+      owedToAsboRc,
+      totalSell,
+      totalUplift,
+      status: "available",
+      paid: false,
+      createdAt: l.createdAt,
+      totalQuantity: l.variants.reduce((s, v) => s + v.quantity, 0),
+      soldCount: l.variants.reduce((s, v) => s + v.soldCount, 0),
+      rowKey: l.listingId,
+    };
+  }
+
   const quantity = Math.max(1, l.quantity || 1);
   const soldCount = Math.min(quantity, Math.max(0, l.soldCount || 0));
   const stockUnits = quantity - soldCount;
   if (stockUnits <= 0) return null;
-  const rrp = l.price || 0;
-  const cutPct = l.penthouseCutPct ?? DEFAULT_PENTHOUSE_CUT_PCT;
-  const penthouseCut = round2(rrp * (cutPct / 100));
-  const owedToAsboRc = round2(rrp - penthouseCut);
+  const consignment = consignmentOf(l);
+  const sell = l.price || 0;
+  const owedPerUnit = round2(consignment * (1 - cutPct / 100));
+  const upliftPerUnit = round2(Math.max(0, sell - consignment));
+  const cutPerUnit = round2(consignment * (cutPct / 100) + upliftPerUnit);
   return {
     listingId: l.listingId,
     title: l.title,
     image: l.images[0] ?? null,
     quantity: stockUnits,
-    rrp,
+    rrp: consignment,
     cutPct,
-    totalRrp: round2(rrp * stockUnits),
-    penthouseCut: round2(penthouseCut * stockUnits),
-    owedToAsboRc: round2(owedToAsboRc * stockUnits),
+    totalRrp: round2(consignment * stockUnits),
+    penthouseCut: round2(cutPerUnit * stockUnits),
+    owedToAsboRc: round2(owedPerUnit * stockUnits),
+    totalSell: round2(sell * stockUnits),
+    totalUplift: round2(upliftPerUnit * stockUnits),
     status: "available",
     paid: false,
     createdAt: l.createdAt,
@@ -170,11 +257,13 @@ function saleToRow(s: AsboRcSale): AsboRcReportItem {
     title: s.title,
     image: s.image,
     quantity: 1,
-    rrp: s.rrp,
+    rrp: s.rrp, // consignment base (ASBO-facing)
     cutPct: s.cutPct,
     totalRrp: s.rrp,
     penthouseCut: s.penthouseCut,
     owedToAsboRc: s.owedToAsboRc,
+    totalSell: s.sellPrice ?? s.rrp,
+    totalUplift: s.uplift ?? 0,
     status: "sold",
     paid: s.paid,
     paidAt: s.paidAt,
