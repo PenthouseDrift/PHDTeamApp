@@ -294,11 +294,18 @@ export function AsboRcReportClient({ report, readOnly = false }: AsboRcReportCli
         <Headline
           label="Products"
           value={String(report.overall.itemCount)}
-          sub={
-            report.draftTotals.unitCount > 0
-              ? `${report.inStockTotals.unitCount} in stock · ${report.draftTotals.unitCount} in draft`
-              : `${report.inStockTotals.unitCount} in stock`
-          }
+          sub={(() => {
+            // Admin sees the consignment VALUE alongside each count; the ASBO
+            // read-only view stays counts-only (no product value figures).
+            const stockPart = readOnly
+              ? `${report.inStockTotals.unitCount} in stock`
+              : `${report.inStockTotals.unitCount} in stock (${formatGBP(report.inStockTotals.totalRrp)})`;
+            if (report.draftTotals.unitCount <= 0) return stockPart;
+            const draftPart = readOnly
+              ? `${report.draftTotals.unitCount} in draft`
+              : `${report.draftTotals.unitCount} in draft (${formatGBP(report.draftTotals.totalRrp)})`;
+            return `${stockPart} · ${draftPart}`;
+          })()}
         />
         {/* Owed to ASBO (93% of consignment) — shown to both ASBO and admin. */}
         <Headline label="Owed to ASBO-RC (all)" value={formatGBP(report.overall.owedToAsboRc)} tone="teal" />
