@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
-import { getListingsPage, getListingAuthorName } from "@/actions/marketplace";
+import { getListingsPage, getListingAuthorName, getDraftListings } from "@/actions/marketplace";
 import { ListingCard } from "@/components/marketplace/ListingCard";
 import { MarketplaceSearch } from "@/components/marketplace/MarketplaceSearch";
 
@@ -17,18 +17,26 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
   const viewerId = session?.user?.id ?? "";
   const isStaff = session?.user?.role === "admin" || session?.user?.role === "moderator";
 
+  // Role that may manage drafts (admin or ASBO-RC). getDraftListings re-checks
+  // and scopes server-side, so this only gates the card's manage affordances.
+  const canManageDrafts = session?.user?.role === "admin" || session?.user?.role === "asbo-rc";
+
   const query = (qParam ?? "").trim();
   const requestedPage = Math.max(1, Number(pageParam) || 1);
-  const { listings, page, totalPages, total } = await getListingsPage(requestedPage, PER_PAGE, {
-    query,
-  });
+  const [{ listings, page, totalPages, total }, drafts] = await Promise.all([
+    getListingsPage(requestedPage, PER_PAGE, { query }),
+    // Drafts only show on the first page of an unfiltered view, so they don't
+    // clutter search results or deeper pages. Empty for non-admin/ASBO-RC.
+    !query && requestedPage === 1 ? getDraftListings() : Promise.resolve([]),
+  ]);
 
   // Build a page href that preserves the active search query.
   const pageHref = (p: number) =>
     query ? `/marketplace?q=${encodeURIComponent(query)}&page=${p}` : `/marketplace?page=${p}`;
 
-  // Resolve author display names in parallel (de-duped by userId) for this page only.
-  const uniqueUserIds = [...new Set(listings.map((l) => l.userId))];
+  // Resolve author display names in parallel (de-duped by userId) for this page
+  // only, including any drafts shown above the grid.
+  const uniqueUserIds = [...new Set([...listings, ...drafts].map((l) => l.userId))];
   const authorNamesArr = await Promise.all(
     uniqueUserIds.map(async (uid) => [uid, await getListingAuthorName(uid)] as [string, string])
   );
@@ -75,6 +83,36 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
 
         {/* Search (keyed on query so external URL changes reset the input) */}
         <MarketplaceSearch key={query} initialQuery={query} />
+
+        {/* Drafts — staff-only (admin sees all, ASBO-RC sees their own). Stocked
+            but not yet published; hidden from members and the public website. */}
+        {drafts.length > 0 && (
+          <section className="space-y-3 rounded-xl border border-dashed border-amber-400/60 bg-amber-50/40 p-4 dark:border-amber-500/40 dark:bg-amber-500/5">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                Drafts · not yet published
+              </h2>
+              <span className="text-xs text-amber-700/70 dark:text-amber-400/70">
+                {drafts.length} item{drafts.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Only you and staff can see these. Publish an item to make it live for members and
+              the website.
+            </p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
+              {drafts.map((draft) => (
+                <ListingCard
+                  key={draft.listingId}
+                  listing={draft}
+                  authorName={authorNames.get(draft.userId) || "Member"}
+                  viewerId={viewerId}
+                  isStaff={canManageDrafts}
+                />
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Grid */}
         {listings.length === 0 ? (

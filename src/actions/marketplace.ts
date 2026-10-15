@@ -30,6 +30,15 @@ function bustMarketplaceCache() {
 const MARKETPLACE_INDEX = "marketplace:all";
 
 /**
+ * Separate sorted set holding DRAFT listing IDs (stocked but not yet
+ * published). Drafts are deliberately kept out of MARKETPLACE_INDEX so every
+ * public/member read (which funnels through that index) fails safe and never
+ * sees a draft. Score is -createdAt (newest-first). On publish, the id moves
+ * from here into MARKETPLACE_INDEX.
+ */
+const MARKETPLACE_DRAFTS_INDEX = "marketplace:drafts";
+
+/**
  * Large constant added to a sold listing's score so every sold item sorts
  * AFTER every available item on a plain ascending zrange. Available scores are
  * -createdAt (negative, since createdAt is a ms timestamp), so adding a value
@@ -128,6 +137,7 @@ function toListing(data: Record<string, unknown> | null): MarketplaceListing | n
     soldAt,
     soldByAsboRc: String(data.soldByAsboRc) === "true",
     soldByPhd: String(data.soldByPhd) === "true",
+    isDraft: String(data.isDraft) === "true",
     penthouseCutPct:
       data.penthouseCutPct === null || data.penthouseCutPct === undefined || data.penthouseCutPct === ""
         ? 7
@@ -183,6 +193,7 @@ export async function createListing(
     quantity?: number;
     soldByAsboRc?: boolean;
     soldByPhd?: boolean;
+    isDraft?: boolean;
     penthouseCutPct?: number;
   }
 ): Promise<ActionResult<MarketplaceListing>> {
@@ -205,6 +216,9 @@ export async function createListing(
     // is ALSO implied by ASBO consignment (PHD sells it on their behalf), so an
     // ASBO item always carries the badge. Only admins may set it standalone.
     const soldByPhd = soldByAsboRc || (role === "admin" && Boolean(parsed.data.soldByPhd));
+    // Draft ("stock first, publish later"): admins and ASBO-RC users only.
+    // Anyone else always creates a live listing regardless of the flag.
+    const isDraft = canSellForAsboRc && Boolean(parsed.data.isDraft);
 
     const listingId = randomUUID();
     const now = Date.now();
@@ -223,6 +237,7 @@ export async function createListing(
       atTrack: parsed.data.atTrack,
       meetAtTrack: parsed.data.meetAtTrack,
       status: "available",
+      isDraft,
       showOnWebsite: true,
       quantity: parsed.data.quantity,
       soldCount: 0,
@@ -250,6 +265,7 @@ export async function createListing(
       contactMethod: listing.contactMethod,
       contactValue: listing.contactValue,
       status: listing.status,
+      isDraft: String(listing.isDraft),
       showOnWebsite: String(listing.showOnWebsite),
       atTrack: String(listing.atTrack),
       meetAtTrack: String(listing.meetAtTrack),
@@ -265,12 +281,17 @@ export async function createListing(
       updatedAt: String(listing.updatedAt),
     };
 
-    await redis
-      .multi()
-      .hset(`listing:${listingId}`, hash)
-      // New listings are always available => scored by -createdAt (newest first).
-      .zadd(MARKETPLACE_INDEX, { score: indexScore(now, "available"), member: listingId })
-      .exec();
+    // Drafts go into the separate drafts index ONLY, so they never surface in
+    // any public/member read (all of which go through MARKETPLACE_INDEX). Live
+    // listings go into the public index as before.
+    const writeMulti = redis.multi().hset(`listing:${listingId}`, hash);
+    if (isDraft) {
+      writeMulti.zadd(MARKETPLACE_DRAFTS_INDEX, { score: -now, member: listingId });
+    } else {
+      // New live listings are always available => scored by -createdAt (newest first).
+      writeMulti.zadd(MARKETPLACE_INDEX, { score: indexScore(now, "available"), member: listingId });
+    }
+    await writeMulti.exec();
 
     revalidatePath("/marketplace");
     bustMarketplaceCache();
@@ -435,6 +456,108 @@ export async function getListingById(listingId: string): Promise<MarketplaceList
     return toListing(data as Record<string, unknown> | null);
   } catch {
     return null;
+  }
+}
+
+/**
+ * Whether the current viewer is allowed to see a given draft listing.
+ * Admins may see any draft; an ASBO-RC user may see only their own. Everyone
+ * else (members, logged-out, public) must never see a draft. Live listings are
+ * always visible — this guard only applies to drafts.
+ */
+export async function canViewDraft(listing: MarketplaceListing): Promise<boolean> {
+  if (!listing.isDraft) return true;
+  const session = await auth();
+  const role = session?.user?.role;
+  if (role === "admin") return true;
+  if (role === "asbo-rc" && session?.user?.id === listing.userId) return true;
+  return false;
+}
+
+/**
+ * Draft listings the current viewer may manage: admins see ALL drafts, ASBO-RC
+ * users see only their own. Any other role gets an empty list. Newest-first.
+ */
+export async function getDraftListings(limit = 60): Promise<MarketplaceListing[]> {
+  try {
+    const session = await auth();
+    const role = session?.user?.role;
+    const isAdmin = role === "admin";
+    const isAsboRc = role === "asbo-rc";
+    if (!isAdmin && !isAsboRc) return [];
+
+    const ids = await redis.zrange(MARKETPLACE_DRAFTS_INDEX, 0, limit - 1);
+    if (!ids || ids.length === 0) return [];
+
+    const pipeline = redis.pipeline();
+    for (const id of ids) pipeline.hgetall(`listing:${id as string}`);
+    const rawResults = await pipeline.exec();
+
+    const drafts = rawResults
+      .map((raw) => toListing(raw as Record<string, unknown> | null))
+      .filter((l): l is MarketplaceListing => l !== null && l.isDraft);
+
+    // ASBO-RC users only see their own drafts; admins see everyone's.
+    return isAdmin ? drafts : drafts.filter((l) => l.userId === session?.user?.id);
+  } catch (error) {
+    console.error("Failed to get draft listings:", error);
+    return [];
+  }
+}
+
+/**
+ * Publish a draft: clear the draft flag, move it from the drafts index into the
+ * public browse index, and refresh all surfaces. Admins may publish any draft;
+ * ASBO-RC users may publish only their own. No-op if the listing isn't a draft.
+ */
+export async function publishListing(
+  listingId: string
+): Promise<ActionResult<{ isDraft: false }>> {
+  try {
+    const session = await auth();
+    const role = session?.user?.role;
+    const isAdmin = role === "admin";
+    const isAsboRc = role === "asbo-rc";
+    if (!isAdmin && !isAsboRc) {
+      return { success: false, error: "Only admins and ASBO-RC users can publish listings" };
+    }
+
+    const data = await redis.hgetall(`listing:${listingId}`);
+    const listing = toListing(data as Record<string, unknown> | null);
+    if (!listing) {
+      return { success: false, error: "Listing not found" };
+    }
+    // ASBO-RC may only publish their own drafts.
+    if (!isAdmin && listing.userId !== session?.user?.id) {
+      return { success: false, error: "You can only publish your own drafts" };
+    }
+    if (!listing.isDraft) {
+      // Already live — treat as success (idempotent).
+      return { success: true, data: { isDraft: false } };
+    }
+
+    // Score the listing into the public index by its CURRENT status so sold-out
+    // stock still sorts correctly, then drop it from the drafts index.
+    await redis
+      .multi()
+      .hset(`listing:${listingId}`, { isDraft: "false", updatedAt: String(Date.now()) })
+      .zadd(MARKETPLACE_INDEX, {
+        score: indexScore(listing.createdAt, listing.status),
+        member: listingId,
+      })
+      .zrem(MARKETPLACE_DRAFTS_INDEX, listingId)
+      .exec();
+
+    revalidatePath("/marketplace");
+    revalidatePath(`/marketplace/${listingId}`);
+    bustMarketplaceCache();
+    revalidatePath("/admin/asbo-rc");
+    return { success: true, data: { isDraft: false } };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to publish listing",
+    };
   }
 }
 
@@ -819,8 +942,11 @@ export async function updateListing(
     // Clamp the sold-timestamp list to the (possibly reduced) sold count.
     const nextSoldAt = existing.soldAt.slice(0, nextSoldCount);
 
+    // Editing never changes draft/live status (publishing is a separate action),
+    // so preserve the existing isDraft value.
     const updated: MarketplaceListing = {
       ...existing,
+      isDraft: existing.isDraft,
       title: parsed.data.title.trim(),
       description: parsed.data.description.trim(),
       price: parsed.data.price,
@@ -857,6 +983,7 @@ export async function updateListing(
       contactMethod: updated.contactMethod,
       contactValue: updated.contactValue,
       status: updated.status,
+      isDraft: String(updated.isDraft),
       showOnWebsite: String(updated.showOnWebsite),
       atTrack: String(updated.atTrack),
       meetAtTrack: String(updated.meetAtTrack),
@@ -875,12 +1002,20 @@ export async function updateListing(
       hash.asboRcPaidAt = String(updated.asboRcPaidAt);
     }
     await redis.hset(`listing:${listingId}`, hash);
-    // Editing quantity can flip status (e.g. sold -> available), so keep the
-    // browse index score in sync with the new status.
-    await redis.zadd(MARKETPLACE_INDEX, {
-      score: indexScore(updated.createdAt, updated.status),
-      member: listingId,
-    });
+    // Keep index membership correct. A draft must stay ONLY in the drafts index
+    // (never the public browse index); a live listing's score is kept in sync
+    // with its (possibly changed) status.
+    if (updated.isDraft) {
+      await redis.zadd(MARKETPLACE_DRAFTS_INDEX, {
+        score: -updated.createdAt,
+        member: listingId,
+      });
+    } else {
+      await redis.zadd(MARKETPLACE_INDEX, {
+        score: indexScore(updated.createdAt, updated.status),
+        member: listingId,
+      });
+    }
 
     // Clean up any images that were removed during the edit (best-effort).
     const removed = existing.images.filter((url) => url && !updated.images.includes(url));
@@ -930,7 +1065,12 @@ export async function deleteListing(listingId: string): Promise<ActionResult<nul
       return { success: false, error: "You can only delete your own listings" };
     }
 
-    await redis.multi().del(`listing:${listingId}`).zrem(MARKETPLACE_INDEX, listingId).exec();
+    await redis
+      .multi()
+      .del(`listing:${listingId}`)
+      .zrem(MARKETPLACE_INDEX, listingId)
+      .zrem(MARKETPLACE_DRAFTS_INDEX, listingId)
+      .exec();
     revalidatePath("/admin/asbo-rc");
     revalidatePath("/asbo-rc");
     revalidatePath("/dashboard");
