@@ -1,11 +1,110 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface ListingGalleryProps {
   images: string[];
   title: string;
   isSold?: boolean;
+}
+
+/**
+ * Fullscreen, closable image viewer with simple zoom. Click/tap the image to
+ * toggle 2.5x zoom; when zoomed, drag to pan. Closes via the X button, Escape,
+ * or clicking the backdrop. No external dependency.
+ */
+function ImageZoomModal({
+  src,
+  alt,
+  onClose,
+}: {
+  src: string;
+  alt: string;
+  onClose: () => void;
+}) {
+  const [zoomed, setZoomed] = useState(false);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const dragRef = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  const toggleZoom = () =>
+    setZoomed((z) => {
+      if (z) setOffset({ x: 0, y: 0 });
+      return !z;
+    });
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (!zoomed) return;
+    dragRef.current = { startX: e.clientX, startY: e.clientY, ox: offset.x, oy: offset.y };
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!zoomed || !dragRef.current) return;
+    setOffset({
+      x: dragRef.current.ox + (e.clientX - dragRef.current.startX),
+      y: dragRef.current.oy + (e.clientY - dragRef.current.startY),
+    });
+  };
+  const onPointerUp = () => {
+    dragRef.current = null;
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${alt} — zoomable image`}
+    >
+      <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close image"
+        className="absolute right-4 top-4 z-10 inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 transition-colors"
+        style={{ top: "max(1rem, env(safe-area-inset-top, 0px))" }}
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+        </svg>
+      </button>
+      <span className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-white/15 px-3 py-1 text-xs font-medium text-white">
+        {zoomed ? "Drag to pan · tap to zoom out" : "Tap image to zoom"}
+      </span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleZoom();
+        }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        className={`relative z-[1] max-h-[90vh] max-w-[92vw] select-none object-contain transition-transform duration-200 ${
+          zoomed ? "cursor-grab" : "cursor-zoom-in"
+        }`}
+        style={{
+          transform: zoomed ? `scale(2.5) translate(${offset.x / 2.5}px, ${offset.y / 2.5}px)` : "none",
+          touchAction: "none",
+        }}
+        draggable={false}
+      />
+    </div>
+  );
 }
 
 /**
@@ -16,6 +115,8 @@ interface ListingGalleryProps {
 export function ListingGallery({ images, title, isSold = false }: ListingGalleryProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [index, setIndex] = useState(0);
+  // Index of the image open in the fullscreen zoom viewer (null = closed).
+  const [zoomIndex, setZoomIndex] = useState<number | null>(null);
 
   const pics = images.length > 0 ? images : [];
   const single = pics.length <= 1;
@@ -47,9 +148,12 @@ export function ListingGallery({ images, title, isSold = false }: ListingGallery
             </div>
           ) : (
             pics.map((url, i) => (
-              <div
+              <button
                 key={`${url}-${i}`}
-                className="relative aspect-square w-full flex-none snap-center bg-zinc-100 dark:bg-zinc-800"
+                type="button"
+                onClick={() => setZoomIndex(i)}
+                aria-label={`Zoom ${title} photo ${i + 1}`}
+                className="relative aspect-square w-full flex-none snap-center cursor-zoom-in bg-zinc-100 dark:bg-zinc-800"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -58,7 +162,7 @@ export function ListingGallery({ images, title, isSold = false }: ListingGallery
                   loading={i === 0 ? "eager" : "lazy"}
                   className="h-full w-full object-cover"
                 />
-              </div>
+              </button>
             ))
           )}
         </div>
@@ -115,6 +219,14 @@ export function ListingGallery({ images, title, isSold = false }: ListingGallery
             </button>
           ))}
         </div>
+      )}
+
+      {zoomIndex !== null && pics[zoomIndex] && (
+        <ImageZoomModal
+          src={pics[zoomIndex]}
+          alt={`${title} photo ${zoomIndex + 1}`}
+          onClose={() => setZoomIndex(null)}
+        />
       )}
     </div>
   );
