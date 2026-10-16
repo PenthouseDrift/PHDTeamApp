@@ -4,20 +4,12 @@ import { auth } from "@/lib/auth";
 import { getListingById, getListingAuthorName, canViewDraft } from "@/actions/marketplace";
 import { ListingDetailActions } from "@/components/marketplace/ListingDetailActions";
 import { ListingGallery } from "@/components/marketplace/ListingGallery";
+import { ListingVariantPricing } from "@/components/marketplace/ListingVariantPricing";
 
 export const dynamic = "force-dynamic";
 
 interface ListingDetailPageProps {
   params: Promise<{ listingId: string }>;
-}
-
-function formatPrice(price: number): string {
-  if (price <= 0) return "Free / Offers";
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "GBP",
-    maximumFractionDigits: price % 1 === 0 ? 0 : 2,
-  }).format(price);
 }
 
 function formatDate(ts: number): string {
@@ -120,22 +112,18 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
           <div className="space-y-5">
             <div>
               <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{listing.title}</h1>
-              <p className="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">
-                {formatPrice(listing.price)}
-              </p>
-              <p
-                className={`mt-1 text-sm font-semibold ${
-                  listing.status === "sold"
-                    ? "text-red-500 dark:text-red-400"
-                    : "text-zinc-600 dark:text-zinc-300"
-                }`}
-              >
-                {listing.status === "sold"
-                  ? "Sold out"
-                  : listing.soldByAsboRc
-                  ? `${listing.quantity} available`
-                  : `${Math.max(0, listing.quantity - listing.soldCount)} available`}
-              </p>
+              {/* Price + variation selector (client). Picking a variation updates
+                  the displayed price and stock. */}
+              <div className="mt-1">
+                <ListingVariantPricing
+                  price={listing.price}
+                  status={listing.status}
+                  available={Math.max(0, listing.quantity - listing.soldCount)}
+                  showAvailable
+                  variationLabel={listing.variationLabel}
+                  variants={listing.hasVariations ? listing.variants : []}
+                />
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
