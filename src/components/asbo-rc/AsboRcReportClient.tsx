@@ -287,6 +287,9 @@ export function AsboRcReportClient({ report, readOnly = false }: AsboRcReportCli
     );
   };
 
+   console.log("owedToAsboRc", report.inStockTotals.owedToAsboRc)
+       console.log("outstandingToAsboRc", report.outstandingToAsboRc)
+
   return (
     <div className="space-y-5">
       {/* Overall headline totals */}
@@ -310,6 +313,9 @@ export function AsboRcReportClient({ report, readOnly = false }: AsboRcReportCli
         {/* Owed to ASBO = 93% of consignment for all stock still on hand PLUS
             93% owed on items sold but not yet paid. In other words, the full
             consignment liability minus anything already sold AND settled. */}
+       
+      
+       
         <Headline
           label="Owed to ASBO-RC"
           value={formatGBP(

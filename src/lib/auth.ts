@@ -3,9 +3,28 @@ import { cookies } from "next/headers";
 import Google from "next-auth/providers/google";
 import { redis } from "./redis";
 
-const ADMIN_EMAILS: string[] = JSON.parse(
-  process.env.ADMIN_EMAILS || "[]"
-);
+// Parse ADMIN_EMAILS defensively. It's expected to be a JSON array of emails
+// (e.g. ["a@b.com"]), but a malformed value (missing quotes, env mangling)
+// must NOT crash the whole app — auth is imported by every protected page.
+// Falls back to accepting either valid JSON or a plain comma/space separated
+// list, and otherwise an empty list.
+const ADMIN_EMAILS: string[] = (() => {
+  const raw = (process.env.ADMIN_EMAILS || "").trim();
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.map((e) => String(e).trim()).filter(Boolean);
+  } catch {
+    // Not valid JSON — tolerate a bare/comma-separated list like
+    // [a@b.com, c@d.com] or a@b.com,c@d.com instead of crashing.
+    return raw
+      .replace(/^\[|\]$/g, "")
+      .split(/[,\s]+/)
+      .map((e) => e.replace(/^["']|["']$/g, "").trim())
+      .filter(Boolean);
+  }
+  return [];
+})();
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "phd-auth-secret-fallback-key-2026",
