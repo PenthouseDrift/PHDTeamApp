@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
 interface ListingGalleryProps {
@@ -13,6 +14,16 @@ interface ListingGalleryProps {
  * toggle 2.5x zoom; when zoomed, drag to pan. Closes via the X button, Escape,
  * or clicking the backdrop. No external dependency.
  */
+/**
+ * Route an image URL through Next's built-in image optimizer so it loads
+ * same-origin (served under the app's own trusted certificate) rather than the
+ * browser hitting the remote blob host directly — which fails on older devices
+ * whose root store doesn't trust the blob host's cert chain.
+ */
+function optimizedSrc(url: string, width = 1920, quality = 90): string {
+  return `/_next/image?url=${encodeURIComponent(url)}&w=${width}&q=${quality}`;
+}
+
 function ImageZoomModal({
   src,
   alt,
@@ -85,7 +96,7 @@ function ImageZoomModal({
       </span>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={src}
+        src={optimizedSrc(src)}
         alt={alt}
         onClick={(e) => {
           e.stopPropagation();
@@ -155,12 +166,13 @@ export function ListingGallery({ images, title, isSold = false }: ListingGallery
                 aria-label={`Zoom ${title} photo ${i + 1}`}
                 className="relative aspect-square w-full flex-none snap-center cursor-zoom-in bg-zinc-100 dark:bg-zinc-800"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src={url}
                   alt={`${title} photo ${i + 1}`}
-                  loading={i === 0 ? "eager" : "lazy"}
-                  className="h-full w-full object-cover"
+                  fill
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                  priority={i === 0}
+                  className="object-cover"
                 />
               </button>
             ))
@@ -214,8 +226,7 @@ export function ListingGallery({ images, title, isSold = false }: ListingGallery
                   : "border-zinc-200 hover:border-amber-500/60 dark:border-zinc-700"
               }`}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={url} alt="" loading="lazy" className="h-full w-full object-cover" />
+              <Image src={url} alt="" fill sizes="64px" className="object-cover" />
             </button>
           ))}
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { MarketplaceListing } from "@/types";
@@ -130,12 +131,12 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
     <div className="group flex flex-col self-start overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
       <Link href={`/marketplace/${listing.listingId}`} className="relative block aspect-square overflow-hidden bg-zinc-100 active:opacity-90 dark:bg-zinc-800">
         {cover ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={cover}
             alt={listing.title}
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-zinc-400">No image</div>
