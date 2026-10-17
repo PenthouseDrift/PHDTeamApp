@@ -307,40 +307,71 @@ export function AsboRcReportClient({ report, readOnly = false }: AsboRcReportCli
             return `${stockPart} · ${draftPart}`;
           })()}
         />
-        {/* Owed to ASBO (93% of consignment) — shown to both ASBO and admin. */}
-        <Headline label="Owed to ASBO-RC (all)" value={formatGBP(report.overall.owedToAsboRc)} tone="teal" />
-        {/* Penthouse's take + uplift are internal — admin only. */}
+        {/* Owed to ASBO = 93% of consignment for all stock still on hand PLUS
+            93% owed on items sold but not yet paid. In other words, the full
+            consignment liability minus anything already sold AND settled. */}
+        <Headline
+          label="Owed to ASBO-RC"
+          value={formatGBP(
+            Math.round((report.inStockTotals.owedToAsboRc + report.outstandingToAsboRc) * 100) / 100
+          )}
+          sub={`${report.inStockTotals.unitCount} in stock + ${report.sold.filter((s) => !s.paid).length} sold unpaid`}
+          tone="teal"
+        />
+        {/* Penthouse margin — REALISED (sold items only). Admin only. */}
         {!readOnly && (
           <Headline
-            label="Penthouse margin (all)"
-            value={formatGBP(report.overall.penthouseCut)}
+            label="Penthouse margin (sold)"
+            value={formatGBP(report.soldTotals.penthouseCut)}
             sub={
-              [
-                report.overall.totalUplift > 0
-                  ? `incl. ${formatGBP(report.overall.totalUplift)} uplift`
-                  : null,
-                // Estimated margin if all current draft stock sold (admin view).
-                report.draftTotals.penthouseCut > 0
-                  ? `+ ${formatGBP(report.draftTotals.penthouseCut)} est. in draft`
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(" · ") || undefined
+              report.soldTotals.totalUplift > 0
+                ? `incl. ${formatGBP(report.soldTotals.totalUplift)} uplift`
+                : undefined
             }
             tone="amber"
           />
         )}
       </div>
 
-      {/* Admin-only: total customer sell value vs consignment basis. */}
-      {!readOnly && report.overall.totalUplift > 0 && (
+      {/* Admin-only: realised sell value + uplift from sold items. */}
+      {!readOnly && report.soldTotals.unitCount > 0 && (
         <div className="grid grid-cols-2 gap-2.5">
-          <Headline label="Sell value (all)" value={formatGBP(report.overall.totalSell)} />
+          <Headline label="Sell value (sold)" value={formatGBP(report.soldTotals.totalSell)} />
           <Headline
-            label="Uplift kept (all)"
-            value={formatGBP(report.overall.totalUplift)}
+            label="Uplift kept (sold)"
+            value={formatGBP(report.soldTotals.totalUplift)}
             tone="emerald"
           />
+        </div>
+      )}
+
+      {/* Admin-only: POTENTIAL — value of stock still on hand (not yet sold),
+          kept clearly separate from the realised figures above so selling never
+          inflates "owed"/"margin". */}
+      {!readOnly && (report.inStockTotals.unitCount > 0 || report.draftTotals.unitCount > 0) && (
+        <div className="rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 bg-zinc-50/60 dark:bg-zinc-900/40 p-3 sm:p-4">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            Stock on hand (potential — not yet sold)
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+            <span className="text-zinc-600 dark:text-zinc-300">
+              Live: <span className="font-bold">{report.inStockTotals.unitCount}</span> units ·{" "}
+              {formatGBP(report.inStockTotals.totalRrp)} consignment
+            </span>
+            <span className="text-zinc-600 dark:text-zinc-300">
+              If sold: <span className="font-bold">{formatGBP(report.inStockTotals.penthouseCut)}</span> margin
+            </span>
+            {report.draftTotals.unitCount > 0 && (
+              <>
+                <span className="text-zinc-500 dark:text-zinc-400">
+                  Draft: {report.draftTotals.unitCount} units · {formatGBP(report.draftTotals.totalRrp)} consignment
+                </span>
+                <span className="text-zinc-500 dark:text-zinc-400">
+                  If sold: {formatGBP(report.draftTotals.penthouseCut)} margin
+                </span>
+              </>
+            )}
+          </div>
         </div>
       )}
 
