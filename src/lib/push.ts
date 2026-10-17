@@ -1,7 +1,27 @@
 import webPush from "web-push";
 
+// First admin email for the VAPID contact, parsed defensively so a malformed
+// ADMIN_EMAILS value never crashes push setup (and with it the admin layout).
+function firstAdminEmail(): string {
+  const raw = (process.env.ADMIN_EMAILS || "").trim();
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed[0]) return String(parsed[0]).trim();
+    } catch {
+      const first = raw
+        .replace(/^\[|\]$/g, "")
+        .split(/[,\s]+/)[0]
+        ?.replace(/^["']|["']$/g, "")
+        .trim();
+      if (first) return first;
+    }
+  }
+  return "admin@penthousedrift.com";
+}
+
 webPush.setVapidDetails(
-  `mailto:${process.env.ADMIN_EMAILS ? JSON.parse(process.env.ADMIN_EMAILS)[0] : "admin@penthousedrift.com"}`,
+  `mailto:${firstAdminEmail()}`,
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
   process.env.VAPID_PRIVATE_KEY!
 );

@@ -220,7 +220,10 @@ function stockLine(l: MarketplaceListing): AsboRcReportItem | null {
     };
   }
 
-  const quantity = Math.max(1, l.quantity || 1);
+  // Quantity may legitimately be 0 for ASBO consignment items that have sold
+  // out — do NOT floor it to 1 (that counted sold-out items as 1 in stock and
+  // inflated the owed/stock totals). Use the raw quantity, clamped at >= 0.
+  const quantity = Math.max(0, Math.floor(Number(l.quantity) || 0));
   const soldCount = Math.min(quantity, Math.max(0, l.soldCount || 0));
   const stockUnits = quantity - soldCount;
   if (stockUnits <= 0) return null;
