@@ -242,29 +242,62 @@ function dayLabel(key: string): string {
   });
 }
 
-/**
- * Build a monthly revenue report from the activity log.
- *
- * Reads the raw `activity:log` sorted set (NOT the display-deduped feed) so
- * totals are accurate. Revenue is counted as:
- *   - online: `type === "purchase"` entries with a positive, non-dev amount.
- *   - door:   `type === "checkin"` entries whose method is a cash/in-person
- *             method (day_pass_cash / rental_cash / membership_cash) with a
- *             positive amount. Wallet redemptions are excluded because they were
- *             already counted as an online purchase when the pass was bought.
- *
- * Note: the activity:log is capped at ~5000 recent entries, so very old months
- * may fall out of the window. This is sufficient for ongoing monthly reporting.
- */
-export async function getMonthlyRevenue(): Promise<RevenueReport> {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "admin") {
-    return { currency: CURRENCY, months: [], totals: { online: 0, door: 0, total: 0 }, count: 0 };
+// ── Shared revenue/attendance classification ───────────────────────────────
+
+type Bucket = {
+  online: number;
+  door: number;
+  count: number;
+  onTrack: number;
+  rentals: number;
+};
+
+const newBucket = (): Bucket => ({ online: 0, door: 0, count: 0, onTrack: 0, rentals: 0 });
+
+// Check-in methods that put a person on track (not a rental).
+const ON_TRACK_METHODS = new Set([
+  "membership",
+  "membership_cash",
+  "qr",
+  "manual",
+  "self_checkin",
+  "day_pass",
+  "day_pass_cash",
+  "day_pass_wallet",
+]);
+const RENTAL_METHODS = new Set(["rental", "rental_cash", "rental_wallet"]);
+
+// Classify a check-in as attendance: on-track vs rental. Uses the method when
+// present, otherwise falls back to the description (older entries were logged
+// without a method field).
+function attendanceCategory(item: ActivityEntry): "onTrack" | "rentals" | null {
+  const method = item.method || "";
+  if (RENTAL_METHODS.has(method)) return "rentals";
+  if (ON_TRACK_METHODS.has(method)) return "onTrack";
+
+  const desc = (item.description || "").toLowerCase();
+  if (!desc) return null;
+  // Rentals first (both cash and wallet phrasings).
+  if (desc.includes("rental")) return "rentals";
+  // Everything else that reads like a track check-in counts as on-track:
+  // day passes, memberships, manual/QR/self check-ins.
+  if (
+    desc.includes("day pass") ||
+    desc.includes("(day_pass)") ||
+    desc.includes("membership") ||
+    desc.includes("checked in") ||
+    desc.includes("check-in") ||
+    desc.includes("track access")
+  ) {
+    return "onTrack";
   }
+  return null;
+}
 
-  const records = await redis.zrange("activity:log", 0, -1, { rev: true });
-
-  const parsed: ActivityEntry[] = (records || [])
+// Parse raw activity:log records into ActivityEntry objects, dropping anything
+// that fails to parse.
+function parseActivityRecords(records: unknown[]): ActivityEntry[] {
+  return (records || [])
     .map((str) => {
       try {
         return typeof str === "string" ? JSON.parse(str) : str;
@@ -273,94 +306,23 @@ export async function getMonthlyRevenue(): Promise<RevenueReport> {
       }
     })
     .filter(Boolean) as ActivityEntry[];
+}
 
-  type Bucket = {
-    online: number;
-    door: number;
-    count: number;
-    onTrack: number;
-    rentals: number;
-  };
-  const newBucket = (): Bucket => ({ online: 0, door: 0, count: 0, onTrack: 0, rentals: 0 });
-  const byMonth = new Map<string, Bucket>();
-  // Nested per-day buckets keyed by month -> day.
-  const byDay = new Map<string, Map<string, Bucket>>();
-
-  // Check-in methods that put a person on track (not a rental).
-  const ON_TRACK_METHODS = new Set([
-    "membership",
-    "membership_cash",
-    "qr",
-    "manual",
-    "self_checkin",
-    "day_pass",
-    "day_pass_cash",
-    "day_pass_wallet",
-  ]);
-  const RENTAL_METHODS = new Set(["rental", "rental_cash", "rental_wallet"]);
-
-  // Classify a check-in as attendance: on-track vs rental. Uses the method when
-  // present, otherwise falls back to the description (older entries were logged
-  // without a method field).
-  function attendanceCategory(item: ActivityEntry): "onTrack" | "rentals" | null {
-    const method = item.method || "";
-    if (RENTAL_METHODS.has(method)) return "rentals";
-    if (ON_TRACK_METHODS.has(method)) return "onTrack";
-
-    const desc = (item.description || "").toLowerCase();
-    if (!desc) return null;
-    // Rentals first (both cash and wallet phrasings).
-    if (desc.includes("rental")) return "rentals";
-    // Everything else that reads like a track check-in counts as on-track:
-    // day passes, memberships, manual/QR/self check-ins.
-    if (
-      desc.includes("day pass") ||
-      desc.includes("(day_pass)") ||
-      desc.includes("membership") ||
-      desc.includes("checked in") ||
-      desc.includes("check-in") ||
-      desc.includes("track access")
-    ) {
-      return "onTrack";
-    }
-    return null;
-  }
-
-  // Cache each member's discounts so we only hit Redis once per member across
-  // the whole log.
-  const discountCache = new Map<string, MemberDiscounts>();
-  async function discountsFor(memberId: string): Promise<MemberDiscounts> {
-    const cached = discountCache.get(memberId);
-    if (cached) return cached;
-    // Guests (guest_*) have no member hash; getMemberDiscounts returns zeros.
-    const d = await getMemberDiscounts(memberId);
-    discountCache.set(memberId, d);
-    return d;
-  }
-
-  // Fetch-or-create the month + day buckets for an entry's timestamp.
-  function bucketsFor(ts: number): { month: Bucket; day: Bucket } {
-    const mKey = monthKey(ts);
-    let month = byMonth.get(mKey);
-    if (!month) {
-      month = newBucket();
-      byMonth.set(mKey, month);
-    }
-    const dKey = dayKey(ts);
-    let daysForMonth = byDay.get(mKey);
-    if (!daysForMonth) {
-      daysForMonth = new Map<string, Bucket>();
-      byDay.set(mKey, daysForMonth);
-    }
-    let day = daysForMonth.get(dKey);
-    if (!day) {
-      day = newBucket();
-      daysForMonth.set(dKey, day);
-    }
-    return { month, day };
-  }
-
-  for (const item of parsed) {
+/**
+ * Fold a list of activity entries into attendance + revenue buckets. The
+ * `bucketsFor` callback supplies the destination bucket(s) for a given
+ * timestamp, letting callers group by month/day (monthly report) or into a
+ * single bucket (daily report). `discountsFor` is injected so each caller can
+ * share one per-member discount cache across its own run.
+ *
+ * Returns nothing; it mutates the buckets returned by `bucketsFor`.
+ */
+async function reduceEntries(
+  entries: ActivityEntry[],
+  bucketsFor: (ts: number) => Bucket[],
+  discountsFor: (memberId: string) => Promise<MemberDiscounts>
+): Promise<void> {
+  for (const item of entries) {
     if (item.isDev) continue;
 
     // 1) Attendance — count every check-in as a person on track, regardless of
@@ -369,13 +331,9 @@ export async function getMonthlyRevenue(): Promise<RevenueReport> {
     if (item.type === "checkin") {
       const category = attendanceCategory(item);
       if (category) {
-        const { month, day } = bucketsFor(item.timestamp);
-        if (category === "rentals") {
-          month.rentals += 1;
-          day.rentals += 1;
-        } else {
-          month.onTrack += 1;
-          day.onTrack += 1;
+        for (const bucket of bucketsFor(item.timestamp)) {
+          if (category === "rentals") bucket.rentals += 1;
+          else bucket.onTrack += 1;
         }
       }
     }
@@ -398,7 +356,6 @@ export async function getMonthlyRevenue(): Promise<RevenueReport> {
 
     let online = 0;
     let door = 0;
-
     if (item.type === "purchase") {
       online = amount;
     } else if (item.type === "checkin") {
@@ -409,14 +366,125 @@ export async function getMonthlyRevenue(): Promise<RevenueReport> {
       continue;
     }
 
-    const { month, day } = bucketsFor(item.timestamp);
-    month.online += online;
-    month.door += door;
-    month.count += 1;
-    day.online += online;
-    day.door += door;
-    day.count += 1;
+    for (const bucket of bucketsFor(item.timestamp)) {
+      bucket.online += online;
+      bucket.door += door;
+      bucket.count += 1;
+    }
   }
+}
+
+// Builds a fresh per-member discount cache + lookup. Each report run gets its
+// own so we only hit Redis once per member within that run.
+function makeDiscountResolver() {
+  const discountCache = new Map<string, MemberDiscounts>();
+  return async function discountsFor(memberId: string): Promise<MemberDiscounts> {
+    const cached = discountCache.get(memberId);
+    if (cached) return cached;
+    // Guests (guest_*) have no member hash; getMemberDiscounts returns zeros.
+    const d = await getMemberDiscounts(memberId);
+    discountCache.set(memberId, d);
+    return d;
+  };
+}
+
+// UTC start/end-of-day timestamps (ms) for a YYYY-MM-DD key.
+function dayBounds(day: string): { start: number; end: number } {
+  const [y, m, d] = day.split("-").map(Number);
+  const start = Date.UTC(y, m - 1, d, 0, 0, 0, 0);
+  const end = Date.UTC(y, m - 1, d, 23, 59, 59, 999);
+  return { start, end };
+}
+
+/**
+ * Fast single-day revenue + attendance. Fetches ONLY the entries whose score
+ * (timestamp) falls within the given UTC day using a zrange-by-score window,
+ * so it never reads or folds the whole activity log. Defaults to today (UTC).
+ */
+export async function getDailyRevenue(day?: string): Promise<DailyRevenue | null> {
+  const session = await auth();
+  if (!session?.user || session.user.role !== "admin") return null;
+
+  const dKey = day || dayKey(Date.now());
+  const { start, end } = dayBounds(dKey);
+
+  // Only the entries scored within this day. Upstash returns the members
+  // (JSON strings) in score order; rev just flips it (order is irrelevant here).
+  const records = await redis.zrange("activity:log", start, end, {
+    byScore: true,
+  });
+  const entries = parseActivityRecords(records as unknown[]);
+
+  const bucket = newBucket();
+  await reduceEntries(entries, () => [bucket], makeDiscountResolver());
+
+  const round = (n: number) => Math.round(n * 100) / 100;
+  return {
+    day: dKey,
+    label: dayLabel(dKey),
+    breakdown: {
+      online: round(bucket.online),
+      door: round(bucket.door),
+      total: round(bucket.online + bucket.door),
+    },
+    count: bucket.count,
+    attendance: { onTrack: bucket.onTrack, rentals: bucket.rentals },
+  };
+}
+
+/**
+ * Build a monthly revenue report from the activity log.
+ *
+ * Reads the raw `activity:log` sorted set (NOT the display-deduped feed) so
+ * totals are accurate. Revenue is counted as:
+ *   - online: `type === "purchase"` entries with a positive, non-dev amount.
+ *   - door:   `type === "checkin"` entries whose method is a cash/in-person
+ *             method (day_pass_cash / rental_cash / membership_cash) with a
+ *             positive amount. Wallet redemptions are excluded because they were
+ *             already counted as an online purchase when the pass was bought.
+ *
+ * Note: the activity:log is capped at ~5000 recent entries, so very old months
+ * may fall out of the window. This is sufficient for ongoing monthly reporting.
+ */
+export async function getMonthlyRevenue(): Promise<RevenueReport> {
+  const session = await auth();
+  if (!session?.user || session.user.role !== "admin") {
+    return { currency: CURRENCY, months: [], totals: { online: 0, door: 0, total: 0 }, count: 0 };
+  }
+
+  const records = await redis.zrange("activity:log", 0, -1, { rev: true });
+  const parsed: ActivityEntry[] = parseActivityRecords(records as unknown[]);
+
+  const byMonth = new Map<string, Bucket>();
+  // Nested per-day buckets keyed by month -> day.
+  const byDay = new Map<string, Map<string, Bucket>>();
+
+  const discountsFor = makeDiscountResolver();
+
+  // Fetch-or-create the month + day buckets for an entry's timestamp.
+  function bucketsFor(ts: number): Bucket[] {
+    const mKey = monthKey(ts);
+    let month = byMonth.get(mKey);
+    if (!month) {
+      month = newBucket();
+      byMonth.set(mKey, month);
+    }
+    const dKey = dayKey(ts);
+    let daysForMonth = byDay.get(mKey);
+    if (!daysForMonth) {
+      daysForMonth = new Map<string, Bucket>();
+      byDay.set(mKey, daysForMonth);
+    }
+    let day = daysForMonth.get(dKey);
+    if (!day) {
+      day = newBucket();
+      daysForMonth.set(dKey, day);
+    }
+    // Both the month total and its day bucket receive each entry's contribution.
+    return [month, day];
+  }
+
+  await reduceEntries(parsed, bucketsFor, discountsFor);
 
   const round = (n: number) => Math.round(n * 100) / 100;
 

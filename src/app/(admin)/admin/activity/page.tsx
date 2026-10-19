@@ -20,7 +20,7 @@ export default async function AdminReportsPage() {
     },
     {
       title: "Revenue",
-      description: "Monthly online and in-person takings, with per-day breakdowns",
+      description: "Today's online and in-person takings — monthly breakdown one tap away",
       href: "/admin/activity/revenue",
       icon: "💰",
       color: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
