@@ -261,7 +261,11 @@ export function EmbeddedCheckout({
       <div
         className="fixed inset-0 bg-black/70 backdrop-blur-sm"
         onClick={() => {
-          if (state !== "finalising" && state !== "paid") onCancel?.();
+          // Dismissable anytime except mid-finalisation. On the paid screen a
+          // backdrop tap refreshes the page behind as it closes.
+          if (state === "finalising") return;
+          if (state === "paid") router.refresh();
+          onCancel?.();
         }}
         aria-hidden="true"
       />
@@ -276,10 +280,15 @@ export function EmbeddedCheckout({
               Pay £{amount.toFixed(2)} · {label}
             </p>
           </div>
-          {state !== "finalising" && state !== "paid" && (
+          {state !== "finalising" && (
             <button
               type="button"
-              onClick={() => onCancel?.()}
+              onClick={() => {
+                // On the success screen, closing should also refresh so the
+                // page behind reflects the new balance/order.
+                if (state === "paid") router.refresh();
+                onCancel?.();
+              }}
               aria-label="Close payment"
               className="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
             >
@@ -309,7 +318,15 @@ export function EmbeddedCheckout({
               </p>
               <button
                 type="button"
-                onClick={() => router.push(doneHref)}
+                onClick={() => {
+                  // Close the modal first — otherwise navigating to a route the
+                  // user is already on (e.g. /wallet) is a no-op and the overlay
+                  // just stays put. Then navigate + refresh so the page reflects
+                  // the new balance/membership.
+                  onCancel?.();
+                  router.push(doneHref);
+                  router.refresh();
+                }}
                 className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-500"
               >
                 {doneLabel}

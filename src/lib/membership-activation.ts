@@ -170,23 +170,28 @@ export async function processSuccessfulPaymentReference(
     });
   }
 
+  // Atomically claim this checkout so only ONE caller does the crediting/
+  // logging. The webhook and the client-side finalize endpoint both fire on a
+  // successful payment and can run concurrently; a read-then-set guard races
+  // and double-credits. `SET ... NX` returns null if the key already exists, so
+  // exactly one caller wins the claim and the rest skip. Returns true if claimed.
+  async function claim(key: string): Promise<boolean> {
+    const res = await redis.set(key, "1", { nx: true, ex: 86400 * 30 });
+    return res === "OK";
+  }
+
   // 3. Process payment idempotently based on itemType
   if (itemType === "membership") {
     await processSuccessfulMembershipPayment(memberId, checkoutId);
     // Guard the activity log so the same checkout isn't logged twice when both
-    // the webhook and the success-page fallback run for one payment.
-    const logKey = `payment:logged:${checkoutId}`;
-    const alreadyLogged = await redis.get(logKey);
-    if (!alreadyLogged) {
+    // the webhook and the finalize endpoint run for one payment.
+    if (await claim(`payment:logged:${checkoutId}`)) {
       await recordPurchase("membership", quantity);
-      await redis.set(logKey, "1", { ex: 86400 * 30 });
     }
     await clearPendingCheckout(checkoutId);
     return { success: true, itemType: "membership", memberId, guestName };
   } else if (itemType === "daypass") {
-    const key = `payment:processed:${checkoutId}`;
-    const alreadyProcessed = await redis.get(key);
-    if (!alreadyProcessed) {
+    if (await claim(`payment:processed:${checkoutId}`)) {
       const walletData = await redis.hgetall(`wallet:${memberId}`);
       const currentPasses = Number(walletData?.dayPasses) || 0;
       const currentRentals = Number(walletData?.rentalHours) || 0;
@@ -198,14 +203,11 @@ export async function processSuccessfulPaymentReference(
         updatedAt: Date.now(),
       });
       await recordPurchase("daypass", quantity);
-      await redis.set(key, "1", { ex: 86400 * 30 });
     }
     await clearPendingCheckout(checkoutId);
     return { success: true, itemType: "daypass", memberId, guestName };
   } else if (itemType === "rental") {
-    const key = `payment:processed:${checkoutId}`;
-    const alreadyProcessed = await redis.get(key);
-    if (!alreadyProcessed) {
+    if (await claim(`payment:processed:${checkoutId}`)) {
       const walletData = await redis.hgetall(`wallet:${memberId}`);
       const currentPasses = Number(walletData?.dayPasses) || 0;
       const currentRentals = Number(walletData?.rentalHours) || 0;
@@ -217,14 +219,11 @@ export async function processSuccessfulPaymentReference(
         updatedAt: Date.now(),
       });
       await recordPurchase("rental", quantity);
-      await redis.set(key, "1", { ex: 86400 * 30 });
     }
     await clearPendingCheckout(checkoutId);
     return { success: true, itemType: "rental", memberId, guestName };
   } else if (itemType === "marketplace") {
-    const key = `payment:processed:${checkoutId}`;
-    const alreadyProcessed = await redis.get(key);
-    if (!alreadyProcessed) {
+    if (await claim(`payment:processed:${checkoutId}`)) {
       // Resolve the amount from metadata → webhook → stored, in that order.
       const saleAmount =
         storedAmount !== undefined && storedAmount > 0
@@ -306,8 +305,8 @@ export async function processSuccessfulPaymentReference(
       } catch (e) {
         console.error("Marketplace confirmation email failed:", e);
       }
-
-      await redis.set(key, "1", { ex: 86400 * 30 });
+      // The claim() at the top of this branch already set payment:processed
+      // atomically, so there's nothing more to mark here.
     }
     await clearPendingCheckout(checkoutId);
     return { success: true, itemType: "marketplace", memberId, guestName };
