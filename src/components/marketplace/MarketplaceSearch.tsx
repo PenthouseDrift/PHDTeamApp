@@ -7,6 +7,8 @@ interface MarketplaceSearchProps {
   /** Current query from the URL. The parent keys this component on it, so a
    * change (back button, clear link) remounts with the right initial value. */
   initialQuery?: string;
+  /** Route the search navigates to (defaults to the browse grid). */
+  basePath?: string;
 }
 
 /**
@@ -14,7 +16,7 @@ interface MarketplaceSearchProps {
  * (?q=...), always resetting to page 1. Server component re-renders with the
  * filtered, paginated results.
  */
-export function MarketplaceSearch({ initialQuery = "" }: MarketplaceSearchProps) {
+export function MarketplaceSearch({ initialQuery = "", basePath = "/marketplace" }: MarketplaceSearchProps) {
   const router = useRouter();
   const [value, setValue] = useState(initialQuery);
 
@@ -24,10 +26,10 @@ export function MarketplaceSearch({ initialQuery = "" }: MarketplaceSearchProps)
     const trimmed = value.trim();
     if (trimmed === initialQuery.trim()) return;
     const t = setTimeout(() => {
-      router.push(trimmed ? `/marketplace?q=${encodeURIComponent(trimmed)}` : "/marketplace");
+      router.push(trimmed ? `${basePath}?q=${encodeURIComponent(trimmed)}` : basePath);
     }, 300);
     return () => clearTimeout(t);
-  }, [value, initialQuery, router]);
+  }, [value, initialQuery, basePath, router]);
 
   return (
     <div className="relative">

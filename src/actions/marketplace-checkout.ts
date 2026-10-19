@@ -24,7 +24,7 @@ export async function createMarketplaceCheckout(
   listingId: string,
   variantId?: string,
   customReturnUrl?: string
-): Promise<ActionResult<{ url: string }>> {
+): Promise<ActionResult<{ url: string; checkoutId: string; amount: number; currency: string; email?: string }>> {
   try {
     const session = await auth();
     if (!session?.user?.id) {
@@ -81,6 +81,7 @@ export async function createMarketplaceCheckout(
     const returnUrl = customReturnUrl || `${baseUrl}/marketplace/purchase/success`;
 
     const buyerName = (await redis.hget(`member:${buyerId}`, "name")) as string | null;
+    const buyerEmail = (await redis.hget(`member:${buyerId}`, "email")) as string | null;
 
     const { createCheckout } = await import("@/lib/sumup");
     const checkout = await createCheckout({
@@ -121,7 +122,12 @@ export async function createMarketplaceCheckout(
     await registerPendingCheckout(checkout.id);
 
     const redirectUrl = checkout.hosted_checkout_url || `https://pay.sumup.com/b2c/Q${checkout.id}`;
-    return { success: true, data: { url: redirectUrl } };
+    // Return the checkout id + amount/currency too, so the embedded Card Widget
+    // flow can mount against this checkout. The hosted-redirect flow just uses url.
+    return {
+      success: true,
+      data: { url: redirectUrl, checkoutId: checkout.id, amount, currency, email: buyerEmail || undefined },
+    };
   } catch (error) {
     console.error("createMarketplaceCheckout error:", error);
     return {

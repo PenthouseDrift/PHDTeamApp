@@ -173,7 +173,7 @@ export async function createWalletCheckout(
   quantity: number,
   customReturnUrl?: string,
   guestName?: string
-): Promise<ActionResult<{ url: string }>> {
+): Promise<ActionResult<{ url: string; checkoutId: string; amount: number; currency: string; email?: string }>> {
   try {
     const { createCheckout } = await import("@/lib/sumup");
     const { getMemberDiscounts, priceFor, CURRENCY } = await import("@/lib/pricing");
@@ -183,6 +183,7 @@ export async function createWalletCheckout(
     const unitPrice = price.final;
     const totalAmount = Math.round(quantity * unitPrice * 100) / 100;
     const memberName = (await redis.hget(`member:${userId}`, "name")) as string | null;
+    const memberEmail = (await redis.hget(`member:${userId}`, "email")) as string | null;
     const buyerLabel = guestName?.trim()
       ? `${memberName || "Member"} for ${guestName.trim()}`
       : memberName || "Member";
@@ -225,7 +226,10 @@ export async function createWalletCheckout(
     await registerPendingCheckout(checkout.id);
 
     const redirectUrl = checkout.hosted_checkout_url || `https://pay.sumup.com/b2c/Q${checkout.id}`;
-    return { success: true, data: { url: redirectUrl } };
+    return {
+      success: true,
+      data: { url: redirectUrl, checkoutId: checkout.id, amount: totalAmount, currency: CURRENCY, email: memberEmail || undefined },
+    };
   } catch (error) {
     console.error("createWalletCheckout error:", error);
     return {

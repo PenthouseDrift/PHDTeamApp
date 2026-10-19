@@ -2,6 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { createMarketplaceCheckout } from "@/actions/marketplace-checkout";
+import { EmbeddedCheckout } from "@/components/marketplace/EmbeddedCheckout";
+
+// Feature flag: when "true", card details are collected inline via the SumUp
+// Card Widget (no redirect). Otherwise the hosted-checkout redirect is used.
+const EMBEDDED = process.env.NEXT_PUBLIC_SUMUP_EMBEDDED === "true";
 
 interface BuyVariant {
   id: string;
@@ -34,6 +39,8 @@ export function BuyAndCollect({
   const [selectedId, setSelectedId] = useState<string>(sellable[0]?.id ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // Set when the embedded widget is active, holding the created checkout.
+  const [embedded, setEmbedded] = useState<{ checkoutId: string; amount: number; currency: string; email?: string } | null>(null);
 
   const selectedVariant = hasVariations ? sellable.find((v) => v.id === selectedId) : undefined;
   const displayPrice = hasVariations ? selectedVariant?.price ?? 0 : price;
@@ -65,8 +72,18 @@ export function BuyAndCollect({
         setError(result.error);
         return;
       }
-      // Hand off to SumUp's hosted checkout.
-      window.location.href = result.data.url;
+      if (EMBEDDED) {
+        // Render the card widget inline against the created checkout.
+        setEmbedded({
+          checkoutId: result.data.checkoutId,
+          amount: result.data.amount,
+          currency: result.data.currency,
+          email: result.data.email,
+        });
+      } else {
+        // Hand off to SumUp's hosted checkout page.
+        window.location.href = result.data.url;
+      }
     });
   }
 
@@ -100,14 +117,33 @@ export function BuyAndCollect({
 
       {error && <p className="text-xs font-semibold text-red-600 dark:text-red-400">{error}</p>}
 
-      <button
-        type="button"
-        onClick={handleBuy}
-        disabled={pending || (hasVariations && !selectedId)}
-        className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3.5 text-sm font-black text-black transition-colors hover:bg-amber-400 active:bg-amber-600 disabled:opacity-60"
-      >
-        {pending ? "Starting checkout…" : `Buy & Collect · ${formatGBP(displayPrice)}`}
-      </button>
+      {embedded ? (
+        <EmbeddedCheckout
+          checkoutId={embedded.checkoutId}
+          amount={embedded.amount}
+          currency={embedded.currency}
+          email={embedded.email}
+          onCancel={() => setEmbedded(null)}
+          finalizeUrl="/api/marketplace/finalize"
+          label="Click & Collect"
+          successBody={(ref) =>
+            ref
+              ? `Your order is confirmed. Collection reference ${ref} — speak to staff at Penthouse Drift to collect.`
+              : "Your order is being confirmed and will appear under My Orders shortly."
+          }
+          doneHref="/orders"
+          doneLabel="View my orders"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={handleBuy}
+          disabled={pending || (hasVariations && !selectedId)}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3.5 text-sm font-black text-black transition-colors hover:bg-amber-400 active:bg-amber-600 disabled:opacity-60"
+        >
+          {pending ? "Starting checkout…" : `Buy & Collect · ${formatGBP(displayPrice)}`}
+        </button>
+      )}
     </div>
   );
 }

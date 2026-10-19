@@ -2,6 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { createMembershipCheckout } from "@/actions/membership";
+import { EmbeddedCheckout } from "@/components/marketplace/EmbeddedCheckout";
+
+const EMBEDDED = process.env.NEXT_PUBLIC_SUMUP_EMBEDDED === "true";
 
 interface PurchaseButtonProps {
   userId: string;
@@ -22,6 +25,7 @@ export function PurchaseButton({
 }: PurchaseButtonProps) {
   const [isPending, startTransition] = useTransition();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [embedded, setEmbedded] = useState<{ checkoutId: string; amount: number; currency: string; email?: string } | null>(null);
 
   function handlePurchaseClick() {
     if (isDisabled) return;
@@ -29,10 +33,19 @@ export function PurchaseButton({
     startTransition(async () => {
       try {
         const res = await createMembershipCheckout(userId);
-        if (res.success) {
-          window.location.href = res.data.url;
-        } else {
+        if (!res.success) {
           setErrorMsg(res.error || "Payment initialization failed");
+          return;
+        }
+        if (EMBEDDED) {
+          setEmbedded({
+            checkoutId: res.data.checkoutId,
+            amount: res.data.amount,
+            currency: res.data.currency,
+            email: res.data.email,
+          });
+        } else {
+          window.location.href = res.data.url;
         }
       } catch (err) {
         setErrorMsg(err instanceof Error ? err.message : "Payment checkout error");
@@ -42,6 +55,20 @@ export function PurchaseButton({
 
   return (
     <div className="space-y-3">
+      {embedded && (
+        <EmbeddedCheckout
+          checkoutId={embedded.checkoutId}
+          amount={embedded.amount}
+          currency={embedded.currency}
+          email={embedded.email}
+          onCancel={() => setEmbedded(null)}
+          label="Membership"
+          successTitle="Membership active"
+          successBody={() => "Your payment was successful and your membership is now active. Enjoy the track!"}
+          doneHref="/dashboard"
+          doneLabel="Go to dashboard"
+        />
+      )}
       {errorMsg && (
         <div className="p-3 text-xs font-semibold rounded-lg bg-red-50 dark:bg-red-950/80 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300">
           {errorMsg}

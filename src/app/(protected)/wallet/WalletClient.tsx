@@ -5,6 +5,9 @@ import type { Wallet, Membership } from "@/types";
 import type { PriceBreakdown } from "@/lib/pricing";
 import { createWalletCheckout } from "@/actions/wallet";
 import { QRPopover } from "@/components/QRPopover";
+import { EmbeddedCheckout } from "@/components/marketplace/EmbeddedCheckout";
+
+const EMBEDDED = process.env.NEXT_PUBLIC_SUMUP_EMBEDDED === "true";
 
 interface WalletPricing {
   membership: PriceBreakdown;
@@ -39,6 +42,13 @@ export function WalletClient({
   const [dayPassQty, setDayPassQty] = useState(1);
   const [rentalQty, setRentalQty] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [embedded, setEmbedded] = useState<{
+    checkoutId: string;
+    amount: number;
+    currency: string;
+    email?: string;
+    itemLabel: string;
+  } | null>(null);
 
   const isMembershipActive = membership?.status === "active";
   // Whole days left; floors to 0 within the final 24h.
@@ -53,10 +63,20 @@ export function WalletClient({
     setIsSubmitting(true);
     try {
       const res = await createWalletCheckout(userId, itemType, qty);
-      if (res.success) {
-        window.location.href = res.data.url;
-      } else {
+      if (!res.success) {
         alert(res.error || "Payment checkout failed");
+        return;
+      }
+      if (EMBEDDED) {
+        setEmbedded({
+          checkoutId: res.data.checkoutId,
+          amount: res.data.amount,
+          currency: res.data.currency,
+          email: res.data.email,
+          itemLabel: itemType === "daypass" ? "Day passes" : "Rental hours",
+        });
+      } else {
+        window.location.href = res.data.url;
       }
     } catch (err) {
       alert(err instanceof Error ? err.message : "Payment checkout error");
@@ -74,6 +94,20 @@ export function WalletClient({
 
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
+      {embedded && (
+        <EmbeddedCheckout
+          checkoutId={embedded.checkoutId}
+          amount={embedded.amount}
+          currency={embedded.currency}
+          email={embedded.email}
+          onCancel={() => setEmbedded(null)}
+          label={embedded.itemLabel}
+          successTitle="Payment received"
+          successBody={() => "Your payment was successful and your wallet has been topped up."}
+          doneHref="/wallet"
+          doneLabel="Back to wallet"
+        />
+      )}
       <div className="mx-auto max-w-2xl space-y-6">
         {/* Header */}
         <div>

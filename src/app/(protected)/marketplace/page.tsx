@@ -42,9 +42,27 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
   );
   const authorNames = new Map(authorNamesArr);
 
+  // Quick-access shortcuts shown as small cards above the grid.
+  const shortcuts = [
+    {
+      title: "My Listings",
+      description: "Items you're selling",
+      href: "/marketplace/mine",
+      icon: "🏷️",
+      color: "border-indigo-500/40 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
+    },
+    {
+      title: "My Orders",
+      description: "Click & Collect orders",
+      href: "/orders",
+      icon: "📦",
+      color: "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    },
+  ];
+
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl space-y-8">
+      <div className="mx-auto max-w-6xl space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -81,8 +99,29 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
           </Link>
         </div>
 
+        {/* Quick-access shortcut cards — My Listings / My Orders */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
+          {shortcuts.map((s) => (
+            <Link
+              key={s.href}
+              href={s.href}
+              className="group flex items-center gap-3 rounded-xl border border-zinc-200 bg-white p-3 shadow-sm transition-all hover:border-amber-500/50 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 sm:p-4"
+            >
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border text-xl ${s.color}`}>
+                {s.icon}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-zinc-900 transition-colors group-hover:text-amber-600 dark:text-zinc-100 dark:group-hover:text-amber-500">
+                  {s.title}
+                </p>
+                <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{s.description}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+
         {/* Search (keyed on query so external URL changes reset the input) */}
-        <MarketplaceSearch key={query} initialQuery={query} />
+        <MarketplaceSearch key={query} initialQuery={query} basePath="/marketplace" />
 
         {/* Drafts — staff-only (admin sees all, ASBO-RC sees their own). Stocked
             but not yet published; hidden from members and the public website. */}

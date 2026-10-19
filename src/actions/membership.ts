@@ -35,7 +35,7 @@ export async function getMembership(
 export async function createMembershipCheckout(
   userId: string,
   customReturnUrl?: string
-): Promise<ActionResult<{ url: string }>> {
+): Promise<ActionResult<{ url: string; checkoutId: string; amount: number; currency: string; email?: string }>> {
   try {
     const { createCheckout } = await import("@/lib/sumup");
     const { getMemberDiscounts, priceFor, CURRENCY, MEMBERSHIP_DURATION_DAYS } = await import("@/lib/pricing");
@@ -46,6 +46,7 @@ export async function createMembershipCheckout(
     const price = priceFor("membership", discounts.membership);
 
     const memberName = (await redis.hget(`member:${userId}`, "name")) as string | null;
+    const memberEmail = (await redis.hget(`member:${userId}`, "email")) as string | null;
 
     const checkout = await createCheckout({
       memberId: userId,
@@ -78,7 +79,10 @@ export async function createMembershipCheckout(
     await registerPendingCheckout(checkout.id);
 
     const redirectUrl = checkout.hosted_checkout_url || `https://pay.sumup.com/b2c/Q${checkout.id}`;
-    return { success: true, data: { url: redirectUrl } };
+    return {
+      success: true,
+      data: { url: redirectUrl, checkoutId: checkout.id, amount: price.final, currency: CURRENCY, email: memberEmail || undefined },
+    };
   } catch (error) {
     console.error("createMembershipCheckout error:", error);
     return {
