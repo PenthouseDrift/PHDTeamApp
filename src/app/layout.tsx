@@ -31,7 +31,10 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
+    // "default" keeps app content below the iOS status bar. "black-translucent"
+    // extends the web view under the notch/clock, hiding the top of the UI
+    // unless every top-level element carries safe-area-inset padding.
+    statusBarStyle: "default",
     title: "PHD",
   },
   other: {

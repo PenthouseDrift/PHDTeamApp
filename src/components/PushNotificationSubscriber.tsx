@@ -27,9 +27,15 @@ export function PushNotificationSubscriber() {
         const registration = await navigator.serviceWorker.ready;
         const existing = await registration.pushManager.getSubscription();
         if (existing) {
-          await sendSubscriptionToServer(existing);
-          if (!cancelled) setState("subscribed");
-          return;
+          // iOS can retain a subscription created with a stale VAPID key. If the
+          // key no longer matches, iOS refuses to deliver pushes, so drop the old
+          // one and fall through to create a fresh subscription.
+          if (subscriptionMatchesVapidKey(existing)) {
+            await sendSubscriptionToServer(existing);
+            if (!cancelled) setState("subscribed");
+            return;
+          }
+          await existing.unsubscribe();
         }
 
         if (Notification.permission === "granted") {
@@ -98,9 +104,27 @@ async function createSubscription(registration: ServiceWorkerRegistration) {
 
   const subscription = await registration.pushManager.subscribe({
     userVisibleOnly: true,
+    // iOS Safari rejects a detached ArrayBuffer here and throws InvalidStateError.
+    // It requires a typed-array view (Uint8Array), so pass that directly.
     applicationServerKey: urlBase64ToUint8Array(vapidKey),
   });
   await sendSubscriptionToServer(subscription);
+}
+
+// Compares the key an existing subscription was created with against the current
+// VAPID public key. Returns true when they match (or when we cannot tell).
+function subscriptionMatchesVapidKey(subscription: PushSubscription): boolean {
+  const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  if (!vapidKey) return true;
+  const existingKey = subscription.options?.applicationServerKey;
+  if (!existingKey) return true;
+  const current = urlBase64ToUint8Array(vapidKey);
+  const existing = new Uint8Array(existingKey);
+  if (existing.length !== current.length) return false;
+  for (let i = 0; i < existing.length; i += 1) {
+    if (existing[i] !== current[i]) return false;
+  }
+  return true;
 }
 
 async function sendSubscriptionToServer(subscription: PushSubscription) {
@@ -118,11 +142,14 @@ async function sendSubscriptionToServer(subscription: PushSubscription) {
   if (!response.ok) throw new Error(`Push subscription sync failed: ${response.status}`);
 }
 
-function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
+function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
   const rawData = atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
+  // Back the view with a concrete ArrayBuffer so it satisfies BufferSource
+  // (pushManager.subscribe rejects SharedArrayBuffer-backed views on the types).
+  const buffer = new ArrayBuffer(rawData.length);
+  const outputArray = new Uint8Array(buffer);
   for (let index = 0; index < rawData.length; index += 1) outputArray[index] = rawData.charCodeAt(index);
-  return outputArray.buffer;
+  return outputArray;
 }

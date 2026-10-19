@@ -32,7 +32,19 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {
-    event.respondWith(fetch(request).catch(() => caches.match(OFFLINE_URL)));
+    event.respondWith(
+      fetch(request).catch(async () => {
+        // respondWith must resolve to a Response. If offline.html isn't cached
+        // (e.g. iOS evicted it), fall back to a minimal inline response rather
+        // than letting the promise resolve to undefined, which iOS renders as
+        // an error page.
+        const cached = await caches.match(OFFLINE_URL);
+        return cached || new Response("You're offline.", {
+          status: 503,
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      })
+    );
     return;
   }
 

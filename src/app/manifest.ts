@@ -6,7 +6,10 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "PHD",
     description: "RC Drift Track Community Platform — memberships, car setups, and more",
     id: "/",
-    start_url: "/dashboard",
+    // Start at the public root. Launching directly into /dashboard makes iOS
+    // open a protected route that redirects logged-out users to sign-in, which
+    // reads as a broken launch. The root routes authenticated users onward.
+    start_url: "/",
     scope: "/",
     display: "standalone",
     theme_color: "#09090b",
