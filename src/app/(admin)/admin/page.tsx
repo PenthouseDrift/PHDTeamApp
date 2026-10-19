@@ -6,9 +6,9 @@ import { getTodayCheckIns, getSelfCheckInStatus } from "@/actions/admin/checkins
 import { getActiveRentals } from "@/actions/admin/rentals";
 import { getUpcomingEvents } from "@/actions/events";
 import { Suspense } from "react";
-import { getCurrentWeek, getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
-import { redis } from "@/lib/redis";
+import { getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
 import { getEventTiming } from "@/lib/event-utils";
+import { getActiveShopOrders } from "@/actions/orders";
 
 export const dynamic = "force-dynamic";
 
@@ -36,20 +36,23 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
   const day = new Date().getDay();
   const isSunday = day === 0;
   const isSaturday = day === 6;
-  const { year, week } = await getCurrentWeek();
 
   // Fetch overview metrics in parallel
-  const [members, todayCheckins, events, currentWinnerInfo, selfCheckInActive, activeRentals] = await Promise.all([
+  const [members, todayCheckins, events, currentWinnerInfo, selfCheckInActive, activeRentals, clickCollectOrders] = await Promise.all([
     getAllMembers(),
     getTodayCheckIns(),
     getUpcomingEvents(),
     getCurrentWeekWinnerInfo(),
     getSelfCheckInStatus(),
     getActiveRentals(),
+    // Admin-only: pending Click & Collect orders awaiting collection. Returns []
+    // for moderators (the action is admin-gated), so the card hides for them.
+    getActiveShopOrders(),
   ]);
 
+  const pendingOrderCount = clickCollectOrders.length;
+
   const winnerChosenThisWeek = Boolean(currentWinnerInfo.shellId);
-  const selectedByName = currentWinnerInfo.selectedByName;
   const activeMemberships = members.filter((m) => m.membership?.status === "active").length;
   const memberCheckinsCount = todayCheckins.filter(
     (c) =>
@@ -73,100 +76,6 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
   if (hasEventToday) {
     allEventsFinished = todaysEvents.every(e => getEventTiming(e).state === "finished");
   }
-
-  const allQuickTiles = [
-    {
-      title: "Check Customer In",
-      description: "Check members and guests in for the track",
-      href: "/admin/check-in",
-      icon: "✅",
-      color: "from-green-500/20 to-emerald-500/10 border-green-500/40 text-green-600 dark:text-green-400",
-      adminOnly: false,
-    },
-    {
-      title: "Member Management",
-      description: "View, search, and check in track members",
-      href: "/admin/members",
-      icon: "👥",
-      color: "from-blue-500/20 to-cyan-500/10 border-blue-500/40 text-blue-600 dark:text-blue-400",
-      adminOnly: false,
-    },
-    {
-      title: "Track Events",
-      description: "View and manage upcoming track events",
-      href: "/admin/events",
-      icon: "📅",
-      color: "from-emerald-500/20 to-green-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
-      adminOnly: false,
-    },
-    {
-      title: "Check-In History",
-      description: "Review complete track check-in logs & dates",
-      href: "/admin/history",
-      icon: "📜",
-      color: "from-indigo-500/20 to-blue-500/10 border-indigo-500/40 text-indigo-600 dark:text-indigo-400",
-      adminOnly: false,
-    },
-    {
-      title: "Global Notifications",
-      description: "Broadcast in-app and push notifications to all users",
-      href: "/admin/notifications",
-      icon: "📢",
-      color: "from-purple-500/20 to-pink-500/10 border-purple-500/40 text-purple-600 dark:text-purple-400",
-      adminOnly: true,
-    },
-    {
-      title: "Reports",
-      description: "Activity log and monthly revenue",
-      href: "/admin/activity",
-      icon: "📋",
-      color: "from-indigo-500/20 to-blue-500/10 border-indigo-500/40 text-indigo-600 dark:text-indigo-400",
-      adminOnly: true,
-    },
-    {
-      title: "Weekly Shell Winners",
-      description: winnerChosenThisWeek
-        ? `Winner selected for Week ${week}, ${year}`
-        : isSunday
-        ? "🚨 TODAY IS SUNDAY: Select weekly winner now!"
-        : isSaturday
-        ? "Select this week's showcase winner!"
-        : "Selection opens on Saturday",
-      href: "/admin/showcase-winners",
-      icon: "🏆",
-      highlight: isSunday && !winnerChosenThisWeek,
-      color: isSunday && !winnerChosenThisWeek
-        ? "from-amber-500/40 to-yellow-500/30 border-amber-500 text-amber-500"
-        : "from-yellow-500/20 to-amber-500/10 border-yellow-500/40 text-yellow-600 dark:text-yellow-400",
-      adminOnly: true,
-    },
-    {
-      title: "Facebook Sync",
-      description: "Manage track social media integrations",
-      href: "/admin/facebook",
-      icon: "📲",
-      color: "from-sky-500/20 to-blue-500/10 border-sky-500/40 text-sky-600 dark:text-sky-400",
-      adminOnly: true,
-    },
-    {
-      title: "Shop",
-      description: "Orders and product inventory",
-      href: "/admin/shop",
-      icon: "🛍️",
-      color: "from-emerald-500/20 to-teal-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
-      adminOnly: true,
-    },
-    {
-      title: "Website Gallery",
-      description: "Upload photos featured on the public website gallery",
-      href: "/admin/gallery",
-      icon: "🖼️",
-      color: "from-rose-500/20 to-pink-500/10 border-rose-500/40 text-rose-600 dark:text-rose-400",
-      adminOnly: true,
-    },
-  ];
-
-  const quickTiles = allQuickTiles.filter((t) => !isModerator || !t.adminOnly);
 
   // Build Actions Needed
   const actionsNeeded: { title: string; desc: string; href: string; icon: string; urgent: boolean }[] = [];
@@ -235,6 +144,36 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
             Back to Member Dashboard
           </Link>
         </div>
+
+        {/* Click & Collect orders — quick view of what's awaiting collection. */}
+        {!isModerator && (
+          <Link
+            href="/admin/click-collect"
+            className="group flex items-center justify-between gap-4 rounded-2xl border border-emerald-500/40 bg-gradient-to-r from-emerald-500/10 to-teal-500/5 p-5 shadow-sm transition-all hover:shadow-md active:scale-[0.99]"
+          >
+            <div className="flex items-center gap-4 min-w-0">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/15 text-2xl">
+                🛍️
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-sm font-black text-zinc-900 dark:text-zinc-100">Click &amp; Collect Orders</h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  {pendingOrderCount === 0
+                    ? "No orders awaiting collection"
+                    : `${pendingOrderCount} order${pendingOrderCount === 1 ? "" : "s"} awaiting collection`}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              {pendingOrderCount > 0 && (
+                <span className="flex h-8 min-w-8 items-center justify-center rounded-full bg-emerald-500 px-2 text-sm font-black text-black">
+                  {pendingOrderCount}
+                </span>
+              )}
+              <span className="text-emerald-600 dark:text-emerald-400 group-hover:translate-x-0.5 transition-transform text-lg">→</span>
+            </div>
+          </Link>
+        )}
 
         {/* Self Check-in status — automated from event open/close times */}
         {hasEventToday && (
@@ -406,49 +345,6 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
           </Link>
         </div>
 
-        {/* Quick Action Tiles Grid */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Quick Navigation Tiles</h2>
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">{quickTiles.length} Controls</span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {quickTiles.map((tile) => (
-              <Link
-                key={tile.href}
-                href={tile.href}
-                prefetch={true}
-                className={`group relative rounded-2xl bg-white dark:bg-zinc-900 border p-5 flex flex-col justify-between transition-all duration-200 hover:shadow-lg space-y-4 ${
-                  tile.highlight
-                    ? "border-amber-500 ring-2 ring-amber-500/40 shadow-amber-500/10 animate-pulse"
-                    : "border-zinc-200/90 dark:border-zinc-800 hover:border-amber-500/60 dark:hover:border-amber-500/60"
-                }`}
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-3xl block">{tile.icon}</span>
-                    {tile.highlight && (
-                      <span className="rounded-full bg-amber-500 text-black text-[9px] font-black px-2 py-0.5 uppercase tracking-wider animate-bounce">
-                        SUNDAY: PICK WINNER
-                      </span>
-                    )}
-                    <span className="text-xs font-bold text-zinc-400 group-hover:text-amber-500 transition-colors">→</span>
-                  </div>
-                  <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 group-hover:text-amber-500 transition-colors">
-                    {tile.title}
-                  </h3>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                    {tile.description}
-                  </p>
-                </div>
-                <div className={`rounded-lg bg-gradient-to-r ${tile.color} border px-3 py-1 text-[10px] font-bold uppercase tracking-wider self-start`}>
-                  Open {tile.title}
-                </div>
-              </Link>
-            ))}
-          </div>
-        </section>
     </>
   );
 }
@@ -471,17 +367,15 @@ function AdminDashboardSkeleton({ isModerator }: { isModerator: boolean }) {
         <div className="h-9 w-40 bg-zinc-200 dark:bg-zinc-800 rounded-xl shrink-0" />
       </div>
 
-      {/* Quick Access Tiles Skeleton */}
+      {/* Click & Collect card skeleton */}
+      {!isModerator && (
+        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm h-20" />
+      )}
+
+      {/* Live metrics bar skeleton */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[...Array(isModerator ? 4 : 8)].map((_, i) => (
-          <div key={i} className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm h-32 flex flex-col justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-zinc-200 dark:bg-zinc-800 shrink-0" />
-              <div className="h-4 w-24 bg-zinc-200 dark:bg-zinc-800 rounded" />
-            </div>
-            <div className="h-3 w-full bg-zinc-200 dark:bg-zinc-800 rounded mt-3" />
-            <div className="h-3 w-2/3 bg-zinc-200 dark:bg-zinc-800 rounded mt-1.5" />
-          </div>
+        {[...Array(isModerator ? 3 : 4)].map((_, i) => (
+          <div key={i} className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm h-24" />
         ))}
       </div>
     </div>

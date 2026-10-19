@@ -17,11 +17,11 @@ export default async function MorePage() {
 
   const featureLinks = [
     {
-      title: "Wheel Visualizer",
-      description: "Preview & compare aftermarket wheels on your RC drift car",
-      href: "/shop/visualizer",
-      icon: WheelIcon,
-      badge: "Wheels",
+      title: "My Orders",
+      description: "Track your Click & Collect orders and collection status",
+      href: "/orders",
+      icon: OrdersIcon,
+      badge: "Orders",
       iconColor: "text-orange-500 bg-orange-500/10 border-orange-500/20",
     },
     {
@@ -146,12 +146,10 @@ function AdminIcon({ className }: { className?: string }) {
   );
 }
 
-function WheelIcon({ className }: { className?: string }) {
+function OrdersIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <circle cx="12" cy="12" r="9" />
-      <circle cx="12" cy="12" r="2.5" />
-      <path strokeLinecap="round" d="M12 9.5V3M12 21v-5.5M9.5 12H3M21 12h-5.5M10.1 10.1 5.7 5.7M18.3 18.3l-4.4-4.4M13.9 10.1l4.4-4.4M5.7 18.3l4.4-4.4" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12A1.125 1.125 0 0 1 19.75 21H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 6.75h12.974c.576 0 1.059.435 1.119 1.007Z" />
     </svg>
   );
 }

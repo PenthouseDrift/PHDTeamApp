@@ -61,20 +61,26 @@ export async function processSuccessfulMembershipPayment(
   return { success: true, expiresAt: newExpiresAt };
 }
 
+type FinalizerItemType = "membership" | "daypass" | "rental" | "marketplace";
+
 export async function processSuccessfulPaymentReference(
   checkoutReference: string,
   checkoutId: string,
   amount: number = 0,
   currency: string = "GBP"
-): Promise<{ success: boolean; itemType: "membership" | "daypass" | "rental"; memberId: string; guestName?: string }> {
+): Promise<{ success: boolean; itemType: FinalizerItemType; memberId: string; guestName?: string }> {
   let memberId = "";
-  let itemType: "membership" | "daypass" | "rental" = "membership";
+  let itemType: FinalizerItemType = "membership";
   let quantity = 1;
   let guestName: string | undefined = undefined;
   // Amount actually charged, persisted in the checkout metadata at creation time.
   // Preferred over the webhook amount, which can be missing or mis-reported.
   let storedAmount: number | undefined = undefined;
   let storedCurrency: string | undefined = undefined;
+  // Marketplace-only metadata (populated from the checkout:<id> record).
+  let listingId: string | undefined = undefined;
+  let variantId: string | undefined = undefined;
+  let itemLabel: string | undefined = undefined;
 
   // 1. First check if we have metadata stored in Redis under checkout:${checkoutId}
   if (checkoutId) {
@@ -90,6 +96,9 @@ export async function processSuccessfulPaymentReference(
           storedAmount = Number(stored.amount);
         }
         if (stored.currency) storedCurrency = String(stored.currency);
+        if (stored.listingId) listingId = String(stored.listingId);
+        if (stored.variantId) variantId = String(stored.variantId);
+        if (stored.itemLabel) itemLabel = String(stored.itemLabel);
       } catch (e) {
         console.error("Failed to parse stored checkout JSON:", e);
       }
@@ -212,6 +221,96 @@ export async function processSuccessfulPaymentReference(
     }
     await clearPendingCheckout(checkoutId);
     return { success: true, itemType: "rental", memberId, guestName };
+  } else if (itemType === "marketplace") {
+    const key = `payment:processed:${checkoutId}`;
+    const alreadyProcessed = await redis.get(key);
+    if (!alreadyProcessed) {
+      // Resolve the amount from metadata → webhook → stored, in that order.
+      const saleAmount =
+        storedAmount !== undefined && storedAmount > 0
+          ? storedAmount
+          : Number.isFinite(amount) && amount > 0
+          ? amount
+          : 0;
+      const saleCurrency = storedCurrency || currency;
+      const label = itemLabel || "Marketplace item";
+
+      if (!listingId) {
+        throw new Error(`Marketplace checkout ${checkoutId} has no listingId in metadata`);
+      }
+
+      // 1. Decrement stock (+ ASBO-RC ledger) via the internal sell path. Gated
+      //    by CRON_SECRET since the webhook has no user session.
+      try {
+        const { recordOnlineSale } = await import("@/actions/marketplace");
+        const result = await recordOnlineSale(
+          process.env.CRON_SECRET || "",
+          listingId,
+          quantity,
+          variantId
+        );
+        if (!result.success) {
+          console.error("Marketplace stock decrement failed:", result.error);
+        }
+      } catch (e) {
+        console.error("Marketplace recordOnlineSale threw:", e);
+      }
+
+      // 2. Create a paid Click & Collect order for the buyer's history and the
+      //    admin fulfilment queue.
+      let orderId = checkoutId;
+      try {
+        const { createOrder, updateOrderStatus } = await import("@/actions/orders");
+        const created = await createOrder(
+          memberId,
+          [{ productId: listingId, name: label, price: saleAmount, quantity }],
+          saleAmount,
+          "click_collect",
+          checkoutReference
+        );
+        if (created.success) {
+          orderId = created.data.id;
+          // Mark paid → auto-promotes to ready_for_collection + fulfilment queue.
+          await updateOrderStatus(orderId, "paid");
+        }
+      } catch (e) {
+        console.error("Marketplace order creation failed:", e);
+      }
+
+      // 3. Record the sale in the activity log (online revenue).
+      await logActivity({
+        type: "purchase",
+        memberId,
+        memberName: finalName,
+        description: `Marketplace: ${label} (Click & Collect)`,
+        amount: saleAmount,
+        currency: saleCurrency,
+      });
+
+      // 4. Email the buyer an order confirmation (best-effort; never blocks).
+      try {
+        const buyerEmail = (await redis.hget(`member:${memberId}`, "email")) as string | null;
+        if (buyerEmail) {
+          const { sendEmail, renderOrderConfirmation } = await import("@/lib/email");
+          const { subject, html } = renderOrderConfirmation({
+            buyerName: memberName,
+            orderId,
+            items: [{ name: label, quantity, price: saleAmount }],
+            totalAmount: saleAmount,
+            currency: saleCurrency,
+          });
+          await sendEmail({ to: buyerEmail, subject, html });
+        } else {
+          console.warn(`[marketplace] No email on file for member ${memberId}; skipping confirmation`);
+        }
+      } catch (e) {
+        console.error("Marketplace confirmation email failed:", e);
+      }
+
+      await redis.set(key, "1", { ex: 86400 * 30 });
+    }
+    await clearPendingCheckout(checkoutId);
+    return { success: true, itemType: "marketplace", memberId, guestName };
   }
 
   throw new Error(`Unsupported item type: ${itemType}`);

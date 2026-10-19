@@ -44,6 +44,16 @@ export async function createCheckout(
     .trim()
     .slice(0, 100);
 
+  // SumUp distinguishes two URLs:
+  //   redirect_url — where the BROWSER is sent back after payment (UX only).
+  //   return_url   — the SERVER-TO-SERVER webhook SumUp POSTs on status change.
+  // There is no dashboard webhook registration for Checkouts: you subscribe by
+  // passing return_url here. Without it SumUp has nowhere to send the webhook,
+  // so payments are only recorded when the buyer returns — the cause of missed
+  // "paid but not recorded" orders. Build it from the app's public URL.
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+  const webhookUrl = appUrl ? `${appUrl}/api/webhooks/sumup` : undefined;
+
   const payload: Record<string, unknown> = {
     checkout_reference: checkoutRef,
     amount: Number(params.amount.toFixed(2)),
@@ -51,6 +61,7 @@ export async function createCheckout(
     description: safeDescription,
     merchant_code: merchantCode,
     redirect_url: params.returnUrl,
+    ...(webhookUrl ? { return_url: webhookUrl } : {}),
     hosted_checkout: {
       enabled: true,
     },

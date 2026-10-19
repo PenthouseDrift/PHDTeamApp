@@ -13,13 +13,12 @@ export function OrderFulfillmentClient({ initialOrders }: OrderFulfillmentClient
   const [isPending, startTransition] = useTransition();
 
   async function handleMarkCollected(orderId: string) {
-    if (isPending || !confirm("Mark this order as collected by the user?")) return;
+    if (isPending || !confirm("Mark this order as collected by the customer?")) return;
 
     startTransition(async () => {
       const res = await updateOrderStatus(orderId, "collected");
       if (res.success) {
-        // Remove from active list
-        setOrders(orders.filter(o => o.id !== orderId));
+        setOrders(orders.filter((o) => o.id !== orderId));
       } else {
         alert("Failed to update order: " + res.error);
       }
@@ -31,7 +30,7 @@ export function OrderFulfillmentClient({ initialOrders }: OrderFulfillmentClient
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-8 text-center shadow-sm">
         <span className="text-4xl mb-4 block">🎉</span>
         <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">All Caught Up!</h3>
-        <p className="text-zinc-500 dark:text-zinc-400 mt-2">There are no pending click & collect orders right now.</p>
+        <p className="text-zinc-500 dark:text-zinc-400 mt-2">There are no orders waiting for collection right now.</p>
       </div>
     );
   }
@@ -40,7 +39,7 @@ export function OrderFulfillmentClient({ initialOrders }: OrderFulfillmentClient
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       {orders.map((order) => {
         const orderDate = new Date(order.createdAt).toLocaleString();
-        
+
         return (
           <div key={order.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-sm overflow-hidden flex flex-col">
             <div className="bg-zinc-50 dark:bg-zinc-800/50 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-start">
@@ -53,8 +52,9 @@ export function OrderFulfillmentClient({ initialOrders }: OrderFulfillmentClient
                 </h3>
               </div>
               <span className="text-[10px] font-medium text-zinc-500 text-right">
-                {orderDate}<br/>
-                ID: {order.id.slice(0, 8)}
+                {orderDate}
+                <br />
+                Ref: {order.id.slice(0, 8).toUpperCase()}
               </span>
             </div>
 

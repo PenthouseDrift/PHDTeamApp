@@ -5,6 +5,7 @@ import { getListingById, getListingAuthorName, canViewDraft } from "@/actions/ma
 import { ListingDetailActions } from "@/components/marketplace/ListingDetailActions";
 import { ListingGallery } from "@/components/marketplace/ListingGallery";
 import { ListingVariantPricing } from "@/components/marketplace/ListingVariantPricing";
+import { BuyAndCollect } from "@/components/marketplace/BuyAndCollect";
 
 export const dynamic = "force-dynamic";
 
@@ -126,6 +127,42 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
               </div>
             </div>
 
+            {/* Online Buy & Collect — shown at the top so buyers see the primary
+                action first. Available items physically at the track can be paid
+                for online via SumUp and collected from staff. */}
+            {listing.status === "available" && listing.atTrack && (
+              <BuyAndCollect
+                listingId={listing.listingId}
+                price={listing.price}
+                hasVariations={listing.hasVariations}
+                variationLabel={listing.variationLabel}
+                variants={listing.variants.map((v) => ({
+                  id: v.id,
+                  name: v.name,
+                  price: v.price,
+                  available: Math.max(0, v.quantity - v.soldCount),
+                }))}
+              />
+            )}
+
+            {/* Owner/staff management (incl. "Record a sale") — shown near the
+                top so staff can record sales without scrolling. Hidden for
+                regular buyers. */}
+            {canManage && (
+              <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+                <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  {viewerId === listing.userId ? "Manage your listing" : "Moderator controls"}
+                </p>
+                <ListingDetailActions
+                  listingId={listing.listingId}
+                  initialStatus={listing.status}
+                  quantity={listing.quantity}
+                  initialSoldCount={listing.soldCount}
+                  soldByAsboRc={listing.soldByAsboRc}
+                />
+              </div>
+            )}
+
             <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
               <span className="font-medium text-zinc-700 dark:text-zinc-300">{authorName}</span>
               {listing.location && <span>· {listing.location}</span>}
@@ -166,9 +203,9 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
               </div>
             )}
 
-            {/* Sold-by-PHD items are bought in person at the track, so no seller
-                contact is shown — just a "come to the track" message. */}
-            {listing.status !== "sold" && listing.soldByPhd ? (
+            {/* Sold-by-PHD items that AREN'T eligible for online Buy & Collect
+                (e.g. not flagged at-track) show the in-person message instead. */}
+            {listing.status !== "sold" && listing.soldByPhd && !listing.atTrack ? (
               <div className="space-y-2 rounded-xl border border-teal-200 bg-teal-50 p-4 dark:border-teal-500/40 dark:bg-teal-500/10">
                 <h2 className="text-sm font-semibold text-teal-800 dark:text-teal-300">
                   How to buy
@@ -180,6 +217,7 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
               </div>
             ) : (
               listing.status !== "sold" &&
+              !listing.soldByPhd &&
               (listing.contactValue || listing.meetAtTrack) && (
                 <div className="space-y-2 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
                   <h2 className="text-sm font-semibold text-zinc-600 dark:text-zinc-300">
@@ -207,21 +245,6 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
                   )}
                 </div>
               )
-            )}
-
-            {canManage && (
-              <div className="border-t border-zinc-200 pt-4 dark:border-zinc-800">
-                <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                  {viewerId === listing.userId ? "Manage your listing" : "Moderator controls"}
-                </p>
-                <ListingDetailActions
-                  listingId={listing.listingId}
-                  initialStatus={listing.status}
-                  quantity={listing.quantity}
-                  initialSoldCount={listing.soldCount}
-                  soldByAsboRc={listing.soldByAsboRc}
-                />
-              </div>
             )}
           </div>
         </div>

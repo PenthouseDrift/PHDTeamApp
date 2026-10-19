@@ -5,9 +5,8 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import type { ActionResult } from "@/types";
 import { randomUUID } from "crypto";
-import { ShopProduct } from "./shop";
 
-export type OrderType = "shop" | "membership" | "day_pass" | "rental";
+export type OrderType = "shop" | "click_collect" | "membership" | "day_pass" | "rental";
 export type OrderStatus = "pending" | "paid" | "ready_for_collection" | "collected";
 
 export interface OrderItem {
@@ -75,8 +74,10 @@ export async function updateOrderStatus(id: string, status: OrderStatus): Promis
     const prevStatus = existing.status as OrderStatus;
     await redis.hset(`order:${id}`, { status });
 
-    // Handle queues for shop items
-    if (existing.type === "shop") {
+    // Fulfilment queue applies to collectable orders: legacy "shop" and the
+    // new "click_collect" marketplace purchases.
+    const isCollectable = existing.type === "shop" || existing.type === "click_collect";
+    if (isCollectable) {
       const multi = redis.multi();
       
       // If moving to ready
@@ -89,7 +90,7 @@ export async function updateOrderStatus(id: string, status: OrderStatus): Promis
         multi.lrem("admin:orders:active", 0, id);
       }
 
-      // If just paid (from pending) and it's a shop order, automatically mark ready for collection
+      // If just paid (from pending), automatically mark ready for collection
       if (prevStatus === "pending" && status === "paid") {
         multi.hset(`order:${id}`, { status: "ready_for_collection" });
         multi.lpush("admin:orders:active", id);
@@ -98,7 +99,7 @@ export async function updateOrderStatus(id: string, status: OrderStatus): Promis
       await multi.exec();
     }
 
-    revalidatePath("/admin/orders");
+    revalidatePath("/admin/click-collect");
     revalidatePath("/orders");
 
     return { success: true, data: { ...existing, status } as unknown as AppOrder };

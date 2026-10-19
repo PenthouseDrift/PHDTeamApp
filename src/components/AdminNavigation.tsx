@@ -42,8 +42,8 @@ const adminNavItems: AdminNavItem[] = [
 
 // Secondary nav — grouped under "More".
 const adminMoreItems: AdminNavItem[] = [
-  // Shop hub (orders + products) — moved out of the primary nav.
-  { href: "/admin/shop", label: "Shop", icon: ShopIcon, adminOnly: true, match: ["/admin/orders"] },
+  // Click & Collect — marketplace orders paid online, awaiting collection.
+  { href: "/admin/click-collect", label: "Click & Collect", icon: ShopIcon, adminOnly: true, match: ["/admin/click-collect"] },
   { href: "/admin/events", label: "Events", icon: EventsIcon },
   { href: "/admin/notes", label: "Notes", icon: NotesIcon },
   { href: "/admin/notifications", label: "Global Alerts", icon: BellIcon, adminOnly: true },

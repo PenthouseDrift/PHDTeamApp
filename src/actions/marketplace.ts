@@ -1434,3 +1434,139 @@ export const getListingAuthorName = unstable_cache(
   ["marketplace-author-name"],
   { revalidate: 300, tags: [MARKETPLACE_TAG] }
 );
+
+/**
+ * Decrement stock for a listing because `quantity` units were paid for online
+ * (SumUp Click & Collect). This is the INTERNAL, non-session sell path used by
+ * the payment finalizer, which runs in the webhook/cron with no user session.
+ *
+ * It is exported from this `"use server"` module, so to stop it being a
+ * client-callable unauthenticated stock mutation it requires `internalSecret`
+ * to equal `CRON_SECRET` (the same server-to-server secret the reconcile cron
+ * uses). Clients never hold that secret.
+ *
+ * Mirrors the three stock paths of the manual flows and PRESERVES the ASBO-RC
+ * ledger: variant listings bump the chosen variant's soldCount; ASBO-RC
+ * non-variant listings decrement `quantity` and append ledger sales via
+ * `createAsboRcSales`; normal listings bump `soldCount`.
+ */
+export async function recordOnlineSale(
+  internalSecret: string,
+  listingId: string,
+  quantity: number,
+  variantId?: string
+): Promise<ActionResult<{ status: "available" | "sold" }>> {
+  if (!internalSecret || internalSecret !== process.env.CRON_SECRET) {
+    return { success: false, error: "Unauthorized" };
+  }
+
+  try {
+    const qty = Math.max(1, Math.floor(Number(quantity) || 1));
+    const data = await redis.hgetall(`listing:${listingId}`);
+    const listing = toListing(data as Record<string, unknown> | null);
+    if (!listing) return { success: false, error: "Listing not found" };
+
+    const now = Date.now();
+
+    // ── Variant listing: bump the chosen variant's soldCount ────────────────
+    if (listing.hasVariations) {
+      const idx = listing.variants.findIndex((v) => v.id === variantId);
+      if (idx < 0) return { success: false, error: "Variation not found" };
+      const variant = listing.variants[idx];
+      const target = Math.min(variant.quantity, variant.soldCount + qty);
+      const soldDelta = target - variant.soldCount;
+
+      const nextVariants = listing.variants.map((v, i) =>
+        i === idx ? { ...v, soldCount: target } : v
+      );
+      const derived = deriveFromVariants(nextVariants);
+
+      await redis.hset(`listing:${listingId}`, {
+        variants: JSON.stringify(nextVariants),
+        price: String(derived.price),
+        quantity: String(derived.quantity),
+        soldCount: String(derived.soldCount),
+        status: derived.status,
+        updatedAt: now,
+      });
+      await redis.zadd(MARKETPLACE_INDEX, {
+        score: indexScore(listing.createdAt, derived.status),
+        member: listingId,
+      });
+
+      if (listing.soldByAsboRc && soldDelta > 0) {
+        const { createAsboRcSales } = await import("@/actions/asbo-rc");
+        await createAsboRcSales(listing, soldDelta, undefined, {
+          price: variant.price,
+          consignmentPrice: variant.consignmentPrice,
+          name: variant.name,
+        });
+      }
+
+      revalidatePath("/marketplace");
+      bustMarketplaceCache();
+      revalidatePath(`/marketplace/${listingId}`);
+      revalidatePath("/admin/asbo-rc");
+      revalidatePath("/asbo-rc");
+      return { success: true, data: { status: derived.status } };
+    }
+
+    // ── ASBO-RC non-variant: decrement quantity + append ledger sales ───────
+    if (listing.soldByAsboRc) {
+      const available = listing.quantity; // ASBO: quantity == available stock
+      const toSell = Math.min(available, qty);
+      const nextAvailable = Math.max(0, available - toSell);
+      const status: "available" | "sold" = nextAvailable <= 0 ? "sold" : "available";
+
+      await redis.hset(`listing:${listingId}`, {
+        quantity: String(nextAvailable),
+        status,
+        updatedAt: now,
+      });
+      await redis.zadd(MARKETPLACE_INDEX, {
+        score: indexScore(listing.createdAt, status),
+        member: listingId,
+      });
+
+      if (toSell > 0) {
+        const { createAsboRcSales } = await import("@/actions/asbo-rc");
+        await createAsboRcSales(listing, toSell);
+      }
+
+      revalidatePath("/marketplace");
+      bustMarketplaceCache();
+      revalidatePath(`/marketplace/${listingId}`);
+      revalidatePath("/admin/asbo-rc");
+      revalidatePath("/asbo-rc");
+      return { success: true, data: { status } };
+    }
+
+    // ── Normal listing: bump soldCount ──────────────────────────────────────
+    const clamped = Math.min(listing.quantity, listing.soldCount + qty);
+    const status: "available" | "sold" = listing.quantity - clamped <= 0 ? "sold" : "available";
+    const soldAt = [...listing.soldAt];
+    while (soldAt.length < clamped) soldAt.push(now);
+    if (soldAt.length > clamped) soldAt.length = clamped;
+
+    await redis.hset(`listing:${listingId}`, {
+      soldCount: String(clamped),
+      soldAt: JSON.stringify(soldAt),
+      status,
+      updatedAt: now,
+    });
+    await redis.zadd(MARKETPLACE_INDEX, {
+      score: indexScore(listing.createdAt, status),
+      member: listingId,
+    });
+
+    revalidatePath("/marketplace");
+    bustMarketplaceCache();
+    revalidatePath(`/marketplace/${listingId}`);
+    return { success: true, data: { status } };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to record online sale",
+    };
+  }
+}
