@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import ImageUploader from "@/components/ui/ImageUploader";
 import { createListing, updateListing } from "@/actions/marketplace";
-import type { MarketplaceListing } from "@/types";
+import type { MarketplaceListing, MarketplaceCategory } from "@/types";
+import { MARKETPLACE_CATEGORIES } from "@/types";
 
 const MAX_DESCRIPTION_LENGTH = 1000;
 const MAX_TITLE_LENGTH = 80;
@@ -41,6 +42,7 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
   );
   const [location, setLocation] = useState(listing?.location ?? "");
   const [description, setDescription] = useState(listing?.description ?? "");
+  const [category, setCategory] = useState<MarketplaceCategory | "">(listing?.category ?? "");
   const [contactName, setContactName] = useState(listing?.contactName ?? "");
   const [contactMethod, setContactMethod] = useState<ContactMethod>(
     listing?.contactMethod ?? "email"
@@ -117,6 +119,10 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
     }
     if (title.trim().length < 2) {
       setError("Please give your listing a title.");
+      return;
+    }
+    if (!category) {
+      setError("Please choose a category.");
       return;
     }
     const priceNum = Number(price);
@@ -207,6 +213,7 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
     const payload = {
       title: title.trim(),
       description: description.trim() || undefined,
+      category: category as MarketplaceCategory,
       price: priceNum,
       images,
       location: location.trim() || undefined,
@@ -282,6 +289,28 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
           className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder-zinc-400 transition-colors focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
           maxLength={MAX_TITLE_LENGTH}
         />
+      </div>
+
+      {/* Category */}
+      <div className="space-y-2">
+        <label htmlFor="category" className="block text-sm font-medium text-zinc-600 dark:text-zinc-300">
+          Category
+        </label>
+        <select
+          id="category"
+          value={category}
+          onChange={(e) => setCategory(e.target.value as MarketplaceCategory | "")}
+          className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-sm text-zinc-900 transition-colors focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+        >
+          <option value="" disabled>
+            Choose a category…
+          </option>
+          {MARKETPLACE_CATEGORIES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Price + Location */}

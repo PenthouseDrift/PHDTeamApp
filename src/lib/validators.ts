@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MARKETPLACE_CATEGORIES } from "@/types";
 
 export const carProfileSchema = z.object({
   name: z.string().min(1).max(50),
@@ -81,6 +82,8 @@ export const marketplaceListingSchema = z
   .object({
     title: z.string().min(2).max(80),
     description: z.string().max(1000).optional().default(""),
+    // Required product category (one of the fixed MARKETPLACE_CATEGORIES).
+    category: z.enum(MARKETPLACE_CATEGORIES),
     price: z.number().min(0).max(100000),
     // ASBO-RC consignment base (the 7% split is calculated on this). Optional:
     // unset falls back to `price`. Enforced in the action/superRefine.

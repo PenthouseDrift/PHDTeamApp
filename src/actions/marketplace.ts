@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { deleteImage } from "@/lib/blob";
 import { marketplaceListingSchema } from "@/lib/validators";
 import type { ActionResult, MarketplaceListing } from "@/types";
+import { MARKETPLACE_CATEGORIES } from "@/types";
 import { randomUUID } from "crypto";
 
 /**
@@ -196,6 +197,9 @@ function toListing(data: Record<string, unknown> | null): MarketplaceListing | n
     userId: asString(data.userId),
     title: asString(data.title),
     description: asString(data.description),
+    category: (MARKETPLACE_CATEGORIES as readonly string[]).includes(asString(data.category))
+      ? (asString(data.category) as import("@/types").MarketplaceCategory)
+      : "",
     price: derived ? derived.price : Number(data.price) || 0,
     consignmentPrice:
       data.consignmentPrice === undefined || data.consignmentPrice === null || data.consignmentPrice === ""
@@ -272,6 +276,7 @@ export async function createListing(
   data: {
     title: string;
     description?: string;
+    category: import("@/types").MarketplaceCategory;
     price: number;
     consignmentPrice?: number;
     images: string[];
@@ -337,6 +342,7 @@ export async function createListing(
       userId,
       title: parsed.data.title.trim(),
       description: parsed.data.description.trim(),
+      category: parsed.data.category,
       price: derived ? derived.price : parsed.data.price,
       // Only meaningful for ASBO items; stored for everyone but ignored unless
       // soldByAsboRc. For variant listings the per-variant consignment prices
@@ -375,6 +381,7 @@ export async function createListing(
       userId: listing.userId,
       title: listing.title,
       description: listing.description,
+      category: listing.category,
       price: String(listing.price),
       consignmentPrice: listing.consignmentPrice != null ? String(listing.consignmentPrice) : "",
       images: JSON.stringify(listing.images),
@@ -479,14 +486,17 @@ export interface MarketplacePage {
 export async function getListingsPage(
   page = 1,
   perPage = 14,
-  options: { query?: string } = {}
+  options: { query?: string; category?: string } = {}
 ): Promise<MarketplacePage> {
   const safePerPage = Math.max(1, Math.min(60, Math.floor(perPage) || 14));
   const query = (options.query ?? "").trim().toLowerCase();
+  const category = (options.category ?? "").trim();
+  const hasCategory = (MARKETPLACE_CATEGORIES as readonly string[]).includes(category);
 
   try {
-    // --- Search path: match across the whole catalogue, then paginate. ---
-    if (query) {
+    // --- Filter path: a search query and/or a category both require scanning
+    // the whole catalogue (the fast page-slice below can't filter). ---
+    if (query || hasCategory) {
       const ids = await redis.zrange(MARKETPLACE_INDEX, 0, -1);
       if (!ids || ids.length === 0) {
         return { listings: [], total: 0, page: 1, perPage: safePerPage, totalPages: 0 };
@@ -500,10 +510,13 @@ export async function getListingsPage(
       const matches = raws
         .map((raw) => toListing(raw as Record<string, unknown> | null))
         .filter((l): l is MarketplaceListing => l !== null)
-        .filter((l) =>
-          [l.title, l.description, l.location]
-            .filter(Boolean)
-            .some((field) => field.toLowerCase().includes(query))
+        .filter((l) => !hasCategory || l.category === category)
+        .filter(
+          (l) =>
+            !query ||
+            [l.title, l.description, l.location]
+              .filter(Boolean)
+              .some((field) => field.toLowerCase().includes(query))
         );
 
       const total = matches.length;
@@ -1150,6 +1163,7 @@ export async function updateListing(
   data: {
     title: string;
     description?: string;
+    category: import("@/types").MarketplaceCategory;
     price: number;
     consignmentPrice?: number;
     images: string[];
@@ -1254,6 +1268,7 @@ export async function updateListing(
       isDraft: existing.isDraft,
       title: parsed.data.title.trim(),
       description: parsed.data.description.trim(),
+      category: parsed.data.category,
       price: derivedV ? derivedV.price : parsed.data.price,
       consignmentPrice: hasVariations ? undefined : parsed.data.consignmentPrice,
       images: parsed.data.images,
@@ -1290,6 +1305,7 @@ export async function updateListing(
       userId: updated.userId,
       title: updated.title,
       description: updated.description,
+      category: updated.category,
       price: String(updated.price),
       consignmentPrice: updated.consignmentPrice != null ? String(updated.consignmentPrice) : "",
       images: JSON.stringify(updated.images),

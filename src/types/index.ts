@@ -179,12 +179,33 @@ export interface ListingVariant {
   reservedCount?: number;
 }
 
+/**
+ * Fixed set of marketplace product categories. Single source of truth for the
+ * listing form <select>, the browse/filter UIs, and validation. Keep the order
+ * stable — it drives how filter chips render.
+ */
+export const MARKETPLACE_CATEGORIES = [
+  "Body shells",
+  "Wheels & tyres",
+  "Electronics & Lighting",
+  "Chassis Parts",
+  "Accessories",
+] as const;
+
+export type MarketplaceCategory = (typeof MARKETPLACE_CATEGORIES)[number];
+
 export interface MarketplaceListing {
   listingId: string;
   /** Google providerAccountId of the member who posted the listing. */
   userId: string;
   title: string;
   description: string;
+  /**
+   * Product category (one of MARKETPLACE_CATEGORIES). Required on new/edited
+   * listings; legacy records that predate categories read back as "" until
+   * backfilled. Drives category filtering in the app + on the website.
+   */
+  category: MarketplaceCategory | "";
   /**
    * Price in GBP — the SELL price the customer pays (and what's shown
    * everywhere a buyer looks). 0 means "free" / offers. For variant listings

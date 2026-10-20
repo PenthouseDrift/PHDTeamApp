@@ -44,6 +44,8 @@ type PublicListing = {
   id: string;
   title: string;
   description: string;
+  /** Product category (one of MARKETPLACE_CATEGORIES); "" if uncategorised. */
+  category: string;
   price: number;
   priceLabel: string;
   images: string[];
@@ -129,6 +131,7 @@ export async function GET(request: Request) {
         id: l.listingId,
         title: l.title,
         description: l.description,
+        category: l.category,
         price: l.price,
         priceLabel: priceLabel(l.price),
         images: l.images,

@@ -3,17 +3,21 @@ import { auth } from "@/lib/auth";
 import { getListingsPage, getListingAuthorName, getDraftListings } from "@/actions/marketplace";
 import { ListingCard } from "@/components/marketplace/ListingCard";
 import { MarketplaceSearch } from "@/components/marketplace/MarketplaceSearch";
+import { MARKETPLACE_CATEGORIES } from "@/types";
 
 export const dynamic = "force-dynamic";
 
 const PER_PAGE = 14;
 
 interface MarketplacePageProps {
-  searchParams: Promise<{ page?: string; q?: string }>;
+  searchParams: Promise<{ page?: string; q?: string; category?: string }>;
 }
 
 export default async function MarketplacePage({ searchParams }: MarketplacePageProps) {
-  const [session, { page: pageParam, q: qParam }] = await Promise.all([auth(), searchParams]);
+  const [session, { page: pageParam, q: qParam, category: catParam }] = await Promise.all([
+    auth(),
+    searchParams,
+  ]);
   const viewerId = session?.user?.id ?? "";
   const isStaff = session?.user?.role === "admin" || session?.user?.role === "moderator";
   const isAdmin = session?.user?.role === "admin";
@@ -23,17 +27,30 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
   const canManageDrafts = session?.user?.role === "admin" || session?.user?.role === "asbo-rc";
 
   const query = (qParam ?? "").trim();
+  // Only honour a category that's in the fixed set; anything else is ignored.
+  const category = (MARKETPLACE_CATEGORIES as readonly string[]).includes((catParam ?? "").trim())
+    ? (catParam as string).trim()
+    : "";
+  const isFiltered = Boolean(query || category);
   const requestedPage = Math.max(1, Number(pageParam) || 1);
   const [{ listings, page, totalPages, total }, drafts] = await Promise.all([
-    getListingsPage(requestedPage, PER_PAGE, { query }),
+    getListingsPage(requestedPage, PER_PAGE, { query, category }),
     // Drafts only show on the first page of an unfiltered view, so they don't
     // clutter search results or deeper pages. Empty for non-admin/ASBO-RC.
-    !query && requestedPage === 1 ? getDraftListings() : Promise.resolve([]),
+    !isFiltered && requestedPage === 1 ? getDraftListings() : Promise.resolve([]),
   ]);
 
-  // Build a page href that preserves the active search query.
-  const pageHref = (p: number) =>
-    query ? `/marketplace?q=${encodeURIComponent(query)}&page=${p}` : `/marketplace?page=${p}`;
+  // Build hrefs that preserve the active query + category.
+  const withParams = (overrides: { page?: number; category?: string | null }) => {
+    const sp = new URLSearchParams();
+    if (query) sp.set("q", query);
+    const cat = overrides.category === undefined ? category : overrides.category;
+    if (cat) sp.set("category", cat);
+    if (overrides.page && overrides.page > 1) sp.set("page", String(overrides.page));
+    const qs = sp.toString();
+    return qs ? `/marketplace?${qs}` : "/marketplace";
+  };
+  const pageHref = (p: number) => withParams({ page: p });
 
   // Resolve author display names in parallel (de-duped by userId) for this page
   // only, including any drafts shown above the grid.
@@ -124,6 +141,34 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
         {/* Search (keyed on query so external URL changes reset the input) */}
         <MarketplaceSearch key={query} initialQuery={query} basePath="/marketplace" />
 
+        {/* Category filter chips. Each preserves the active search query and
+            resets to page 1. "All" clears the category. */}
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={withParams({ category: null, page: 1 })}
+            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              !category
+                ? "border-amber-500 bg-amber-500 text-black"
+                : "border-zinc-300 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            }`}
+          >
+            All
+          </Link>
+          {MARKETPLACE_CATEGORIES.map((c) => (
+            <Link
+              key={c}
+              href={withParams({ category: category === c ? null : c, page: 1 })}
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                category === c
+                  ? "border-amber-500 bg-amber-500 text-black"
+                  : "border-zinc-300 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              }`}
+            >
+              {c}
+            </Link>
+          ))}
+        </div>
+
         {/* Drafts — staff-only (admin sees all, ASBO-RC sees their own). Stocked
             but not yet published; hidden from members and the public website. */}
         {drafts.length > 0 && (
@@ -157,16 +202,20 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
 
         {/* Grid */}
         {listings.length === 0 ? (
-          query ? (
+          isFiltered ? (
             <div className="rounded-xl border border-zinc-200 bg-white p-12 text-center dark:border-zinc-800 dark:bg-zinc-900">
               <p className="text-zinc-500 dark:text-zinc-400">
-                No items match &ldquo;{query}&rdquo;.
+                {query && category
+                  ? `No ${category} items match “${query}”.`
+                  : query
+                  ? `No items match “${query}”.`
+                  : `No items in ${category} yet.`}
               </p>
               <Link
                 href="/marketplace"
                 className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-amber-600 transition-colors hover:text-amber-500"
               >
-                Clear search
+                Clear filters
               </Link>
             </div>
           ) : (
