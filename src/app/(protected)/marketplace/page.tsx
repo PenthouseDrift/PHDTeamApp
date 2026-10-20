@@ -16,6 +16,7 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
   const [session, { page: pageParam, q: qParam }] = await Promise.all([auth(), searchParams]);
   const viewerId = session?.user?.id ?? "";
   const isStaff = session?.user?.role === "admin" || session?.user?.role === "moderator";
+  const isAdmin = session?.user?.role === "admin";
 
   // Role that may manage drafts (admin or ASBO-RC). getDraftListings re-checks
   // and scopes server-side, so this only gates the card's manage affordances.
@@ -147,6 +148,7 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
                   authorName={authorNames.get(draft.userId) || "Member"}
                   viewerId={viewerId}
                   isStaff={canManageDrafts}
+                  isAdmin={isAdmin}
                 />
               ))}
             </div>
@@ -190,6 +192,7 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
                   authorName={authorNames.get(listing.userId) || "Member"}
                   viewerId={viewerId}
                   isStaff={isStaff}
+                  isAdmin={isAdmin}
                 />
               ))}
             </div>

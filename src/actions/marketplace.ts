@@ -87,6 +87,7 @@ function parseVariants(raw: unknown): import("@/types").ListingVariant[] {
         consignmentPrice: cp,
         quantity,
         soldCount,
+        reserved: o.reserved === true || o.reserved === "true",
       };
     })
     .filter((v) => v.name.length > 0);
@@ -204,6 +205,7 @@ function toListing(data: Record<string, unknown> | null): MarketplaceListing | n
     soldAt,
     soldByAsboRc: String(data.soldByAsboRc) === "true",
     soldByPhd: String(data.soldByPhd) === "true",
+    reserved: String(data.reserved) === "true",
     isDraft: String(data.isDraft) === "true",
     hasVariations,
     variationLabel: asString(data.variationLabel),
@@ -340,6 +342,7 @@ export async function createListing(
       soldAt: [],
       soldByAsboRc,
       soldByPhd,
+      reserved: false,
       penthouseCutPct: parsed.data.penthouseCutPct,
       asboRcPaid: false,
       asboRcPaidUnits: 0,
@@ -374,6 +377,7 @@ export async function createListing(
       soldAt: JSON.stringify(listing.soldAt),
       soldByAsboRc: String(listing.soldByAsboRc),
       soldByPhd: String(listing.soldByPhd),
+      reserved: String(listing.reserved),
       penthouseCutPct: String(listing.penthouseCutPct),
       asboRcPaid: String(listing.asboRcPaid),
       asboRcPaidUnits: String(listing.asboRcPaidUnits),
@@ -1567,6 +1571,230 @@ export async function recordOnlineSale(
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to record online sale",
+    };
+  }
+}
+
+/**
+ * Admin-only hold: mark a listing reserved (or clear the reservation). This is
+ * purely a flag — it does NOT change status, quantity, soldCount, or the browse
+ * index, and it NEVER writes to the ASBO-RC ledger. Only an actual sale does.
+ * While reserved, the buy flow is blocked and a "Reserved" badge is shown.
+ */
+export async function setListingReserved(
+  listingId: string,
+  reserved: boolean
+): Promise<ActionResult<{ reserved: boolean }>> {
+  try {
+    const session = await auth();
+    if (!session?.user || session.user.role !== "admin") {
+      return { success: false, error: "Only admins can reserve listings" };
+    }
+
+    const data = await redis.hgetall(`listing:${listingId}`);
+    const listing = toListing(data as Record<string, unknown> | null);
+    if (!listing) {
+      return { success: false, error: "Listing not found" };
+    }
+
+    await redis.hset(`listing:${listingId}`, {
+      reserved: reserved ? "true" : "false",
+      updatedAt: Date.now(),
+    });
+
+    revalidatePath("/marketplace");
+    revalidatePath(`/marketplace/${listingId}`);
+    bustMarketplaceCache();
+    return { success: true, data: { reserved } };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to update reservation",
+    };
+  }
+}
+
+/**
+ * Admin-only hold on ONE variant of a variant listing. Flips that variant's
+ * `reserved` flag and re-persists the variants array. Like setListingReserved,
+ * this is a pure flag: it does NOT change stock, soldCount, derived status, or
+ * the browse index, and it NEVER writes to the ASBO-RC ledger.
+ */
+export async function setVariantReserved(
+  listingId: string,
+  variantId: string,
+  reserved: boolean
+): Promise<ActionResult<{ reserved: boolean }>> {
+  try {
+    const session = await auth();
+    if (!session?.user || session.user.role !== "admin") {
+      return { success: false, error: "Only admins can reserve listings" };
+    }
+
+    const data = await redis.hgetall(`listing:${listingId}`);
+    const listing = toListing(data as Record<string, unknown> | null);
+    if (!listing) return { success: false, error: "Listing not found" };
+    if (!listing.hasVariations) {
+      return { success: false, error: "This listing does not use variations" };
+    }
+
+    const idx = listing.variants.findIndex((v) => v.id === variantId);
+    if (idx < 0) return { success: false, error: "Variation not found" };
+
+    const nextVariants = listing.variants.map((v, i) =>
+      i === idx ? { ...v, reserved } : v
+    );
+
+    await redis.hset(`listing:${listingId}`, {
+      variants: JSON.stringify(nextVariants),
+      updatedAt: Date.now(),
+    });
+
+    revalidatePath("/marketplace");
+    revalidatePath(`/marketplace/${listingId}`);
+    bustMarketplaceCache();
+    return { success: true, data: { reserved } };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to update reservation",
+    };
+  }
+}
+
+/**
+ * Add `add` units of stock to a NON-VARIANT listing. This raises the listing's
+ * total quantity (so available = quantity - soldCount goes up by `add`), which
+ * also re-activates a sold-out listing. It NEVER changes soldCount and NEVER
+ * writes to the ASBO-RC ledger — only a sale does that. Owner or staff only.
+ *
+ * Note: for ASBO-RC non-variant listings `quantity` already represents live
+ * available stock (sold units live in the ledger), so adding to quantity is the
+ * correct way to restock there too.
+ */
+export async function addListingStock(
+  listingId: string,
+  add: number
+): Promise<ActionResult<{ quantity: number; available: number; status: "available" | "sold" }>> {
+  try {
+    const session = await auth();
+    if (!session?.user) return { success: false, error: "You must be logged in" };
+
+    const toAdd = Math.max(1, Math.floor(Number(add) || 0));
+    const data = await redis.hgetall(`listing:${listingId}`);
+    const listing = toListing(data as Record<string, unknown> | null);
+    if (!listing) return { success: false, error: "Listing not found" };
+
+    const isOwner = listing.userId === session.user.id;
+    const isStaff = session.user.role === "admin" || session.user.role === "moderator";
+    if (!isOwner && !isStaff) {
+      return { success: false, error: "You can only update your own listings" };
+    }
+    if (listing.hasVariations) {
+      return { success: false, error: "This listing uses variations — add stock per variation." };
+    }
+
+    const nextQuantity = listing.quantity + toAdd;
+    // ASBO-RC: quantity == available. Normal: available = quantity - soldCount.
+    const available = listing.soldByAsboRc ? nextQuantity : nextQuantity - listing.soldCount;
+    const status: "available" | "sold" = available <= 0 ? "sold" : "available";
+    const now = Date.now();
+
+    await redis.hset(`listing:${listingId}`, {
+      quantity: String(nextQuantity),
+      status,
+      updatedAt: now,
+    });
+    await redis.zadd(MARKETPLACE_INDEX, {
+      score: indexScore(listing.createdAt, status),
+      member: listingId,
+    });
+
+    revalidatePath("/marketplace");
+    bustMarketplaceCache();
+    revalidatePath(`/marketplace/${listingId}`);
+    revalidatePath("/admin/asbo-rc");
+    revalidatePath("/asbo-rc");
+    return { success: true, data: { quantity: nextQuantity, available: Math.max(0, available), status } };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to add stock",
+    };
+  }
+}
+
+/**
+ * Add `add` units of stock to ONE variant of a variant listing. Raises that
+ * variant's quantity (available = quantity - soldCount rises by `add`), which
+ * re-activates a sold-out variant. Re-derives the listing's totals/status and
+ * re-persists the variants array. NEVER changes soldCount or the ASBO-RC
+ * ledger. Owner or staff only.
+ */
+export async function addVariantStock(
+  listingId: string,
+  variantId: string,
+  add: number
+): Promise<ActionResult<{ variantQuantity: number; variantAvailable: number; status: "available" | "sold" }>> {
+  try {
+    const session = await auth();
+    if (!session?.user) return { success: false, error: "You must be logged in" };
+
+    const toAdd = Math.max(1, Math.floor(Number(add) || 0));
+    const data = await redis.hgetall(`listing:${listingId}`);
+    const listing = toListing(data as Record<string, unknown> | null);
+    if (!listing) return { success: false, error: "Listing not found" };
+    if (!listing.hasVariations) {
+      return { success: false, error: "This listing does not use variations" };
+    }
+
+    const isOwner = listing.userId === session.user.id;
+    const isStaff = session.user.role === "admin" || session.user.role === "moderator";
+    if (!isOwner && !isStaff) {
+      return { success: false, error: "You can only update your own listings" };
+    }
+
+    const idx = listing.variants.findIndex((v) => v.id === variantId);
+    if (idx < 0) return { success: false, error: "Variation not found" };
+
+    const variant = listing.variants[idx];
+    const nextVariantQty = variant.quantity + toAdd;
+    const nextVariants = listing.variants.map((v, i) =>
+      i === idx ? { ...v, quantity: nextVariantQty } : v
+    );
+    const derived = deriveFromVariants(nextVariants);
+    const now = Date.now();
+
+    await redis.hset(`listing:${listingId}`, {
+      variants: JSON.stringify(nextVariants),
+      price: String(derived.price),
+      quantity: String(derived.quantity),
+      soldCount: String(derived.soldCount),
+      status: derived.status,
+      updatedAt: now,
+    });
+    await redis.zadd(MARKETPLACE_INDEX, {
+      score: indexScore(listing.createdAt, derived.status),
+      member: listingId,
+    });
+
+    revalidatePath("/marketplace");
+    bustMarketplaceCache();
+    revalidatePath(`/marketplace/${listingId}`);
+    revalidatePath("/admin/asbo-rc");
+    revalidatePath("/asbo-rc");
+    return {
+      success: true,
+      data: {
+        variantQuantity: nextVariantQty,
+        variantAvailable: Math.max(0, nextVariantQty - variant.soldCount),
+        status: derived.status,
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to add stock",
     };
   }
 }

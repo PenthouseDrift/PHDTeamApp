@@ -5,7 +5,8 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { MarketplaceListing } from "@/types";
-import { deleteListing, setListingStatus, setListingSoldCount, sellAsboRcUnits, publishListing, adjustVariantSold } from "@/actions/marketplace";
+import { deleteListing, setListingStatus, setListingSoldCount, sellAsboRcUnits, publishListing, adjustVariantSold, setListingReserved, setVariantReserved, addListingStock, addVariantStock } from "@/actions/marketplace";
+import { isListingReserved } from "@/lib/marketplace-reserved";
 
 
 interface ListingCardProps {
@@ -15,6 +16,8 @@ interface ListingCardProps {
   viewerId: string;
   /** Whether the viewer is admin/moderator (can moderate any listing). */
   isStaff?: boolean;
+  /** Whether the viewer is an admin specifically (reserve is admin-only). */
+  isAdmin?: boolean;
 }
 
 function formatPrice(price: number): string {
@@ -26,15 +29,81 @@ function formatPrice(price: number): string {
   }).format(price);
 }
 
-export function ListingCard({ listing, authorName, viewerId, isStaff = false }: ListingCardProps) {
+export function ListingCard({ listing, authorName, viewerId, isStaff = false, isAdmin = false }: ListingCardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [status, setStatus] = useState(listing.status);
   const [soldCount, setSoldCount] = useState(listing.soldCount);
   const [variants, setVariants] = useState(listing.variants);
+  const [reserved, setReserved] = useState(Boolean(listing.reserved));
+  const [quantityState, setQuantityState] = useState(listing.quantity);
+  const [addQty, setAddQty] = useState(1);
+  const [variantAddQty, setVariantAddQty] = useState<Record<string, number>>({});
   const [manageOpen, setManageOpen] = useState(false);
 
+  const addStockToListing = () => {
+    const n = Math.max(1, Math.floor(addQty) || 1);
+    startTransition(async () => {
+      const result = await addListingStock(listing.listingId, n);
+      if (result.success) {
+        setQuantityState(result.data.quantity);
+        setStatus(result.data.status);
+        router.refresh();
+      } else {
+        alert(result.error);
+      }
+    });
+  };
+
+  const addStockToVariant = (variantId: string) => {
+    const n = Math.max(1, Math.floor(variantAddQty[variantId] ?? 1) || 1);
+    startTransition(async () => {
+      const result = await addVariantStock(listing.listingId, variantId, n);
+      if (result.success) {
+        setVariants((vs) =>
+          vs.map((v) => (v.id === variantId ? { ...v, quantity: result.data.variantQuantity } : v))
+        );
+        setStatus(result.data.status);
+        router.refresh();
+      } else {
+        alert(result.error);
+      }
+    });
+  };
+
   const hasVariations = listing.hasVariations;
+  // PHD/ASBO items only can be reserved, and only admins may do it.
+  const canReserve = isAdmin && (listing.soldByPhd || listing.soldByAsboRc);
+  // Whether the card should show the "Reserved" corner badge (no buyable units
+  // left due to a hold, and not sold).
+  const showReservedBadge =
+    status !== "sold" &&
+    isListingReserved({ status, reserved, hasVariations, variants });
+
+  const toggleListingReserved = () => {
+    const next = !reserved;
+    startTransition(async () => {
+      const result = await setListingReserved(listing.listingId, next);
+      if (result.success) {
+        setReserved(result.data.reserved);
+        router.refresh();
+      } else {
+        alert(result.error);
+      }
+    });
+  };
+
+  const toggleVariantReserved = (variantId: string, next: boolean) => {
+    startTransition(async () => {
+      const result = await setVariantReserved(listing.listingId, variantId, next);
+      if (result.success) {
+        setVariants((vs) => vs.map((v) => (v.id === variantId ? { ...v, reserved: next } : v)));
+        router.refresh();
+      } else {
+        alert(result.error);
+      }
+    });
+  };
 
   const adjustVariant = (variantId: string, delta: number) => {
     startTransition(async () => {
@@ -58,10 +127,10 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
   const isAsbo = listing.soldByAsboRc;
   // For ASBO-RC listings, quantity IS the live available stock (sold units live
   // in the ledger, not soldCount). For normal listings, available = quantity - sold.
-  const quantity = Math.max(0, listing.quantity || 0);
+  const quantity = Math.max(0, quantityState || 0);
   const available = isAsbo ? quantity : Math.max(0, quantity - soldCount);
   // "multiUnit" only tweaks wording for normal listings.
-  const multiUnit = Math.max(1, listing.quantity || 1) > 1;
+  const multiUnit = Math.max(1, quantityState || 1) > 1;
 
   const handleToggleSold = () => {
     const next = status === "sold" ? "available" : "sold";
@@ -145,6 +214,15 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
           <div className="absolute inset-0 flex items-center justify-center bg-black/50">
             <span className="rounded-md bg-red-500 px-3 py-1 text-sm font-bold uppercase tracking-wide text-white">
               {multiUnit ? "Sold out" : "Sold"}
+            </span>
+          </div>
+        )}
+        {/* Reserved corner triangle (bottom-right). Sold takes precedence. */}
+        {showReservedBadge && (
+          <div className="pointer-events-none absolute bottom-0 right-0 h-16 w-16 overflow-hidden">
+            <div className="absolute bottom-0 right-0 h-0 w-0 border-b-[64px] border-l-[64px] border-b-amber-500 border-l-transparent" />
+            <span className="absolute bottom-1 right-1 rotate-[-45deg] text-[9px] font-black uppercase tracking-wider text-black">
+              Reserved
             </span>
           </div>
         )}
@@ -236,6 +314,22 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
                 >
                   Edit
                 </Link>
+                {/* Listing-level reserve toggle — admin, PHD/ASBO, non-variant,
+                    non-sold. Variant listings reserve per-option above. */}
+                {canReserve && !hasVariations && status !== "sold" && (
+                  <button
+                    type="button"
+                    onClick={toggleListingReserved}
+                    disabled={isPending}
+                    className={`rounded-lg border py-2.5 text-sm font-medium transition-colors disabled:opacity-50 ${
+                      reserved
+                        ? "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-300"
+                        : "border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    }`}
+                  >
+                    {reserved ? "🔖 Reserved — tap to release" : "Reserve item"}
+                  </button>
+                )}
                 {hasVariations ? (
                   <div className="flex flex-col gap-2">
                     <span className="text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
@@ -246,8 +340,9 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
                       return (
                         <div
                           key={v.id}
-                          className="flex items-center justify-between gap-2 rounded-lg border border-zinc-300 px-2 py-1.5 dark:border-zinc-700"
+                          className="flex flex-col gap-1.5 rounded-lg border border-zinc-300 px-2 py-1.5 dark:border-zinc-700"
                         >
+                          <div className="flex items-center justify-between gap-2">
                           <span className="min-w-0 flex-1 truncate text-xs font-medium text-zinc-700 dark:text-zinc-300">
                             {v.name}
                             <span className="ml-1 text-zinc-400">{formatPrice(v.price)}</span>
@@ -273,6 +368,50 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
                               className="flex h-6 w-6 items-center justify-center rounded border border-zinc-300 text-sm font-bold text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
                             >
                               +
+                            </button>
+                            {/* Per-variant reserve toggle (admin, PHD/ASBO only). */}
+                            {canReserve && (
+                              <button
+                                type="button"
+                                aria-label={v.reserved ? `Release ${v.name}` : `Reserve ${v.name}`}
+                                title={v.reserved ? "Reserved — tap to release" : "Reserve this option"}
+                                onClick={() => toggleVariantReserved(v.id, !v.reserved)}
+                                disabled={isPending || (vAvail <= 0 && !v.reserved)}
+                                className={`flex h-6 items-center justify-center rounded border px-1.5 text-[10px] font-bold transition-colors disabled:opacity-40 ${
+                                  v.reserved
+                                    ? "border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-300"
+                                    : "border-zinc-300 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                                }`}
+                              >
+                                🔖
+                              </button>
+                            )}
+                          </div>
+                          </div>
+                          {/* Add stock to this variation. */}
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              min={1}
+                              step={1}
+                              inputMode="numeric"
+                              aria-label={`Units to add to ${v.name}`}
+                              value={variantAddQty[v.id] ?? 1}
+                              onChange={(e) =>
+                                setVariantAddQty((m) => ({
+                                  ...m,
+                                  [v.id]: Math.max(1, Math.floor(Number(e.target.value) || 1)),
+                                }))
+                              }
+                              className="h-6 w-12 rounded border border-zinc-300 bg-white px-1 text-center text-[11px] font-semibold text-zinc-800 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => addStockToVariant(v.id)}
+                              disabled={isPending}
+                              className="h-6 rounded border border-emerald-300 bg-emerald-50 px-2 text-[10px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-400"
+                            >
+                              + Add stock
                             </button>
                           </div>
                         </div>
@@ -342,6 +481,30 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false }: 
                         ? multiUnit ? "Restock (mark available)" : "Mark available"
                         : multiUnit ? "Mark all sold" : "Mark as sold"}
                     </button>
+                    {/* Add stock — raises total quantity (and availability). */}
+                    <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50/50 px-2 py-1.5 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                      <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Add stock</span>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={1}
+                          step={1}
+                          inputMode="numeric"
+                          aria-label="Units to add to stock"
+                          value={addQty}
+                          onChange={(e) => setAddQty(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                          className="h-7 w-14 rounded border border-zinc-300 bg-white px-1 text-center text-xs font-semibold text-zinc-800 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
+                        />
+                        <button
+                          type="button"
+                          onClick={addStockToListing}
+                          disabled={isPending}
+                          className="h-7 rounded-md border border-emerald-300 bg-emerald-100 px-2.5 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-200 disabled:opacity-50 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-400"
+                        >
+                          + Add
+                        </button>
+                      </div>
+                    </div>
                   </>
                 )}
                 <button

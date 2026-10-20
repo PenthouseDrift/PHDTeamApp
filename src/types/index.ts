@@ -168,6 +168,12 @@ export interface ListingVariant {
   quantity: number;
   /** Units of this variant sold so far (0..quantity). */
   soldCount: number;
+  /**
+   * Admin-only hold on this variant: it's being reserved for a buyer, so it
+   * can't be bought right now (but isn't sold). Display/purchase-gate flag
+   * only — never affects stock or the ASBO-RC ledger. Defaults to false.
+   */
+  reserved?: boolean;
 }
 
 export interface MarketplaceListing {
@@ -292,6 +298,14 @@ export interface MarketplaceListing {
   asboRcPaidUnits: number;
   /** Timestamp (ms) of the most recent settlement action (if any). */
   asboRcPaidAt?: number;
+  /**
+   * Admin-only hold: the item is reserved for a buyer (e.g. an admin is
+   * arranging a sale on their behalf). While reserved, no one can buy it, but it
+   * is NOT sold — it shows a "Reserved" corner badge. This is purely a display/
+   * purchase-gate flag: it never affects stock (quantity/soldCount) and is NEVER
+   * recorded on the ASBO-RC ledger. Only an actual sale touches the ledger.
+   */
+  reserved: boolean;
   createdAt: number;
   updatedAt: number;
 }

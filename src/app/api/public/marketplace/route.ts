@@ -55,6 +55,8 @@ type PublicListing = {
   soldByAsboRc: boolean;
   /** True when the "Sold by PHD" badge should show (first-party or ASBO). */
   soldByPhd: boolean;
+  /** Admin hold: listing-level reserved flag (non-variant). */
+  reserved: boolean;
   /** Listing status — "sold" items are shown greyed/marked on the website. */
   status: "available" | "sold";
   /** Total units in the listing. */
@@ -71,6 +73,7 @@ type PublicListing = {
     price: number;
     priceLabel: string;
     available: number;
+    reserved: boolean;
   }[];
   contact: {
     name: string;
@@ -125,6 +128,7 @@ export async function GET(request: Request) {
         meetAtTrack: l.meetAtTrack,
         soldByAsboRc: l.soldByAsboRc,
         soldByPhd: l.soldByPhd || l.soldByAsboRc,
+        reserved: l.reserved,
         status: l.status,
         quantity: l.quantity,
         available: Math.max(0, l.quantity - l.soldCount),
@@ -136,6 +140,7 @@ export async function GET(request: Request) {
               price: v.price,
               priceLabel: priceLabel(v.price),
               available: Math.max(0, v.quantity - v.soldCount),
+              reserved: v.reserved === true,
             }))
           : [],
         // Sold-by-PHD items are bought in person at the track, so expose no

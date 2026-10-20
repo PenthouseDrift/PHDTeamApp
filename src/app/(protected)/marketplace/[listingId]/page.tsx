@@ -6,6 +6,7 @@ import { ListingDetailActions } from "@/components/marketplace/ListingDetailActi
 import { ListingGallery } from "@/components/marketplace/ListingGallery";
 import { ListingVariantPricing } from "@/components/marketplace/ListingVariantPricing";
 import { BuyAndCollect } from "@/components/marketplace/BuyAndCollect";
+import { isListingReserved } from "@/lib/marketplace-reserved";
 
 export const dynamic = "force-dynamic";
 
@@ -89,6 +90,8 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
   const viewerId = session?.user?.id ?? "";
   const isStaff = session?.user?.role === "admin" || session?.user?.role === "moderator";
   const canManage = viewerId === listing.userId || isStaff;
+  // Effectively reserved = nothing buyable remains due to a hold (not sold).
+  const reservedView = isListingReserved(listing);
 
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
@@ -127,10 +130,20 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
               </div>
             </div>
 
+            {/* Reserved hold — item is being held for a buyer; no one can buy it
+                right now, but it is NOT sold. */}
+            {listing.status !== "sold" && reservedView && (
+              <div className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
+                <span>🔖</span>
+                <span>This item is reserved and is not currently available to buy.</span>
+              </div>
+            )}
+
             {/* Online Buy & Collect — shown at the top so buyers see the primary
                 action first. Available items physically at the track can be paid
-                for online via SumUp and collected from staff. */}
-            {listing.status === "available" && listing.atTrack && (
+                for online via SumUp and collected from staff. Hidden while
+                reserved. */}
+            {listing.status === "available" && listing.atTrack && !reservedView && (
               <BuyAndCollect
                 listingId={listing.listingId}
                 price={listing.price}
@@ -141,6 +154,7 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
                   name: v.name,
                   price: v.price,
                   available: Math.max(0, v.quantity - v.soldCount),
+                  reserved: v.reserved,
                 }))}
               />
             )}
@@ -159,6 +173,10 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
                   quantity={listing.quantity}
                   initialSoldCount={listing.soldCount}
                   soldByAsboRc={listing.soldByAsboRc}
+                  hasVariations={listing.hasVariations}
+                  initialReserved={listing.reserved}
+                  isAdmin={session?.user?.role === "admin"}
+                  canReserve={(listing.soldByPhd || listing.soldByAsboRc) && !listing.hasVariations}
                 />
               </div>
             )}
@@ -203,9 +221,8 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
               </div>
             )}
 
-            {/* Sold-by-PHD items that AREN'T eligible for online Buy & Collect
-                (e.g. not flagged at-track) show the in-person message instead. */}
-            {listing.status !== "sold" && listing.soldByPhd && !listing.atTrack ? (
+            {/* How-to-buy / contact seller — hidden entirely while reserved. */}
+            {reservedView ? null : listing.status !== "sold" && listing.soldByPhd && !listing.atTrack ? (
               <div className="space-y-2 rounded-xl border border-teal-200 bg-teal-50 p-4 dark:border-teal-500/40 dark:bg-teal-500/10">
                 <h2 className="text-sm font-semibold text-teal-800 dark:text-teal-300">
                   How to buy

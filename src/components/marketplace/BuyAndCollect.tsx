@@ -13,6 +13,8 @@ interface BuyVariant {
   name: string;
   price: number;
   available: number;
+  /** Admin hold — a reserved variant can't be selected/bought. */
+  reserved?: boolean;
 }
 
 interface BuyAndCollectProps {
@@ -35,7 +37,8 @@ export function BuyAndCollect({
   variationLabel,
   variants = [],
 }: BuyAndCollectProps) {
-  const sellable = variants.filter((v) => v.available > 0 && v.price > 0);
+  // Reserved variants are excluded — they can't be selected or bought.
+  const sellable = variants.filter((v) => v.available > 0 && v.price > 0 && !v.reserved);
   const [selectedId, setSelectedId] = useState<string>(sellable[0]?.id ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();

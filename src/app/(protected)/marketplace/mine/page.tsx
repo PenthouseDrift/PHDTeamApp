@@ -13,6 +13,7 @@ export default async function MyListingsPage() {
   }
   const viewerId = session.user.id;
   const isStaff = session.user.role === "admin" || session.user.role === "moderator";
+  const isAdmin = session.user.role === "admin";
 
   // Published (available + sold) listings, then narrowed to this member. A
   // generous limit covers any member's own catalogue without a bespoke query.
@@ -87,6 +88,7 @@ export default async function MyListingsPage() {
                       authorName={authorName}
                       viewerId={viewerId}
                       isStaff={isStaff}
+                      isAdmin={isAdmin}
                     />
                   ))}
                 </div>
@@ -102,6 +104,7 @@ export default async function MyListingsPage() {
                     authorName={authorName}
                     viewerId={viewerId}
                     isStaff={isStaff}
+                      isAdmin={isAdmin}
                   />
                 ))}
               </div>

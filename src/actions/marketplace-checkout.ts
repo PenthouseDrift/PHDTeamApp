@@ -36,6 +36,13 @@ export async function createMarketplaceCheckout(
     if (!listing) return { success: false, error: "Listing not found" };
     if (listing.isDraft) return { success: false, error: "This item isn't available" };
 
+    // Reserved items are being held for a buyer — block purchase. For a plain
+    // listing that's the listing flag; for a variant the chosen variant's flag
+    // is checked below alongside its stock.
+    if (!listing.hasVariations && listing.reserved) {
+      return { success: false, error: "This item is currently reserved" };
+    }
+
     // Eligibility: available AND physically at the track for collection.
     if (listing.status !== "available") {
       return { success: false, error: "This item has sold" };
@@ -55,6 +62,9 @@ export async function createMarketplaceCheckout(
       if (!variant) return { success: false, error: "That option isn't available" };
       if (variant.quantity - variant.soldCount <= 0) {
         return { success: false, error: "That option has sold out" };
+      }
+      if (variant.reserved) {
+        return { success: false, error: "That option is currently reserved" };
       }
       unitPrice = variant.price;
       itemLabel = `${listing.title} — ${variant.name}`;
