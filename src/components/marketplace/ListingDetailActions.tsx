@@ -8,7 +8,7 @@ import {
   setListingStatus,
   setListingSoldCount,
   sellAsboRcUnits,
-  setListingReserved,
+  setListingReservedCount,
   addListingStock,
 } from "@/actions/marketplace";
 
@@ -20,8 +20,8 @@ interface ListingDetailActionsProps {
   soldByAsboRc?: boolean;
   /** Whether this listing uses per-option variants (stock managed per variant). */
   hasVariations?: boolean;
-  /** Current reserved state (listing-level, non-variant only). */
-  initialReserved?: boolean;
+  /** Current reserved-unit count (listing-level, non-variant only). */
+  initialReservedCount?: number;
   /** Whether the viewer is an admin (reserve is admin-only). */
   isAdmin?: boolean;
   /** Whether this listing is PHD/ASBO (reserve only applies to those). */
@@ -35,7 +35,7 @@ export function ListingDetailActions({
   initialSoldCount = 0,
   soldByAsboRc = false,
   hasVariations = false,
-  initialReserved = false,
+  initialReservedCount = 0,
   isAdmin = false,
   canReserve = false,
 }: ListingDetailActionsProps) {
@@ -43,14 +43,17 @@ export function ListingDetailActions({
   const [isPending, startTransition] = useTransition();
   const [status, setStatus] = useState(initialStatus);
   const [soldCount, setSoldCount] = useState(initialSoldCount);
-  const [reserved, setReserved] = useState(initialReserved);
+  const [reservedCount, setReservedCount] = useState(Math.max(0, initialReservedCount));
+  const [reserveInput, setReserveInput] = useState(Math.max(0, initialReservedCount));
 
-  const toggleReserved = () => {
-    const next = !reserved;
+  // Set the hold to an absolute number of units (0 releases).
+  const setReserve = (units: number) => {
+    const n = Math.max(0, Math.floor(units) || 0);
     startTransition(async () => {
-      const result = await setListingReserved(listingId, next);
+      const result = await setListingReservedCount(listingId, n);
       if (result.success) {
-        setReserved(result.data.reserved);
+        setReservedCount(result.data.reservedCount);
+        setReserveInput(result.data.reservedCount);
         router.refresh();
       } else {
         alert(result.error);
@@ -65,7 +68,10 @@ export function ListingDetailActions({
   const [addQty, setAddQty] = useState(1);
 
   const totalUnits = Math.max(1, quantityState);
-  const available = soldByAsboRc ? asboAvailable : Math.max(0, totalUnits - soldCount);
+  // Physical stock remaining (ignores holds).
+  const inStock = soldByAsboRc ? asboAvailable : Math.max(0, totalUnits - soldCount);
+  // Buyable = physical stock minus reserved hold.
+  const available = Math.max(0, inStock - reservedCount);
   const multiUnit = totalUnits > 1;
 
   const addStock = () => {
@@ -228,6 +234,54 @@ export function ListingDetailActions({
         </p>
       )}
 
+      {/* Reserve units — admin only, PHD/ASBO non-variant listings, non-sold.
+          Holds N units out of the buyable pool (pure display/purchase gate:
+          no stock or ledger effect). */}
+      {isAdmin && canReserve && !hasVariations && status !== "sold" && (
+        <div
+          className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2.5 ${
+            reservedCount > 0
+              ? "border-amber-400 bg-amber-50 dark:border-amber-500/50 dark:bg-amber-500/10"
+              : "border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/40"
+          }`}
+        >
+          <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+            {reservedCount > 0 ? `🔖 ${reservedCount} reserved` : "Reserve units"}
+          </span>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            inputMode="numeric"
+            aria-label="Units to reserve"
+            value={reserveInput}
+            onChange={(e) => setReserveInput(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+            className="h-8 w-16 rounded-md border border-zinc-300 bg-white px-2 text-center text-sm font-semibold text-zinc-800 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
+          />
+          <button
+            type="button"
+            onClick={() => setReserve(reserveInput)}
+            disabled={isPending}
+            className="rounded-md border border-amber-300 bg-amber-100 px-3 py-2 text-sm font-bold text-amber-700 transition-colors hover:bg-amber-200 disabled:opacity-50 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300"
+          >
+            Hold
+          </button>
+          {reservedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setReserve(0)}
+              disabled={isPending}
+              className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              Release
+            </button>
+          )}
+          <span className="ml-auto text-xs text-zinc-500 dark:text-zinc-400">
+            {available} buyable now
+          </span>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
         <Link
           href={`/marketplace/${listingId}/edit`}
@@ -251,22 +305,6 @@ export function ListingDetailActions({
               : multiUnit
               ? "Mark all sold"
               : "Mark as sold"}
-          </button>
-        )}
-        {/* Reserve hold — admin only, PHD/ASBO listings only, non-sold. Pure
-            flag: no stock/ledger effect. */}
-        {isAdmin && canReserve && status !== "sold" && (
-          <button
-            type="button"
-            onClick={toggleReserved}
-            disabled={isPending}
-            className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
-              reserved
-                ? "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-300"
-                : "border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-            }`}
-          >
-            {reserved ? "🔖 Reserved — tap to release" : "Reserve item"}
           </button>
         )}
         <button

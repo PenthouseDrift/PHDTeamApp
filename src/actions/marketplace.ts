@@ -80,6 +80,16 @@ function parseVariants(raw: unknown): import("@/types").ListingVariant[] {
         o.consignmentPrice === undefined || o.consignmentPrice === null || o.consignmentPrice === ""
           ? undefined
           : Math.max(0, Number(o.consignmentPrice) || 0);
+      // Reserved units: prefer the numeric reservedCount; migrate a legacy
+      // boolean reserved:true to "all currently-available units held".
+      const available = Math.max(0, quantity - soldCount);
+      const legacyReserved = o.reserved === true || o.reserved === "true";
+      const reservedCount =
+        o.reservedCount === undefined || o.reservedCount === null || o.reservedCount === ""
+          ? legacyReserved
+            ? available
+            : 0
+          : Math.min(available, Math.max(0, Math.floor(Number(o.reservedCount) || 0)));
       return {
         id: o.id ? String(o.id) : randomUUID(),
         name: String(o.name ?? "").trim(),
@@ -87,7 +97,7 @@ function parseVariants(raw: unknown): import("@/types").ListingVariant[] {
         consignmentPrice: cp,
         quantity,
         soldCount,
-        reserved: o.reserved === true || o.reserved === "true",
+        reservedCount,
       };
     })
     .filter((v) => v.name.length > 0);
@@ -205,7 +215,15 @@ function toListing(data: Record<string, unknown> | null): MarketplaceListing | n
     soldAt,
     soldByAsboRc: String(data.soldByAsboRc) === "true",
     soldByPhd: String(data.soldByPhd) === "true",
-    reserved: String(data.reserved) === "true",
+    // Reserved units (non-variant). Prefer numeric reservedCount; migrate a
+    // legacy boolean reserved:true to "all currently-available units held".
+    reservedCount: (() => {
+      const avail = Math.max(0, (derived ? derived.quantity : qty) - (derived ? derived.soldCount : soldCountVal));
+      if (data.reservedCount === undefined || data.reservedCount === null || data.reservedCount === "") {
+        return String(data.reserved) === "true" ? avail : 0;
+      }
+      return Math.min(avail, Math.max(0, Math.floor(Number(data.reservedCount) || 0)));
+    })(),
     isDraft: String(data.isDraft) === "true",
     hasVariations,
     variationLabel: asString(data.variationLabel),
@@ -342,7 +360,7 @@ export async function createListing(
       soldAt: [],
       soldByAsboRc,
       soldByPhd,
-      reserved: false,
+      reservedCount: 0,
       penthouseCutPct: parsed.data.penthouseCutPct,
       asboRcPaid: false,
       asboRcPaidUnits: 0,
@@ -377,7 +395,7 @@ export async function createListing(
       soldAt: JSON.stringify(listing.soldAt),
       soldByAsboRc: String(listing.soldByAsboRc),
       soldByPhd: String(listing.soldByPhd),
-      reserved: String(listing.reserved),
+      reservedCount: String(listing.reservedCount),
       penthouseCutPct: String(listing.penthouseCutPct),
       asboRcPaid: String(listing.asboRcPaid),
       asboRcPaidUnits: String(listing.asboRcPaidUnits),
@@ -1198,13 +1216,18 @@ export async function updateListing(
       ? parsed.data.variants!.map((v) => {
           const prior = v.id ? existingVariantById.get(v.id) : undefined;
           const priorSold = prior ? prior.soldCount : 0;
+          const soldCount = Math.min(v.quantity, Math.max(0, priorSold));
+          // Preserve any reserved hold, clamped to the new buyable availability.
+          const priorReserved = prior ? prior.reservedCount ?? 0 : 0;
+          const reservedCount = Math.min(Math.max(0, v.quantity - soldCount), Math.max(0, priorReserved));
           return {
             id: v.id || randomUUID(),
             name: v.name.trim(),
             price: v.price,
             consignmentPrice: v.consignmentPrice,
             quantity: v.quantity,
-            soldCount: Math.min(v.quantity, Math.max(0, priorSold)),
+            soldCount,
+            reservedCount,
           };
         })
       : [];
@@ -1249,6 +1272,11 @@ export async function updateListing(
       status: nextStatus,
       soldByAsboRc,
       soldByPhd,
+      // Preserve the listing-level hold, clamped to the new buyable availability
+      // (variant holds live on each variant's reservedCount).
+      reservedCount: hasVariations
+        ? 0
+        : Math.min(Math.max(0, nextQuantity - nextSoldCount), Math.max(0, existing.reservedCount)),
       penthouseCutPct: parsed.data.penthouseCutPct,
       asboRcPaidUnits: nextPaidUnits,
       updatedAt: Date.now(),
@@ -1282,6 +1310,7 @@ export async function updateListing(
       soldAt: JSON.stringify(updated.soldAt),
       soldByAsboRc: String(updated.soldByAsboRc),
       soldByPhd: String(updated.soldByPhd),
+      reservedCount: String(updated.reservedCount),
       penthouseCutPct: String(updated.penthouseCutPct),
       asboRcPaid: String(updated.asboRcPaid),
       asboRcPaidUnits: String(updated.asboRcPaidUnits),
@@ -1576,15 +1605,18 @@ export async function recordOnlineSale(
 }
 
 /**
- * Admin-only hold: mark a listing reserved (or clear the reservation). This is
- * purely a flag — it does NOT change status, quantity, soldCount, or the browse
- * index, and it NEVER writes to the ASBO-RC ledger. Only an actual sale does.
- * While reserved, the buy flow is blocked and a "Reserved" badge is shown.
+ * Admin-only hold: set how many units of a NON-VARIANT listing are reserved for
+ * a buyer. Reserved units are held out of the buyable pool
+ * (buyable = quantity - soldCount - reservedCount) but are NOT sold. Pass 0 to
+ * release the hold. This is purely a display/purchase gate — it does NOT change
+ * status, quantity, soldCount, or the browse index, and it NEVER writes to the
+ * ASBO-RC ledger. Only an actual sale does. When nothing buyable remains the
+ * item shows a "Reserved" badge and buying is blocked.
  */
-export async function setListingReserved(
+export async function setListingReservedCount(
   listingId: string,
-  reserved: boolean
-): Promise<ActionResult<{ reserved: boolean }>> {
+  reservedCount: number
+): Promise<ActionResult<{ reservedCount: number; available: number }>> {
   try {
     const session = await auth();
     if (!session?.user || session.user.role !== "admin") {
@@ -1596,16 +1628,23 @@ export async function setListingReserved(
     if (!listing) {
       return { success: false, error: "Listing not found" };
     }
+    if (listing.hasVariations) {
+      return { success: false, error: "This listing uses variations — reserve per variation." };
+    }
+
+    // Can't reserve more than what's currently available to sell.
+    const sellable = Math.max(0, listing.quantity - listing.soldCount);
+    const next = Math.min(sellable, Math.max(0, Math.floor(Number(reservedCount) || 0)));
 
     await redis.hset(`listing:${listingId}`, {
-      reserved: reserved ? "true" : "false",
+      reservedCount: String(next),
       updatedAt: Date.now(),
     });
 
     revalidatePath("/marketplace");
     revalidatePath(`/marketplace/${listingId}`);
     bustMarketplaceCache();
-    return { success: true, data: { reserved } };
+    return { success: true, data: { reservedCount: next, available: Math.max(0, sellable - next) } };
   } catch (error) {
     return {
       success: false,
@@ -1615,16 +1654,17 @@ export async function setListingReserved(
 }
 
 /**
- * Admin-only hold on ONE variant of a variant listing. Flips that variant's
- * `reserved` flag and re-persists the variants array. Like setListingReserved,
- * this is a pure flag: it does NOT change stock, soldCount, derived status, or
- * the browse index, and it NEVER writes to the ASBO-RC ledger.
+ * Admin-only hold on ONE variant of a variant listing. Sets how many units of
+ * that variant are reserved (0 releases), re-persisting the variants array.
+ * Like setListingReservedCount it is a pure display/purchase gate: it does NOT
+ * change stock, soldCount, derived status, or the browse index, and it NEVER
+ * writes to the ASBO-RC ledger.
  */
-export async function setVariantReserved(
+export async function setVariantReservedCount(
   listingId: string,
   variantId: string,
-  reserved: boolean
-): Promise<ActionResult<{ reserved: boolean }>> {
+  reservedCount: number
+): Promise<ActionResult<{ reservedCount: number; variantAvailable: number }>> {
   try {
     const session = await auth();
     if (!session?.user || session.user.role !== "admin") {
@@ -1641,8 +1681,12 @@ export async function setVariantReserved(
     const idx = listing.variants.findIndex((v) => v.id === variantId);
     if (idx < 0) return { success: false, error: "Variation not found" };
 
+    const variant = listing.variants[idx];
+    const sellable = Math.max(0, variant.quantity - variant.soldCount);
+    const next = Math.min(sellable, Math.max(0, Math.floor(Number(reservedCount) || 0)));
+
     const nextVariants = listing.variants.map((v, i) =>
-      i === idx ? { ...v, reserved } : v
+      i === idx ? { ...v, reservedCount: next } : v
     );
 
     await redis.hset(`listing:${listingId}`, {
@@ -1653,7 +1697,7 @@ export async function setVariantReserved(
     revalidatePath("/marketplace");
     revalidatePath(`/marketplace/${listingId}`);
     bustMarketplaceCache();
-    return { success: true, data: { reserved } };
+    return { success: true, data: { reservedCount: next, variantAvailable: Math.max(0, sellable - next) } };
   } catch (error) {
     return {
       success: false,

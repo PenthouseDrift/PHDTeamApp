@@ -169,11 +169,14 @@ export interface ListingVariant {
   /** Units of this variant sold so far (0..quantity). */
   soldCount: number;
   /**
-   * Admin-only hold on this variant: it's being reserved for a buyer, so it
-   * can't be bought right now (but isn't sold). Display/purchase-gate flag
-   * only — never affects stock or the ASBO-RC ledger. Defaults to false.
+   * Admin-only hold on this variant: how many units are reserved for a buyer
+   * and therefore not buyable right now (but not sold). Reduces buyable
+   * availability by this amount: buyable = quantity - soldCount - reservedCount.
+   * Display/purchase-gate only — never affects stock or the ASBO-RC ledger.
+   * Defaults to 0. (Legacy boolean `reserved:true` migrates to "all remaining
+   * units held".)
    */
-  reserved?: boolean;
+  reservedCount?: number;
 }
 
 export interface MarketplaceListing {
@@ -299,13 +302,16 @@ export interface MarketplaceListing {
   /** Timestamp (ms) of the most recent settlement action (if any). */
   asboRcPaidAt?: number;
   /**
-   * Admin-only hold: the item is reserved for a buyer (e.g. an admin is
-   * arranging a sale on their behalf). While reserved, no one can buy it, but it
-   * is NOT sold — it shows a "Reserved" corner badge. This is purely a display/
-   * purchase-gate flag: it never affects stock (quantity/soldCount) and is NEVER
-   * recorded on the ASBO-RC ledger. Only an actual sale touches the ledger.
+   * Admin-only hold (non-variant listings): how many units are reserved for a
+   * buyer and therefore not buyable right now (but not sold). Reduces buyable
+   * availability: buyable = quantity - soldCount - reservedCount. When nothing
+   * buyable remains but stock still exists, the item shows a "Reserved" corner
+   * badge and the buy flow is blocked. Purely a display/purchase-gate figure:
+   * it never affects stock (quantity/soldCount) and is NEVER recorded on the
+   * ASBO-RC ledger. Only an actual sale touches the ledger. Defaults to 0.
+   * (For variant listings, holds live per-variant on `variants[].reservedCount`.)
    */
-  reserved: boolean;
+  reservedCount: number;
   createdAt: number;
   updatedAt: number;
 }

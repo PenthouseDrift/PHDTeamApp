@@ -4,6 +4,7 @@ import { redis } from "@/lib/redis";
 import { auth } from "@/lib/auth";
 import type { ActionResult } from "@/types";
 import { getListingById } from "@/actions/marketplace";
+import { variantBuyable } from "@/lib/marketplace-reserved";
 
 /**
  * Start a SumUp Click & Collect checkout for a marketplace listing.
@@ -36,11 +37,14 @@ export async function createMarketplaceCheckout(
     if (!listing) return { success: false, error: "Listing not found" };
     if (listing.isDraft) return { success: false, error: "This item isn't available" };
 
-    // Reserved items are being held for a buyer — block purchase. For a plain
-    // listing that's the listing flag; for a variant the chosen variant's flag
-    // is checked below alongside its stock.
-    if (!listing.hasVariations && listing.reserved) {
-      return { success: false, error: "This item is currently reserved" };
+    // Reserved units are being held for a buyer — block purchase when none are
+    // buyable. For a plain listing that's quantity - soldCount - reservedCount;
+    // for a variant the chosen variant's buyable count is checked below.
+    if (!listing.hasVariations) {
+      const buyable = listing.quantity - listing.soldCount - Math.max(0, listing.reservedCount);
+      if (buyable <= 0 && listing.quantity - listing.soldCount > 0) {
+        return { success: false, error: "This item is currently reserved" };
+      }
     }
 
     // Eligibility: available AND physically at the track for collection.
@@ -63,7 +67,7 @@ export async function createMarketplaceCheckout(
       if (variant.quantity - variant.soldCount <= 0) {
         return { success: false, error: "That option has sold out" };
       }
-      if (variant.reserved) {
+      if (variantBuyable(variant) <= 0) {
         return { success: false, error: "That option is currently reserved" };
       }
       unitPrice = variant.price;

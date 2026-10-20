@@ -153,8 +153,7 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
                   id: v.id,
                   name: v.name,
                   price: v.price,
-                  available: Math.max(0, v.quantity - v.soldCount),
-                  reserved: v.reserved,
+                  available: Math.max(0, v.quantity - v.soldCount - Math.max(0, v.reservedCount ?? 0)),
                 }))}
               />
             )}
@@ -174,7 +173,7 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
                   initialSoldCount={listing.soldCount}
                   soldByAsboRc={listing.soldByAsboRc}
                   hasVariations={listing.hasVariations}
-                  initialReserved={listing.reserved}
+                  initialReservedCount={listing.reservedCount}
                   isAdmin={session?.user?.role === "admin"}
                   canReserve={(listing.soldByPhd || listing.soldByAsboRc) && !listing.hasVariations}
                 />

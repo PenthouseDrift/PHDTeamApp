@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { MarketplaceListing } from "@/types";
-import { deleteListing, setListingStatus, setListingSoldCount, sellAsboRcUnits, publishListing, adjustVariantSold, setListingReserved, setVariantReserved, addListingStock, addVariantStock } from "@/actions/marketplace";
+import { deleteListing, setListingStatus, setListingSoldCount, sellAsboRcUnits, publishListing, adjustVariantSold, setListingReservedCount, setVariantReservedCount, addListingStock, addVariantStock } from "@/actions/marketplace";
 import { isListingReserved } from "@/lib/marketplace-reserved";
 
 
@@ -35,10 +35,13 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
   const [status, setStatus] = useState(listing.status);
   const [soldCount, setSoldCount] = useState(listing.soldCount);
   const [variants, setVariants] = useState(listing.variants);
-  const [reserved, setReserved] = useState(Boolean(listing.reserved));
+  const [reservedCount, setReservedCount] = useState(Math.max(0, listing.reservedCount || 0));
   const [quantityState, setQuantityState] = useState(listing.quantity);
   const [addQty, setAddQty] = useState(1);
   const [variantAddQty, setVariantAddQty] = useState<Record<string, number>>({});
+  // Draft values for the "reserve N units" inputs (listing + per variant).
+  const [reserveInput, setReserveInput] = useState(0);
+  const [variantReserveInput, setVariantReserveInput] = useState<Record<string, number>>({});
   const [manageOpen, setManageOpen] = useState(false);
 
   const addStockToListing = () => {
@@ -78,14 +81,23 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
   // left due to a hold, and not sold).
   const showReservedBadge =
     status !== "sold" &&
-    isListingReserved({ status, reserved, hasVariations, variants });
+    isListingReserved({
+      status,
+      reservedCount,
+      quantity: quantityState,
+      soldCount,
+      hasVariations,
+      variants,
+    });
 
-  const toggleListingReserved = () => {
-    const next = !reserved;
+  // Set the listing-level hold to an absolute number of units (0 releases).
+  const setListingReserve = (units: number) => {
+    const n = Math.max(0, Math.floor(units) || 0);
     startTransition(async () => {
-      const result = await setListingReserved(listing.listingId, next);
+      const result = await setListingReservedCount(listing.listingId, n);
       if (result.success) {
-        setReserved(result.data.reserved);
+        setReservedCount(result.data.reservedCount);
+        setReserveInput(result.data.reservedCount);
         router.refresh();
       } else {
         alert(result.error);
@@ -93,11 +105,17 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
     });
   };
 
-  const toggleVariantReserved = (variantId: string, next: boolean) => {
+  // Set a variant's hold to an absolute number of units (0 releases).
+  const setVariantReserve = (variantId: string, units: number) => {
+    const n = Math.max(0, Math.floor(units) || 0);
     startTransition(async () => {
-      const result = await setVariantReserved(listing.listingId, variantId, next);
+      const result = await setVariantReservedCount(listing.listingId, variantId, n);
       if (result.success) {
-        setVariants((vs) => vs.map((v) => (v.id === variantId ? { ...v, reserved: next } : v)));
+        const applied = result.data.reservedCount;
+        setVariants((vs) =>
+          vs.map((v) => (v.id === variantId ? { ...v, reservedCount: applied } : v))
+        );
+        setVariantReserveInput((m) => ({ ...m, [variantId]: applied }));
         router.refresh();
       } else {
         alert(result.error);
@@ -217,14 +235,11 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
             </span>
           </div>
         )}
-        {/* Reserved corner triangle (bottom-right). Sold takes precedence. */}
+        {/* Reserved pill (top-right). Sold takes precedence. */}
         {showReservedBadge && (
-          <div className="pointer-events-none absolute bottom-0 right-0 h-16 w-16 overflow-hidden">
-            <div className="absolute bottom-0 right-0 h-0 w-0 border-b-[64px] border-l-[64px] border-b-amber-500 border-l-transparent" />
-            <span className="absolute bottom-1 right-1 rotate-[-45deg] text-[9px] font-black uppercase tracking-wider text-black">
-              Reserved
-            </span>
-          </div>
+          <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-amber-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-black shadow">
+            🔖 Reserved
+          </span>
         )}
         {listing.images.length > 1 && (
           <span className="absolute bottom-2 right-2 rounded-md bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white">
@@ -314,21 +329,56 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
                 >
                   Edit
                 </Link>
-                {/* Listing-level reserve toggle — admin, PHD/ASBO, non-variant,
-                    non-sold. Variant listings reserve per-option above. */}
+                {/* Listing-level reserve (quantity hold) — admin, PHD/ASBO,
+                    non-variant, non-sold. Variant listings reserve per-option
+                    below. Reserving holds N units out of the buyable pool. */}
                 {canReserve && !hasVariations && status !== "sold" && (
-                  <button
-                    type="button"
-                    onClick={toggleListingReserved}
-                    disabled={isPending}
-                    className={`rounded-lg border py-2.5 text-sm font-medium transition-colors disabled:opacity-50 ${
-                      reserved
-                        ? "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-300"
-                        : "border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  <div
+                    className={`flex flex-col gap-1.5 rounded-lg border px-2 py-2 ${
+                      reservedCount > 0
+                        ? "border-amber-400 bg-amber-50 dark:border-amber-500/50 dark:bg-amber-500/10"
+                        : "border-zinc-300 dark:border-zinc-700"
                     }`}
                   >
-                    {reserved ? "🔖 Reserved — tap to release" : "Reserve item"}
-                  </button>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                        {reservedCount > 0 ? `🔖 ${reservedCount} reserved` : "Reserve units"}
+                      </span>
+                      <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        {Math.max(0, quantity - soldCount - reservedCount)} buyable
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        inputMode="numeric"
+                        aria-label="Units to reserve"
+                        value={reserveInput || reservedCount}
+                        onChange={(e) => setReserveInput(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+                        className="h-7 w-14 rounded border border-zinc-300 bg-white px-1 text-center text-xs font-semibold text-zinc-800 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setListingReserve(reserveInput || reservedCount)}
+                        disabled={isPending}
+                        className="h-7 flex-1 rounded border border-amber-300 bg-amber-100 px-2 text-[11px] font-bold text-amber-700 transition-colors hover:bg-amber-200 disabled:opacity-50 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300"
+                      >
+                        Hold
+                      </button>
+                      {reservedCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setListingReserve(0)}
+                          disabled={isPending}
+                          className="h-7 rounded border border-zinc-300 px-2 text-[11px] font-bold text-zinc-600 transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                        >
+                          Release
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 )}
                 {hasVariations ? (
                   <div className="flex flex-col gap-2">
@@ -337,6 +387,8 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
                     </span>
                     {variants.map((v) => {
                       const vAvail = Math.max(0, v.quantity - v.soldCount);
+                      const vReserved = Math.max(0, v.reservedCount ?? 0);
+                      const vBuyable = Math.max(0, vAvail - vReserved);
                       return (
                         <div
                           key={v.id}
@@ -369,25 +421,56 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
                             >
                               +
                             </button>
-                            {/* Per-variant reserve toggle (admin, PHD/ASBO only). */}
-                            {canReserve && (
+                          </div>
+                          </div>
+                          {/* Reserve units of this variation (admin, PHD/ASBO). */}
+                          {canReserve && (
+                            <div
+                              className={`flex items-center gap-1.5 rounded px-1.5 py-1 ${
+                                vReserved > 0
+                                  ? "bg-amber-50 dark:bg-amber-500/10"
+                                  : ""
+                              }`}
+                            >
+                              <span className="flex-1 truncate text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">
+                                {vReserved > 0 ? `🔖 ${vReserved} reserved` : "Reserve"}
+                                <span className="ml-1 text-zinc-400">· {vBuyable} buyable</span>
+                              </span>
+                              <input
+                                type="number"
+                                min={0}
+                                step={1}
+                                inputMode="numeric"
+                                aria-label={`Units of ${v.name} to reserve`}
+                                value={variantReserveInput[v.id] ?? vReserved}
+                                onChange={(e) =>
+                                  setVariantReserveInput((m) => ({
+                                    ...m,
+                                    [v.id]: Math.max(0, Math.floor(Number(e.target.value) || 0)),
+                                  }))
+                                }
+                                className="h-6 w-11 rounded border border-zinc-300 bg-white px-1 text-center text-[11px] font-semibold text-zinc-800 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
+                              />
                               <button
                                 type="button"
-                                aria-label={v.reserved ? `Release ${v.name}` : `Reserve ${v.name}`}
-                                title={v.reserved ? "Reserved — tap to release" : "Reserve this option"}
-                                onClick={() => toggleVariantReserved(v.id, !v.reserved)}
-                                disabled={isPending || (vAvail <= 0 && !v.reserved)}
-                                className={`flex h-6 items-center justify-center rounded border px-1.5 text-[10px] font-bold transition-colors disabled:opacity-40 ${
-                                  v.reserved
-                                    ? "border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-300"
-                                    : "border-zinc-300 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                                }`}
+                                onClick={() => setVariantReserve(v.id, variantReserveInput[v.id] ?? vReserved)}
+                                disabled={isPending}
+                                className="h-6 rounded border border-amber-300 bg-amber-100 px-2 text-[10px] font-bold text-amber-700 transition-colors hover:bg-amber-200 disabled:opacity-50 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300"
                               >
-                                🔖
+                                Hold
                               </button>
-                            )}
-                          </div>
-                          </div>
+                              {vReserved > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setVariantReserve(v.id, 0)}
+                                  disabled={isPending}
+                                  className="h-6 rounded border border-zinc-300 px-1.5 text-[10px] font-bold text-zinc-600 transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                          )}
                           {/* Add stock to this variation. */}
                           <div className="flex items-center gap-1.5">
                             <input

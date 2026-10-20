@@ -12,9 +12,8 @@ interface BuyVariant {
   id: string;
   name: string;
   price: number;
+  /** Buyable units: physical stock minus sold minus any reserved hold. */
   available: number;
-  /** Admin hold — a reserved variant can't be selected/bought. */
-  reserved?: boolean;
 }
 
 interface BuyAndCollectProps {
@@ -37,8 +36,9 @@ export function BuyAndCollect({
   variationLabel,
   variants = [],
 }: BuyAndCollectProps) {
-  // Reserved variants are excluded — they can't be selected or bought.
-  const sellable = variants.filter((v) => v.available > 0 && v.price > 0 && !v.reserved);
+  // `available` is already the buyable count (stock minus sold minus holds),
+  // so a fully-held variant drops out here.
+  const sellable = variants.filter((v) => v.available > 0 && v.price > 0);
   const [selectedId, setSelectedId] = useState<string>(sellable[0]?.id ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();

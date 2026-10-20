@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getWebsiteListings, getListingAuthorName } from "@/actions/marketplace";
+import { isListingReserved, variantBuyable, isVariantReserved } from "@/lib/marketplace-reserved";
 
 export const dynamic = "force-dynamic";
 
@@ -55,13 +56,19 @@ type PublicListing = {
   soldByAsboRc: boolean;
   /** True when the "Sold by PHD" badge should show (first-party or ASBO). */
   soldByPhd: boolean;
-  /** Admin hold: listing-level reserved flag (non-variant). */
+  /**
+   * True when the listing is effectively reserved for display: it still has
+   * physical stock but none is buyable because it's all held. Buying is blocked
+   * and a "Reserved" badge is shown.
+   */
   reserved: boolean;
+  /** Units currently held by an admin (non-variant listing level). */
+  reservedCount: number;
   /** Listing status — "sold" items are shown greyed/marked on the website. */
   status: "available" | "sold";
   /** Total units in the listing. */
   quantity: number;
-  /** Units still available for sale (quantity - soldCount). */
+  /** Units a customer can buy now (quantity - soldCount - reservedCount). */
   available: number;
   /** True when the listing offers selectable variants (each with own price/stock). */
   hasVariations: boolean;
@@ -72,8 +79,12 @@ type PublicListing = {
     name: string;
     price: number;
     priceLabel: string;
+    /** Units a customer can buy now (stock minus sold minus hold). */
     available: number;
+    /** True when this option still has stock but is fully held. */
     reserved: boolean;
+    /** Units of this option currently held by an admin. */
+    reservedCount: number;
   }[];
   contact: {
     name: string;
@@ -128,10 +139,12 @@ export async function GET(request: Request) {
         meetAtTrack: l.meetAtTrack,
         soldByAsboRc: l.soldByAsboRc,
         soldByPhd: l.soldByPhd || l.soldByAsboRc,
-        reserved: l.reserved,
+        reserved: isListingReserved(l),
+        reservedCount: Math.max(0, l.reservedCount || 0),
         status: l.status,
         quantity: l.quantity,
-        available: Math.max(0, l.quantity - l.soldCount),
+        // Buyable = physical stock minus sold minus any admin hold.
+        available: Math.max(0, l.quantity - l.soldCount - Math.max(0, l.reservedCount || 0)),
         hasVariations: l.hasVariations,
         variationLabel: l.variationLabel,
         variants: l.hasVariations
@@ -139,8 +152,9 @@ export async function GET(request: Request) {
               name: v.name,
               price: v.price,
               priceLabel: priceLabel(v.price),
-              available: Math.max(0, v.quantity - v.soldCount),
-              reserved: v.reserved === true,
+              available: variantBuyable(v),
+              reserved: isVariantReserved(v),
+              reservedCount: Math.max(0, v.reservedCount || 0),
             }))
           : [],
         // Sold-by-PHD items are bought in person at the track, so expose no
