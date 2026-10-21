@@ -89,6 +89,7 @@ export function EmbeddedCheckout({
   successBody,
   doneHref = "/dashboard",
   doneLabel = "Continue",
+  onPaid,
 }: {
   checkoutId: string;
   amount: number;
@@ -96,6 +97,8 @@ export function EmbeddedCheckout({
   /** Buyer's email, pre-filled so SCA/3DS has it and the field is hidden. */
   email?: string;
   onCancel?: () => void;
+  /** Fired once when the payment is finalised (used e.g. to clear a basket). */
+  onPaid?: () => void;
   /** Server endpoint that verifies + finalizes the checkout. */
   finalizeUrl?: string;
   /** Short subtitle under "Secure checkout" (e.g. "Click & Collect"). */
@@ -161,6 +164,7 @@ export function EmbeddedCheckout({
           setOrderRef(null);
         }
         setState("paid");
+        onPaid?.();
         cardRef.current?.unmount();
         router.refresh();
       } catch {
@@ -169,6 +173,7 @@ export function EmbeddedCheckout({
           // the webhook will record it. Treat as paid-but-unconfirmed.
           setOrderRef(null);
           setState("paid");
+          onPaid?.();
         }
       }
     }
@@ -241,7 +246,7 @@ export function EmbeddedCheckout({
         // ignore unmount errors on teardown
       }
     };
-  }, [mounted, checkoutId, amount, currency, email, finalizeUrl, router]);
+  }, [mounted, checkoutId, amount, currency, email, finalizeUrl, router, onPaid]);
 
 
   console.log(state)

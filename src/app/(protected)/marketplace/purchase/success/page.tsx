@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import { getCheckoutStatus } from "@/lib/sumup";
 import { processSuccessfulPaymentReference } from "@/lib/membership-activation";
+import { ClearBasketOnMount } from "@/components/marketplace/ClearBasketOnMount";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,8 @@ export default async function MarketplacePurchaseSuccessPage({ searchParams }: P
       <div className="mx-auto max-w-lg space-y-6 pt-8">
         {paid ? (
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-center space-y-4 dark:border-zinc-800 dark:bg-zinc-900">
+            {/* Empty the client basket now the order is confirmed. */}
+            <ClearBasketOnMount />
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10">
               <svg className="h-8 w-8 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

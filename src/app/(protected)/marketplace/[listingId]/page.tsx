@@ -161,6 +161,9 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
               <BuyAndCollect
                 listingId={listing.listingId}
                 price={listing.price}
+                title={listing.title}
+                image={listing.images[0]}
+                available={Math.max(0, listing.quantity - listing.soldCount - Math.max(0, listing.reservedCount))}
                 hasVariations={listing.hasVariations}
                 variationLabel={listing.variationLabel}
                 variants={listing.variants.map((v) => ({

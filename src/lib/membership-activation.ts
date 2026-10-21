@@ -81,6 +81,11 @@ export async function processSuccessfulPaymentReference(
   let listingId: string | undefined = undefined;
   let variantId: string | undefined = undefined;
   let itemLabel: string | undefined = undefined;
+  // Basket checkouts carry a lines[] array (one entry per listing). Single-item
+  // checkouts leave this undefined and use listingId/variantId above.
+  let lines:
+    | { listingId: string; variantId?: string; quantity: number; unitPrice: number; label: string }[]
+    | undefined = undefined;
 
   // 1. First check if we have metadata stored in Redis under checkout:${checkoutId}
   if (checkoutId) {
@@ -99,6 +104,17 @@ export async function processSuccessfulPaymentReference(
         if (stored.listingId) listingId = String(stored.listingId);
         if (stored.variantId) variantId = String(stored.variantId);
         if (stored.itemLabel) itemLabel = String(stored.itemLabel);
+        if (Array.isArray(stored.lines) && stored.lines.length > 0) {
+          lines = stored.lines
+            .map((l: Record<string, unknown>) => ({
+              listingId: String(l.listingId || ""),
+              variantId: l.variantId ? String(l.variantId) : undefined,
+              quantity: Math.max(1, Math.floor(Number(l.quantity) || 1)),
+              unitPrice: Math.max(0, Number(l.unitPrice) || 0),
+              label: String(l.label || "Marketplace item"),
+            }))
+            .filter((l: { listingId: string }) => l.listingId.length > 0);
+        }
       } catch (e) {
         console.error("Failed to parse stored checkout JSON:", e);
       }
@@ -224,46 +240,86 @@ export async function processSuccessfulPaymentReference(
     return { success: true, itemType: "rental", memberId, guestName };
   } else if (itemType === "marketplace") {
     if (await claim(`payment:processed:${checkoutId}`)) {
-      // Resolve the amount from metadata → webhook → stored, in that order.
-      const saleAmount =
+      const saleCurrency = storedCurrency || currency;
+
+      // Normalise to a list of lines. Basket checkouts carry lines[]; legacy
+      // single-item checkouts are treated as a one-line basket so the rest of
+      // this branch has a single code path.
+      const saleLines =
+        lines && lines.length > 0
+          ? lines
+          : listingId
+          ? [
+              {
+                listingId,
+                variantId,
+                quantity,
+                // Single-item records store the TOTAL amount; quantity was always
+                // 1 there, so total == unit price.
+                unitPrice:
+                  storedAmount !== undefined && storedAmount > 0
+                    ? storedAmount
+                    : Number.isFinite(amount) && amount > 0
+                    ? amount
+                    : 0,
+                label: itemLabel || "Marketplace item",
+              },
+            ]
+          : [];
+
+      if (saleLines.length === 0) {
+        throw new Error(`Marketplace checkout ${checkoutId} has no line items in metadata`);
+      }
+
+      // Prefer the amount captured at checkout time; otherwise derive from the
+      // lines (unit price × qty). This is the figure shown on the order + email.
+      const linesTotal = saleLines.reduce((s, l) => s + l.unitPrice * l.quantity, 0);
+      const saleTotal =
         storedAmount !== undefined && storedAmount > 0
           ? storedAmount
           : Number.isFinite(amount) && amount > 0
           ? amount
-          : 0;
-      const saleCurrency = storedCurrency || currency;
-      const label = itemLabel || "Marketplace item";
+          : Math.round(linesTotal * 100) / 100;
 
-      if (!listingId) {
-        throw new Error(`Marketplace checkout ${checkoutId} has no listingId in metadata`);
-      }
-
-      // 1. Decrement stock (+ ASBO-RC ledger) via the internal sell path. Gated
-      //    by CRON_SECRET since the webhook has no user session.
+      // 1. Decrement stock (+ ASBO-RC ledger) for EVERY line via the internal
+      //    sell path. recordOnlineSale handles variant / ASBO / normal paths and
+      //    clamps to real stock, and writes the ASBO-RC ledger per unit when the
+      //    listing is soldByAsboRc. Gated by CRON_SECRET (no user session here).
       try {
         const { recordOnlineSale } = await import("@/actions/marketplace");
-        const result = await recordOnlineSale(
-          process.env.CRON_SECRET || "",
-          listingId,
-          quantity,
-          variantId
-        );
-        if (!result.success) {
-          console.error("Marketplace stock decrement failed:", result.error);
+        for (const line of saleLines) {
+          try {
+            const result = await recordOnlineSale(
+              process.env.CRON_SECRET || "",
+              line.listingId,
+              line.quantity,
+              line.variantId
+            );
+            if (!result.success) {
+              console.error(`Marketplace stock decrement failed for ${line.listingId}:`, result.error);
+            }
+          } catch (e) {
+            console.error(`Marketplace recordOnlineSale threw for ${line.listingId}:`, e);
+          }
         }
       } catch (e) {
-        console.error("Marketplace recordOnlineSale threw:", e);
+        console.error("Marketplace recordOnlineSale import failed:", e);
       }
 
-      // 2. Create a paid Click & Collect order for the buyer's history and the
-      //    admin fulfilment queue.
+      // 2. Create ONE paid Click & Collect order holding every line, for the
+      //    buyer's history and the admin fulfilment queue.
       let orderId = checkoutId;
       try {
         const { createOrder, updateOrderStatus } = await import("@/actions/orders");
         const created = await createOrder(
           memberId,
-          [{ productId: listingId, name: label, price: saleAmount, quantity }],
-          saleAmount,
+          saleLines.map((l) => ({
+            productId: l.listingId,
+            name: l.label,
+            price: l.unitPrice,
+            quantity: l.quantity,
+          })),
+          saleTotal,
           "click_collect",
           checkoutReference
         );
@@ -276,17 +332,22 @@ export async function processSuccessfulPaymentReference(
         console.error("Marketplace order creation failed:", e);
       }
 
-      // 3. Record the sale in the activity log (online revenue).
+      // 3. Record the sale in the activity log (online revenue). One entry for
+      //    the whole basket, at the total charged.
+      const activityLabel =
+        saleLines.length === 1
+          ? saleLines[0].label
+          : `${saleLines.length} items (${saleLines.reduce((s, l) => s + l.quantity, 0)} units)`;
       await logActivity({
         type: "purchase",
         memberId,
         memberName: finalName,
-        description: `Marketplace: ${label} (Click & Collect)`,
-        amount: saleAmount,
+        description: `Marketplace: ${activityLabel} (Click & Collect)`,
+        amount: saleTotal,
         currency: saleCurrency,
       });
 
-      // 4. Email the buyer an order confirmation (best-effort; never blocks).
+      // 4. Email the buyer an order confirmation listing every line (best-effort).
       try {
         const buyerEmail = (await redis.hget(`member:${memberId}`, "email")) as string | null;
         if (buyerEmail) {
@@ -294,8 +355,8 @@ export async function processSuccessfulPaymentReference(
           const { subject, html } = renderOrderConfirmation({
             buyerName: memberName,
             orderId,
-            items: [{ name: label, quantity, price: saleAmount }],
-            totalAmount: saleAmount,
+            items: saleLines.map((l) => ({ name: l.label, quantity: l.quantity, price: l.unitPrice })),
+            totalAmount: saleTotal,
             currency: saleCurrency,
           });
           await sendEmail({ to: buyerEmail, subject, html });

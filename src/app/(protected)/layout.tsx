@@ -5,6 +5,7 @@ import { getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
 import { ProtectedNavigation } from "@/components/ProtectedNavigation";
 import { PullToRefresh } from "@/components/PullToRefresh";
 import { DevToolsPanel } from "@/components/DevToolsPanel";
+import { BasketProvider } from "@/components/marketplace/BasketProvider";
 import { getForceSelfCheckIn } from "@/actions/dev";
 
 export default async function ProtectedLayout({
@@ -72,7 +73,7 @@ export default async function ProtectedLayout({
       <main className="pwa-protected-content flex-1 overflow-y-auto md:pt-0 flex flex-col">
         <PullToRefresh>
           <div className="pwa-protected-bottom flex-1 flex flex-col md:pb-0">
-            {children}
+            <BasketProvider>{children}</BasketProvider>
           </div>
         </PullToRefresh>
       </main>

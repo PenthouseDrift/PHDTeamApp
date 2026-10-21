@@ -8,6 +8,7 @@ import type { MarketplaceListing } from "@/types";
 import { deleteListing, setListingStatus, setListingSoldCount, sellAsboRcUnits, publishListing, adjustVariantSold, setListingReservedCount, setVariantReservedCount, addListingStock, addVariantStock } from "@/actions/marketplace";
 import { isListingReserved } from "@/lib/marketplace-reserved";
 import { ShareButton } from "@/components/ShareButton";
+import { AddToBasketButton } from "@/components/marketplace/AddToBasketButton";
 
 // Public base URL of the app (inlined at build time), used for share links.
 const APP_BASE_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://app.penthousedrift.com").replace(/\/$/, "");
@@ -148,6 +149,18 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
   const cover = listing.images[0];
   const isAsbo = listing.soldByAsboRc;
   const listingShareUrl = `${APP_BASE_URL}/marketplace/${listing.listingId}`;
+  // Buyable (non-variant) stock for the quick "Add to basket" on the card.
+  const nonVariantBuyable = Math.max(0, quantityState - soldCount - reservedCount);
+  // A card can quick-add only a simple (non-variant), at-track, priced,
+  // in-stock, non-sold, non-draft item. Variant items need the detail page to
+  // pick an option, so they show a "Choose options" link instead.
+  const canQuickAdd =
+    !hasVariations &&
+    !listing.isDraft &&
+    status !== "sold" &&
+    listing.atTrack &&
+    listing.price > 0 &&
+    nonVariantBuyable > 0;
   // For ASBO-RC listings, quantity IS the live available stock (sold units live
   // in the ledger, not soldCount). For normal listings, available = quantity - sold.
   const quantity = Math.max(0, quantityState || 0);
@@ -303,6 +316,25 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
             ? isAsbo || multiUnit ? "Sold out" : "Sold"
             : `${available} available`}
         </p>
+
+        {/* Quick add-to-basket (simple items) or a prompt to choose options. */}
+        {canQuickAdd ? (
+          <AddToBasketButton
+            listingId={listing.listingId}
+            label={listing.title}
+            unitPrice={listing.price}
+            image={cover}
+            maxQuantity={nonVariantBuyable}
+            className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-amber-500/70 py-1.5 text-xs font-bold text-amber-600 transition-colors hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+          />
+        ) : hasVariations && status !== "sold" && listing.atTrack ? (
+          <Link
+            href={`/marketplace/${listing.listingId}`}
+            className="mt-2 inline-flex w-full items-center justify-center rounded-lg border border-zinc-300 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            Choose options
+          </Link>
+        ) : null}
 
         {canManage && (
           <div className="mt-2">

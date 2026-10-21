@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { getListingsPage, getListingAuthorName, getDraftListings } from "@/actions/marketplace";
 import { ListingCard } from "@/components/marketplace/ListingCard";
 import { MarketplaceSearch } from "@/components/marketplace/MarketplaceSearch";
+import { BasketShortcut } from "@/components/marketplace/BasketShortcut";
 import { MARKETPLACE_CATEGORIES } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -117,8 +118,9 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
           </Link>
         </div>
 
-        {/* Quick-access shortcut cards — My Listings / My Orders */}
-        <div className="grid grid-cols-2 gap-3 sm:gap-4">
+        {/* Quick-access shortcut cards — Basket / My Listings / My Orders */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+          <BasketShortcut />
           {shortcuts.map((s) => (
             <Link
               key={s.href}

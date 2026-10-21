@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { createMarketplaceCheckout } from "@/actions/marketplace-checkout";
 import { EmbeddedCheckout } from "@/components/marketplace/EmbeddedCheckout";
+import { AddToBasketButton } from "@/components/marketplace/AddToBasketButton";
 
 // Feature flag: when "true", card details are collected inline via the SumUp
 // Card Widget (no redirect). Otherwise the hosted-checkout redirect is used.
@@ -23,6 +24,11 @@ interface BuyAndCollectProps {
   hasVariations: boolean;
   variationLabel?: string;
   variants?: BuyVariant[];
+  /** Buyable units for a NON-variant listing (stock − sold − holds). */
+  available?: number;
+  /** Listing title + cover, used to label the item in the basket. */
+  title: string;
+  image?: string;
 }
 
 function formatGBP(amount: number): string {
@@ -35,6 +41,9 @@ export function BuyAndCollect({
   hasVariations,
   variationLabel,
   variants = [],
+  available = 1,
+  title,
+  image,
 }: BuyAndCollectProps) {
   // `available` is already the buyable count (stock minus sold minus holds),
   // so a fully-held variant drops out here.
@@ -138,14 +147,29 @@ export function BuyAndCollect({
           doneLabel="View my orders"
         />
       ) : (
-        <button
-          type="button"
-          onClick={handleBuy}
-          disabled={pending || (hasVariations && !selectedId)}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3.5 text-sm font-black text-black transition-colors hover:bg-amber-400 active:bg-amber-600 disabled:opacity-60"
-        >
-          {pending ? "Starting checkout…" : `Buy & Collect · ${formatGBP(displayPrice)}`}
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={handleBuy}
+            disabled={pending || (hasVariations && !selectedId)}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3.5 text-sm font-black text-black transition-colors hover:bg-amber-400 active:bg-amber-600 disabled:opacity-60"
+          >
+            {pending ? "Starting checkout…" : `Buy & Collect · ${formatGBP(displayPrice)}`}
+          </button>
+          {/* Add to basket — buy this alongside other items in one payment.
+              Disabled until a valid (priced, in-stock) option is chosen. */}
+          {(!hasVariations || selectedVariant) && displayPrice > 0 && (
+            <AddToBasketButton
+              listingId={listingId}
+              variantId={hasVariations ? selectedVariant?.id : undefined}
+              label={hasVariations && selectedVariant ? `${title} — ${selectedVariant.name}` : title}
+              unitPrice={displayPrice}
+              image={image}
+              maxQuantity={hasVariations ? selectedVariant?.available ?? 1 : Math.max(1, available)}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-500 px-4 py-3 text-sm font-bold text-amber-700 transition-colors hover:bg-amber-100/60 dark:text-amber-300 dark:hover:bg-amber-950/30"
+            />
+          )}
+        </>
       )}
     </div>
   );

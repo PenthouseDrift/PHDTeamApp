@@ -150,3 +150,197 @@ export async function createMarketplaceCheckout(
     };
   }
 }
+
+/** One requested basket line (as sent from the client). */
+export interface BasketLineInput {
+  listingId: string;
+  variantId?: string;
+  quantity: number;
+}
+
+/**
+ * A resolved + validated basket line persisted in the checkout record. The
+ * finalizer replays one of these per listing (stock + ASBO-RC ledger + the
+ * order + the email line), so it carries everything needed without re-reading
+ * the listing: the unit price charged and a human label.
+ */
+export interface CheckoutLine {
+  listingId: string;
+  variantId?: string;
+  quantity: number;
+  unitPrice: number;
+  label: string;
+}
+
+/**
+ * Start a single SumUp checkout that pays for MULTIPLE marketplace items (a
+ * basket) in one transaction. Mirrors createMarketplaceCheckout but validates
+ * each line and persists a `lines[]` array in the checkout record. The finalizer
+ * prefers `lines[]` and replays stock/ledger/order/email per line.
+ *
+ * Every line must be a live, at-track, buyable, priced item; the requested
+ * quantity can't exceed buyable stock. Validation is re-run here (never trust
+ * client prices) and again—implicitly—by recordOnlineSale at finalize time
+ * (which clamps to real stock), so an item selling out between basket and
+ * payment can't oversell.
+ */
+export async function createMarketplaceBasketCheckout(
+  lines: BasketLineInput[],
+  customReturnUrl?: string
+): Promise<ActionResult<{ url: string; checkoutId: string; amount: number; currency: string; email?: string }>> {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return { success: false, error: "You must be logged in to buy" };
+    }
+    const buyerId = session.user.id;
+
+    if (!Array.isArray(lines) || lines.length === 0) {
+      return { success: false, error: "Your basket is empty" };
+    }
+    if (lines.length > 50) {
+      return { success: false, error: "Too many items in one order" };
+    }
+
+    // Collapse duplicate (listingId+variantId) lines and sum their quantities so
+    // stock checks see the true requested amount.
+    const merged = new Map<string, BasketLineInput>();
+    for (const raw of lines) {
+      const listingId = String(raw.listingId || "");
+      const variantId = raw.variantId ? String(raw.variantId) : undefined;
+      const qty = Math.max(1, Math.floor(Number(raw.quantity) || 0));
+      if (!listingId) continue;
+      const key = `${listingId}::${variantId ?? ""}`;
+      const existing = merged.get(key);
+      if (existing) existing.quantity += qty;
+      else merged.set(key, { listingId, variantId, quantity: qty });
+    }
+    const requested = [...merged.values()];
+    if (requested.length === 0) {
+      return { success: false, error: "Your basket is empty" };
+    }
+
+    const resolved: CheckoutLine[] = [];
+    let amount = 0;
+
+    for (const line of requested) {
+      const listing = await getListingById(line.listingId);
+      if (!listing) return { success: false, error: "One of your items is no longer available" };
+      if (listing.isDraft || listing.status !== "available") {
+        return { success: false, error: `"${listing.title}" is no longer available` };
+      }
+      if (!listing.atTrack) {
+        return { success: false, error: `"${listing.title}" isn't available for Click & Collect` };
+      }
+
+      let unitPrice: number;
+      let label: string;
+      let resolvedVariantId: string | undefined;
+      let buyable: number;
+
+      if (listing.hasVariations) {
+        if (!line.variantId) {
+          return { success: false, error: `Please choose an option for "${listing.title}"` };
+        }
+        const variant = listing.variants.find((v) => v.id === line.variantId);
+        if (!variant) return { success: false, error: `An option for "${listing.title}" is no longer available` };
+        buyable = variantBuyable(variant);
+        if (buyable <= 0) {
+          return { success: false, error: `"${listing.title} — ${variant.name}" is sold out or reserved` };
+        }
+        unitPrice = variant.price;
+        label = `${listing.title} — ${variant.name}`;
+        resolvedVariantId = variant.id;
+      } else {
+        buyable = listing.quantity - listing.soldCount - Math.max(0, listing.reservedCount);
+        if (buyable <= 0) {
+          return { success: false, error: `"${listing.title}" is sold out or reserved` };
+        }
+        unitPrice = listing.price;
+        label = listing.title;
+      }
+
+      if (!(unitPrice > 0)) {
+        return { success: false, error: `"${listing.title}" can't be bought online` };
+      }
+      if (line.quantity > buyable) {
+        return {
+          success: false,
+          error: `Only ${buyable} of "${label}" ${buyable === 1 ? "is" : "are"} available`,
+        };
+      }
+
+      resolved.push({
+        listingId: listing.listingId,
+        variantId: resolvedVariantId,
+        quantity: line.quantity,
+        unitPrice,
+        label,
+      });
+      amount += unitPrice * line.quantity;
+    }
+
+    amount = Math.round(amount * 100) / 100;
+    if (!(amount > 0)) {
+      return { success: false, error: "Nothing to pay for" };
+    }
+    const currency = "GBP";
+
+    const totalUnits = resolved.reduce((s, l) => s + l.quantity, 0);
+    const description =
+      resolved.length === 1
+        ? `Penthouse Drift - ${resolved[0].label}`
+        : `Penthouse Drift - ${resolved.length} items (${totalUnits} units)`;
+
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const returnUrl = customReturnUrl || `${baseUrl}/marketplace/purchase/success`;
+
+    const buyerName = (await redis.hget(`member:${buyerId}`, "name")) as string | null;
+    const buyerEmail = (await redis.hget(`member:${buyerId}`, "email")) as string | null;
+
+    const { createCheckout } = await import("@/lib/sumup");
+    const checkout = await createCheckout({
+      memberId: buyerId,
+      amount,
+      currency,
+      description,
+      returnUrl,
+    });
+
+    // Persist the full basket. `lines[]` is the basket-aware source of truth;
+    // the single-item fields are left for a human-readable summary only.
+    await redis.set(
+      `checkout:${checkout.id}`,
+      JSON.stringify({
+        memberId: buyerId,
+        itemType: "marketplace",
+        lines: resolved,
+        itemLabel:
+          resolved.length === 1 ? resolved[0].label : `${resolved.length} items`,
+        quantity: totalUnits,
+        amount,
+        currency,
+        buyerName: buyerName || undefined,
+        checkoutReference: checkout.checkout_reference,
+        createdAt: Date.now(),
+      }),
+      { ex: 86400 * 30 }
+    );
+
+    await redis.set(`pending_checkout:${buyerId}`, checkout.id, { ex: 3600 });
+    const { registerPendingCheckout } = await import("@/lib/pending-checkouts");
+    await registerPendingCheckout(checkout.id);
+
+    const redirectUrl = checkout.hosted_checkout_url || `https://pay.sumup.com/b2c/Q${checkout.id}`;
+    return {
+      success: true,
+      data: { url: redirectUrl, checkoutId: checkout.id, amount, currency, email: buyerEmail || undefined },
+    };
+  } catch (error) {
+    console.error("createMarketplaceBasketCheckout error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to start checkout",
+    };
+  }
+}
