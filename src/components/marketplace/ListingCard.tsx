@@ -7,6 +7,10 @@ import { useState, useTransition } from "react";
 import type { MarketplaceListing } from "@/types";
 import { deleteListing, setListingStatus, setListingSoldCount, sellAsboRcUnits, publishListing, adjustVariantSold, setListingReservedCount, setVariantReservedCount, addListingStock, addVariantStock } from "@/actions/marketplace";
 import { isListingReserved } from "@/lib/marketplace-reserved";
+import { ShareButton } from "@/components/ShareButton";
+
+// Public base URL of the app (inlined at build time), used for share links.
+const APP_BASE_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://app.penthousedrift.com").replace(/\/$/, "");
 
 
 interface ListingCardProps {
@@ -143,6 +147,7 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
   const canManage = viewerId === listing.userId || isStaff;
   const cover = listing.images[0];
   const isAsbo = listing.soldByAsboRc;
+  const listingShareUrl = `${APP_BASE_URL}/marketplace/${listing.listingId}`;
   // For ASBO-RC listings, quantity IS the live available stock (sold units live
   // in the ledger, not soldCount). For normal listings, available = quantity - sold.
   const quantity = Math.max(0, quantityState || 0);
@@ -271,6 +276,14 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
           >
             {listing.title}
           </Link>
+          <ShareButton
+            variant="icon"
+            url={listingShareUrl}
+            title={listing.title}
+            text={`Check out "${listing.title}" on Penthouse Drift`}
+            label="Share this listing"
+            className="-mr-1 -mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          />
         </div>
         <p className="text-base font-bold text-amber-600 dark:text-amber-400">
           {hasVariations ? `from ${formatPrice(listing.price)}` : formatPrice(listing.price)}

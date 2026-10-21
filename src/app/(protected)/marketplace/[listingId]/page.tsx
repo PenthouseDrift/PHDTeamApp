@@ -7,8 +7,12 @@ import { ListingGallery } from "@/components/marketplace/ListingGallery";
 import { ListingVariantPricing } from "@/components/marketplace/ListingVariantPricing";
 import { BuyAndCollect } from "@/components/marketplace/BuyAndCollect";
 import { isListingReserved } from "@/lib/marketplace-reserved";
+import { ShareButton } from "@/components/ShareButton";
 
 export const dynamic = "force-dynamic";
+
+// Public base URL of the app, for building shareable listing links.
+const APP_BASE_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://app.penthousedrift.com").replace(/\/$/, "");
 
 interface ListingDetailPageProps {
   params: Promise<{ listingId: string }>;
@@ -115,7 +119,17 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
           {/* Details */}
           <div className="space-y-5">
             <div>
-              <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{listing.title}</h1>
+              <div className="flex items-start justify-between gap-3">
+                <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{listing.title}</h1>
+                <ShareButton
+                  variant="icon"
+                  url={`${APP_BASE_URL}/marketplace/${listing.listingId}`}
+                  title={listing.title}
+                  text={`Check out "${listing.title}" on Penthouse Drift`}
+                  label="Share this listing"
+                  className="mt-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-zinc-300 text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                />
+              </div>
               {/* Price + variation selector (client). Picking a variation updates
                   the displayed price and stock. */}
               <div className="mt-1">

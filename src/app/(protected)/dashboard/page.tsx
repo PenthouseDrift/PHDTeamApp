@@ -18,8 +18,12 @@ import { getSelfCheckInStatus } from "@/actions/admin/checkins";
 import { getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
 import { getAsboRcReport } from "@/actions/asbo-rc";
 import { AsboRcReportsSummary } from "@/components/asbo-rc/AsboRcReportsSummary";
+import { ShareButton } from "@/components/ShareButton";
 
 export const dynamic = "force-dynamic";
+
+// Public base URL of the app, used for the "Share the app" invite link.
+const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://app.penthousedrift.com").replace(/\/$/, "");
 
 const quickLinks = [
   {
@@ -563,6 +567,24 @@ export default async function DashboardPage() {
                 <span className="text-sm font-medium text-center">{link.title}</span>
               </Link>
             ))}
+          </div>
+        </section>
+
+        {/* Share the app — invite other drifters to join Penthouse Drift. */}
+        <section className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-5 text-center shadow-sm dark:border-amber-500/30 dark:from-amber-950/30 dark:to-orange-950/20 sm:p-6">
+          <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100">Share Penthouse Drift</h2>
+          <p className="mx-auto mt-1 max-w-md text-sm text-zinc-600 dark:text-zinc-300">
+            Know someone who&apos;d love the track? Send them the app so they can join, book sessions
+            and shop the marketplace.
+          </p>
+          <div className="mt-4 flex justify-center">
+            <ShareButton
+              url={APP_URL}
+              title="Penthouse Drift"
+              text="Join me on Penthouse Drift — the RC drift track & community app."
+              label="Share the app"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-black transition-colors hover:bg-amber-400 active:bg-amber-600"
+            />
           </div>
         </section>
       </div>
