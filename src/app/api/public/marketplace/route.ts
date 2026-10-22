@@ -59,6 +59,12 @@ type PublicListing = {
   /** True when the "Sold by PHD" badge should show (first-party or ASBO). */
   soldByPhd: boolean;
   /**
+   * True when the member's own item is being sold on their behalf by Penthouse
+   * Drift ("Facilitated by PHD" badge). Only the boolean is exposed — the owner
+   * payout figure is private (owner/admin only) and never sent to the website.
+   */
+  facilitatedByPhd: boolean;
+  /**
    * True when the listing is effectively reserved for display: it still has
    * physical stock but none is buyable because it's all held. Buying is blocked
    * and a "Reserved" badge is shown.
@@ -142,6 +148,7 @@ export async function GET(request: Request) {
         meetAtTrack: l.meetAtTrack,
         soldByAsboRc: l.soldByAsboRc,
         soldByPhd: l.soldByPhd || l.soldByAsboRc,
+        facilitatedByPhd: l.facilitatedByPhd,
         reserved: isListingReserved(l),
         reservedCount: Math.max(0, l.reservedCount || 0),
         status: l.status,
@@ -160,9 +167,10 @@ export async function GET(request: Request) {
               reservedCount: Math.max(0, v.reservedCount || 0),
             }))
           : [],
-        // Sold-by-PHD items are bought in person at the track, so expose no
-        // seller contact — the website shows a "come to the track" note instead.
-        contact: l.soldByPhd
+        // Sold-by-PHD and Facilitated-by-PHD items are bought in person at the
+        // track (PHD handles the sale), so expose no seller contact — the
+        // website shows a "come to the track" note instead.
+        contact: l.soldByPhd || l.facilitatedByPhd
           ? { name: "", method: "other" as const, value: "" }
           : {
               name: l.contactName || names.get(l.userId) || "Member",
@@ -174,7 +182,17 @@ export async function GET(request: Request) {
 
     return NextResponse.json(
       { listings: items.slice(0, limit) },
-      { headers: { ...cors, "Cache-Control": "public, max-age=300" } }
+      {
+        headers: {
+          ...cors,
+          // Short browser/CDN cache so the public website reflects new listings
+          // and edits within ~30s, while stale-while-revalidate keeps responses
+          // instant (serve the cached copy, refresh in the background). The
+          // server read itself is still collapsed to ~1 Redis hit/min by the
+          // getWebsiteListings unstable_cache, so this doesn't add DB load.
+          "Cache-Control": "public, max-age=30, stale-while-revalidate=60",
+        },
+      }
     );
   } catch (error) {
     return NextResponse.json(
