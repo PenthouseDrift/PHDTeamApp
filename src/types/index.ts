@@ -164,6 +164,14 @@ export interface ListingVariant {
    * for ASBO-RC consignment listings.
    */
   consignmentPrice?: number;
+  /**
+   * "Facilitated by PHD" owner payout for THIS variant — the amount the
+   * original owner is paid when this variant sells (club keeps the rest of the
+   * variant's sell price). Only meaningful on `facilitatedByPhd` listings;
+   * unset falls back to this variant's `price` (owner gets the full amount).
+   * Sensitive: owner/admin only. Separate from `consignmentPrice` (ASBO-RC).
+   */
+  ownerPayoutPrice?: number;
   /** Total units of this variant. */
   quantity: number;
   /** Units of this variant sold so far (0..quantity). */
@@ -308,6 +316,29 @@ export interface MarketplaceListing {
    * changes. Defaults to 7 (%). Ignored for non-ASBO-RC listings.
    */
   penthouseCutPct: number;
+  /**
+   * "Facilitated by PHD" flag — available to EVERY seller (not just admins /
+   * ASBO-RC partners). The seller is listing their own item but asks Penthouse
+   * Drift to handle the sale at the track on their behalf. Completely separate
+   * from the ASBO-RC consignment system: it NEVER touches the ASBO-RC ledger or
+   * report. Shows a "Facilitated by PHD" badge on the advert and feeds the
+   * admin "Owner payouts" report. When a facilitated item sells, PHD owes the
+   * ORIGINAL OWNER (the listing's userId) the `ownerPayoutPrice`; the club
+   * keeps the remainder of the sell price.
+   */
+  facilitatedByPhd: boolean;
+  /**
+   * The amount (GBP) the ORIGINAL OWNER is paid out when a facilitated item
+   * sells — e.g. "sell for £50, I keep £40" => ownerPayoutPrice = 40 and the
+   * club keeps £10. Only meaningful when `facilitatedByPhd` is true. Optional:
+   * when unset, the owner is owed the full sell `price` (the club keeps £0).
+   * NOTE: this is the OPPOSITE direction to `consignmentPrice` (which is the
+   * ASBO-RC partner base where the club keeps the uplift). This figure is
+   * SENSITIVE: shown ONLY to the listing owner and admins, never to other
+   * buyers on the app or website. For variant listings the per-variant
+   * `ownerPayoutPrice` drives the payout, so the listing-level value is unset.
+   */
+  ownerPayoutPrice?: number;
   /**
    * Legacy whole-listing settlement flag. Superseded by asboRcPaidUnits, but
    * retained so older records are read correctly (a true value is treated as

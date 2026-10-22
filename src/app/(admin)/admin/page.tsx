@@ -9,6 +9,7 @@ import { Suspense } from "react";
 import { getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
 import { getEventTiming } from "@/lib/event-utils";
 import { getActiveShopOrders } from "@/actions/orders";
+import { getReservedListings } from "@/actions/marketplace";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +39,7 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
   const isSaturday = day === 6;
 
   // Fetch overview metrics in parallel
-  const [members, todayCheckins, events, currentWinnerInfo, selfCheckInActive, activeRentals, clickCollectOrders] = await Promise.all([
+  const [members, todayCheckins, events, currentWinnerInfo, selfCheckInActive, activeRentals, clickCollectOrders, reservedListings] = await Promise.all([
     getAllMembers(),
     getTodayCheckIns(),
     getUpcomingEvents(),
@@ -48,9 +49,14 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
     // Admin-only: pending Click & Collect orders awaiting collection. Returns []
     // for moderators (the action is admin-gated), so the card hides for them.
     getActiveShopOrders(),
+    // Admin-only: marketplace items with units currently reserved (held for a
+    // buyer). Also surfaced on the same Click & Collect page. [] for moderators.
+    getReservedListings(),
   ]);
 
   const pendingOrderCount = clickCollectOrders.length;
+  // Total units held across all reserved listings (for the summary card).
+  const reservedUnitCount = reservedListings.reduce((sum, l) => sum + l.reservedCount, 0);
 
   const winnerChosenThisWeek = Boolean(currentWinnerInfo.shellId);
   const activeMemberships = members.filter((m) => m.membership?.status === "active").length;
@@ -156,18 +162,31 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
                 🛍️
               </span>
               <div className="min-w-0">
-                <h3 className="text-sm font-black text-zinc-900 dark:text-zinc-100">Click &amp; Collect Orders</h3>
+                <h3 className="text-sm font-black text-zinc-900 dark:text-zinc-100">Click &amp; Collect</h3>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                   {pendingOrderCount === 0
                     ? "No orders awaiting collection"
                     : `${pendingOrderCount} order${pendingOrderCount === 1 ? "" : "s"} awaiting collection`}
+                  {reservedUnitCount > 0 &&
+                    ` · ${reservedUnitCount} item${reservedUnitCount === 1 ? "" : "s"} reserved`}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
               {pendingOrderCount > 0 && (
-                <span className="flex h-8 min-w-8 items-center justify-center rounded-full bg-emerald-500 px-2 text-sm font-black text-black">
+                <span
+                  title={`${pendingOrderCount} order${pendingOrderCount === 1 ? "" : "s"} awaiting collection`}
+                  className="flex h-8 min-w-8 items-center justify-center rounded-full bg-emerald-500 px-2 text-sm font-black text-black"
+                >
                   {pendingOrderCount}
+                </span>
+              )}
+              {reservedUnitCount > 0 && (
+                <span
+                  title={`${reservedUnitCount} item${reservedUnitCount === 1 ? "" : "s"} reserved`}
+                  className="flex h-8 min-w-8 items-center justify-center rounded-full bg-amber-500 px-2 text-sm font-black text-black"
+                >
+                  🔖 {reservedUnitCount}
                 </span>
               )}
               <span className="text-emerald-600 dark:text-emerald-400 group-hover:translate-x-0.5 transition-transform text-lg">→</span>

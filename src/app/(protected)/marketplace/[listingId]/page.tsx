@@ -94,6 +94,13 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
   const viewerId = session?.user?.id ?? "";
   const isStaff = session?.user?.role === "admin" || session?.user?.role === "moderator";
   const canManage = viewerId === listing.userId || isStaff;
+  const isAdmin = session?.user?.role === "admin";
+  // "Facilitated by PHD" owner payout is SENSITIVE: only the listing owner and
+  // admins may see it. Everyone else sees only the sale price.
+  const canSeePayout = viewerId === listing.userId || isAdmin;
+  // Facilitated items are handled by PHD at the track, like Sold-by-PHD items,
+  // so the seller-contact UI is suppressed for them too.
+  const phdHandled = listing.soldByPhd || listing.soldByAsboRc || listing.facilitatedByPhd;
   // Effectively reserved = nothing buyable remains due to a hold (not sold).
   const reservedView = isListingReserved(listing);
 
@@ -216,7 +223,46 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
                   <span>Sold by PHD</span>
                 </div>
               )}
+              {listing.facilitatedByPhd && !listing.soldByPhd && !listing.soldByAsboRc && (
+                <div className="inline-flex items-center gap-2 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-800 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-300">
+                  <span>🤝</span>
+                  <span>Facilitated by PHD</span>
+                </div>
+              )}
             </div>
+
+            {/* Owner payout — SENSITIVE. Only the listing owner and admins see
+                it; never shown to other buyers. */}
+            {listing.facilitatedByPhd && canSeePayout && (
+              <div className="space-y-1 rounded-xl border border-indigo-200 bg-indigo-50/60 p-4 dark:border-indigo-500/40 dark:bg-indigo-500/10">
+                <h2 className="text-sm font-semibold text-indigo-800 dark:text-indigo-300">
+                  {viewerId === listing.userId ? "Your payout" : "Owner payout"}
+                  <span className="ml-2 rounded bg-indigo-200/70 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-200">
+                    Private
+                  </span>
+                </h2>
+                {listing.hasVariations ? (
+                  <p className="text-sm text-indigo-800 dark:text-indigo-200">
+                    Payout is set per option — see each variation&apos;s payout in the listing
+                    editor.
+                  </p>
+                ) : (
+                  <p className="text-sm text-indigo-800 dark:text-indigo-200">
+                    {viewerId === listing.userId ? "You are" : "The owner is"} paid{" "}
+                    <span className="font-bold">
+                      £{(listing.ownerPayoutPrice ?? listing.price).toFixed(2)}
+                    </span>{" "}
+                    when this sells
+                    {listing.ownerPayoutPrice != null && listing.price >= listing.ownerPayoutPrice
+                      ? ` — the club keeps £${(listing.price - listing.ownerPayoutPrice).toFixed(2)}.`
+                      : " (the full sale price)."}
+                  </p>
+                )}
+                <p className="text-[11px] text-indigo-700/80 dark:text-indigo-300/70">
+                  Only you and the admins can see this. Buyers only ever see the sale price.
+                </p>
+              </div>
+            )}
 
             {listing.status === "sold" && (
               <div className="rounded-lg bg-red-500/10 px-4 py-3">
@@ -238,19 +284,23 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
             )}
 
             {/* How-to-buy / contact seller — hidden entirely while reserved. */}
-            {reservedView ? null : listing.status !== "sold" && listing.soldByPhd && !listing.atTrack ? (
+            {reservedView ? null : listing.status !== "sold" && phdHandled && !listing.atTrack ? (
               <div className="space-y-2 rounded-xl border border-teal-200 bg-teal-50 p-4 dark:border-teal-500/40 dark:bg-teal-500/10">
                 <h2 className="text-sm font-semibold text-teal-800 dark:text-teal-300">
                   How to buy
                 </h2>
                 <div className="flex items-center gap-2 text-sm font-medium text-teal-800 dark:text-teal-200">
                   <span>📍</span>
-                  <span>Sold by Penthouse Drift — just come to the track to buy it in person.</span>
+                  <span>
+                    {listing.facilitatedByPhd && !listing.soldByPhd && !listing.soldByAsboRc
+                      ? "Facilitated by Penthouse Drift — come to the track to buy it in person."
+                      : "Sold by Penthouse Drift — just come to the track to buy it in person."}
+                  </span>
                 </div>
               </div>
             ) : (
               listing.status !== "sold" &&
-              !listing.soldByPhd &&
+              !phdHandled &&
               (listing.contactValue || listing.meetAtTrack) && (
                 <div className="space-y-2 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
                   <h2 className="text-sm font-semibold text-zinc-600 dark:text-zinc-300">

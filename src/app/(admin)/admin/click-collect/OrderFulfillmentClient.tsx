@@ -25,19 +25,40 @@ export function OrderFulfillmentClient({ initialOrders }: OrderFulfillmentClient
     });
   }
 
-  if (orders.length === 0) {
-    return (
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-8 text-center shadow-sm">
-        <span className="text-4xl mb-4 block">🎉</span>
-        <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">All Caught Up!</h3>
-        <p className="text-zinc-500 dark:text-zinc-400 mt-2">There are no orders waiting for collection right now.</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {orders.map((order) => {
+    <section className="overflow-hidden rounded-xl border border-emerald-200 bg-white shadow-sm dark:border-emerald-500/30 dark:bg-zinc-900">
+      {/* Section header — matches the Reserved items + Owner payouts panels */}
+      <div className="flex items-center justify-between gap-3 border-b border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-500/30 dark:bg-emerald-500/10">
+        <div className="flex items-center gap-2">
+          <span className="text-lg" aria-hidden>
+            🛍️
+          </span>
+          <div>
+            <h2 className="text-sm font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+              Click &amp; Collect orders
+            </h2>
+            <p className="text-[11px] text-emerald-700/80 dark:text-emerald-300/70">
+              Paid online — awaiting collection at the track
+            </p>
+          </div>
+        </div>
+        {orders.length > 0 && (
+          <span className="rounded-full bg-emerald-500 px-2.5 py-1 text-[11px] font-black text-black">
+            {orders.length} order{orders.length === 1 ? "" : "s"}
+          </span>
+        )}
+      </div>
+
+      {orders.length === 0 ? (
+        <div className="flex items-center gap-3 px-4 py-6 text-sm text-zinc-500 dark:text-zinc-400">
+          <span className="text-xl" aria-hidden>
+            🎉
+          </span>
+          <span>All caught up — no orders waiting for collection right now.</span>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-2">
+          {orders.map((order) => {
         const orderDate = new Date(order.createdAt).toLocaleString();
 
         return (
@@ -89,7 +110,9 @@ export function OrderFulfillmentClient({ initialOrders }: OrderFulfillmentClient
             </div>
           </div>
         );
-      })}
-    </div>
+          })}
+        </div>
+      )}
+    </section>
   );
 }

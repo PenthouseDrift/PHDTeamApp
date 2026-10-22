@@ -36,8 +36,8 @@ const adminNavItems: AdminNavItem[] = [
   { href: "/admin/members", label: "Members", icon: MembersIcon },
   // Marketplace (member listings + ASBO-RC consignment stock/drafts).
   { href: "/marketplace", label: "Marketplace", icon: TagIcon, adminOnly: true, match: ["/marketplace"] },
-  // Reports hub (activity log + revenue + check-in history + ASBO-RC).
-  { href: "/admin/activity", label: "Reports", icon: ActivityIcon, adminOnly: true, match: ["/admin/history", "/admin/asbo-rc"] },
+  // Reports hub (activity log + revenue + check-in history + ASBO-RC + payouts).
+  { href: "/admin/activity", label: "Reports", icon: ActivityIcon, adminOnly: true, match: ["/admin/history", "/admin/asbo-rc", "/admin/facilitated-sales"] },
 ];
 
 // Secondary nav — grouped under "More".

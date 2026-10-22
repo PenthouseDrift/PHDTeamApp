@@ -121,6 +121,9 @@ export const marketplaceListingSchema = z
           price: z.number().min(0).max(100000),
           // Per-variant ASBO consignment base; unset falls back to the variant price.
           consignmentPrice: z.number().min(0).max(100000).optional(),
+          // Per-variant "Facilitated by PHD" owner payout; unset falls back to
+          // the variant price. Enforced <= variant price in the superRefine.
+          ownerPayoutPrice: z.number().min(0).max(100000).optional(),
           quantity: z.number().int().min(0).max(10000),
           soldCount: z.number().int().min(0).max(10000).optional().default(0),
         })
@@ -130,12 +133,19 @@ export const marketplaceListingSchema = z
       .default([]),
     // Penthouse Drift commission % on ASBO-RC sales. Default 7%.
     penthouseCutPct: z.number().min(0).max(100).optional().default(7),
+    // "Facilitated by PHD" — available to EVERY seller. PHD sells the member's
+    // own item on their behalf at the track. Separate from ASBO-RC consignment.
+    facilitatedByPhd: z.boolean().optional().default(false),
+    // The payout owed to the original owner when a facilitated item sells.
+    // Optional: unset => owner gets the full sell price. Enforced <= price in
+    // the superRefine below (non-variant); per-variant handled there too.
+    ownerPayoutPrice: z.number().min(0).max(100000).optional(),
   })
   .superRefine((data, ctx) => {
     // A contact detail is required unless the seller opts to meet at the track,
-    // OR the item is Sold by PHD / ASBO-RC consignment (bought in person at the
-    // track — no seller contact needed).
-    const boughtAtTrack = data.soldByPhd || data.soldByAsboRc;
+    // OR the item is Sold by PHD / ASBO-RC consignment / Facilitated by PHD
+    // (all handled in person at the track — no seller contact needed).
+    const boughtAtTrack = data.soldByPhd || data.soldByAsboRc || data.facilitatedByPhd;
     if (!boughtAtTrack && !data.meetAtTrack && !data.contactValue.trim()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -166,6 +176,34 @@ export const marketplaceListingSchema = z
               code: z.ZodIssueCode.custom,
               path: ["variants", i, "consignmentPrice"],
               message: "Consignment price can't be higher than the sell price.",
+            });
+          }
+        });
+      }
+    }
+
+    // "Facilitated by PHD" owner payout: the amount paid back to the original
+    // owner can't exceed the sell price (the club keeps the difference, which
+    // can't be negative). Only checked when a payout is explicitly set.
+    if (data.facilitatedByPhd) {
+      if (
+        !data.hasVariations &&
+        data.ownerPayoutPrice != null &&
+        data.ownerPayoutPrice > data.price
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["ownerPayoutPrice"],
+          message: "Owner payout can't be higher than the sell price.",
+        });
+      }
+      if (data.hasVariations && data.variants) {
+        data.variants.forEach((v, i) => {
+          if (v.ownerPayoutPrice != null && v.ownerPayoutPrice > v.price) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["variants", i, "ownerPayoutPrice"],
+              message: "Owner payout can't be higher than the sell price.",
             });
           }
         });

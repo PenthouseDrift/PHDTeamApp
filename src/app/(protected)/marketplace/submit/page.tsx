@@ -1,10 +1,17 @@
 import { auth } from "@/lib/auth";
 import { ListingForm } from "@/components/marketplace/ListingForm";
+import { getAllUsers } from "@/actions/admin/users";
 
 export const dynamic = "force-dynamic";
 
 export default async function SubmitListingPage() {
   const session = await auth();
+  // Admins can create a listing on behalf of another member. Load the member
+  // list for the picker; everyone else gets an empty list (the picker hides).
+  const members =
+    session?.user?.role === "admin"
+      ? (await getAllUsers()).map((m) => ({ id: m.id, name: m.name, email: m.email, image: m.image }))
+      : [];
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-2xl space-y-6">
@@ -16,7 +23,7 @@ export default async function SubmitListingPage() {
           </p>
         </div>
 
-        <ListingForm mode="create" viewerRole={session?.user?.role} />
+        <ListingForm mode="create" viewerRole={session?.user?.role} members={members} />
       </div>
     </div>
   );

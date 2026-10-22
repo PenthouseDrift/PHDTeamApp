@@ -81,6 +81,10 @@ function parseVariants(raw: unknown): import("@/types").ListingVariant[] {
         o.consignmentPrice === undefined || o.consignmentPrice === null || o.consignmentPrice === ""
           ? undefined
           : Math.max(0, Number(o.consignmentPrice) || 0);
+      const op =
+        o.ownerPayoutPrice === undefined || o.ownerPayoutPrice === null || o.ownerPayoutPrice === ""
+          ? undefined
+          : Math.max(0, Number(o.ownerPayoutPrice) || 0);
       // Reserved units: prefer the numeric reservedCount; migrate a legacy
       // boolean reserved:true to "all currently-available units held".
       const available = Math.max(0, quantity - soldCount);
@@ -96,6 +100,7 @@ function parseVariants(raw: unknown): import("@/types").ListingVariant[] {
         name: String(o.name ?? "").trim(),
         price: Math.max(0, Number(o.price) || 0),
         consignmentPrice: cp,
+        ownerPayoutPrice: op,
         quantity,
         soldCount,
         reservedCount,
@@ -219,6 +224,13 @@ function toListing(data: Record<string, unknown> | null): MarketplaceListing | n
     soldAt,
     soldByAsboRc: String(data.soldByAsboRc) === "true",
     soldByPhd: String(data.soldByPhd) === "true",
+    // "Facilitated by PHD" (available to all sellers). Legacy records default
+    // to false / undefined so they behave exactly as before.
+    facilitatedByPhd: String(data.facilitatedByPhd) === "true",
+    ownerPayoutPrice:
+      data.ownerPayoutPrice === undefined || data.ownerPayoutPrice === null || data.ownerPayoutPrice === ""
+        ? undefined
+        : Math.max(0, Number(data.ownerPayoutPrice) || 0),
     // Reserved units (non-variant). Prefer numeric reservedCount; migrate a
     // legacy boolean reserved:true to "all currently-available units held".
     reservedCount: (() => {
@@ -289,11 +301,21 @@ export async function createListing(
     quantity?: number;
     soldByAsboRc?: boolean;
     soldByPhd?: boolean;
+    facilitatedByPhd?: boolean;
+    ownerPayoutPrice?: number;
     isDraft?: boolean;
     hasVariations?: boolean;
     variationLabel?: string;
-    variants?: { id?: string; name: string; price: number; consignmentPrice?: number; quantity: number; soldCount?: number }[];
+    variants?: { id?: string; name: string; price: number; consignmentPrice?: number; ownerPayoutPrice?: number; quantity: number; soldCount?: number }[];
     penthouseCutPct?: number;
+    /**
+     * Admin-only: create this listing ON BEHALF OF another member. When set (and
+     * the creator is an admin, and it names a real member), the listing is owned
+     * by this member — it appears under THEIR profile and "My Listings", and any
+     * facilitated owner-payout is owed to them. Ignored for non-admins and the
+     * creator stays the owner.
+     */
+    onBehalfOfUserId?: string;
   }
 ): Promise<ActionResult<MarketplaceListing>> {
   const parsed = marketplaceListingSchema.safeParse(data);
@@ -308,6 +330,24 @@ export async function createListing(
   try {
     const session = await auth();
     const role = session?.user?.role;
+
+    // Resolve the OWNER of the listing. By default it's the creator (`userId`).
+    // Admins may sell on behalf of another member: if `onBehalfOfUserId` is set
+    // and names a real member, that member becomes the owner so the listing
+    // shows under their profile. Non-admins can never set a different owner.
+    let ownerId = userId;
+    if (
+      data.onBehalfOfUserId &&
+      data.onBehalfOfUserId !== userId &&
+      role === "admin"
+    ) {
+      const target = await redis.hgetall(`member:${data.onBehalfOfUserId}`);
+      if (!target || Object.keys(target).length === 0 || !target.email) {
+        return { success: false, error: "That member could not be found" };
+      }
+      ownerId = data.onBehalfOfUserId;
+    }
+
     // Only admins or ASBO-RC partners may flag a listing as ASBO-RC consignment.
     const canSellForAsboRc = role === "admin" || role === "asbo-rc";
     const soldByAsboRc = Boolean(parsed.data.soldByAsboRc) && canSellForAsboRc;
@@ -328,18 +368,25 @@ export async function createListing(
           name: v.name.trim(),
           price: v.price,
           consignmentPrice: v.consignmentPrice,
+          ownerPayoutPrice: v.ownerPayoutPrice,
           quantity: v.quantity,
           soldCount: Math.min(v.quantity, Math.max(0, v.soldCount ?? 0)),
         }))
       : [];
     const derived = hasVariations ? deriveFromVariants(variants) : null;
 
+    // "Facilitated by PHD" is available to EVERY seller (no role clamp). The
+    // per-owner payout is only meaningful for non-variant listings at the
+    // listing level; variant listings carry per-variant payouts.
+    const facilitatedByPhd = Boolean(parsed.data.facilitatedByPhd);
+    const ownerPayoutPrice = hasVariations ? undefined : parsed.data.ownerPayoutPrice;
+
     const listingId = randomUUID();
     const now = Date.now();
 
     const listing: MarketplaceListing = {
       listingId,
-      userId,
+      userId: ownerId,
       title: parsed.data.title.trim(),
       description: parsed.data.description.trim(),
       category: parsed.data.category,
@@ -366,6 +413,8 @@ export async function createListing(
       soldAt: [],
       soldByAsboRc,
       soldByPhd,
+      facilitatedByPhd,
+      ownerPayoutPrice,
       reservedCount: 0,
       penthouseCutPct: parsed.data.penthouseCutPct,
       asboRcPaid: false,
@@ -402,6 +451,8 @@ export async function createListing(
       soldAt: JSON.stringify(listing.soldAt),
       soldByAsboRc: String(listing.soldByAsboRc),
       soldByPhd: String(listing.soldByPhd),
+      facilitatedByPhd: String(listing.facilitatedByPhd),
+      ownerPayoutPrice: listing.ownerPayoutPrice != null ? String(listing.ownerPayoutPrice) : "",
       reservedCount: String(listing.reservedCount),
       penthouseCutPct: String(listing.penthouseCutPct),
       asboRcPaid: String(listing.asboRcPaid),
@@ -425,6 +476,7 @@ export async function createListing(
     revalidatePath("/marketplace");
     bustMarketplaceCache();
     revalidatePath("/admin/asbo-rc");
+    revalidatePath("/admin/facilitated-sales");
     return { success: true, data: listing };
   } catch (error) {
     return {
@@ -872,6 +924,14 @@ export async function setListingSoldCount(
       const { createAsboRcSales } = await import("@/actions/asbo-rc");
       await createAsboRcSales(listing, soldDelta);
     }
+    // "Facilitated by PHD" (separate from ASBO-RC): each newly-sold unit logs an
+    // owner-payout ledger record so the admin payouts report knows what PHD
+    // owes the original owner. Un-selling never removes ledger history.
+    if (listing.facilitatedByPhd && soldDelta > 0) {
+      const { createPhdFacilitatedSales } = await import("@/actions/phd-facilitated");
+      const stamps = soldAt.slice(listing.soldCount, clamped);
+      await createPhdFacilitatedSales(listing, soldDelta, stamps);
+    }
     // Keep the browse index ordered (sold items sink to the bottom).
     await redis.zadd(MARKETPLACE_INDEX, {
       score: indexScore(listing.createdAt, status),
@@ -883,6 +943,7 @@ export async function setListingSoldCount(
     revalidatePath(`/marketplace/${listingId}`);
     revalidatePath("/admin/asbo-rc");
     revalidatePath("/asbo-rc");
+    revalidatePath("/admin/facilitated-sales");
     revalidatePath("/dashboard");
     return { success: true, data: { soldCount: clamped, available, status } };
   } catch (error) {
@@ -1137,12 +1198,22 @@ export async function adjustVariantSold(
         name: variant.name,
       });
     }
+    // "Facilitated by PHD": log owner-payout ledger records for that variant.
+    if (listing.facilitatedByPhd && soldDelta > 0) {
+      const { createPhdFacilitatedSales } = await import("@/actions/phd-facilitated");
+      await createPhdFacilitatedSales(listing, soldDelta, undefined, {
+        price: variant.price,
+        ownerPayoutPrice: variant.ownerPayoutPrice,
+        name: variant.name,
+      });
+    }
 
     revalidatePath("/marketplace");
     bustMarketplaceCache();
     revalidatePath(`/marketplace/${listingId}`);
     revalidatePath("/admin/asbo-rc");
     revalidatePath("/asbo-rc");
+    revalidatePath("/admin/facilitated-sales");
     revalidatePath("/dashboard");
     return { success: true, data: { variantSoldCount: target, status: derived.status } };
   } catch (error) {
@@ -1176,10 +1247,19 @@ export async function updateListing(
     quantity?: number;
     soldByAsboRc?: boolean;
     soldByPhd?: boolean;
+    facilitatedByPhd?: boolean;
+    ownerPayoutPrice?: number;
     hasVariations?: boolean;
     variationLabel?: string;
-    variants?: { id?: string; name: string; price: number; consignmentPrice?: number; quantity: number; soldCount?: number }[];
+    variants?: { id?: string; name: string; price: number; consignmentPrice?: number; ownerPayoutPrice?: number; quantity: number; soldCount?: number }[];
     penthouseCutPct?: number;
+    /**
+     * Admin-only: reassign this listing to another member (change the owner).
+     * When set to a real member's id by an admin, the listing moves under that
+     * member's profile and any facilitated payout is owed to them. Ignored for
+     * non-admins and for the no-op case (same owner).
+     */
+    onBehalfOfUserId?: string;
   }
 ): Promise<ActionResult<MarketplaceListing>> {
   const parsed = marketplaceListingSchema.safeParse(data);
@@ -1203,6 +1283,22 @@ export async function updateListing(
     const isStaff = session.user.role === "admin" || session.user.role === "moderator";
     if (!isOwner && !isStaff) {
       return { success: false, error: "You can only edit your own listings" };
+    }
+
+    // Owner reassignment (admins only). Default: keep the current owner. If an
+    // admin picked a different member and that member exists, move the listing
+    // to them so it shows under their profile.
+    let nextOwnerId = existing.userId;
+    if (
+      data.onBehalfOfUserId &&
+      data.onBehalfOfUserId !== existing.userId &&
+      session.user.role === "admin"
+    ) {
+      const target = await redis.hgetall(`member:${data.onBehalfOfUserId}`);
+      if (!target || Object.keys(target).length === 0 || !target.email) {
+        return { success: false, error: "That member could not be found" };
+      }
+      nextOwnerId = data.onBehalfOfUserId;
     }
 
     // Only admins or ASBO-RC partners may toggle the ASBO-RC consignment flag.
@@ -1239,6 +1335,7 @@ export async function updateListing(
             name: v.name.trim(),
             price: v.price,
             consignmentPrice: v.consignmentPrice,
+            ownerPayoutPrice: v.ownerPayoutPrice,
             quantity: v.quantity,
             soldCount,
             reservedCount,
@@ -1246,6 +1343,11 @@ export async function updateListing(
         })
       : [];
     const derivedV = hasVariations ? deriveFromVariants(nextVariants) : null;
+
+    // "Facilitated by PHD" can be toggled by any owner/staff editing their own
+    // listing (no role clamp, matching creation).
+    const facilitatedByPhd = Boolean(parsed.data.facilitatedByPhd);
+    const ownerPayoutPrice = hasVariations ? undefined : parsed.data.ownerPayoutPrice;
 
     // Non-variant path: editing quantity can't un-sell units — clamp existing
     // soldCount to the new quantity and keep status consistent.
@@ -1265,6 +1367,7 @@ export async function updateListing(
     // so preserve the existing isDraft value.
     const updated: MarketplaceListing = {
       ...existing,
+      userId: nextOwnerId,
       isDraft: existing.isDraft,
       title: parsed.data.title.trim(),
       description: parsed.data.description.trim(),
@@ -1287,6 +1390,8 @@ export async function updateListing(
       status: nextStatus,
       soldByAsboRc,
       soldByPhd,
+      facilitatedByPhd,
+      ownerPayoutPrice,
       // Preserve the listing-level hold, clamped to the new buyable availability
       // (variant holds live on each variant's reservedCount).
       reservedCount: hasVariations
@@ -1326,6 +1431,8 @@ export async function updateListing(
       soldAt: JSON.stringify(updated.soldAt),
       soldByAsboRc: String(updated.soldByAsboRc),
       soldByPhd: String(updated.soldByPhd),
+      facilitatedByPhd: String(updated.facilitatedByPhd),
+      ownerPayoutPrice: updated.ownerPayoutPrice != null ? String(updated.ownerPayoutPrice) : "",
       reservedCount: String(updated.reservedCount),
       penthouseCutPct: String(updated.penthouseCutPct),
       asboRcPaid: String(updated.asboRcPaid),
@@ -1551,12 +1658,21 @@ export async function recordOnlineSale(
           name: variant.name,
         });
       }
+      if (listing.facilitatedByPhd && soldDelta > 0) {
+        const { createPhdFacilitatedSales } = await import("@/actions/phd-facilitated");
+        await createPhdFacilitatedSales(listing, soldDelta, undefined, {
+          price: variant.price,
+          ownerPayoutPrice: variant.ownerPayoutPrice,
+          name: variant.name,
+        });
+      }
 
       revalidatePath("/marketplace");
       bustMarketplaceCache();
       revalidatePath(`/marketplace/${listingId}`);
       revalidatePath("/admin/asbo-rc");
       revalidatePath("/asbo-rc");
+      revalidatePath("/admin/facilitated-sales");
       return { success: true, data: { status: derived.status } };
     }
 
@@ -1592,6 +1708,7 @@ export async function recordOnlineSale(
 
     // ── Normal listing: bump soldCount ──────────────────────────────────────
     const clamped = Math.min(listing.quantity, listing.soldCount + qty);
+    const soldDelta = clamped - listing.soldCount;
     const status: "available" | "sold" = listing.quantity - clamped <= 0 ? "sold" : "available";
     const soldAt = [...listing.soldAt];
     while (soldAt.length < clamped) soldAt.push(now);
@@ -1608,15 +1725,123 @@ export async function recordOnlineSale(
       member: listingId,
     });
 
+    // "Facilitated by PHD": log owner-payout ledger records for the newly-sold
+    // units. (Facilitated items are never soldByAsboRc, so they land here.)
+    if (listing.facilitatedByPhd && soldDelta > 0) {
+      const { createPhdFacilitatedSales } = await import("@/actions/phd-facilitated");
+      const stamps = soldAt.slice(listing.soldCount, clamped);
+      await createPhdFacilitatedSales(listing, soldDelta, stamps);
+    }
+
     revalidatePath("/marketplace");
     bustMarketplaceCache();
     revalidatePath(`/marketplace/${listingId}`);
+    revalidatePath("/admin/facilitated-sales");
     return { success: true, data: { status } };
   } catch (error) {
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to record online sale",
     };
+  }
+}
+
+/**
+ * A listing that currently has one or more units reserved (admin hold), shaped
+ * for the admin Click & Collect view so staff can see what's being held for a
+ * buyer alongside paid orders awaiting collection. Reservations are a pure
+ * quantity hold — they don't record who the item is held for — so this just
+ * surfaces the product, how many units are held, and the stock context.
+ */
+export interface ReservedListingSummary {
+  listingId: string;
+  title: string;
+  image: string | null;
+  /** Total units currently held across the listing (sum of variant holds). */
+  reservedCount: number;
+  /** Units still buyable right now (after holds + sold). */
+  buyable: number;
+  /** Total physical units in stock (quantity - soldCount). */
+  inStock: number;
+  /** True when nothing is buyable because the remaining stock is all held. */
+  fullyReserved: boolean;
+  soldByPhd: boolean;
+  soldByAsboRc: boolean;
+  facilitatedByPhd: boolean;
+  updatedAt: number;
+  /** Per-variant hold breakdown (empty for non-variant listings). */
+  variants: { id: string; name: string; reservedCount: number; buyable: number }[];
+}
+
+/**
+ * Admin-only: every live listing that currently has reserved (held) units, for
+ * the Click & Collect page. Sorted most-recently-updated first. Returns [] for
+ * non-admins. Reservations never touch stock or the ASBO-RC ledger.
+ */
+export async function getReservedListings(): Promise<ReservedListingSummary[]> {
+  try {
+    const session = await auth();
+    if (session?.user?.role !== "admin") return [];
+
+    // Live listings only (drafts live in a separate index and aren't buyable).
+    const listings = await getListings(1000, { includeSold: false });
+
+    const summaries: ReservedListingSummary[] = [];
+    for (const l of listings) {
+      if (l.hasVariations) {
+        const heldVariants = l.variants.filter((v) => Math.max(0, v.reservedCount ?? 0) > 0);
+        const reservedCount = heldVariants.reduce((s, v) => s + Math.max(0, v.reservedCount ?? 0), 0);
+        if (reservedCount <= 0) continue;
+        const buyable = l.variants.reduce(
+          (s, v) => s + Math.max(0, v.quantity - v.soldCount - Math.max(0, v.reservedCount ?? 0)),
+          0
+        );
+        const inStock = l.variants.reduce((s, v) => s + Math.max(0, v.quantity - v.soldCount), 0);
+        summaries.push({
+          listingId: l.listingId,
+          title: l.title,
+          image: l.images[0] ?? null,
+          reservedCount,
+          buyable,
+          inStock,
+          fullyReserved: buyable <= 0 && inStock > 0,
+          soldByPhd: l.soldByPhd,
+          soldByAsboRc: l.soldByAsboRc,
+          facilitatedByPhd: l.facilitatedByPhd,
+          updatedAt: l.updatedAt,
+          variants: heldVariants.map((v) => ({
+            id: v.id,
+            name: v.name,
+            reservedCount: Math.max(0, v.reservedCount ?? 0),
+            buyable: Math.max(0, v.quantity - v.soldCount - Math.max(0, v.reservedCount ?? 0)),
+          })),
+        });
+      } else {
+        const reservedCount = Math.max(0, l.reservedCount || 0);
+        if (reservedCount <= 0) continue;
+        const inStock = Math.max(0, l.quantity - l.soldCount);
+        const buyable = Math.max(0, inStock - reservedCount);
+        summaries.push({
+          listingId: l.listingId,
+          title: l.title,
+          image: l.images[0] ?? null,
+          reservedCount,
+          buyable,
+          inStock,
+          fullyReserved: buyable <= 0 && inStock > 0,
+          soldByPhd: l.soldByPhd,
+          soldByAsboRc: l.soldByAsboRc,
+          facilitatedByPhd: l.facilitatedByPhd,
+          updatedAt: l.updatedAt,
+          variants: [],
+        });
+      }
+    }
+
+    return summaries.sort((a, b) => b.updatedAt - a.updatedAt);
+  } catch (error) {
+    console.error("Failed to get reserved listings:", error);
+    return [];
   }
 }
 

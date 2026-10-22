@@ -279,6 +279,11 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
             Sold by PHD
           </span>
         )}
+        {listing.facilitatedByPhd && !listing.soldByPhd && !listing.soldByAsboRc && status !== "sold" && (
+          <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md bg-indigo-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white shadow">
+            Facilitated by PHD
+          </span>
+        )}
       </Link>
 
       <div className="flex flex-1 flex-col gap-1 p-3">
@@ -301,6 +306,18 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
         <p className="text-base font-bold text-amber-600 dark:text-amber-400">
           {hasVariations ? `from ${formatPrice(listing.price)}` : formatPrice(listing.price)}
         </p>
+        {/* "Facilitated by PHD" owner payout — SENSITIVE: shown ONLY to the
+            listing owner and admins, never to other buyers. For variant
+            listings the payout varies per option, so we just flag it. */}
+        {listing.facilitatedByPhd && (viewerId === listing.userId || isAdmin) && (
+          <p className="mt-0.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+            {hasVariations
+              ? "Your payout set per option"
+              : listing.ownerPayoutPrice != null
+              ? `Your payout: ${formatPrice(listing.ownerPayoutPrice)}`
+              : `Your payout: ${formatPrice(listing.price)} (full price)`}
+          </p>
+        )}
         {hasVariations && (
           <p className="mt-0.5 line-clamp-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
             {variants.length} {listing.variationLabel || "option"}

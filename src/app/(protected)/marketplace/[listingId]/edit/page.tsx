@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getListingById } from "@/actions/marketplace";
+import { getAllUsers } from "@/actions/admin/users";
 import { ListingForm } from "@/components/marketplace/ListingForm";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,13 @@ export default async function EditListingPage({ params }: EditListingPageProps) 
     redirect(`/marketplace/${listingId}`);
   }
 
+  // Admins can reassign the listing to another member; load the member list for
+  // the picker. Non-admins get an empty list (the picker stays hidden).
+  const members =
+    session?.user?.role === "admin"
+      ? (await getAllUsers()).map((m) => ({ id: m.id, name: m.name, email: m.email, image: m.image }))
+      : [];
+
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-2xl space-y-6">
@@ -47,7 +55,7 @@ export default async function EditListingPage({ params }: EditListingPageProps) 
           </p>
         </div>
 
-        <ListingForm mode="edit" listing={listing} viewerRole={session?.user?.role} />
+        <ListingForm mode="edit" listing={listing} viewerRole={session?.user?.role} members={members} />
       </div>
     </div>
   );

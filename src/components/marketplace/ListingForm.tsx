@@ -23,9 +23,22 @@ interface ListingFormProps {
    * admin/ASBO-RC-only controls are shown. The server actions re-check anyway.
    */
   viewerRole?: "admin" | "moderator" | "member" | "asbo-rc";
+  /**
+   * Admin-only (create mode): the list of members an admin can create a listing
+   * on behalf of. Empty for non-admins, which hides the picker. When a member
+   * is chosen, the listing is owned by them (shows under their profile).
+   */
+  members?: MemberOption[];
 }
 
-export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
+interface MemberOption {
+  id: string;
+  name: string;
+  email: string;
+  image?: string | null;
+}
+
+export function ListingForm({ mode, listing, viewerRole, members = [] }: ListingFormProps) {
   const router = useRouter();
   const { data: session } = useSession();
   const [isPending, startTransition] = useTransition();
@@ -56,12 +69,27 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
   const [soldByAsboRc, setSoldByAsboRc] = useState(listing?.soldByAsboRc ?? false);
   const [soldByPhd, setSoldByPhd] = useState(listing?.soldByPhd ?? false);
   const [saveAsDraft, setSaveAsDraft] = useState(listing?.isDraft ?? false);
+  // Admin "sell on behalf of" / owner reassignment. In create mode this starts
+  // empty (the admin owns it unless they pick someone). In edit mode it starts
+  // as the listing's current owner so admins can change it. `memberQuery` is the
+  // search text for filtering the member list.
+  const [onBehalfOfUserId, setOnBehalfOfUserId] = useState(
+    mode === "edit" ? listing?.userId ?? "" : ""
+  );
+  const [memberQuery, setMemberQuery] = useState("");
+  // "Facilitated by PHD" — available to every seller. PHD sells the item on the
+  // owner's behalf at the track; the owner is paid `ownerPayoutPrice` and the
+  // club keeps the rest. Separate from ASBO-RC consignment.
+  const [facilitatedByPhd, setFacilitatedByPhd] = useState(listing?.facilitatedByPhd ?? false);
+  const [ownerPayoutPrice, setOwnerPayoutPrice] = useState(
+    listing?.ownerPayoutPrice != null ? String(listing.ownerPayoutPrice) : ""
+  );
 
   // Variants (available to all sellers). Each has its own price + stock.
   const [hasVariations, setHasVariations] = useState(listing?.hasVariations ?? false);
   const [variationLabel, setVariationLabel] = useState(listing?.variationLabel ?? "");
   const [variants, setVariants] = useState<
-    { id?: string; name: string; price: string; consignmentPrice: string; quantity: string }[]
+    { id?: string; name: string; price: string; consignmentPrice: string; ownerPayoutPrice: string; quantity: string }[]
   >(
     listing?.variants?.length
       ? listing.variants.map((v) => ({
@@ -69,20 +97,21 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
           name: v.name,
           price: String(v.price),
           consignmentPrice: v.consignmentPrice != null ? String(v.consignmentPrice) : "",
+          ownerPayoutPrice: v.ownerPayoutPrice != null ? String(v.ownerPayoutPrice) : "",
           quantity: String(v.quantity),
         }))
-      : [{ name: "", price: "", consignmentPrice: "", quantity: "1" }]
+      : [{ name: "", price: "", consignmentPrice: "", ownerPayoutPrice: "", quantity: "1" }]
   );
 
   const [error, setError] = useState<string | null>(null);
 
   const addVariant = () =>
-    setVariants((vs) => [...vs, { name: "", price: "", consignmentPrice: "", quantity: "1" }]);
+    setVariants((vs) => [...vs, { name: "", price: "", consignmentPrice: "", ownerPayoutPrice: "", quantity: "1" }]);
   const removeVariant = (i: number) =>
     setVariants((vs) => (vs.length > 1 ? vs.filter((_, idx) => idx !== i) : vs));
   const updateVariant = (
     i: number,
-    field: "name" | "price" | "consignmentPrice" | "quantity",
+    field: "name" | "price" | "consignmentPrice" | "ownerPayoutPrice" | "quantity",
     value: string
   ) => setVariants((vs) => vs.map((v, idx) => (idx === i ? { ...v, [field]: value } : v)));
 
@@ -90,6 +119,21 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
   // Prefer the server-resolved role (reliable under impersonation); fall back
   // to the client session only if a role wasn't passed in.
   const role = viewerRole ?? session?.user?.role;
+  // The member picker is admin-only and needs a member list. Shown in both
+  // create mode (sell on behalf of) and edit mode (reassign the owner).
+  const canSellOnBehalf = role === "admin" && members.length > 0;
+  const selectedMember = members.find((m) => m.id === onBehalfOfUserId) ?? null;
+  // Filter the member list by the search text (name or email). Cap the rendered
+  // list so a large membership doesn't render thousands of rows.
+  const filteredMembers = (() => {
+    const q = memberQuery.trim().toLowerCase();
+    const list = q
+      ? members.filter(
+          (m) => m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q)
+        )
+      : members;
+    return list.slice(0, 50);
+  })();
   // Only admins and ASBO-RC partners may flag an item as ASBO-RC consignment.
   const canSellForAsboRc = role === "admin" || role === "asbo-rc";
   // Only admins control the standalone "Sold by PHD" badge. ASBO-RC partners
@@ -97,11 +141,28 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
   const isAdmin = role === "admin";
   // ASBO consignment always implies the "Sold by PHD" badge.
   const effectiveSoldByPhd = soldByPhd || soldByAsboRc;
+  // Items handled in person at the track by PHD (no seller contact needed):
+  // Sold-by-PHD / ASBO consignment, OR a member's own item facilitated by PHD.
+  const handledAtTrack = effectiveSoldByPhd || facilitatedByPhd;
 
-  // Ticking "Provided by ASBO-RC" auto-selects "Sold by PHD".
+  // Ticking "Provided by ASBO-RC" auto-selects "Sold by PHD" and clears the
+  // member-facilitated flag (they're mutually exclusive — club stock vs a
+  // member's own item).
   const handleToggleAsboRc = (checked: boolean) => {
     setSoldByAsboRc(checked);
-    if (checked) setSoldByPhd(true);
+    if (checked) {
+      setSoldByPhd(true);
+      setFacilitatedByPhd(false);
+    }
+  };
+
+  // Ticking "Facilitated by PHD" clears the ASBO-RC consignment flag.
+  const handleToggleFacilitated = (checked: boolean) => {
+    setFacilitatedByPhd(checked);
+    if (checked) {
+      setSoldByAsboRc(false);
+      if (!isAdmin) setSoldByPhd(false);
+    }
   };
 
   const handleUploadComplete = (urls: string[]) => {
@@ -141,6 +202,18 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
       setError("Consignment price can't be higher than the sell price.");
       return;
     }
+    // Facilitated-by-PHD owner payout (non-variant): must be valid and not above
+    // the sell price (the club keeps the difference).
+    const ownerPayoutNum = ownerPayoutPrice.trim() === "" ? undefined : Number(ownerPayoutPrice);
+    if (
+      facilitatedByPhd &&
+      !hasVariations &&
+      ownerPayoutNum != null &&
+      (Number.isNaN(ownerPayoutNum) || ownerPayoutNum < 0 || ownerPayoutNum > priceNum)
+    ) {
+      setError("Owner payout can't be higher than the sell price.");
+      return;
+    }
     const quantityNum = Math.max(1, Math.floor(Number(quantity) || 1));
     if (!hasVariations && (Number.isNaN(quantityNum) || quantityNum < 1)) {
       setError("Quantity must be at least 1.");
@@ -153,6 +226,7 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
       name: string;
       price: number;
       consignmentPrice?: number;
+      ownerPayoutPrice?: number;
       quantity: number;
     }[] = [];
     if (hasVariations) {
@@ -166,6 +240,7 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
           name: v.name.trim(),
           price: Number(v.price),
           consignmentPrice: v.consignmentPrice.trim() === "" ? undefined : Number(v.consignmentPrice),
+          ownerPayoutPrice: v.ownerPayoutPrice.trim() === "" ? undefined : Number(v.ownerPayoutPrice),
           quantity: Math.floor(Number(v.quantity)),
         }))
         .filter((v) => v.name.length > 0);
@@ -190,6 +265,14 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
           setError(`Consignment price for "${r.name}" can't be higher than its sell price.`);
           return;
         }
+        if (
+          facilitatedByPhd &&
+          r.ownerPayoutPrice != null &&
+          (Number.isNaN(r.ownerPayoutPrice) || r.ownerPayoutPrice > r.price)
+        ) {
+          setError(`Owner payout for "${r.name}" can't be higher than its sell price.`);
+          return;
+        }
       }
       const names = rows.map((r) => r.name.toLowerCase());
       if (new Set(names).size !== names.length) {
@@ -198,9 +281,9 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
       }
       cleanVariants = rows;
     }
-    // Sold-by-PHD / ASBO consignment items are bought in person at the track,
-    // so no seller contact is required.
-    const boughtAtTrack = effectiveSoldByPhd || soldByAsboRc;
+    // Sold-by-PHD / ASBO consignment / facilitated items are handled in person
+    // at the track by PHD, so no seller contact is required.
+    const boughtAtTrack = handledAtTrack;
     if (!boughtAtTrack && !meetAtTrack && !contactValue.trim()) {
       setError("Add contact details, or tick 'Meet at the track'.");
       return;
@@ -239,6 +322,23 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
       // (undefined) when blank so it falls back to the sell price server-side.
       consignmentPrice:
         soldByAsboRc && !hasVariations && consignmentNum != null ? consignmentNum : undefined,
+      // Facilitated by PHD (available to everyone). The server re-reads the flag
+      // and, for facilitated non-variant items, the owner payout (blank =>
+      // undefined => owner gets the full sell price).
+      facilitatedByPhd,
+      ownerPayoutPrice:
+        facilitatedByPhd && !hasVariations && ownerPayoutNum != null ? ownerPayoutNum : undefined,
+      // Admin owner selection. Create: the chosen member (or undefined = self).
+      // Edit: the chosen owner, sent only when it differs from the current owner
+      // (a reassignment). The server re-checks the admin role + that the member
+      // exists, and ignores no-ops.
+      onBehalfOfUserId: canSellOnBehalf
+        ? isEdit
+          ? onBehalfOfUserId && onBehalfOfUserId !== listing?.userId
+            ? onBehalfOfUserId
+            : undefined
+          : onBehalfOfUserId || undefined
+        : undefined,
     };
 
     startTransition(async () => {
@@ -262,6 +362,122 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Admin: choose/reassign the listing owner. The chosen member becomes the
+          owner — it shows under their profile, not the admin's. In edit mode
+          this reassigns an existing listing to a different member. */}
+      {canSellOnBehalf && (
+        <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-500/30 dark:bg-amber-500/5">
+          <label className="block text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+            {isEdit ? "Listing owner" : "Listing on behalf of"}
+          </label>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            {isEdit
+              ? "Reassign this listing to a different member. It will appear under their profile and any payout is owed to them."
+              : "Pick a member to sell for. The listing will appear under their profile and any payout is owed to them. Leave as “Myself” to list it as your own."}
+          </p>
+
+          {selectedMember ? (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-300 bg-white px-3 py-2.5 dark:border-amber-500/40 dark:bg-zinc-900">
+              <span className="flex min-w-0 items-center gap-2.5">
+                {selectedMember.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={selectedMember.image}
+                    alt={selectedMember.name}
+                    className="h-8 w-8 shrink-0 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-black">
+                    {selectedMember.name.slice(0, 2).toUpperCase()}
+                  </span>
+                )}
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    {selectedMember.name}
+                  </span>
+                  <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
+                    {selectedMember.email}
+                  </span>
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  // Reopen the member search. Create: empty => list as myself.
+                  // Edit: an empty selection submits as "no change" (keeps the
+                  // current owner) unless a different member is then picked.
+                  setOnBehalfOfUserId("");
+                  setMemberQuery("");
+                }}
+                className="shrink-0 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                Change
+              </button>
+            </div>
+          ) : (
+            <>
+              <input
+                type="text"
+                value={memberQuery}
+                onChange={(e) => setMemberQuery(e.target.value)}
+                placeholder="Search members by name or email…"
+                className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder-zinc-400 transition-colors focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              />
+              {memberQuery.trim() && (
+                <div className="max-h-56 overflow-y-auto rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+                  {filteredMembers.length === 0 ? (
+                    <p className="px-3 py-3 text-sm text-zinc-500 dark:text-zinc-400">
+                      No members match &ldquo;{memberQuery.trim()}&rdquo;.
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                      {filteredMembers.map((m) => (
+                        <li key={m.id}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOnBehalfOfUserId(m.id);
+                              setMemberQuery("");
+                            }}
+                            className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-amber-50 dark:hover:bg-amber-500/10"
+                          >
+                            {m.image ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={m.image}
+                                alt={m.name}
+                                className="h-8 w-8 shrink-0 rounded-full object-cover"
+                              />
+                            ) : (
+                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-300 text-xs font-bold text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
+                                {m.name.slice(0, 2).toUpperCase()}
+                              </span>
+                            )}
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                                {m.name}
+                              </span>
+                              <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
+                                {m.email}
+                              </span>
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+              <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                {isEdit
+                  ? "Pick a member to reassign this listing, or leave blank to keep the current owner."
+                  : "Listing as yourself unless you pick a member."}
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Images */}
       <div className="space-y-2">
         <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-300">
@@ -369,6 +585,36 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
             The price the ASBO-RC 7% split is based on. ASBO is owed 93% of this; anything the
             sell price above is kept entirely by Penthouse. Leave blank to use the sell price.
+          </p>
+        </div>
+      )}
+
+      {/* Owner payout — "Facilitated by PHD" items only, non-variant. The amount
+          paid back to you (the original owner) when PHD sells it; the club keeps
+          the rest. Blank => you get the full sell price. */}
+      {facilitatedByPhd && !hasVariations && (
+        <div className="space-y-2 rounded-lg border border-indigo-200 bg-indigo-50/40 p-4 dark:border-indigo-500/30 dark:bg-indigo-500/5">
+          <label htmlFor="ownerPayoutPrice" className="block text-sm font-medium text-zinc-700 dark:text-zinc-200">
+            Your payout (£) <span className="text-zinc-500 dark:text-zinc-400">(optional)</span>
+          </label>
+          <input
+            id="ownerPayoutPrice"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="0.01"
+            value={ownerPayoutPrice}
+            onChange={(e) => setOwnerPayoutPrice(e.target.value)}
+            placeholder={price ? `Defaults to £${price}` : "Defaults to the sell price"}
+            className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder-zinc-400 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+          />
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            How much you get back when PHD sells this for you. Penthouse Drift keeps the
+            difference between the sell price and your payout
+            {price && ownerPayoutPrice && Number(price) >= Number(ownerPayoutPrice)
+              ? ` (£${(Number(price) - Number(ownerPayoutPrice)).toFixed(2)} to the club)`
+              : ""}
+            . Leave blank to keep the full sale price. Only you and admins ever see this figure.
           </p>
         </div>
       )}
@@ -527,6 +773,26 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
                     />
                   </div>
                 )}
+                {facilitatedByPhd && (
+                  <div className="w-24 space-y-1">
+                    {i === 0 && (
+                      <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+                        Payout (£)
+                      </label>
+                    )}
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step="0.01"
+                      value={v.ownerPayoutPrice}
+                      onChange={(e) => updateVariant(i, "ownerPayoutPrice", e.target.value)}
+                      placeholder={v.price ? v.price : "sell"}
+                      title="Your payout for this variation when PHD sells it (defaults to its sell price)"
+                      className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                    />
+                  </div>
+                )}
                 <div className="w-20 space-y-1">
                   {i === 0 && (
                     <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
@@ -593,6 +859,39 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
           </span>
         </span>
       </label>
+
+      {/* Facilitated by PHD — available to EVERY seller. PHD sells the item on
+          the owner's behalf at the track; the owner is paid their payout and the
+          club keeps the rest. Hidden when the item is ASBO-RC consignment (that
+          is club stock, a different thing). */}
+      {!soldByAsboRc && (
+        <label
+          htmlFor="facilitatedByPhd"
+          className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors ${
+            facilitatedByPhd
+              ? "border-indigo-400 bg-indigo-50 dark:border-indigo-500/50 dark:bg-indigo-500/10"
+              : "border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/50"
+          }`}
+        >
+          <input
+            id="facilitatedByPhd"
+            type="checkbox"
+            checked={facilitatedByPhd}
+            onChange={(e) => handleToggleFacilitated(e.target.checked)}
+            className="mt-0.5 h-5 w-5 shrink-0 rounded border-zinc-300 text-indigo-500 focus:ring-indigo-500 dark:border-zinc-600"
+          />
+          <span>
+            <span className="block text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+              Facilitated by Penthouse Drift
+            </span>
+            <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+              PHD handles the sale for you at the track. Set how much you want paid back below —
+              the club keeps the difference. Buyers only ever see the sale price; your payout is
+              shown only to you and the admins.
+            </span>
+          </span>
+        </label>
+      )}
 
       {/* Sold by ASBO-RC — admins & ASBO-RC partners only */}
       {/* Provided by ASBO-RC (consignment) — admins & ASBO-RC partners */}
@@ -711,11 +1010,21 @@ export function ListingForm({ mode, listing, viewerRole }: ListingFormProps) {
         </p>
       </div>
 
-      {/* Seller contact — hidden for Sold-by-PHD items (bought at the track). */}
-      {effectiveSoldByPhd ? (
-        <div className="rounded-lg border border-teal-200 bg-teal-50/50 p-4 text-sm text-teal-800 dark:border-teal-500/40 dark:bg-teal-500/10 dark:text-teal-200">
-          <span className="font-semibold">Sold by PHD:</span> buyers come to the track to buy in
-          person, so no seller contact is shown on this listing.
+      {/* Seller contact — hidden when PHD handles the sale at the track
+          (Sold-by-PHD, ASBO consignment, or facilitated items). */}
+      {handledAtTrack ? (
+        <div
+          className={`rounded-lg border p-4 text-sm ${
+            facilitatedByPhd && !effectiveSoldByPhd
+              ? "border-indigo-200 bg-indigo-50/50 text-indigo-800 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-200"
+              : "border-teal-200 bg-teal-50/50 text-teal-800 dark:border-teal-500/40 dark:bg-teal-500/10 dark:text-teal-200"
+          }`}
+        >
+          <span className="font-semibold">
+            {facilitatedByPhd && !effectiveSoldByPhd ? "Facilitated by PHD:" : "Sold by PHD:"}
+          </span>{" "}
+          buyers come to the track to buy in person, so no seller contact is shown on this
+          listing.
         </div>
       ) : (
       <div className="space-y-4 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">

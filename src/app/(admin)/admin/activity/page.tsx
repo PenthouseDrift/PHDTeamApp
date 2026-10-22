@@ -39,6 +39,13 @@ export default async function AdminReportsPage() {
       icon: "🏷️",
       color: "border-teal-500/40 bg-teal-500/10 text-teal-600 dark:text-teal-400",
     },
+    {
+      title: "Owner Payouts",
+      description: "Items facilitated by PHD — how much we owe each original owner, grouped and settlable",
+      href: "/admin/facilitated-sales",
+      icon: "🤝",
+      color: "border-indigo-500/40 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
+    },
   ];
 
   return (
