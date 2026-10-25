@@ -41,6 +41,10 @@ const nextConfig: NextConfig = {
     ],
   },
   experimental: {
+    // Reuse a page's data for 30s when someone revisits it (tab hopping, Back).
+    // Every action that changes data revalidates its paths, which clears this,
+    // so edits still show immediately; it only stops pointless re-renders.
+    staleTimes: { dynamic: 30 },
     serverActions: {
       bodySizeLimit: '20mb',
     },

@@ -99,7 +99,7 @@ function TopBarContent({
         {atRoot ? (
           <ThemeAppIcon size={28} className="h-7 w-7 shrink-0 overflow-hidden rounded-md" priority />
         ) : (
-          <Link href={backFor(pathname)} aria-label="Back" className={iconButton} prefetch>
+          <Link href={backFor(pathname)} aria-label="Back" className={iconButton}>
             <ShellIcon name="back" className="h-5 w-5" />
           </Link>
         )}
@@ -123,7 +123,7 @@ function TopBarContent({
           // The floating dev-tools cog sits in the top-right corner; keep clear of it.
           <span className="w-10 shrink-0" aria-hidden />
         ) : (
-          <Link href="/profile" aria-label="Profile" className="ml-1 shrink-0" prefetch>
+          <Link href="/profile" aria-label="Profile" className="ml-1 shrink-0">
             <Avatar user={user} size={32} />
           </Link>
         )}
@@ -191,7 +191,6 @@ export function NewAppShell({
             <Link
               key={tab.key}
               href={tab.href}
-              prefetch
               aria-current={activeTab === tab.key ? "page" : undefined}
               className={sidebarLink(activeTab === tab.key)}
             >
@@ -283,7 +282,6 @@ export function NewAppShell({
               <Link
                 key={tab.key}
                 href={tab.href}
-                prefetch
                 aria-current={active ? "page" : undefined}
                 className={`relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-semibold transition-colors ${
                   active ? "text-amber-600 dark:text-amber-400" : "text-zinc-500 dark:text-zinc-400"

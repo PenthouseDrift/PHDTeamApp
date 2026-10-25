@@ -492,7 +492,7 @@ export async function createListing(
  * vanish. Pass includeSold: false to hide sold ones (used by the public
  * website feed, which stays clean).
  */
-export async function getListings(
+async function loadListings(
   limit = 60,
   options: { includeSold?: boolean } = {}
 ): Promise<MarketplaceListing[]> {
@@ -517,6 +517,26 @@ export async function getListings(
       : listings;
   } catch (error) {
     console.error("Failed to get marketplace listings:", error);
+    // Rethrow so a Redis hiccup is never cached as "no listings".
+    throw error;
+  }
+}
+
+// Reading listings costs one HGETALL each, and the data is the same for every
+// viewer, so it is cached until the marketplace changes (all listing / stock /
+// reservation mutations bust the "marketplace" tag).
+const getListingsCached = unstable_cache(loadListings, ["marketplace-listings"], {
+  revalidate: 600,
+  tags: [MARKETPLACE_TAG],
+});
+
+export async function getListings(
+  limit = 60,
+  options: { includeSold?: boolean } = {}
+): Promise<MarketplaceListing[]> {
+  try {
+    return await getListingsCached(limit, options);
+  } catch {
     return [];
   }
 }
@@ -535,7 +555,7 @@ export interface MarketplacePage {
  * ones — so we only read the hashes for the requested page, not the whole set.
  * This keeps DB work proportional to the page size, not the catalogue size.
  */
-export async function getListingsPage(
+async function loadListingsPage(
   page = 1,
   perPage = 14,
   options: { query?: string; category?: string } = {}
@@ -611,6 +631,27 @@ export async function getListingsPage(
     return { listings, total, page: safePage, perPage: safePerPage, totalPages };
   } catch (error) {
     console.error("Failed to get marketplace page:", error);
+    throw error;
+  }
+}
+
+// One browse page (or one search / category result) is up to 14 HGETALLs, or
+// EVERY listing when filtering. Same for all viewers, so cache it per
+// page/query/category until the marketplace changes.
+const getListingsPageCached = unstable_cache(loadListingsPage, ["marketplace-page"], {
+  revalidate: 600,
+  tags: [MARKETPLACE_TAG],
+});
+
+export async function getListingsPage(
+  page = 1,
+  perPage = 14,
+  options: { query?: string; category?: string } = {}
+): Promise<MarketplacePage> {
+  try {
+    return await getListingsPageCached(page, perPage, options);
+  } catch {
+    const safePerPage = Math.max(1, Math.min(60, Math.floor(perPage) || 14));
     return { listings: [], total: 0, page: 1, perPage: safePerPage, totalPages: 0 };
   }
 }
@@ -665,6 +706,25 @@ export async function canViewDraft(listing: MarketplaceListing): Promise<boolean
  * Draft listings the current viewer may manage: admins see ALL drafts, ASBO-RC
  * users see only their own. Any other role gets an empty list. Newest-first.
  */
+// All drafts, read once and cached until the marketplace changes. Who may SEE
+// them is decided per viewer in getDraftListings, never inside the cache.
+const loadAllDrafts = unstable_cache(
+  async (limit: number): Promise<MarketplaceListing[]> => {
+    const ids = await redis.zrange(MARKETPLACE_DRAFTS_INDEX, 0, limit - 1);
+    if (!ids || ids.length === 0) return [];
+
+    const pipeline = redis.pipeline();
+    for (const id of ids) pipeline.hgetall(`listing:${id as string}`);
+    const rawResults = await pipeline.exec();
+
+    return rawResults
+      .map((raw) => toListing(raw as Record<string, unknown> | null))
+      .filter((l): l is MarketplaceListing => l !== null && l.isDraft);
+  },
+  ["marketplace-drafts"],
+  { revalidate: 600, tags: [MARKETPLACE_TAG] }
+);
+
 export async function getDraftListings(limit = 60): Promise<MarketplaceListing[]> {
   try {
     const session = await auth();
@@ -673,16 +733,7 @@ export async function getDraftListings(limit = 60): Promise<MarketplaceListing[]
     const isAsboRc = role === "asbo-rc";
     if (!isAdmin && !isAsboRc) return [];
 
-    const ids = await redis.zrange(MARKETPLACE_DRAFTS_INDEX, 0, limit - 1);
-    if (!ids || ids.length === 0) return [];
-
-    const pipeline = redis.pipeline();
-    for (const id of ids) pipeline.hgetall(`listing:${id as string}`);
-    const rawResults = await pipeline.exec();
-
-    const drafts = rawResults
-      .map((raw) => toListing(raw as Record<string, unknown> | null))
-      .filter((l): l is MarketplaceListing => l !== null && l.isDraft);
+    const drafts = await loadAllDrafts(limit);
 
     // ASBO-RC users only see their own drafts; admins see everyone's.
     return isAdmin ? drafts : drafts.filter((l) => l.userId === session?.user?.id);

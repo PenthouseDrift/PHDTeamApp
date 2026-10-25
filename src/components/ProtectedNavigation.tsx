@@ -85,7 +85,6 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
               <Link
                 key={item.href}
                 href={item.href}
-                prefetch={true}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
                     ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
@@ -99,7 +98,6 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
           })}
           <Link
             href="/profile"
-            prefetch={true}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
               pathname.startsWith("/profile")
                 ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100"
@@ -112,7 +110,6 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
           {user.role === "asbo-rc" && (
             <Link
               href="/asbo-rc"
-              prefetch={true}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 pathname.startsWith("/asbo-rc")
                   ? "bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400 font-bold"
@@ -126,7 +123,6 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
           {(user.role === "admin" || user.role === "moderator") && (
             <Link
               href="/admin"
-              prefetch={true}
               className={`flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 pathname.startsWith("/admin")
                   ? "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 font-bold"
@@ -165,7 +161,6 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
           {pathname !== homeHref ? (
             <Link
               href={homeHref}
-              prefetch={true}
               className="inline-flex items-center gap-1 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:text-amber-500 transition-colors bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700"
             >
               <span>←</span> Back
@@ -177,7 +172,7 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
         <div className="flex items-center gap-1.5 sm:gap-3">
           <QRPopover userId={user.id} variant="button" buttonText="Show QR code" />
           <NotificationsPopover userId={user.id} initialUnreadCount={unreadNotifications} />
-          <Link href="/profile" prefetch={true}>
+          <Link href="/profile">
             {user.image ? (
               <Image
                 src={user.image}
@@ -204,7 +199,6 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
             <Link
               key={item.href}
               href={item.href}
-              prefetch={true}
               className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
                 isActive ? "text-zinc-900 dark:text-zinc-100" : "text-zinc-400 dark:text-zinc-500"
               }`}
@@ -218,7 +212,6 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
         {(user.role === "admin" || user.role === "moderator") && (
           <Link
             href="/admin"
-            prefetch={true}
             className={`relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors ${
               pathname.startsWith("/admin") ? "text-amber-600 dark:text-amber-400 font-bold" : "text-amber-500 dark:text-amber-400"
             }`}

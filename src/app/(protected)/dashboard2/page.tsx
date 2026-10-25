@@ -58,9 +58,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
   let pendingId = params.checkout_id;
   if (!pendingId) {
-    pendingId =
-      ((await redis.get(`pending_wallet_checkout:${userId}`)) as string) ||
-      ((await redis.get(`pending_checkout:${userId}`)) as string);
+    // Both pointers in one command (this runs on every Home view).
+    const [walletPending, checkoutPending] = await redis.mget<[string | null, string | null]>(
+      `pending_wallet_checkout:${userId}`,
+      `pending_checkout:${userId}`
+    );
+    pendingId = walletPending || checkoutPending || undefined;
   }
   if (pendingId) {
     const checkout = await getCheckoutStatus(pendingId);

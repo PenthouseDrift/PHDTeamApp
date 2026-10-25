@@ -387,7 +387,6 @@ export default async function DashboardPage() {
             {winnerSelectionPending && (
               <Link
                 href="/admin/showcase-winners"
-                prefetch={true}
                 className="flex items-center justify-between rounded-xl bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-orange-500/20 border border-amber-500/40 p-3.5 text-xs font-bold text-zinc-900 dark:text-zinc-100 hover:border-amber-500 transition-all shadow-xs group"
               >
                 <div className="flex items-center gap-2.5">
@@ -422,7 +421,6 @@ export default async function DashboardPage() {
                 {/* Dashboard */}
                 <Link
                   href="/admin"
-                  prefetch={true}
                   className="relative flex flex-col items-center gap-2 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/60 p-3 hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:border-amber-200 dark:hover:border-amber-800 transition-colors group"
                 >
                   {winnerSelectionPending && (
@@ -444,7 +442,6 @@ export default async function DashboardPage() {
                 {/* Check Customer In (opens the check-in modal) */}
                 <Link
                   href="/admin/check-in?open=1"
-                  prefetch={true}
                   className="flex flex-col items-center gap-2 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/60 p-3 hover:bg-green-50 dark:hover:bg-green-950/30 hover:border-green-200 dark:hover:border-green-800 transition-colors group"
                 >
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-green-100 dark:bg-green-950/60 group-hover:bg-green-200 dark:group-hover:bg-green-900/60 transition-colors">
@@ -570,7 +567,6 @@ export default async function DashboardPage() {
               <Link
                 key={link.href}
                 href={link.href}
-                prefetch={true}
                 className="flex flex-col items-center gap-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 p-5 text-zinc-700 dark:text-zinc-200 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800/80 hover:text-zinc-900 dark:hover:text-white shadow-xs group"
               >
                 {link.icon}

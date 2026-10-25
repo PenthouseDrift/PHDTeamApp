@@ -144,7 +144,6 @@ export function AdminNavigation({ user, unreadNotifications = 0 }: AdminNavigati
               <Link
                 key={item.href}
                 href={item.href}
-                prefetch={true}
                 className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
                     ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold"
@@ -201,7 +200,6 @@ export function AdminNavigation({ user, unreadNotifications = 0 }: AdminNavigati
                       <Link
                         key={item.href}
                         href={item.href}
-                        prefetch={true}
                         className={`flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                           isActive
                             ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 font-bold"
@@ -228,7 +226,6 @@ export function AdminNavigation({ user, unreadNotifications = 0 }: AdminNavigati
         <div className="p-3 border-t border-zinc-200 dark:border-zinc-800">
           <Link
             href="/dashboard"
-            prefetch={true}
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold text-amber-600 dark:text-amber-500 hover:bg-amber-500/10 transition-colors"
           >
             <BackIcon className="w-5 h-5" />
@@ -247,7 +244,6 @@ export function AdminNavigation({ user, unreadNotifications = 0 }: AdminNavigati
               <Link
                 key={item.href}
                 href={item.href}
-                prefetch={true}
                 className={`flex flex-shrink-0 flex-col items-center justify-center gap-1 py-2 px-3 text-[10px] font-medium transition-colors min-w-[64px] ${
                   isActive ? "text-amber-500 font-bold" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
                 }`}
@@ -300,7 +296,6 @@ export function AdminNavigation({ user, unreadNotifications = 0 }: AdminNavigati
                   <Link
                     key={item.href}
                     href={item.href}
-                    prefetch={true}
                     onClick={() => setMoreOpen(false)}
                     className={`flex flex-col items-center justify-center gap-1 rounded-xl p-3 text-[11px] font-medium transition-colors ${
                       isActive
