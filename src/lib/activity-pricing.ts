@@ -49,6 +49,8 @@ export interface ActivityAmountInput {
   amount?: number;
   /** Unpaid cash check-in: no revenue until it's marked paid. */
   unpaid?: boolean;
+  /** Written off by staff: settled with no payment, so never revenue. */
+  waived?: boolean;
   isDev?: boolean;
 }
 
@@ -109,6 +111,7 @@ export function resolveActivityItem(entry: ActivityAmountInput): ActivityItem | 
   if (entry.isDev) return null;
   // Unpaid cash check-ins carry no revenue until marked paid.
   if (entry.unpaid) return null;
+  if (entry.waived) return null;
 
   if (entry.type === "checkin") {
     const item = checkInMethodToItem(entry.method);
@@ -165,6 +168,8 @@ export function resolveActivityAmount(entry: ActivityAmountInput): number | null
   if (entry.isDev) return null;
   // Unpaid cash check-ins show no amount until marked paid.
   if (entry.unpaid) return null;
+  // Waived balances were written off, so they never count.
+  if (entry.waived) return null;
 
   // A real charged amount already reflects any discount applied at the time.
   if (typeof entry.amount === "number" && entry.amount > 0) {

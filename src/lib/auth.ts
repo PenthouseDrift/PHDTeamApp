@@ -67,6 +67,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               theme: "light",
               createdAt: Date.now(),
             });
+            // Keep the member directory current (see lib/member-roster).
+            try {
+              const { addToMemberIndex } = await import("@/lib/member-roster");
+              const { bustMemberRoster, bustAdminMembers } = await import("@/lib/cache-bust");
+              await addToMemberIndex(stableId);
+              bustMemberRoster();
+              bustAdminMembers();
+            } catch (err) {
+              console.error("[Auth] Member index update failed:", err);
+            }
           } else {
             // Existing user — use the role and theme from Redis
             token.role = (existing.role as "admin" | "moderator" | "member" | "asbo-rc") || "member";
@@ -116,14 +126,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           (session.user as any).customAvatar = token.customAvatar;
         }
         
-        // Developer Mode Impersonation
+        // Developer Mode Impersonation. "member" = plain member; "member_active"
+        // = member WITH an active membership (display-only, no Redis writes).
         if (process.env.NODE_ENV === "development") {
           const cookieStore = await cookies();
           const impersonate = cookieStore.get("dev_impersonate_role")?.value;
-          if (impersonate === "member") {
+          if (impersonate === "member" || impersonate === "member_active") {
             // Add a flag so the UI knows we are impersonating
             (session.user as any).realRole = session.user.role;
             session.user.role = "member";
+            if (impersonate === "member_active") {
+              (session.user as any).devFakeMembership = true;
+            }
           }
         }
       }

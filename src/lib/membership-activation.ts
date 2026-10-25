@@ -1,6 +1,7 @@
 import { redis } from "@/lib/redis";
 import { logActivity } from "@/lib/activity";
 import { clearPendingCheckout } from "@/lib/pending-checkouts";
+import { bustAdminMembers } from "@/lib/cache-bust";
 
 /** Returns 23:59:59.999 UTC on the day that is 28 days after `fromDate` */
 function endOfDay28(fromDate: Date): number {
@@ -68,7 +69,14 @@ export async function processSuccessfulPaymentReference(
   checkoutId: string,
   amount: number = 0,
   currency: string = "GBP"
-): Promise<{ success: boolean; itemType: FinalizerItemType; memberId: string; guestName?: string }> {
+): Promise<{
+  success: boolean;
+  itemType: FinalizerItemType;
+  memberId: string;
+  guestName?: string;
+  /** True when the member's auto check-in setting used the pass they just bought to check them in. */
+  autoCheckedIn?: boolean;
+}> {
   let memberId = "";
   let itemType: FinalizerItemType = "membership";
   let quantity = 1;
@@ -199,6 +207,7 @@ export async function processSuccessfulPaymentReference(
   // 3. Process payment idempotently based on itemType
   if (itemType === "membership") {
     await processSuccessfulMembershipPayment(memberId, checkoutId);
+    bustAdminMembers();
     // Guard the activity log so the same checkout isn't logged twice when both
     // the webhook and the finalize endpoint run for one payment.
     if (await claim(`payment:logged:${checkoutId}`)) {
@@ -207,7 +216,9 @@ export async function processSuccessfulPaymentReference(
     await clearPendingCheckout(checkoutId);
     return { success: true, itemType: "membership", memberId, guestName };
   } else if (itemType === "daypass") {
+    let autoCheckedIn = false;
     if (await claim(`payment:processed:${checkoutId}`)) {
+      bustAdminMembers();
       const walletData = await redis.hgetall(`wallet:${memberId}`);
       const currentPasses = Number(walletData?.dayPasses) || 0;
       const currentRentals = Number(walletData?.rentalHours) || 0;
@@ -219,11 +230,18 @@ export async function processSuccessfulPaymentReference(
         updatedAt: Date.now(),
       });
       await recordPurchase("daypass", quantity);
+      // Bought for themselves (not a guest) and auto check-in is on: use it now.
+      if (!guestName) {
+        const { tryAutoCheckIn } = await import("@/lib/auto-checkin");
+        autoCheckedIn = await tryAutoCheckIn(memberId, "day_pass");
+      }
     }
     await clearPendingCheckout(checkoutId);
-    return { success: true, itemType: "daypass", memberId, guestName };
+    return { success: true, itemType: "daypass", memberId, guestName, autoCheckedIn };
   } else if (itemType === "rental") {
+    let autoCheckedIn = false;
     if (await claim(`payment:processed:${checkoutId}`)) {
+      bustAdminMembers();
       const walletData = await redis.hgetall(`wallet:${memberId}`);
       const currentPasses = Number(walletData?.dayPasses) || 0;
       const currentRentals = Number(walletData?.rentalHours) || 0;
@@ -235,9 +253,13 @@ export async function processSuccessfulPaymentReference(
         updatedAt: Date.now(),
       });
       await recordPurchase("rental", quantity);
+      if (!guestName) {
+        const { tryAutoCheckIn } = await import("@/lib/auto-checkin");
+        autoCheckedIn = await tryAutoCheckIn(memberId, "rental");
+      }
     }
     await clearPendingCheckout(checkoutId);
-    return { success: true, itemType: "rental", memberId, guestName };
+    return { success: true, itemType: "rental", memberId, guestName, autoCheckedIn };
   } else if (itemType === "marketplace") {
     if (await claim(`payment:processed:${checkoutId}`)) {
       const saleCurrency = storedCurrency || currency;
@@ -330,6 +352,20 @@ export async function processSuccessfulPaymentReference(
         }
       } catch (e) {
         console.error("Marketplace order creation failed:", e);
+      }
+
+      // 2b. If the buyer had reserved any of these items, turn those reservations
+      //     into this purchase: release the held units (they're sold now) and
+      //     link the reservation to the order so it leaves their "Reserved" list.
+      try {
+        const { consumeReservationsForPurchase } = await import("@/lib/marketplace-reservations");
+        await consumeReservationsForPurchase(
+          memberId,
+          saleLines.map((l) => ({ listingId: l.listingId, variantId: l.variantId, quantity: l.quantity })),
+          orderId
+        );
+      } catch (e) {
+        console.error("Marketplace reservation consume failed:", e);
       }
 
       // 3. Record the sale in the activity log (online revenue). One entry for
