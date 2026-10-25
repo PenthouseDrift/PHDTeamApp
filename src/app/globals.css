@@ -151,3 +151,29 @@ body {
   flex-shrink: 0;
   white-space: nowrap;
 }
+
+/* Card maker printing: only the print layer (a direct child of <body>) prints. */
+[data-card-print] {
+  display: none;
+}
+@media print {
+  body > *:not([data-card-print]) {
+    display: none !important;
+  }
+  [data-card-print] {
+    display: block !important;
+    background: #fff;
+  }
+  [data-card-print] * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  html,
+  body {
+    background: #fff !important;
+  }
+  @page {
+    size: A4;
+    margin: 0;
+  }
+}

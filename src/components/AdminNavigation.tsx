@@ -46,6 +46,7 @@ const adminMoreItems: AdminNavItem[] = [
   { href: "/admin/click-collect", label: "Click & Collect", icon: ShopIcon, adminOnly: true, match: ["/admin/click-collect"] },
   { href: "/admin/events", label: "Events", icon: EventsIcon },
   { href: "/admin/notes", label: "Notes", icon: NotesIcon },
+  { href: "/admin/card-maker", label: "Card Maker", icon: GalleryIcon, adminOnly: true },
   { href: "/admin/notifications", label: "Global Alerts", icon: BellIcon, adminOnly: true },
   { href: "/admin/showcase-winners", label: "Winners", icon: TrophyIcon, adminOnly: true },
   { href: "/admin/facebook", label: "Facebook", icon: ShareIcon, adminOnly: true },
