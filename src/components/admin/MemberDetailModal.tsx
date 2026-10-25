@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useEffect } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
@@ -21,6 +22,8 @@ interface MemberDetailModalProps {
   member: MemberWithMembership;
   onClose: () => void;
   onUpdate: (feedback: { type: "success" | "error"; message: string }) => void;
+  /** New experience: send "Check-In" to the check-in desk instead of the built-in options modal. */
+  checkInHref?: string;
 }
 
 function formatDate(ts: number) {
@@ -36,7 +39,7 @@ function getRemainingDays(expiresAt: number) {
   return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
 }
 
-export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: MemberDetailModalProps) {
+export function MemberDetailModal({ member: initialMember, onClose, onUpdate, checkInHref }: MemberDetailModalProps) {
   const { data: session } = useSession();
   const [isPending, startTransition] = useTransition();
   const [localWallet, setLocalWallet] = useState(initialMember.wallet);
@@ -335,7 +338,15 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate }: 
 
         <div className="p-5 space-y-5">
           {/* Single Check-In Button (Admin & Moderator) */}
-          {(isAdminViewer || isModeratorViewer) && (
+          {(isAdminViewer || isModeratorViewer) && checkInHref && (
+            <Link
+              href={checkInHref}
+              className="w-full py-3 px-4 rounded-xl bg-green-600 hover:bg-green-700 active:scale-[0.99] text-white font-black text-sm flex items-center justify-center gap-2 shadow-md transition-all"
+            >
+              <span>🟢</span> Check-In {m.name}
+            </Link>
+          )}
+          {(isAdminViewer || isModeratorViewer) && !checkInHref && (
             <button
               type="button"
               onClick={() => setShowCheckInModal(true)}

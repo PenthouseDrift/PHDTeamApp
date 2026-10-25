@@ -54,7 +54,7 @@ export function BasketClient() {
       <>
         <header className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Your basket</h1>
-          <Link
+          <Link data-page-back
             href="/marketplace"
             className="text-sm font-medium text-amber-600 transition-colors hover:text-amber-500"
           >

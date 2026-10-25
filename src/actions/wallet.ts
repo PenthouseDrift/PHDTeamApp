@@ -2,6 +2,7 @@
 
 import { redis } from "@/lib/redis";
 import { revalidatePath } from "next/cache";
+import { bustAdminMembers } from "@/lib/cache-bust";
 import type { Wallet, ActionResult } from "@/types";
 
 export async function getWallet(userId: string): Promise<ActionResult<Wallet>> {
@@ -52,6 +53,8 @@ export async function addDayPasses(
     });
 
     revalidatePath("/wallet");
+
+    bustAdminMembers();
     return {
       success: true,
       data: { userId, dayPasses: newPasses, rentalHours: wallet.rentalHours, updatedAt: now },
@@ -83,6 +86,8 @@ export async function addRentalHours(
     });
 
     revalidatePath("/wallet");
+
+    bustAdminMembers();
     return {
       success: true,
       data: { userId, dayPasses: wallet.dayPasses, rentalHours: newHours, updatedAt: now },
@@ -118,6 +123,7 @@ export async function redeemDayPass(
     if (!skipRevalidate) {
       try {
         revalidatePath("/wallet");
+        bustAdminMembers();
       } catch {
         // Safe fallback if called during server rendering
       }
@@ -154,6 +160,7 @@ export async function redeemRentalHour(
     if (!skipRevalidate) {
       try {
         revalidatePath("/wallet");
+        bustAdminMembers();
       } catch {
         // Safe fallback if called during server rendering
       }

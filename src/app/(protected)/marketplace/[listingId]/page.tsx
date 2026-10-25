@@ -8,6 +8,10 @@ import { ListingVariantPricing } from "@/components/marketplace/ListingVariantPr
 import { BuyAndCollect } from "@/components/marketplace/BuyAndCollect";
 import { isListingReserved } from "@/lib/marketplace-reserved";
 import { ShareButton } from "@/components/ShareButton";
+import { MemberReservations, ReserveForMemberButton } from "@/components/marketplace/MemberReservations";
+import { MyReservationNotice } from "@/components/marketplace/MyReservationNotice";
+import { PublishDraftButton } from "@/components/marketplace/PublishDraftButton";
+import { getReservationContext } from "@/actions/marketplace-reservations";
 
 export const dynamic = "force-dynamic";
 
@@ -90,7 +94,11 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
     notFound();
   }
 
-  const authorName = await getListingAuthorName(listing.userId);
+  const [authorName, reservationCtx] = await Promise.all([
+    getListingAuthorName(listing.userId),
+    // Viewer-specific: your own holds, plus every holder for admins only.
+    getReservationContext(),
+  ]);
   const viewerId = session?.user?.id ?? "";
   const isStaff = session?.user?.role === "admin" || session?.user?.role === "moderator";
   const canManage = viewerId === listing.userId || isStaff;
@@ -104,11 +112,47 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
   // Effectively reserved = nothing buyable remains due to a hold (not sold).
   const reservedView = isListingReserved(listing);
 
+  // Reservations. A member only ever gets their own; an admin also gets holders.
+  const myReservations = reservationCtx.mine[listing.listingId] ?? [];
+  const adminReservations = reservationCtx.all[listing.listingId] ?? [];
+  const myHeld = myReservations.reduce((s, r) => s + r.quantity, 0);
+  const myHeldFor = (variantId: string) =>
+    myReservations.filter((r) => r.variantId === variantId).reduce((s, r) => s + r.quantity, 0);
+  const memberHeldFor = (variantId?: string) =>
+    adminReservations.filter((r) => (r.variantId ?? "") === (variantId ?? "")).reduce((s, r) => s + r.quantity, 0);
+  // Admins can reserve any live listing for a member.
+  const canReserve = isAdmin && listing.status !== "sold" && !listing.isDraft;
+
+  // Drafts can't be bought or reserved until they're published.
+  const showBuyBox = !listing.isDraft && listing.status === "available" && listing.atTrack && (!reservedView || myHeld > 0);
+
+  // Admin-only "Reserve for member": sits directly under Add to basket inside
+  // the Buy box, or on its own when the Buy box isn't shown.
+  const reserveButton = (where: "inBox" | "standalone") => (
+    <ReserveForMemberButton
+      listingId={listing.listingId}
+      hasVariations={listing.hasVariations}
+      variationLabel={listing.variationLabel}
+      free={Math.max(0, listing.quantity - listing.soldCount - Math.max(0, listing.reservedCount))}
+      variants={listing.variants.map((v) => ({
+        id: v.id,
+        name: v.name,
+        free: Math.max(0, v.quantity - v.soldCount - Math.max(0, v.reservedCount ?? 0)),
+        anonHeld: 0,
+      }))}
+      className={
+        where === "inBox"
+          ? "flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-amber-600/60 bg-white/60 px-4 py-3 text-sm font-bold text-amber-800 transition-colors hover:bg-white disabled:opacity-40 dark:bg-zinc-950/40 dark:text-amber-300 dark:hover:bg-zinc-950/70"
+          : "inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 text-sm font-bold text-amber-800 transition-colors hover:bg-amber-100 disabled:opacity-40 dark:border-amber-700/50 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/20"
+      }
+    />
+  );
+
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl space-y-6">
         {/* Back */}
-        <Link
+        <Link data-page-back
           href="/marketplace"
           className="inline-flex items-center gap-1 text-sm font-medium text-zinc-500 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
         >
@@ -153,34 +197,57 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
 
             {/* Reserved hold — item is being held for a buyer; no one can buy it
                 right now, but it is NOT sold. */}
-            {listing.status !== "sold" && reservedView && (
+            {listing.status !== "sold" && reservedView && myHeld === 0 && (
               <div className="flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
                 <span>🔖</span>
                 <span>This item is reserved and is not currently available to buy.</span>
               </div>
             )}
 
+            {/* Drafts: say why there's no buy / reserve option, and offer to publish. */}
+            {listing.isDraft && (
+              <div className="space-y-3 rounded-xl border border-dashed border-amber-400 bg-amber-50 p-4 dark:border-amber-500/50 dark:bg-amber-500/10">
+                <div>
+                  <p className="text-sm font-black text-amber-900 dark:text-amber-200">This listing is a draft</p>
+                  <p className="text-xs text-amber-800/80 dark:text-amber-200/70">
+                    Only you and admins can see it. Buying and reserving switch on once it&apos;s published.
+                  </p>
+                </div>
+                {canManage && <PublishDraftButton listingId={listing.listingId} />}
+              </div>
+            )}
+
+            {/* Only the member it's reserved for sees this. */}
+            {listing.status !== "sold" && <MyReservationNotice reservations={myReservations} />}
+
             {/* Online Buy & Collect — shown at the top so buyers see the primary
                 action first. Available items physically at the track can be paid
                 for online via SumUp and collected from staff. Hidden while
                 reserved. */}
-            {listing.status === "available" && listing.atTrack && !reservedView && (
+            {showBuyBox && (
               <BuyAndCollect
+                footer={canReserve ? reserveButton("inBox") : undefined}
                 listingId={listing.listingId}
                 price={listing.price}
                 title={listing.title}
                 image={listing.images[0]}
-                available={Math.max(0, listing.quantity - listing.soldCount - Math.max(0, listing.reservedCount))}
+                available={
+                  Math.max(0, listing.quantity - listing.soldCount - Math.max(0, listing.reservedCount)) +
+                  (listing.hasVariations ? 0 : myHeld)
+                }
                 hasVariations={listing.hasVariations}
                 variationLabel={listing.variationLabel}
                 variants={listing.variants.map((v) => ({
                   id: v.id,
                   name: v.name,
                   price: v.price,
-                  available: Math.max(0, v.quantity - v.soldCount - Math.max(0, v.reservedCount ?? 0)),
+                  available: Math.max(0, v.quantity - v.soldCount - Math.max(0, v.reservedCount ?? 0)) + myHeldFor(v.id),
                 }))}
               />
             )}
+
+            {/* Admin only, when the Buy box isn't showing (e.g. fully reserved): same button, standalone. */}
+            {canReserve && !showBuyBox && reserveButton("standalone")}
 
             {/* Owner/staff management (incl. "Record a sale") — shown near the
                 top so staff can record sales without scrolling. Hidden for
@@ -197,10 +264,28 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
                   initialSoldCount={listing.soldCount}
                   soldByAsboRc={listing.soldByAsboRc}
                   hasVariations={listing.hasVariations}
-                  initialReservedCount={listing.reservedCount}
-                  isAdmin={session?.user?.role === "admin"}
-                  canReserve={(listing.soldByPhd || listing.soldByAsboRc) && !listing.hasVariations}
                 />
+                {canReserve && (
+                  <div className="mt-3">
+                    <MemberReservations
+                      listingId={listing.listingId}
+                      hasVariations={listing.hasVariations}
+                      variationLabel={listing.variationLabel}
+                      free={Math.max(0, listing.quantity - listing.soldCount - Math.max(0, listing.reservedCount))}
+                      anonHeld={Math.max(0, listing.reservedCount - memberHeldFor())}
+                      variants={listing.variants.map((v) => {
+                        const held = Math.max(0, v.reservedCount ?? 0);
+                        return {
+                          id: v.id,
+                          name: v.name,
+                          free: Math.max(0, v.quantity - v.soldCount - held),
+                          anonHeld: Math.max(0, held - memberHeldFor(v.id)),
+                        };
+                      })}
+                      reservations={adminReservations}
+                    />
+                  </div>
+                )}
               </div>
             )}
 

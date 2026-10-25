@@ -54,6 +54,7 @@ export default async function AdminReportsPage() {
         {/* Header */}
         <div className="flex items-center gap-3 border-b border-zinc-200 dark:border-zinc-800 pb-6">
           <Link
+            data-page-back
             href="/admin"
             className="inline-flex items-center gap-1 text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
           >

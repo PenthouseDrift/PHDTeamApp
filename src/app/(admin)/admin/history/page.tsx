@@ -17,6 +17,7 @@ export default async function CheckInHistoryPage({
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
       <div>
         <Link
+          data-page-back
           href="/admin/activity"
           className="inline-flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-amber-500 transition-colors mb-1"
         >

@@ -2,6 +2,9 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getUserOrders } from "@/actions/orders";
 import Link from "next/link";
+import { getDashboardVersion } from "@/lib/dashboard-pref";
+import { getMyReservations } from "@/actions/marketplace-reservations";
+import { ReservedOrderCard } from "@/components/marketplace/ReservedOrderCard";
 
 export const dynamic = "force-dynamic";
 
@@ -11,26 +14,47 @@ export default async function OrdersPage() {
     redirect("/");
   }
 
-  const orders = await getUserOrders(session.user.id);
+  // getDashboardVersion is request-memoised, so this shares the layout's read.
+  const [orders, version, reservations] = await Promise.all([
+    getUserOrders(session.user.id),
+    getDashboardVersion(session.user.id),
+    // Items an admin has reserved for this member. Paid ones turn into real
+    // orders (below) and drop off this list.
+    getMyReservations(),
+  ]);
+  const isNew = version === "new";
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 pb-20">
-      {/* Header */}
-      <div className="sticky top-0 z-30 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800">
-        <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/marketplace" className="text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors" aria-label="Back to Marketplace">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-            </Link>
-            <h1 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">My Orders</h1>
+    <div className={isNew ? "" : "min-h-screen bg-zinc-50 dark:bg-zinc-950 pb-20"}>
+      {/* Classic header. The new shell supplies its own top bar and Back button. */}
+      {!isNew && (
+        <div className="sticky top-0 z-30 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800">
+          <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Link href="/marketplace" className="text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors" aria-label="Back to Marketplace">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </Link>
+              <h1 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">My Orders</h1>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
-        {orders.length === 0 ? (
+        {reservations.length > 0 && (
+          <section aria-label="Reserved for you" className="space-y-3">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+              Reserved for you
+            </h2>
+            {reservations.map((r) => (
+              <ReservedOrderCard key={r.id} reservation={r} />
+            ))}
+          </section>
+        )}
+
+        {orders.length === 0 && reservations.length > 0 ? null : orders.length === 0 ? (
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 text-center shadow-sm">
             <span className="text-4xl mb-4 block">🧾</span>
             <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">No Orders Yet</h3>

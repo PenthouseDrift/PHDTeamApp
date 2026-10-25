@@ -2,12 +2,29 @@
 
 import { redis } from "@/lib/redis";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import type { ActionResult } from "@/types";
 import { isUserCheckedInToday } from "@/actions/admin/checkins";
 import { redeemDayPass, redeemRentalHour } from "@/actions/wallet";
 import { createRentalSession } from "@/actions/admin/rentals";
 import { logActivity } from "@/lib/activity";
 import { recordCheckInCount } from "@/lib/checkin-count";
+
+/**
+ * DEV-ONLY: true when an admin is impersonating a "member with membership" via
+ * the dev tools (dev_impersonate_role=member_active). Lets the membership
+ * check-in succeed end-to-end for local testing without writing a fake
+ * membership record. Always false in production.
+ */
+async function isDevFakeMembershipActive(): Promise<boolean> {
+  if (process.env.NODE_ENV !== "development") return false;
+  try {
+    const cookieStore = await cookies();
+    return cookieStore.get("dev_impersonate_role")?.value === "member_active";
+  } catch {
+    return false;
+  }
+}
 
 export async function performSelfCheckIn(
   userId: string,
@@ -50,11 +67,16 @@ export async function performSelfCheckIn(
 
     if (method === "membership") {
       const isMembershipActive = membershipData && Number(membershipData.expiresAt) > now;
-      if (!isMembershipActive) {
+      // Dev-only: allow the check-in when impersonating a member-with-membership
+      // (no real record exists). Never applies in production.
+      const devBypass = !isMembershipActive && (await isDevFakeMembershipActive());
+      if (!isMembershipActive && !devBypass) {
         return { success: false, error: "Your 28-day membership is not active" };
       }
       checkInMethod = "qr";
-      successMessage = `Checked in with 28-Day Membership! Have a great track session 🏎️`;
+      successMessage = devBypass
+        ? `[DEV] Checked in as impersonated member (membership) 🏎️`
+        : `Checked in with 28-Day Membership! Have a great track session 🏎️`;
     } else if (method === "day_pass") {
       const redeemRes = await redeemDayPass(userId, skipRevalidate);
       if (!redeemRes.success) {

@@ -5,6 +5,14 @@ import { auth } from "@/lib/auth";
 import type { ActionResult } from "@/types";
 import { getListingById } from "@/actions/marketplace";
 import { variantBuyable } from "@/lib/marketplace-reserved";
+import { listActiveForUser, type ReservationRecord } from "@/lib/marketplace-reservations";
+
+/** Units this buyer personally has reserved on a listing (or one variant). */
+function heldBy(mine: ReservationRecord[], listingId: string, variantId?: string): number {
+  return mine
+    .filter((r) => r.listingId === listingId && (r.variantId ?? "") === (variantId ?? ""))
+    .reduce((s, r) => s + r.quantity, 0);
+}
 
 /**
  * Start a SumUp Click & Collect checkout for a marketplace listing.
@@ -40,8 +48,11 @@ export async function createMarketplaceCheckout(
     // Reserved units are being held for a buyer — block purchase when none are
     // buyable. For a plain listing that's quantity - soldCount - reservedCount;
     // for a variant the chosen variant's buyable count is checked below.
+    // A member's own reservation is theirs to buy, so it counts as buyable for them.
+    const mine = await listActiveForUser(buyerId);
     if (!listing.hasVariations) {
-      const buyable = listing.quantity - listing.soldCount - Math.max(0, listing.reservedCount);
+      const buyable =
+        listing.quantity - listing.soldCount - Math.max(0, listing.reservedCount) + heldBy(mine, listing.listingId);
       if (buyable <= 0 && listing.quantity - listing.soldCount > 0) {
         return { success: false, error: "This item is currently reserved" };
       }
@@ -67,7 +78,7 @@ export async function createMarketplaceCheckout(
       if (variant.quantity - variant.soldCount <= 0) {
         return { success: false, error: "That option has sold out" };
       }
-      if (variantBuyable(variant) <= 0) {
+      if (variantBuyable(variant) + heldBy(mine, listing.listingId, variant.id) <= 0) {
         return { success: false, error: "That option is currently reserved" };
       }
       unitPrice = variant.price;
@@ -222,6 +233,8 @@ export async function createMarketplaceBasketCheckout(
 
     const resolved: CheckoutLine[] = [];
     let amount = 0;
+    // The buyer's own reservations count as buyable for them (not for others).
+    const mine = await listActiveForUser(buyerId);
 
     for (const line of requested) {
       const listing = await getListingById(line.listingId);
@@ -244,7 +257,7 @@ export async function createMarketplaceBasketCheckout(
         }
         const variant = listing.variants.find((v) => v.id === line.variantId);
         if (!variant) return { success: false, error: `An option for "${listing.title}" is no longer available` };
-        buyable = variantBuyable(variant);
+        buyable = variantBuyable(variant) + heldBy(mine, listing.listingId, variant.id);
         if (buyable <= 0) {
           return { success: false, error: `"${listing.title} — ${variant.name}" is sold out or reserved` };
         }
@@ -252,7 +265,8 @@ export async function createMarketplaceBasketCheckout(
         label = `${listing.title} — ${variant.name}`;
         resolvedVariantId = variant.id;
       } else {
-        buyable = listing.quantity - listing.soldCount - Math.max(0, listing.reservedCount);
+        buyable =
+          listing.quantity - listing.soldCount - Math.max(0, listing.reservedCount) + heldBy(mine, listing.listingId);
         if (buyable <= 0) {
           return { success: false, error: `"${listing.title}" is sold out or reserved` };
         }

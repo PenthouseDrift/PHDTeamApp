@@ -46,6 +46,9 @@ function getInitials(name: string | null | undefined): string {
 
 export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelectionPending = false }: ProtectedNavigationProps) {
   const pathname = usePathname();
+  // The "home" the mobile back button returns to: the new dashboard's pages
+  // (/dashboard2/...) go back to /dashboard2, everything else to /dashboard.
+  const homeHref = pathname.startsWith("/dashboard2") ? "/dashboard2" : "/dashboard";
 
   return (
     <>
@@ -159,9 +162,9 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
       {/* Mobile top header */}
       <header className="pwa-mobile-header fixed top-0 left-0 right-0 z-40 flex md:hidden items-center justify-between px-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/95 backdrop-blur-sm">
         <div className="flex items-center gap-2">
-          {pathname !== "/dashboard" ? (
+          {pathname !== homeHref ? (
             <Link
-              href="/dashboard"
+              href={homeHref}
               prefetch={true}
               className="inline-flex items-center gap-1 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:text-amber-500 transition-colors bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700"
             >

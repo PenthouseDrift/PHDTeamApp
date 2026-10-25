@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import { getMembership } from "@/actions/membership";
@@ -102,11 +103,20 @@ export default async function DashboardPage() {
   const isAdminOrMod = session.user.role === "admin" || session.user.role === "moderator";
   const isAsboRc = session.user.role === "asbo-rc";
 
+  // Members who switched on the new dashboard (Profile -> New dashboard) are sent
+  // straight there. The member record is needed below anyway, so it's read once
+  // up front (no extra Redis command) and opted-in members skip the rest of the
+  // fetching entirely.
+  const memberData = await redis.hgetall(`member:${session.user.id}`);
+  // The new experience is the default; only members who opted back to classic stay.
+  if (memberData?.dashboardVersion !== "classic") {
+    redirect("/dashboard2");
+  }
+
   // Fetch all dashboard data in parallel
-  const [result, walletRes, memberData, upcomingEvents, isCheckedInToday, winnerInfo, selfCheckInActive, asboRcReport] = await Promise.all([
+  const [result, walletRes, upcomingEvents, isCheckedInToday, winnerInfo, selfCheckInActive, asboRcReport] = await Promise.all([
     getMembership(session.user.id),
     getWallet(session.user.id),
-    redis.hgetall(`member:${session.user.id}`),
     getUpcomingEvents(),
     isUserCheckedInToday(session.user.id),
     isAdminOrMod ? getCurrentWeekWinnerInfo() : Promise.resolve(null),

@@ -15,26 +15,10 @@ async function _getAllMembers(): Promise<MemberWithMembership[]> {
   try {
     const membersMap = new Map<string, MemberWithMembership>();
 
-    // Scan all member:* keys
-    let cursor = 0;
-    const memberKeys: string[] = [];
-
-    do {
-      const [newCursor, keys] = await redis.scan(cursor, {
-        match: "member:*",
-        count: 200,
-      });
-      cursor = Number(newCursor);
-
-      for (const key of keys) {
-        const keyStr = key as string;
-        if (keyStr.split(":").length > 2) continue;
-        memberKeys.push(keyStr);
-      }
-    } while (cursor !== 0);
-
-    // Deduplicate
-    const uniqueKeys = [...new Set(memberKeys)];
+    // Member ids come from the maintained index (one SMEMBERS) rather than a
+    // SCAN over the whole keyspace.
+    const { getMemberIds } = await import("@/lib/member-roster");
+    const uniqueKeys = (await getMemberIds()).map((id) => `member:${id}`);
 
     // Fetch all member data in parallel (batch) using pipeline
     const pipeline = redis.pipeline();
@@ -111,10 +95,13 @@ async function _getAllMembers(): Promise<MemberWithMembership[]> {
   }
 }
 
+// Cached for 10 minutes and cleared (see lib/cache-bust) whenever membership,
+// wallet, discounts or roles change. Refreshing costs about 3 reads per member,
+// so this is deliberately not a 60-second cache.
 export const getAllMembers = unstable_cache(
   async () => _getAllMembers(),
   ["admin-members"],
-  { revalidate: 60, tags: ["admin-members"] }
+  { revalidate: 600, tags: ["admin-members"] }
 );
 
 

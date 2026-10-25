@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { getMemberHash } from "@/lib/dashboard-pref";
 import { redis } from "@/lib/redis";
 import { getOrCreateQRCode } from "@/actions/qr";
 import { QRDownloadButton } from "@/components/QRDownloadButton";
@@ -7,6 +8,9 @@ import { ProfileAvatarUpload } from "./ProfileAvatarUpload";
 import { ProfileNicknameForm } from "./ProfileNicknameForm";
 import { SignOutSection } from "./SignOutSection";
 import { ThemeToggle } from "./ThemeToggle";
+import { DashboardSwitch } from "./DashboardSwitch";
+import { AutoCheckInSettings } from "./AutoCheckInSettings";
+import { parseAutoCheckInPrefs } from "@/lib/auto-checkin-prefs";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +35,7 @@ export default async function ProfilePage() {
 
   // Get member & membership data from Redis
   const [memberData, membershipData] = await Promise.all([
-    redis.hgetall(`member:${user.id}`),
+    getMemberHash(user.id),
     redis.hgetall(`membership:${user.id}`),
   ]);
   const customAvatar = (memberData?.customAvatar as string) || null;
@@ -39,6 +43,8 @@ export default async function ProfilePage() {
   const avatarUrl = customAvatar || user.image || null;
   const displayName = nickname.trim() || user.name || "Member";
   const isActiveMember = Number(membershipData?.expiresAt) > Date.now();
+  const autoCheckIn = parseAutoCheckInPrefs(memberData);
+  const dashboardVersion: "classic" | "new" = memberData?.dashboardVersion === "classic" ? "classic" : "new";
 
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
@@ -142,6 +148,8 @@ export default async function ProfilePage() {
 
         {/* Sign Out */}
         <ThemeToggle />
+        <AutoCheckInSettings initialDayPass={autoCheckIn.dayPass} initialRental={autoCheckIn.rental} />
+        <DashboardSwitch initialVersion={dashboardVersion} />
         <SignOutSection />
       </div>
     </div>

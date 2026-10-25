@@ -26,7 +26,7 @@ export default async function AsboRcReportPage() {
       <div className="mx-auto max-w-5xl space-y-6">
         {/* Header */}
         <div className="border-b border-zinc-200 dark:border-zinc-800 pb-6 space-y-1">
-          <Link
+          <Link data-page-back
             href="/dashboard"
             className="inline-flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-amber-500 transition-colors"
           >

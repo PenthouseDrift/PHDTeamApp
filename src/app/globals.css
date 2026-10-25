@@ -127,3 +127,27 @@ body {
 .note-html p {
   margin: 0.25rem 0;
 }
+
+/* New app experience: the shell already provides a Back button, so hide
+   each feature page's own "back" link when rendered inside it. */
+.new-shell [data-page-back],
+.new-shell [data-classic-only] {
+  display: none;
+}
+
+/* New app experience: filter chips scroll in a single row instead of
+   wrapping onto several lines. */
+.new-shell [data-chip-row] {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin-inline: -1rem;
+  padding-inline: 1rem;
+}
+.new-shell [data-chip-row]::-webkit-scrollbar {
+  display: none;
+}
+.new-shell [data-chip-row] > * {
+  flex-shrink: 0;
+  white-space: nowrap;
+}

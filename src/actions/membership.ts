@@ -1,24 +1,60 @@
 "use server";
 
+import { bustAdminMembers } from "@/lib/cache-bust";
 import { redis } from "@/lib/redis";
+import { cookies } from "next/headers";
+import { auth } from "@/lib/auth";
 import type { Membership, ActionResult } from "@/types";
+
+/**
+ * DEV ONLY: when an admin uses the "Impersonate Member (with membership)" dev
+ * tool, report an active 28-day membership for THAT signed-in user so every page
+ * that goes through getMembership (old and new experience alike) sees it. Display
+ * only: nothing is written to Redis. Always null outside development, and never
+ * applied to a different user's id.
+ */
+async function devFakeMembership(userId: string): Promise<Membership | null> {
+  if (process.env.NODE_ENV !== "development") return null;
+  try {
+    const store = await cookies();
+    if (store.get("dev_impersonate_role")?.value !== "member_active") return null;
+    const session = await auth();
+    if (session?.user?.id !== userId) return null;
+    const now = new Date().getTime();
+    return {
+      userId,
+      status: "active",
+      purchasedAt: now,
+      expiresAt: now + 28 * 24 * 60 * 60 * 1000,
+      paymentRef: "dev-impersonation",
+    };
+  } catch {
+    return null;
+  }
+}
 
 export async function getMembership(
   userId: string
 ): Promise<ActionResult<Membership | null>> {
   try {
     const data = await redis.hgetall(`membership:${userId}`);
-    if (!data || Object.keys(data).length === 0) {
-      return { success: true, data: null };
+
+    let membership: Membership | null = null;
+    if (data && Object.keys(data).length > 0) {
+      membership = {
+        userId: data.userId as string,
+        status: Number(data.expiresAt) > Date.now() ? "active" : "expired",
+        purchasedAt: Number(data.purchasedAt),
+        expiresAt: Number(data.expiresAt),
+        paymentRef: (data.paymentRef as string) || "",
+      };
     }
 
-    const membership: Membership = {
-      userId: data.userId as string,
-      status: Number(data.expiresAt) > Date.now() ? "active" : "expired",
-      purchasedAt: Number(data.purchasedAt),
-      expiresAt: Number(data.expiresAt),
-      paymentRef: (data.paymentRef as string) || "",
-    };
+    // Dev tool: only stands in when there is no real ACTIVE membership.
+    if (membership?.status !== "active") {
+      const fake = await devFakeMembership(userId);
+      if (fake) return { success: true, data: fake };
+    }
 
     return { success: true, data: membership };
   } catch (error) {
@@ -101,14 +137,12 @@ export async function activateMembershipInPerson(
     // Resolve the admin id server-side if the client didn't pass one (avoids
     // the whole action silently no-op'ing when the client session is still
     // loading). Also enforces that only staff can activate memberships.
-    if (!adminId) {
-      const { auth } = await import("@/lib/auth");
-      const session = await auth();
-      if (!session?.user || (session.user.role !== "admin" && session.user.role !== "moderator")) {
-        return { success: false, error: "Unauthorized" };
-      }
-      adminId = session.user.id;
-    }
+    // Always verify staff server-side and use the session's id rather than a
+    // client-supplied one.
+    const { requireStaff } = await import("@/lib/staff-auth");
+    const staff = await requireStaff();
+    if (!staff) return { success: false, error: "Unauthorized" };
+    adminId = staff.id;
 
     const now = Date.now();
     const TWENTY_EIGHT_DAYS = 28 * 24 * 60 * 60 * 1000;
@@ -130,6 +164,8 @@ export async function activateMembershipInPerson(
       membershipStatus: "active",
       membershipExpiresAt: expiresAt,
     });
+
+    bustAdminMembers();
 
     // 3. Record Check-In for today if not already checked in
     const dedupKey = `checkin:dedup:${memberId}`;

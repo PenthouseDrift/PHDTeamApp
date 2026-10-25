@@ -8,6 +8,7 @@ import { getActiveRentals } from "@/actions/admin/rentals";
 import { MemberList } from "@/components/admin/MemberList";
 import { ActiveRentalsWidget } from "@/components/admin/ActiveRentalsWidget";
 import { RefreshDataButton } from "@/components/admin/RefreshDataButton";
+import { getDashboardVersion } from "@/lib/dashboard-pref";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ export default function AdminMembersPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <Link
+            data-page-back
             href="/admin"
             className="inline-flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-amber-500 transition-colors mb-1"
           >
@@ -70,13 +72,14 @@ async function MembersData() {
   const checkedInIds = new Set(todayCheckIns.map((c) => c.userId));
   const checkedInMembers = members.filter((m) => checkedInIds.has(m.member.id));
   const userRole = session?.user?.role || "member";
+  const useDesk = session?.user ? (await getDashboardVersion(session.user.id)) === "new" : false;
 
   return (
     <>
       <ActiveRentalsWidget initialRentals={activeRentals} />
       <div>
         <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-3">All Members</h2>
-        <MemberList members={members} checkedInMembers={checkedInMembers} userRole={userRole} />
+        <MemberList members={members} checkedInMembers={checkedInMembers} userRole={userRole} useDesk={useDesk} />
       </div>
     </>
   );

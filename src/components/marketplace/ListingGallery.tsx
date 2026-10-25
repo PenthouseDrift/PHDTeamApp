@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 interface ListingGalleryProps {
   images: string[];
@@ -20,7 +21,10 @@ interface ListingGalleryProps {
  * browser hitting the remote blob host directly — which fails on older devices
  * whose root store doesn't trust the blob host's cert chain.
  */
-function optimizedSrc(url: string, width = 1920, quality = 90): string {
+// Quality must be in `images.qualities`, which defaults to [75] in Next 16.
+// Any other value (e.g. 90) is rejected by the optimizer with a 400, which is
+// what produced the broken image in the zoom viewer.
+function optimizedSrc(url: string, width = 1920, quality = 75): string {
   return `/_next/image?url=${encodeURIComponent(url)}&w=${width}&q=${quality}`;
 }
 
@@ -72,7 +76,10 @@ function ImageZoomModal({
     dragRef.current = null;
   };
 
-  return (
+  // Portal to <body> so the overlay covers the whole viewport, including the
+  // new shell's top bar and bottom tabs (a transformed/scrolling ancestor
+  // would otherwise trap `position: fixed` inside the content area).
+  return createPortal(
     <div
       className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90"
       role="dialog"
@@ -114,7 +121,8 @@ function ImageZoomModal({
         }}
         draggable={false}
       />
-    </div>
+    </div>,
+    document.body
   );
 }
 

@@ -26,7 +26,7 @@ export default async function BeginnerAIPage({ params }: BeginnerAIPageProps) {
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl space-y-6">
         {/* Back Link */}
-        <Link
+        <Link data-page-back
           href={`/cars/${carId}`}
           className="inline-flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
         >

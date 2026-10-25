@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getUnreadCount } from "@/actions/notifications";
 import { AdminNavigation } from "@/components/AdminNavigation";
+import { NewAdminShell } from "@/components/admin-shell/NewAdminShell";
+import { getDashboardVersion } from "@/lib/dashboard-pref";
 
 export default async function AdminLayout({
   children,
@@ -33,6 +35,23 @@ export default async function AdminLayout({
     ...session.user,
     image: customAvatar || session.user.image || null,
   };
+
+  // Staff who opted into the new experience get the matching admin shell. One
+  // cached HGET (shared with any page that also asks), classic stays as-is.
+  let useNewShell = false;
+  try {
+    useNewShell = (await getDashboardVersion(session.user.id)) === "new";
+  } catch {
+    // Fall back to the classic shell.
+  }
+
+  if (useNewShell) {
+    return (
+      <NewAdminShell user={userWithAvatar} unreadNotifications={unreadCount}>
+        {children}
+      </NewAdminShell>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-zinc-50 dark:bg-zinc-950">

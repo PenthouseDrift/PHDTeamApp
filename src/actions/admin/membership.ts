@@ -2,6 +2,7 @@
 
 import { redis } from "@/lib/redis";
 import { revalidatePath } from "next/cache";
+import { bustAdminMembers } from "@/lib/cache-bust";
 import type { ActionResult } from "@/types";
 import { logActivity } from "@/lib/activity";
 import {
@@ -80,6 +81,7 @@ export async function activateMembership(
     });
 
     revalidatePath("/admin/members");
+    bustAdminMembers();
     return { success: true, data: { expiresAt: newExpiresAt } };
   } catch (error) {
     return {
@@ -115,6 +117,7 @@ export async function revokeMembership(
     });
 
     revalidatePath("/admin/members");
+    bustAdminMembers();
     return { success: true, data: null };
   } catch (error) {
     return {
@@ -144,6 +147,7 @@ export async function clearMembershipRecord(
     });
 
     revalidatePath("/admin/members");
+    bustAdminMembers();
     return { success: true, data: null };
   } catch (error) {
     return {
@@ -195,6 +199,7 @@ export async function adminAdjustWallet(
     });
 
     revalidatePath("/admin/members");
+    bustAdminMembers();
     return { success: true, data: { dayPasses: newDayPasses, rentalHours: newRentalHours } };
   } catch (error) {
     return {
@@ -236,6 +241,7 @@ export async function setMemberDiscounts(
     });
 
     revalidatePath("/admin/members");
+    bustAdminMembers();
     revalidatePath("/dashboard");
     revalidatePath("/wallet");
     revalidatePath("/membership/purchase");

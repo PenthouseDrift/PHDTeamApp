@@ -5,6 +5,7 @@ import { ListingCard } from "@/components/marketplace/ListingCard";
 import { MarketplaceSearch } from "@/components/marketplace/MarketplaceSearch";
 import { BasketShortcut } from "@/components/marketplace/BasketShortcut";
 import { MARKETPLACE_CATEGORIES } from "@/types";
+import { getReservationContext } from "@/actions/marketplace-reservations";
 
 export const dynamic = "force-dynamic";
 
@@ -34,11 +35,13 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
     : "";
   const isFiltered = Boolean(query || category);
   const requestedPage = Math.max(1, Number(pageParam) || 1);
-  const [{ listings, page, totalPages, total }, drafts] = await Promise.all([
+  const [{ listings, page, totalPages, total }, drafts, reservationCtx] = await Promise.all([
     getListingsPage(requestedPage, PER_PAGE, { query, category }),
     // Drafts only show on the first page of an unfiltered view, so they don't
     // clutter search results or deeper pages. Empty for non-admin/ASBO-RC.
     !isFiltered && requestedPage === 1 ? getDraftListings() : Promise.resolve([]),
+    // Viewer-specific: your own reservations, plus holders for admins only.
+    getReservationContext(),
   ]);
 
   // Build hrefs that preserve the active query + category.
@@ -118,8 +121,9 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
           </Link>
         </div>
 
-        {/* Quick-access shortcut cards — Basket / My Listings / My Orders */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+        {/* Quick-access shortcut cards — Basket / My Listings / My Orders.
+            Hidden in the new shell, where the top-bar basket and section chips cover them. */}
+        <div data-classic-only className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
           <BasketShortcut />
           {shortcuts.map((s) => (
             <Link
@@ -145,7 +149,7 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
 
         {/* Category filter chips. Each preserves the active search query and
             resets to page 1. "All" clears the category. */}
-        <div className="flex flex-wrap gap-2">
+        <div data-chip-row className="flex flex-wrap gap-2">
           <Link
             href={withParams({ category: null, page: 1 })}
             className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
@@ -196,6 +200,8 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
                   viewerId={viewerId}
                   isStaff={canManageDrafts}
                   isAdmin={isAdmin}
+                  reservations={reservationCtx.all[draft.listingId]}
+                  myReservations={reservationCtx.mine[draft.listingId]}
                 />
               ))}
             </div>
@@ -244,6 +250,8 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
                   viewerId={viewerId}
                   isStaff={isStaff}
                   isAdmin={isAdmin}
+                  reservations={reservationCtx.all[listing.listingId]}
+                  myReservations={reservationCtx.mine[listing.listingId]}
                 />
               ))}
             </div>

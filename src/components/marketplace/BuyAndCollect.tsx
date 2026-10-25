@@ -29,6 +29,8 @@ interface BuyAndCollectProps {
   /** Listing title + cover, used to label the item in the basket. */
   title: string;
   image?: string;
+  /** Extra controls shown under Add to basket (e.g. the admin-only reserve button). */
+  footer?: React.ReactNode;
 }
 
 function formatGBP(amount: number): string {
@@ -44,6 +46,7 @@ export function BuyAndCollect({
   available = 1,
   title,
   image,
+  footer,
 }: BuyAndCollectProps) {
   // `available` is already the buyable count (stock minus sold minus holds),
   // so a fully-held variant drops out here.
@@ -169,6 +172,7 @@ export function BuyAndCollect({
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-500 px-4 py-3 text-sm font-bold text-amber-700 transition-colors hover:bg-amber-100/60 dark:text-amber-300 dark:hover:bg-amber-950/30"
             />
           )}
+          {footer}
         </>
       )}
     </div>

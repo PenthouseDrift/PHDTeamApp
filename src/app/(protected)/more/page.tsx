@@ -1,12 +1,16 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
+import { redirectIfNewDashboard } from "@/lib/dashboard-pref";
 
 export const dynamic = "force-dynamic";
 
 export default async function MorePage() {
   const session = await auth();
   if (!session?.user) return null;
+
+  // New-experience members use the Menu tab instead.
+  await redirectIfNewDashboard(session.user.id, "/dashboard2/menu");
 
   const memberData = await redis.hgetall(`member:${session.user.id}`);
 

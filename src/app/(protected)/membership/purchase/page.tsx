@@ -4,6 +4,7 @@ import { getMembership } from "@/actions/membership";
 import { getRemainingDays } from "@/lib/membership-utils";
 import { processSuccessfulMembershipPayment } from "@/lib/membership-activation";
 import { getMemberDiscounts, priceFor, formatGBP, MEMBERSHIP_DURATION_DAYS } from "@/lib/pricing";
+import { redirectIfNewDashboard } from "@/lib/dashboard-pref";
 import { PurchaseButton } from "./PurchaseButton";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,9 @@ export default async function PurchaseMembershipPage() {
   if (!session?.user) {
     redirect("/auth/signin");
   }
+
+  // New-experience members buy from the Passes tab.
+  await redirectIfNewDashboard(session.user.id, "/dashboard2/passes");
 
   const result = await getMembership(session.user.id);
   const membership = result.success ? result.data : null;

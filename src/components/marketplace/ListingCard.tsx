@@ -5,10 +5,13 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { MarketplaceListing } from "@/types";
-import { deleteListing, setListingStatus, setListingSoldCount, sellAsboRcUnits, publishListing, adjustVariantSold, setListingReservedCount, setVariantReservedCount, addListingStock, addVariantStock } from "@/actions/marketplace";
+import { deleteListing, setListingStatus, setListingSoldCount, sellAsboRcUnits, publishListing, adjustVariantSold, addListingStock, addVariantStock } from "@/actions/marketplace";
 import { isListingReserved } from "@/lib/marketplace-reserved";
 import { ShareButton } from "@/components/ShareButton";
 import { AddToBasketButton } from "@/components/marketplace/AddToBasketButton";
+import { MemberReservations, ReserveForMemberButton } from "@/components/marketplace/MemberReservations";
+import { SheetFrame } from "@/components/admin/desk/desk-ui";
+import type { ReservationView } from "@/actions/marketplace-reservations";
 
 // Public base URL of the app (inlined at build time), used for share links.
 const APP_BASE_URL = (process.env.NEXT_PUBLIC_APP_URL || "https://app.penthousedrift.com").replace(/\/$/, "");
@@ -23,6 +26,10 @@ interface ListingCardProps {
   isStaff?: boolean;
   /** Whether the viewer is an admin specifically (reserve is admin-only). */
   isAdmin?: boolean;
+  /** Admin only: who each reservation on THIS listing is held for. */
+  reservations?: ReservationView[];
+  /** The viewer's own reservations on THIS listing (never anyone else's). */
+  myReservations?: ReservationView[];
 }
 
 function formatPrice(price: number): string {
@@ -34,7 +41,15 @@ function formatPrice(price: number): string {
   }).format(price);
 }
 
-export function ListingCard({ listing, authorName, viewerId, isStaff = false, isAdmin = false }: ListingCardProps) {
+export function ListingCard({
+  listing,
+  authorName,
+  viewerId,
+  isStaff = false,
+  isAdmin = false,
+  reservations = [],
+  myReservations = [],
+}: ListingCardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [status, setStatus] = useState(listing.status);
@@ -44,10 +59,19 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
   const [quantityState, setQuantityState] = useState(listing.quantity);
   const [addQty, setAddQty] = useState(1);
   const [variantAddQty, setVariantAddQty] = useState<Record<string, number>>({});
-  // Draft values for the "reserve N units" inputs (listing + per variant).
-  const [reserveInput, setReserveInput] = useState(0);
-  const [variantReserveInput, setVariantReserveInput] = useState<Record<string, number>>({});
   const [manageOpen, setManageOpen] = useState(false);
+
+  // Server-driven changes (reserving, cancelling, a purchase) arrive as a new
+  // listing prop after router.refresh(). Re-sync local copies when updatedAt moves.
+  const [syncedAt, setSyncedAt] = useState(listing.updatedAt);
+  if (syncedAt !== listing.updatedAt) {
+    setSyncedAt(listing.updatedAt);
+    setStatus(listing.status);
+    setSoldCount(listing.soldCount);
+    setVariants(listing.variants);
+    setReservedCount(Math.max(0, listing.reservedCount || 0));
+    setQuantityState(listing.quantity);
+  }
 
   const addStockToListing = () => {
     const n = Math.max(1, Math.floor(addQty) || 1);
@@ -80,12 +104,17 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
   };
 
   const hasVariations = listing.hasVariations;
-  // PHD/ASBO items only can be reserved, and only admins may do it.
-  const canReserve = isAdmin && (listing.soldByPhd || listing.soldByAsboRc);
+  // Admins can reserve any live listing for a member; nobody else can.
+  const canReserve = isAdmin;
+  // Units THIS viewer has reserved here (variant listings: summed across options).
+  const myHeld = myReservations.reduce((s, r) => s + r.quantity, 0);
+  const memberHeldFor = (variantId?: string) =>
+    reservations.filter((r) => (r.variantId ?? "") === (variantId ?? "")).reduce((s, r) => s + r.quantity, 0);
   // Whether the card should show the "Reserved" corner badge (no buyable units
   // left due to a hold, and not sold).
   const showReservedBadge =
     status !== "sold" &&
+    myHeld === 0 &&
     isListingReserved({
       status,
       reservedCount,
@@ -94,39 +123,6 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
       hasVariations,
       variants,
     });
-
-  // Set the listing-level hold to an absolute number of units (0 releases).
-  const setListingReserve = (units: number) => {
-    const n = Math.max(0, Math.floor(units) || 0);
-    startTransition(async () => {
-      const result = await setListingReservedCount(listing.listingId, n);
-      if (result.success) {
-        setReservedCount(result.data.reservedCount);
-        setReserveInput(result.data.reservedCount);
-        router.refresh();
-      } else {
-        alert(result.error);
-      }
-    });
-  };
-
-  // Set a variant's hold to an absolute number of units (0 releases).
-  const setVariantReserve = (variantId: string, units: number) => {
-    const n = Math.max(0, Math.floor(units) || 0);
-    startTransition(async () => {
-      const result = await setVariantReservedCount(listing.listingId, variantId, n);
-      if (result.success) {
-        const applied = result.data.reservedCount;
-        setVariants((vs) =>
-          vs.map((v) => (v.id === variantId ? { ...v, reservedCount: applied } : v))
-        );
-        setVariantReserveInput((m) => ({ ...m, [variantId]: applied }));
-        router.refresh();
-      } else {
-        alert(result.error);
-      }
-    });
-  };
 
   const adjustVariant = (variantId: string, delta: number) => {
     startTransition(async () => {
@@ -151,6 +147,8 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
   const listingShareUrl = `${APP_BASE_URL}/marketplace/${listing.listingId}`;
   // Buyable (non-variant) stock for the quick "Add to basket" on the card.
   const nonVariantBuyable = Math.max(0, quantityState - soldCount - reservedCount);
+  // The viewer's own reservation is theirs to buy, so it counts for them.
+  const myBuyable = nonVariantBuyable + (hasVariations ? 0 : myHeld);
   // A card can quick-add only a simple (non-variant), at-track, priced,
   // in-stock, non-sold, non-draft item. Variant items need the detail page to
   // pick an option, so they show a "Choose options" link instead.
@@ -160,7 +158,7 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
     status !== "sold" &&
     listing.atTrack &&
     listing.price > 0 &&
-    nonVariantBuyable > 0;
+    myBuyable > 0;
   // For ASBO-RC listings, quantity IS the live available stock (sold units live
   // in the ledger, not soldCount). For normal listings, available = quantity - sold.
   const quantity = Math.max(0, quantityState || 0);
@@ -264,33 +262,42 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
             {listing.images.length} photos
           </span>
         )}
-        {listing.isDraft && (
-          <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-md bg-zinc-900/85 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-300 shadow ring-1 ring-amber-400/50">
-            Draft
-          </span>
-        )}
-        {listing.atTrack && status !== "sold" && !listing.isDraft && (
-          <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-md bg-amber-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-black shadow">
-            📍 At the track
-          </span>
-        )}
-        {(listing.soldByPhd || listing.soldByAsboRc) && status !== "sold" && (
-          <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md bg-teal-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white shadow">
-            Sold by PHD
-          </span>
-        )}
-        {listing.facilitatedByPhd && !listing.soldByPhd && !listing.soldByAsboRc && status !== "sold" && (
-          <span className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md bg-indigo-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white shadow">
-            Facilitated by PHD
-          </span>
-        )}
+        {/* Left badges stack vertically so long labels (e.g. "Facilitated by PHD")
+            never collide with the photo count at the bottom-right. */}
+        <div className="absolute left-2 top-2 flex max-w-[calc(100%-1rem)] flex-col items-start gap-1">
+          {myHeld > 0 && status !== "sold" && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white shadow">
+              🔖 Reserved for you
+            </span>
+          )}
+          {listing.isDraft && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-zinc-900/85 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-300 shadow ring-1 ring-amber-400/50">
+              Draft
+            </span>
+          )}
+          {listing.atTrack && status !== "sold" && !listing.isDraft && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-amber-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-black shadow">
+              📍 At the track
+            </span>
+          )}
+          {(listing.soldByPhd || listing.soldByAsboRc) && status !== "sold" && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-teal-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white shadow">
+              Sold by PHD
+            </span>
+          )}
+          {listing.facilitatedByPhd && !listing.soldByPhd && !listing.soldByAsboRc && status !== "sold" && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-indigo-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white shadow">
+              Facilitated by PHD
+            </span>
+          )}
+        </div>
       </Link>
 
       <div className="flex flex-1 flex-col gap-1 p-3">
         <div className="flex items-start justify-between gap-2">
           <Link
             href={`/marketplace/${listing.listingId}`}
-            className="line-clamp-1 text-sm font-semibold text-zinc-900 hover:text-amber-600 dark:text-zinc-100 dark:hover:text-amber-400"
+            className="line-clamp-2 text-sm font-semibold leading-snug text-zinc-900 hover:text-amber-600 dark:text-zinc-100 dark:hover:text-amber-400"
           >
             {listing.title}
           </Link>
@@ -341,7 +348,7 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
             label={listing.title}
             unitPrice={listing.price}
             image={cover}
-            maxQuantity={nonVariantBuyable}
+            maxQuantity={myBuyable}
             className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-amber-500/70 py-1.5 text-xs font-bold text-amber-600 transition-colors hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
           />
         ) : hasVariations && status !== "sold" && listing.atTrack ? (
@@ -353,283 +360,227 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
           </Link>
         ) : null}
 
-        {canManage && (
+        {/* Admin: reserve straight from the card, right under Add to basket. */}
+        {canReserve && status !== "sold" && !listing.isDraft && (
           <div className="mt-2">
+            <ReserveForMemberButton
+              listingId={listing.listingId}
+              hasVariations={hasVariations}
+              variationLabel={listing.variationLabel}
+              free={nonVariantBuyable}
+              variants={variants.map((v) => ({
+                id: v.id,
+                name: v.name,
+                free: Math.max(0, v.quantity - v.soldCount - Math.max(0, v.reservedCount ?? 0)),
+                anonHeld: 0,
+              }))}
+            />
+          </div>
+        )}
+
+        {canManage && (
+          <>
             <button
               type="button"
-              onClick={() => setManageOpen((v) => !v)}
-              aria-expanded={manageOpen}
-              className="flex w-full items-center justify-center gap-1 rounded-lg border border-zinc-300 py-2 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100 active:bg-zinc-200 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              onClick={() => setManageOpen(true)}
+              aria-haspopup="dialog"
+              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-zinc-300 py-2 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100 active:bg-zinc-200 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
-              Manage
-              <svg
-                className={`h-3.5 w-3.5 transition-transform ${manageOpen ? "rotate-180" : ""}`}
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
               </svg>
+              Manage
             </button>
 
             {manageOpen && (
-              <div className="mt-2 flex flex-col gap-2">
-                {listing.isDraft && (
-                  <button
-                    type="button"
-                    onClick={handlePublish}
-                    disabled={isPending}
-                    className="rounded-lg bg-amber-500 py-2.5 text-center text-sm font-bold text-black transition-colors hover:bg-amber-400 active:bg-amber-600 disabled:opacity-50"
+              <SheetFrame
+                title={listing.title}
+                subtitle={listing.isDraft ? "Draft · manage listing" : "Manage listing"}
+                onClose={() => setManageOpen(false)}
+              >
+                {/* Quick actions */}
+                <div className="grid grid-cols-2 gap-2">
+                  {listing.isDraft && (
+                    <button
+                      type="button"
+                      onClick={handlePublish}
+                      disabled={isPending}
+                      className="col-span-2 min-h-12 rounded-xl bg-amber-500 text-sm font-black text-black transition-colors hover:bg-amber-400 disabled:opacity-50"
+                    >
+                      Publish listing
+                    </button>
+                  )}
+                  <Link
+                    href={`/marketplace/${listing.listingId}/edit`}
+                    className="flex min-h-12 items-center justify-center rounded-xl border border-zinc-300 text-sm font-bold text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
                   >
-                    Publish
-                  </button>
-                )}
-                <Link
-                  href={`/marketplace/${listing.listingId}/edit`}
-                  className="rounded-lg border border-zinc-300 py-2.5 text-center text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 active:bg-zinc-200 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                >
-                  Edit
-                </Link>
-                {/* Listing-level reserve (quantity hold) — admin, PHD/ASBO,
-                    non-variant, non-sold. Variant listings reserve per-option
-                    below. Reserving holds N units out of the buyable pool. */}
-                {canReserve && !hasVariations && status !== "sold" && (
-                  <div
-                    className={`flex flex-col gap-1.5 rounded-lg border px-2 py-2 ${
-                      reservedCount > 0
-                        ? "border-amber-400 bg-amber-50 dark:border-amber-500/50 dark:bg-amber-500/10"
-                        : "border-zinc-300 dark:border-zinc-700"
-                    }`}
+                    Edit
+                  </Link>
+                  <Link
+                    href={`/marketplace/${listing.listingId}`}
+                    className="flex min-h-12 items-center justify-center rounded-xl border border-zinc-300 text-sm font-bold text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                        {reservedCount > 0 ? `🔖 ${reservedCount} reserved` : "Reserve units"}
-                      </span>
-                      <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                        {Math.max(0, quantity - soldCount - reservedCount)} buyable
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="number"
-                        min={0}
-                        step={1}
-                        inputMode="numeric"
-                        aria-label="Units to reserve"
-                        value={reserveInput || reservedCount}
-                        onChange={(e) => setReserveInput(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
-                        className="h-7 w-14 rounded border border-zinc-300 bg-white px-1 text-center text-xs font-semibold text-zinc-800 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setListingReserve(reserveInput || reservedCount)}
-                        disabled={isPending}
-                        className="h-7 flex-1 rounded border border-amber-300 bg-amber-100 px-2 text-[11px] font-bold text-amber-700 transition-colors hover:bg-amber-200 disabled:opacity-50 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300"
-                      >
-                        Hold
-                      </button>
-                      {reservedCount > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setListingReserve(0)}
-                          disabled={isPending}
-                          className="h-7 rounded border border-zinc-300 px-2 text-[11px] font-bold text-zinc-600 transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                        >
-                          Release
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                    View
+                  </Link>
+                </div>
+
+                {/* Reserve for a member / see who holds what (admin only). */}
+                {canReserve && status !== "sold" && (
+                  <MemberReservations
+                    listingId={listing.listingId}
+                    hasVariations={hasVariations}
+                    variationLabel={listing.variationLabel}
+                    free={nonVariantBuyable}
+                    anonHeld={Math.max(0, reservedCount - memberHeldFor())}
+                    variants={variants.map((v) => {
+                      const held = Math.max(0, v.reservedCount ?? 0);
+                      return {
+                        id: v.id,
+                        name: v.name,
+                        free: Math.max(0, v.quantity - v.soldCount - held),
+                        anonHeld: Math.max(0, held - memberHeldFor(v.id)),
+                      };
+                    })}
+                    reservations={reservations}
+                  />
                 )}
-                {hasVariations ? (
-                  <div className="flex flex-col gap-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                      {listing.variationLabel || "Variations"}
-                    </span>
-                    {variants.map((v) => {
-                      const vAvail = Math.max(0, v.quantity - v.soldCount);
-                      const vReserved = Math.max(0, v.reservedCount ?? 0);
-                      const vBuyable = Math.max(0, vAvail - vReserved);
-                      return (
-                        <div
-                          key={v.id}
-                          className="flex flex-col gap-1.5 rounded-lg border border-zinc-300 px-2 py-1.5 dark:border-zinc-700"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                          <span className="min-w-0 flex-1 truncate text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                            {v.name}
-                            <span className="ml-1 text-zinc-400">{formatPrice(v.price)}</span>
-                          </span>
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              aria-label={`One fewer ${v.name} sold`}
-                              onClick={() => adjustVariant(v.id, -1)}
-                              disabled={isPending || v.soldCount <= 0}
-                              className="flex h-6 w-6 items-center justify-center rounded border border-zinc-300 text-sm font-bold text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                            >
-                              −
-                            </button>
-                            <span className="min-w-[3rem] text-center text-[11px] font-bold tabular-nums text-zinc-800 dark:text-zinc-200">
-                              {vAvail} left
-                            </span>
-                            <button
-                              type="button"
-                              aria-label={`One more ${v.name} sold`}
-                              onClick={() => adjustVariant(v.id, 1)}
-                              disabled={isPending || vAvail <= 0}
-                              className="flex h-6 w-6 items-center justify-center rounded border border-zinc-300 text-sm font-bold text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                            >
-                              +
-                            </button>
-                          </div>
-                          </div>
-                          {/* Reserve units of this variation (admin, PHD/ASBO). */}
-                          {canReserve && (
-                            <div
-                              className={`flex items-center gap-1.5 rounded px-1.5 py-1 ${
-                                vReserved > 0
-                                  ? "bg-amber-50 dark:bg-amber-500/10"
-                                  : ""
-                              }`}
-                            >
-                              <span className="flex-1 truncate text-[10px] font-semibold text-zinc-500 dark:text-zinc-400">
-                                {vReserved > 0 ? `🔖 ${vReserved} reserved` : "Reserve"}
-                                <span className="ml-1 text-zinc-400">· {vBuyable} buyable</span>
+
+                {/* Stock & sales */}
+                <section className="space-y-2" aria-label="Stock and sales">
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    {hasVariations ? listing.variationLabel || "Variations" : "Stock & sales"}
+                  </h3>
+
+                  {hasVariations ? (
+                    <>
+                      {variants.map((v) => {
+                        const vAvail = Math.max(0, v.quantity - v.soldCount);
+                        return (
+                          <div key={v.id} className="space-y-3 rounded-xl border border-zinc-200 p-3 dark:border-zinc-700">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="min-w-0 truncate text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                                {v.name}
+                                <span className="ml-1.5 font-medium text-zinc-400">{formatPrice(v.price)}</span>
                               </span>
+                              <span className="shrink-0 text-right leading-tight">
+                                <span className="block text-sm font-black tabular-nums text-zinc-900 dark:text-zinc-100">
+                                  {vAvail} left
+                                </span>
+                                <span className="block text-xs tabular-nums text-zinc-400">{v.soldCount} sold</span>
+                              </span>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => adjustVariant(v.id, 1)}
+                                disabled={isPending || vAvail <= 0}
+                                className="min-h-11 flex-1 rounded-lg bg-zinc-900 px-3 text-sm font-bold text-white transition-colors hover:bg-zinc-700 disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+                              >
+                                {vAvail <= 0 ? "Sold out" : `Mark 1 ${v.name} sold`}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => adjustVariant(v.id, -1)}
+                                disabled={isPending || v.soldCount <= 0}
+                                title="Undo the last sale"
+                                className="min-h-11 rounded-lg border border-zinc-300 px-3.5 text-sm font-semibold text-zinc-600 hover:bg-zinc-50 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                              >
+                                Undo 1
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-2 rounded-lg bg-emerald-50/70 p-2 dark:bg-emerald-950/20">
+                              <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">Add stock</span>
                               <input
                                 type="number"
-                                min={0}
+                                min={1}
                                 step={1}
                                 inputMode="numeric"
-                                aria-label={`Units of ${v.name} to reserve`}
-                                value={variantReserveInput[v.id] ?? vReserved}
+                                aria-label={`Units to add to ${v.name}`}
+                                value={variantAddQty[v.id] ?? 1}
                                 onChange={(e) =>
-                                  setVariantReserveInput((m) => ({
+                                  setVariantAddQty((m) => ({
                                     ...m,
-                                    [v.id]: Math.max(0, Math.floor(Number(e.target.value) || 0)),
+                                    [v.id]: Math.max(1, Math.floor(Number(e.target.value) || 1)),
                                   }))
                                 }
-                                className="h-6 w-11 rounded border border-zinc-300 bg-white px-1 text-center text-[11px] font-semibold text-zinc-800 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
+                                className="ml-auto h-10 w-16 rounded-lg border border-zinc-300 bg-white px-2 text-center text-sm font-semibold text-zinc-800 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                               />
                               <button
                                 type="button"
-                                onClick={() => setVariantReserve(v.id, variantReserveInput[v.id] ?? vReserved)}
+                                onClick={() => addStockToVariant(v.id)}
                                 disabled={isPending}
-                                className="h-6 rounded border border-amber-300 bg-amber-100 px-2 text-[10px] font-bold text-amber-700 transition-colors hover:bg-amber-200 disabled:opacity-50 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300"
+                                className="h-10 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
                               >
-                                Hold
+                                + Add
                               </button>
-                              {vReserved > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={() => setVariantReserve(v.id, 0)}
-                                  disabled={isPending}
-                                  className="h-6 rounded border border-zinc-300 px-1.5 text-[10px] font-bold text-zinc-600 transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                                >
-                                  ✕
-                                </button>
-                              )}
                             </div>
-                          )}
-                          {/* Add stock to this variation. */}
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              type="number"
-                              min={1}
-                              step={1}
-                              inputMode="numeric"
-                              aria-label={`Units to add to ${v.name}`}
-                              value={variantAddQty[v.id] ?? 1}
-                              onChange={(e) =>
-                                setVariantAddQty((m) => ({
-                                  ...m,
-                                  [v.id]: Math.max(1, Math.floor(Number(e.target.value) || 1)),
-                                }))
-                              }
-                              className="h-6 w-12 rounded border border-zinc-300 bg-white px-1 text-center text-[11px] font-semibold text-zinc-800 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => addStockToVariant(v.id)}
-                              disabled={isPending}
-                              className="h-6 rounded border border-emerald-300 bg-emerald-50 px-2 text-[10px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-400"
-                            >
-                              + Add stock
-                            </button>
                           </div>
-                        </div>
-                      );
-                    })}
-                    <p className="text-[10px] leading-snug text-zinc-400 dark:text-zinc-500">
-                      {isAsbo
-                        ? "Selling a variation logs it to the ASBO-RC ledger at that variation's price."
-                        : "Adjust how many of each variation have sold."}
-                    </p>
-                  </div>
-                ) : isAsbo ? (
-                  <>
-                    <div className="flex items-center justify-between gap-2 rounded-lg border border-teal-200 bg-teal-50/50 px-3 py-2 dark:border-teal-900/50 dark:bg-teal-950/20">
-                      <span className="text-xs font-semibold text-teal-700 dark:text-teal-300">
-                        {available} available
-                      </span>
-                      <button
-                        type="button"
-                        onClick={sellOne}
-                        disabled={isPending || available <= 0}
-                        className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-teal-500 disabled:opacity-40"
-                      >
-                        Record a sale
-                      </button>
-                    </div>
-                    <p className="text-[10px] leading-snug text-zinc-400 dark:text-zinc-500">
-                      Logs a sale to the ASBO-RC ledger and drops available by 1. Manage stock in Admin
-                      → Reports → ASBO-RC.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-300 px-2 py-1.5 dark:border-zinc-700">
-                      <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Sold</span>
-                      <div className="flex items-center gap-1.5">
+                        );
+                      })}
+                      <p className="text-xs leading-snug text-zinc-500 dark:text-zinc-400">
+                        {isAsbo
+                          ? "Selling a variation logs it to the ASBO-RC ledger at that variation's price."
+                          : "Mark 1 sold when one goes. Use Undo 1 if you tapped it by mistake."}
+                      </p>
+                    </>
+                  ) : isAsbo ? (
+                    <>
+                      <div className="flex items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50/60 p-3 dark:border-teal-900/50 dark:bg-teal-950/20">
+                        <span className="text-sm font-bold text-teal-800 dark:text-teal-300">{available} available</span>
                         <button
                           type="button"
-                          aria-label="Fewer sold"
-                          onClick={() => adjustSold(-1)}
-                          disabled={isPending || soldCount <= 0}
-                          className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-300 text-sm font-bold text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                          onClick={sellOne}
+                          disabled={isPending || available <= 0}
+                          className="min-h-11 rounded-lg bg-teal-600 px-4 text-sm font-bold text-white hover:bg-teal-500 disabled:opacity-40"
                         >
-                          −
-                        </button>
-                        <span className="min-w-[3.5rem] text-center text-xs font-bold tabular-nums text-zinc-800 dark:text-zinc-200">
-                          {soldCount}/{quantity}
-                        </span>
-                        <button
-                          type="button"
-                          aria-label="More sold"
-                          onClick={() => adjustSold(1)}
-                          disabled={isPending || soldCount >= quantity}
-                          className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-300 text-sm font-bold text-zinc-700 transition-colors hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                        >
-                          +
+                          Record a sale
                         </button>
                       </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleToggleSold}
-                      disabled={isPending}
-                      className="rounded-lg border border-zinc-300 py-2.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 active:bg-zinc-200 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                    >
-                      {status === "sold"
-                        ? multiUnit ? "Restock (mark available)" : "Mark available"
-                        : multiUnit ? "Mark all sold" : "Mark as sold"}
-                    </button>
-                    {/* Add stock — raises total quantity (and availability). */}
-                    <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50/50 px-2 py-1.5 dark:border-emerald-900/50 dark:bg-emerald-950/20">
-                      <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Add stock</span>
-                      <div className="flex items-center gap-1.5">
+                      <p className="text-xs leading-snug text-zinc-500 dark:text-zinc-400">
+                        Logs a sale to the ASBO-RC ledger and drops available by 1. Manage stock in Admin → Reports → ASBO-RC.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 p-3 dark:border-zinc-700">
+                        <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Sold</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            aria-label="Fewer sold"
+                            onClick={() => adjustSold(-1)}
+                            disabled={isPending || soldCount <= 0}
+                            className="flex h-10 w-10 items-center justify-center rounded-lg border border-zinc-300 text-lg font-bold text-zinc-700 hover:bg-zinc-50 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                          >
+                            −
+                          </button>
+                          <span className="min-w-[4rem] text-center text-sm font-black tabular-nums text-zinc-900 dark:text-zinc-100">
+                            {soldCount}/{quantity}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label="More sold"
+                            onClick={() => adjustSold(1)}
+                            disabled={isPending || soldCount >= quantity}
+                            className="flex h-10 w-10 items-center justify-center rounded-lg border border-zinc-300 text-lg font-bold text-zinc-700 hover:bg-zinc-50 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleToggleSold}
+                        disabled={isPending}
+                        className="min-h-12 w-full rounded-xl border border-zinc-300 text-sm font-bold text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      >
+                        {status === "sold"
+                          ? multiUnit ? "Restock (mark available)" : "Mark available"
+                          : multiUnit ? "Mark all sold" : "Mark as sold"}
+                      </button>
+                      {/* Add stock: raises total quantity (and availability). */}
+                      <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                        <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Add stock</span>
                         <input
                           type="number"
                           min={1}
@@ -638,31 +589,35 @@ export function ListingCard({ listing, authorName, viewerId, isStaff = false, is
                           aria-label="Units to add to stock"
                           value={addQty}
                           onChange={(e) => setAddQty(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
-                          className="h-7 w-14 rounded border border-zinc-300 bg-white px-1 text-center text-xs font-semibold text-zinc-800 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
+                          className="ml-auto h-10 w-16 rounded-lg border border-zinc-300 bg-white px-2 text-center text-sm font-semibold text-zinc-800 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
                         />
                         <button
                           type="button"
                           onClick={addStockToListing}
                           disabled={isPending}
-                          className="h-7 rounded-md border border-emerald-300 bg-emerald-100 px-2.5 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-200 disabled:opacity-50 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-400"
+                          className="h-10 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
                         >
                           + Add
                         </button>
                       </div>
-                    </div>
-                  </>
-                )}
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  disabled={isPending}
-                  className="rounded-lg border border-red-300 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 active:bg-red-100 disabled:opacity-50 dark:border-red-900/60 dark:text-red-400 dark:hover:bg-red-950/40"
-                >
-                  Delete
-                </button>
-              </div>
+                    </>
+                  )}
+                </section>
+
+                {/* Danger zone */}
+                <div className="border-t border-zinc-100 pt-3 dark:border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={isPending}
+                    className="min-h-12 w-full rounded-xl border border-red-300 text-sm font-bold text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:text-red-400 dark:hover:bg-red-950/40"
+                  >
+                    Delete listing
+                  </button>
+                </div>
+              </SheetFrame>
             )}
-          </div>
+          </>
         )}
       </div>
     </div>

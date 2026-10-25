@@ -10,6 +10,10 @@ import { getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
 import { getEventTiming } from "@/lib/event-utils";
 import { getActiveShopOrders } from "@/actions/orders";
 import { getReservedListings } from "@/actions/marketplace";
+import { getDashboardVersion } from "@/lib/dashboard-pref";
+import { NewAdminHome } from "@/components/admin/NewAdminHome";
+import { getUnpaidSummary } from "@/actions/admin/unpaid";
+import { UnpaidPanel } from "@/components/admin/UnpaidPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +22,17 @@ export default async function AdminDashboardPage() {
   if (!session?.user || (session.user.role !== "admin" && session.user.role !== "moderator")) return null;
 
   const isModerator = session.user.role === "moderator";
+
+  // New experience: the focused "Today" view. Classic keeps the command center below.
+  if ((await getDashboardVersion(session.user.id)) === "new") {
+    return (
+      <PullToRefresh>
+        <Suspense fallback={<div className="mx-auto h-64 max-w-3xl animate-pulse px-4 py-4"><div className="h-full rounded-2xl bg-zinc-200 dark:bg-zinc-800" /></div>}>
+          <NewAdminHome isModerator={isModerator} />
+        </Suspense>
+      </PullToRefresh>
+    );
+  }
 
   return (
     <PullToRefresh>
@@ -39,7 +54,7 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
   const isSaturday = day === 6;
 
   // Fetch overview metrics in parallel
-  const [members, todayCheckins, events, currentWinnerInfo, selfCheckInActive, activeRentals, clickCollectOrders, reservedListings] = await Promise.all([
+  const [members, todayCheckins, events, currentWinnerInfo, selfCheckInActive, activeRentals, clickCollectOrders, reservedListings, unpaidGroups] = await Promise.all([
     getAllMembers(),
     getTodayCheckIns(),
     getUpcomingEvents(),
@@ -52,6 +67,8 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
     // Admin-only: marketplace items with units currently reserved (held for a
     // buyer). Also surfaced on the same Click & Collect page. [] for moderators.
     getReservedListings(),
+    // Every outstanding unpaid check-in, from any event.
+    getUnpaidSummary(),
   ]);
 
   const pendingOrderCount = clickCollectOrders.length;
@@ -153,6 +170,7 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
 
         {/* Click & Collect orders — quick view of what's awaiting collection. */}
         {!isModerator && (
+          <div className="space-y-2">
           <Link
             href="/admin/click-collect"
             className="group flex items-center justify-between gap-4 rounded-2xl border border-emerald-500/40 bg-gradient-to-r from-emerald-500/10 to-teal-500/5 p-5 shadow-sm transition-all hover:shadow-md active:scale-[0.99]"
@@ -192,6 +210,16 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
               <span className="text-emerald-600 dark:text-emerald-400 group-hover:translate-x-0.5 transition-transform text-lg">→</span>
             </div>
           </Link>
+          <Link
+            href="/marketplace"
+            className="flex items-center justify-between gap-2 rounded-xl border border-teal-500/30 bg-teal-500/5 px-4 py-3 text-sm font-bold text-teal-700 transition-colors hover:bg-teal-500/10 dark:text-teal-300"
+          >
+            <span className="flex items-center gap-2">
+              <span aria-hidden>🏷️</span> Open the marketplace
+            </span>
+            <span aria-hidden>→</span>
+          </Link>
+          </div>
         )}
 
         {/* Self Check-in status — automated from event open/close times */}
@@ -237,6 +265,9 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
             </div>
           </div>
         )}
+
+        {/* People who checked in without paying (any event) */}
+        <UnpaidPanel groups={unpaidGroups} />
 
         {/* Action Needed Section */}
         {actionsNeeded.length > 0 && (

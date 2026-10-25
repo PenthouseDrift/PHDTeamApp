@@ -2,11 +2,21 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { toggleImpersonation, toggleForceSelfCheckIn } from "@/actions/dev";
+import {
+  toggleImpersonation,
+  toggleForceSelfCheckIn,
+  devAddWalletBalance,
+  devActivateMembership,
+} from "@/actions/dev";
 
 interface DevToolsPanelProps {
   /** Whether the admin is currently impersonating a member. */
   isImpersonating: boolean;
+  /**
+   * Which impersonation variant is active: "member" (no membership),
+   * "member_active" (with an active membership), or null (not impersonating).
+   */
+  impersonateVariant: "member" | "member_active" | null;
   /** The viewer's real (non-impersonated) role. */
   realRole: string;
   /** Whether the dev "force self check-in" override is active. */
@@ -18,10 +28,17 @@ interface DevToolsPanelProps {
  * button sits at the top-right of the screen; clicking it opens a small panel
  * of local-testing controls (impersonate member, force self check-in).
  */
-export function DevToolsPanel({ isImpersonating, realRole, forceSelfCheckin }: DevToolsPanelProps) {
+export function DevToolsPanel({
+  isImpersonating,
+  impersonateVariant,
+  realRole,
+  forceSelfCheckin,
+}: DevToolsPanelProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  // Declared before the dev-only early return below (rules of hooks).
+  const [actionNote, setActionNote] = useState<string | null>(null);
 
   if (process.env.NODE_ENV !== "development") return null;
 
@@ -29,9 +46,23 @@ export function DevToolsPanel({ isImpersonating, realRole, forceSelfCheckin }: D
   // any dev session, so the panel always shows in development.
   const canImpersonate = isImpersonating || realRole === "admin" || realRole === "moderator";
 
-  const handleToggleImpersonation = () => {
+  const isPlainMember = impersonateVariant === "member";
+  const isActiveMember = impersonateVariant === "member_active";
+
+  // Toggling a variant: turn it on (replacing the other), or off if already on.
+  const handleToggleVariant = (variant: "member" | "member_active") => {
+    const alreadyOn = impersonateVariant === variant;
     startTransition(async () => {
-      await toggleImpersonation(!isImpersonating);
+      await toggleImpersonation(!alreadyOn, variant);
+      router.refresh();
+    });
+  };
+
+  const runAction = (fn: () => Promise<{ success: boolean }>) => {
+    setActionNote(null);
+    startTransition(async () => {
+      const res = await fn();
+      setActionNote(res.success ? "Done — page refreshed." : "Failed (are you signed in?)");
       router.refresh();
     });
   };
@@ -83,13 +114,22 @@ export function DevToolsPanel({ isImpersonating, realRole, forceSelfCheckin }: D
 
           <div className="space-y-1">
             {canImpersonate && (
-              <DevToggleRow
-                label="Impersonate Member"
-                description="View the app as a regular member"
-                active={isImpersonating}
-                disabled={isPending}
-                onToggle={handleToggleImpersonation}
-              />
+              <>
+                <DevToggleRow
+                  label="Impersonate Member"
+                  description="View the app as a regular member (no membership)"
+                  active={isPlainMember}
+                  disabled={isPending}
+                  onToggle={() => handleToggleVariant("member")}
+                />
+                <DevToggleRow
+                  label="Impersonate Member (with membership)"
+                  description="View as a member with an active 28-day membership"
+                  active={isActiveMember}
+                  disabled={isPending}
+                  onToggle={() => handleToggleVariant("member_active")}
+                />
+              </>
             )}
 
             <DevToggleRow
@@ -100,9 +140,50 @@ export function DevToolsPanel({ isImpersonating, realRole, forceSelfCheckin }: D
               onToggle={handleToggleForceCheckin}
             />
           </div>
+
+          {/* One-tap test shortcuts. These write real data for YOUR account (no
+              payment), so you can exercise check-in and the wallet from any page. */}
+          <div className="mt-3 border-t border-zinc-200 pt-3 dark:border-zinc-700">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+              Test data (your account)
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              <DevActionButton disabled={isPending} onClick={() => runAction(() => devAddWalletBalance("daypass", 1))}>
+                +1 day pass
+              </DevActionButton>
+              <DevActionButton disabled={isPending} onClick={() => runAction(() => devAddWalletBalance("rental", 1))}>
+                +1 rental hr
+              </DevActionButton>
+              <DevActionButton disabled={isPending} onClick={() => runAction(() => devActivateMembership())}>
+                +28d member
+              </DevActionButton>
+            </div>
+            {actionNote && <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">{actionNote}</p>}
+          </div>
         </div>
       )}
     </div>
+  );
+}
+
+function DevActionButton({
+  children,
+  disabled,
+  onClick,
+}: {
+  children: React.ReactNode;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="rounded-lg bg-blue-600 px-2 py-2 text-[11px] font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-50"
+    >
+      {children}
+    </button>
   );
 }
 

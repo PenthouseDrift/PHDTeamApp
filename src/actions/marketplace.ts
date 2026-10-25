@@ -1513,6 +1513,15 @@ export async function deleteListing(listingId: string): Promise<ActionResult<nul
       .zrem(MARKETPLACE_INDEX, listingId)
       .zrem(MARKETPLACE_DRAFTS_INDEX, listingId)
       .exec();
+
+    // A deleted item can't stay reserved: close any member reservations on it so
+    // they don't linger in someone's orders with nothing to buy.
+    try {
+      const { listActiveForListing, closeReservation } = await import("@/lib/marketplace-reservations");
+      for (const rec of await listActiveForListing(listingId)) await closeReservation(rec, "cancelled");
+    } catch (e) {
+      console.error("Closing reservations for deleted listing failed:", e);
+    }
     revalidatePath("/admin/asbo-rc");
     revalidatePath("/asbo-rc");
     revalidatePath("/dashboard");
@@ -1778,11 +1787,8 @@ export interface ReservedListingSummary {
  * the Click & Collect page. Sorted most-recently-updated first. Returns [] for
  * non-admins. Reservations never touch stock or the ASBO-RC ledger.
  */
-export async function getReservedListings(): Promise<ReservedListingSummary[]> {
+async function loadReservedListings(): Promise<ReservedListingSummary[]> {
   try {
-    const session = await auth();
-    if (session?.user?.role !== "admin") return [];
-
     // Live listings only (drafts live in a separate index and aren't buyable).
     const listings = await getListings(1000, { includeSold: false });
 
@@ -1845,6 +1851,20 @@ export async function getReservedListings(): Promise<ReservedListingSummary[]> {
   }
 }
 
+// Building this reads every live listing, so it is cached and rebuilt only when
+// the marketplace changes (every listing / reservation / sale mutation busts the
+// "marketplace" tag) rather than on each admin page view.
+const getReservedListingsCached = unstable_cache(loadReservedListings, ["reserved-listings"], {
+  revalidate: 3600,
+  tags: [MARKETPLACE_TAG],
+});
+
+export async function getReservedListings(): Promise<ReservedListingSummary[]> {
+  const session = await auth();
+  if (session?.user?.role !== "admin") return [];
+  return getReservedListingsCached();
+}
+
 /**
  * Admin-only hold: set how many units of a NON-VARIANT listing are reserved for
  * a buyer. Reserved units are held out of the buyable pool
@@ -1873,9 +1893,15 @@ export async function setListingReservedCount(
       return { success: false, error: "This listing uses variations — reserve per variation." };
     }
 
+    // `reservedCount` here is the units held WITHOUT a named member (the legacy
+    // anonymous hold). Holds linked to a member account are kept on top of it,
+    // so releasing/adjusting this never drops someone's reservation.
+    const { memberHeldQty } = await import("@/lib/marketplace-reservations");
+    const memberHeld = await memberHeldQty(listingId);
+
     // Can't reserve more than what's currently available to sell.
     const sellable = Math.max(0, listing.quantity - listing.soldCount);
-    const next = Math.min(sellable, Math.max(0, Math.floor(Number(reservedCount) || 0)));
+    const next = Math.min(sellable, Math.max(0, Math.floor(Number(reservedCount) || 0)) + memberHeld);
 
     await redis.hset(`listing:${listingId}`, {
       reservedCount: String(next),
@@ -1922,9 +1948,14 @@ export async function setVariantReservedCount(
     const idx = listing.variants.findIndex((v) => v.id === variantId);
     if (idx < 0) return { success: false, error: "Variation not found" };
 
+    // `reservedCount` is the units held WITHOUT a named member; member-linked
+    // holds stay on top of it (see setListingReservedCount).
+    const { memberHeldQty } = await import("@/lib/marketplace-reservations");
+    const memberHeld = await memberHeldQty(listingId, variantId);
+
     const variant = listing.variants[idx];
     const sellable = Math.max(0, variant.quantity - variant.soldCount);
-    const next = Math.min(sellable, Math.max(0, Math.floor(Number(reservedCount) || 0)));
+    const next = Math.min(sellable, Math.max(0, Math.floor(Number(reservedCount) || 0)) + memberHeld);
 
     const nextVariants = listing.variants.map((v, i) =>
       i === idx ? { ...v, reservedCount: next } : v

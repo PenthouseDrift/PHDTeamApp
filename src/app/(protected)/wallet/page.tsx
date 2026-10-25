@@ -7,6 +7,7 @@ import { logActivity } from "@/lib/activity";
 import { processSuccessfulPaymentReference } from "@/lib/membership-activation";
 import { redis } from "@/lib/redis";
 import { parseDiscounts, priceFor } from "@/lib/pricing";
+import { getDashboardVersion } from "@/lib/dashboard-pref";
 import { WalletClient } from "./WalletClient";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,16 @@ export default async function WalletPage({ searchParams }: PageProps) {
 
   const userId = session.user.id;
   const params = await searchParams;
+
+  // New-experience members use the Passes tab. A payment return still carries its
+  // checkout_id through to Home, which verifies it and prompts check-in.
+  if ((await getDashboardVersion(userId)) === "new") {
+    redirect(
+      params.checkout_id
+        ? `/dashboard2?checkout_id=${encodeURIComponent(params.checkout_id)}`
+        : "/dashboard2/passes"
+    );
+  }
 
   // Instant fallback verification when customer returns from SumUp checkout
   let targetCheckoutId = params.checkout_id;

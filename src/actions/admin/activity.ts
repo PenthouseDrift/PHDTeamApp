@@ -11,7 +11,7 @@ import {
   getMemberDiscounts,
   type MemberDiscounts,
 } from "@/lib/pricing";
-import type { ActivityEntry } from "@/lib/activity";
+import { UNPAID_INDEX_KEY, type ActivityEntry } from "@/lib/activity";
 
 export const getRecentActivity = unstable_cache(
   async () => {
@@ -67,53 +67,75 @@ export async function refreshActivityLog() {
 }
 
 /**
- * Mark the check-in activity entry identified by (memberId, timestamp) as paid:
- * clears its `unpaid` flag and sets the given amount so it counts toward
- * revenue. Called when an admin marks an unpaid check-in as paid.
+ * Settle the unpaid check-in activity entry identified by (memberId, timestamp):
+ * either as PAID (sets the amount so it counts toward revenue) or WAIVED
+ * (written off: no amount, never revenue). Clears `unpaid`, rewrites the
+ * "Not Paid Yet" wording and removes it from the unpaid index.
+ *
+ * Entries are scored by their timestamp, so the lookup is a single
+ * ZRANGE BYSCORE on that exact timestamp instead of reading the newest 2000
+ * log entries and searching them.
  */
+export async function settleActivityCheckIn(
+  memberId: string,
+  timestamp: number,
+  settle: { mode: "paid"; amount: number; currency: string } | { mode: "waived" }
+): Promise<{ success: boolean }> {
+  try {
+    // Exported server actions are callable by any signed-in client, so verify staff.
+    const { requireStaff } = await import("@/lib/staff-auth");
+    if (!(await requireStaff())) return { success: false };
+
+    const ts = Number(timestamp);
+    const candidates = await redis.zrange("activity:log", ts, ts, { byScore: true });
+    for (const item of candidates) {
+      const parsed = typeof item === "string" ? JSON.parse(item) : (item as any);
+      if (!parsed || parsed.type !== "checkin" || parsed.memberId !== memberId || Number(parsed.timestamp) !== ts) {
+        continue;
+      }
+      // Rewrite the description so it no longer reads "Not Paid Yet".
+      // Handles both "(Not Paid Yet)" (member cash) and ", Not Paid Yet)"
+      // (guest, e.g. "(day_pass, Not Paid Yet)").
+      const word = settle.mode === "paid" ? ["Paid Cash", "Paid"] : ["Waived", "Waived"];
+      const newDescription =
+        typeof parsed.description === "string"
+          ? parsed.description
+              .replace(/\(Not Paid Yet\)/i, `(${word[0]})`)
+              .replace(/,\s*Not Paid Yet\)/i, `, ${word[1]})`)
+          : parsed.description;
+      const updated =
+        settle.mode === "paid"
+          ? { ...parsed, unpaid: false, amount: settle.amount, currency: settle.currency, description: newDescription }
+          : { ...parsed, unpaid: false, waived: true, amount: 0, description: newDescription };
+
+      // Swap the entry (exact stored form out, updated form in at the same
+      // score) and drop it from the unpaid index in one round trip.
+      await redis
+        .multi()
+        .zrem("activity:log", item as any)
+        .zadd("activity:log", { score: ts, member: JSON.stringify(updated) })
+        .hdel(UNPAID_INDEX_KEY, String(parsed.id))
+        .exec();
+      updateTag("activity-log");
+      updateTag("unpaid-checkins");
+      revalidatePath("/admin/activity");
+      return { success: true };
+    }
+    return { success: false };
+  } catch (error) {
+    console.error("[Activity] settleActivityCheckIn failed:", error);
+    return { success: false };
+  }
+}
+
+/** Mark the unpaid check-in at (memberId, timestamp) as paid. */
 export async function markActivityCheckInPaid(
   memberId: string,
   timestamp: number,
   amount: number,
   currency: string
 ): Promise<{ success: boolean }> {
-  try {
-    const records = await redis.zrange("activity:log", 0, 1999, { rev: true });
-    for (const item of records) {
-      const parsed = typeof item === "string" ? JSON.parse(item) : (item as any);
-      if (
-        parsed &&
-        parsed.type === "checkin" &&
-        parsed.memberId === memberId &&
-        Number(parsed.timestamp) === Number(timestamp)
-      ) {
-        // Remove the old member (matching the exact stored form) and re-add the
-        // updated one at the same score.
-        await redis.zrem("activity:log", item as any);
-        // Rewrite the description so it no longer reads "Not Paid Yet".
-        // Handles both "(Not Paid Yet)" (member cash) and ", Not Paid Yet)"
-        // (guest, e.g. "(day_pass, Not Paid Yet)").
-        const newDescription =
-          typeof parsed.description === "string"
-            ? parsed.description
-                .replace(/\(Not Paid Yet\)/i, "(Paid Cash)")
-                .replace(/,\s*Not Paid Yet\)/i, ", Paid)")
-            : parsed.description;
-        const updated = { ...parsed, unpaid: false, amount, currency, description: newDescription };
-        await redis.zadd("activity:log", {
-          score: Number(parsed.timestamp),
-          member: JSON.stringify(updated),
-        });
-        updateTag("activity-log");
-        revalidatePath("/admin/activity");
-        return { success: true };
-      }
-    }
-    return { success: false };
-  } catch (error) {
-    console.error("[Activity] markActivityCheckInPaid failed:", error);
-    return { success: false };
-  }
+  return settleActivityCheckIn(memberId, timestamp, { mode: "paid", amount, currency });
 }
 
 export async function deleteActivity(id: string) {
@@ -124,8 +146,13 @@ export async function deleteActivity(id: string) {
       return { success: false, error: "Unauthorized: only admins can delete activity records" };
     }
 
-    const records = await redis.zrange("activity:log", 0, 1999, { rev: true });
-    
+    // Ids look like act_<timestamp>_<rand> and entries are scored by timestamp,
+    // so look at just that score instead of reading the newest 2000 entries.
+    const idTimestamp = Number(/^act_(\d+)_/.exec(id)?.[1]);
+    const records = Number.isFinite(idTimestamp) && idTimestamp > 0
+      ? await redis.zrange("activity:log", idTimestamp, idTimestamp, { byScore: true })
+      : await redis.zrange("activity:log", 0, 1999, { rev: true });
+
     let targetObjOrStr: any = null;
     
     for (const item of records) {
@@ -148,7 +175,10 @@ export async function deleteActivity(id: string) {
 
     if (targetObjOrStr) {
       await redis.zrem("activity:log", targetObjOrStr);
+      // If it was an outstanding unpaid check-in, it can't stay on the owed list.
+      await redis.hdel(UNPAID_INDEX_KEY, id);
       updateTag("activity-log");
+      updateTag("unpaid-checkins");
       revalidatePath("/admin/activity");
       return { success: true };
     }

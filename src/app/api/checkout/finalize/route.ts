@@ -51,12 +51,18 @@ export async function POST(request: Request) {
     const statusUpper = (checkout?.status || "").toUpperCase();
 
     if (checkout && (statusUpper === "PAID" || statusUpper === "SUCCESSFUL")) {
-      await processSuccessfulPaymentReference(
+      const result = await processSuccessfulPaymentReference(
         checkout.checkout_reference || "",
         checkout.id || checkoutId,
         Number(checkout.amount) || 0,
         checkout.currency || "GBP"
       );
+      // Did the buyer's auto check-in setting check them in with this pass?
+      let autoCheckedIn = Boolean(result.autoCheckedIn);
+      if (!autoCheckedIn && !result.guestName && (result.itemType === "daypass" || result.itemType === "rental")) {
+        const { autoCheckInApplied } = await import("@/lib/auto-checkin");
+        autoCheckedIn = await autoCheckInApplied(session.user.id, result.itemType === "daypass" ? "day_pass" : "rental");
+      }
       // Clear whichever per-user pointer applies.
       await redis.del(`pending_checkout:${session.user.id}`);
       await redis.del(`pending_wallet_checkout:${session.user.id}`);
@@ -64,6 +70,7 @@ export async function POST(request: Request) {
         status: "paid",
         itemType: typeof meta.itemType === "string" ? meta.itemType : undefined,
         ref: (checkout.id || checkoutId).slice(0, 8).toUpperCase(),
+        autoCheckedIn,
       });
     }
 

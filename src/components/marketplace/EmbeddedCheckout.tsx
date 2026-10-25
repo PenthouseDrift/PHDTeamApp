@@ -89,6 +89,7 @@ export function EmbeddedCheckout({
   successBody,
   doneHref = "/dashboard",
   doneLabel = "Continue",
+  autoDoneLabel,
   onPaid,
 }: {
   checkoutId: string;
@@ -106,7 +107,9 @@ export function EmbeddedCheckout({
   /** Success-screen heading. */
   successTitle?: string;
   /** Success-screen body. Receives the collection/order ref when available. */
-  successBody?: (ref: string | null) => string;
+  successBody?: (ref: string | null, autoCheckedIn?: boolean) => string;
+  /** Button label instead of `doneLabel` when auto check-in already checked the buyer in. */
+  autoDoneLabel?: string;
   /** Where the success button sends the buyer. */
   doneHref?: string;
   /** Success button text. */
@@ -118,6 +121,7 @@ export function EmbeddedCheckout({
   const [state, setState] = useState<State>("loading");
   const [error, setError] = useState<string | null>(null);
   const [orderRef, setOrderRef] = useState<string | null>(null);
+  const [autoCheckedIn, setAutoCheckedIn] = useState(false);
   // Portals only work after mount (no document on the server).
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -160,6 +164,7 @@ export function EmbeddedCheckout({
         if (res.ok && data.status === "paid") {
           // Marketplace endpoint returns `orderRef`; the generic one returns `ref`.
           setOrderRef(data.orderRef || data.ref || null);
+          setAutoCheckedIn(Boolean(data.autoCheckedIn));
         } else {
           setOrderRef(null);
         }
@@ -316,7 +321,7 @@ export function EmbeddedCheckout({
               <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-100">{successTitle}</h3>
               <p className="text-sm text-zinc-600 dark:text-zinc-300">
                 {successBody
-                  ? successBody(orderRef)
+                  ? successBody(orderRef, autoCheckedIn)
                   : orderRef
                     ? `Your order is confirmed. Collection reference ${orderRef} — speak to staff at Penthouse Drift to collect.`
                     : "Your order is being confirmed and will appear under My Orders shortly."}
@@ -334,7 +339,7 @@ export function EmbeddedCheckout({
                 }}
                 className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white hover:bg-emerald-500"
               >
-                {doneLabel}
+                {autoCheckedIn && autoDoneLabel ? autoDoneLabel : doneLabel}
               </button>
             </div>
           ) : (

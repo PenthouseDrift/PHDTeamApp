@@ -119,26 +119,9 @@ export async function sendGlobalNotification(
       return { success: false, error: "Title and message are required" };
     }
 
-    // Scan all member:* keys
-    let cursor = 0;
-    const memberIds = new Set<string>();
-
-    do {
-      const [newCursor, keys] = await redis.scan(cursor, {
-        match: "member:*",
-        count: 200,
-      });
-      cursor = Number(newCursor);
-
-      for (const key of keys) {
-        const keyStr = key as string;
-        const parts = keyStr.split(":");
-        if (parts.length === 2 && parts[1]) {
-          memberIds.add(parts[1]);
-        }
-      }
-    } while (cursor !== 0);
-
+    // Everyone, from the maintained member index (one read, no keyspace SCAN).
+    const { getMemberIds } = await import("@/lib/member-roster");
+    const memberIds = new Set<string>(await getMemberIds());
     const targetUserIds = Array.from(memberIds);
     if (targetUserIds.length === 0) {
       return { success: false, error: "No members found to notify" };

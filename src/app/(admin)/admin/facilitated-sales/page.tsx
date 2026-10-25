@@ -26,6 +26,7 @@ export default async function AdminFacilitatedSalesPage() {
         {/* Header */}
         <div className="border-b border-zinc-200 dark:border-zinc-800 pb-6 space-y-1">
           <Link
+            data-page-back
             href="/admin/activity"
             className="inline-flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-amber-500 transition-colors"
           >

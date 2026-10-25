@@ -6,6 +6,7 @@ import { performSelfCheckIn, performGuestSelfCheckIn } from "@/actions/self-chec
 import { getCheckoutStatus } from "@/lib/sumup";
 import { processSuccessfulPaymentReference } from "@/lib/membership-activation";
 import { SelfCheckInClient } from "@/components/SelfCheckInClient";
+import { getDashboardVersion } from "@/lib/dashboard-pref";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,17 @@ export default async function TrackCheckInPage({ searchParams }: PageProps) {
   const userId = session.user.id;
   const now = Date.now();
   const params = await searchParams;
+
+  // /track-checkin is the printed QR-poster URL, so it must keep working. New-
+  // experience members land on Home, where check-in lives. A payment return
+  // keeps its checkout_id so Home can verify it.
+  if ((await getDashboardVersion(userId)) === "new") {
+    redirect(
+      params.checkout_id
+        ? `/dashboard2?checkout_id=${encodeURIComponent(params.checkout_id)}`
+        : "/dashboard2"
+    );
+  }
 
   // 1. Case-insensitive Payment Verification on return from SumUp checkout
   let targetCheckoutId = params.checkout_id;

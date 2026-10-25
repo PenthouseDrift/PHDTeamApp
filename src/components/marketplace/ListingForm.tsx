@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import ImageUploader from "@/components/ui/ImageUploader";
@@ -81,6 +81,7 @@ export function ListingForm({ mode, listing, viewerRole, members = [] }: Listing
   // owner's behalf at the track; the owner is paid `ownerPayoutPrice` and the
   // club keeps the rest. Separate from ASBO-RC consignment.
   const [facilitatedByPhd, setFacilitatedByPhd] = useState(listing?.facilitatedByPhd ?? false);
+  const payoutRef = useRef<HTMLInputElement>(null);
   const [ownerPayoutPrice, setOwnerPayoutPrice] = useState(
     listing?.ownerPayoutPrice != null ? String(listing.ownerPayoutPrice) : ""
   );
@@ -144,6 +145,24 @@ export function ListingForm({ mode, listing, viewerRole, members = [] }: Listing
   // Items handled in person at the track by PHD (no seller contact needed):
   // Sold-by-PHD / ASBO consignment, OR a member's own item facilitated by PHD.
   const handledAtTrack = effectiveSoldByPhd || facilitatedByPhd;
+
+  // What still blocks posting, recomputed live so the button never fails silently.
+  const priceInvalid = price.trim() !== "" && (Number.isNaN(Number(price)) || Number(price) < 0);
+  const missing: string[] = [];
+  if (images.length === 0) missing.push("Add at least one photo");
+  if (title.trim().length < 2) missing.push("Give it a title");
+  if (!category) missing.push("Choose a category");
+  if (priceInvalid) missing.push("Enter a valid price (0 for free / offers)");
+  if (hasVariations && !variationLabel.trim()) missing.push("Label your variations (e.g. Colour)");
+  if (!handledAtTrack && !meetAtTrack && !contactValue.trim()) {
+    missing.push("Add contact details, or tick “Meet at the track”");
+  }
+
+  // Bring a submit error into view; on a long form it's often off-screen.
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [error]);
 
   // Ticking "Provided by ASBO-RC" auto-selects "Sold by PHD" and clears the
   // member-facilitated flag (they're mutually exclusive — club stock vs a
@@ -589,36 +608,6 @@ export function ListingForm({ mode, listing, viewerRole, members = [] }: Listing
         </div>
       )}
 
-      {/* Owner payout — "Facilitated by PHD" items only, non-variant. The amount
-          paid back to you (the original owner) when PHD sells it; the club keeps
-          the rest. Blank => you get the full sell price. */}
-      {facilitatedByPhd && !hasVariations && (
-        <div className="space-y-2 rounded-lg border border-indigo-200 bg-indigo-50/40 p-4 dark:border-indigo-500/30 dark:bg-indigo-500/5">
-          <label htmlFor="ownerPayoutPrice" className="block text-sm font-medium text-zinc-700 dark:text-zinc-200">
-            Your payout (£) <span className="text-zinc-500 dark:text-zinc-400">(optional)</span>
-          </label>
-          <input
-            id="ownerPayoutPrice"
-            type="number"
-            inputMode="decimal"
-            min={0}
-            step="0.01"
-            value={ownerPayoutPrice}
-            onChange={(e) => setOwnerPayoutPrice(e.target.value)}
-            placeholder={price ? `Defaults to £${price}` : "Defaults to the sell price"}
-            className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder-zinc-400 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-          />
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            How much you get back when PHD sells this for you. Penthouse Drift keeps the
-            difference between the sell price and your payout
-            {price && ownerPayoutPrice && Number(price) >= Number(ownerPayoutPrice)
-              ? ` (£${(Number(price) - Number(ownerPayoutPrice)).toFixed(2)} to the club)`
-              : ""}
-            . Leave blank to keep the full sale price. Only you and admins ever see this figure.
-          </p>
-        </div>
-      )}
-
       {/* Quantity — available to everyone, defaults to 1. Hidden when the
           listing uses variations (stock is then tracked per-variant). */}
       {!hasVariations && (
@@ -865,32 +854,81 @@ export function ListingForm({ mode, listing, viewerRole, members = [] }: Listing
           club keeps the rest. Hidden when the item is ASBO-RC consignment (that
           is club stock, a different thing). */}
       {!soldByAsboRc && (
-        <label
-          htmlFor="facilitatedByPhd"
-          className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors ${
+        <div
+          className={`rounded-lg border transition-colors ${
             facilitatedByPhd
               ? "border-indigo-400 bg-indigo-50 dark:border-indigo-500/50 dark:bg-indigo-500/10"
               : "border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/50"
           }`}
         >
-          <input
-            id="facilitatedByPhd"
-            type="checkbox"
-            checked={facilitatedByPhd}
-            onChange={(e) => handleToggleFacilitated(e.target.checked)}
-            className="mt-0.5 h-5 w-5 shrink-0 rounded border-zinc-300 text-indigo-500 focus:ring-indigo-500 dark:border-zinc-600"
-          />
-          <span>
-            <span className="block text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-              Facilitated by Penthouse Drift
+          <label htmlFor="facilitatedByPhd" className="flex cursor-pointer items-start gap-3 p-4">
+            <input
+              id="facilitatedByPhd"
+              type="checkbox"
+              checked={facilitatedByPhd}
+              onChange={(e) => {
+                handleToggleFacilitated(e.target.checked);
+                // The payout field appears right below; jump to it so it isn't missed.
+                if (e.target.checked && !hasVariations) {
+                  requestAnimationFrame(() => payoutRef.current?.focus());
+                }
+              }}
+              className="mt-0.5 h-5 w-5 shrink-0 rounded border-zinc-300 text-indigo-500 focus:ring-indigo-500 dark:border-zinc-600"
+            />
+            <span>
+              <span className="block text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+                Facilitated by Penthouse Drift
+              </span>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+                PHD handles the sale for you at the track and the club keeps the difference between
+                the sell price and your payout. Buyers only ever see the sale price.
+              </span>
             </span>
-            <span className="block text-xs text-zinc-500 dark:text-zinc-400">
-              PHD handles the sale for you at the track. Set how much you want paid back below —
-              the club keeps the difference. Buyers only ever see the sale price; your payout is
-              shown only to you and the admins.
-            </span>
-          </span>
-        </label>
+          </label>
+
+          {/* Owner payout, shown the moment the box is ticked and kept inside this
+              card so it can't be missed. Blank => you get the full sell price. */}
+          {facilitatedByPhd && (
+            <div className="space-y-2 border-t border-indigo-200 p-4 dark:border-indigo-500/30">
+              {hasVariations ? (
+                <p className="text-sm font-medium text-indigo-900 dark:text-indigo-200">
+                  Set <strong>Your payout</strong> on each variation below. Leave a payout blank to
+                  keep that variation&apos;s full sell price.
+                </p>
+              ) : (
+                <>
+                  <label htmlFor="ownerPayoutPrice" className="block text-sm font-semibold text-indigo-900 dark:text-indigo-200">
+                    Your payout (£) <span className="font-normal text-zinc-500 dark:text-zinc-400">(what you get back)</span>
+                  </label>
+                  <input
+                    id="ownerPayoutPrice"
+                    ref={payoutRef}
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="0.01"
+                    value={ownerPayoutPrice}
+                    onChange={(e) => setOwnerPayoutPrice(e.target.value)}
+                    placeholder={price ? `Defaults to £${price}` : "Defaults to the sell price"}
+                    className="w-full rounded-lg border border-indigo-300 bg-white px-4 py-3 text-sm text-zinc-900 placeholder-zinc-400 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 dark:border-indigo-500/40 dark:bg-zinc-900 dark:text-zinc-100"
+                  />
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                    {price && ownerPayoutPrice && Number(price) >= Number(ownerPayoutPrice) ? (
+                      <>
+                        Sells for <strong>£{Number(price).toFixed(2)}</strong>, you get{" "}
+                        <strong>£{Number(ownerPayoutPrice).toFixed(2)}</strong>,{" "}
+                        <strong>£{(Number(price) - Number(ownerPayoutPrice)).toFixed(2)}</strong> goes to the club.
+                      </>
+                    ) : (
+                      <>Leave blank to keep the full sale price.</>
+                    )}{" "}
+                    Only you and admins ever see this figure.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Sold by ASBO-RC — admins & ASBO-RC partners only */}
@@ -1129,8 +1167,26 @@ export function ListingForm({ mode, listing, viewerRole, members = [] }: Listing
 
       {/* Error */}
       {error && (
-        <div className="rounded-lg bg-red-500/10 px-4 py-3" role="alert">
+        <div ref={errorRef} className="rounded-lg bg-red-500/10 px-4 py-3" role="alert">
           <p className="text-sm text-red-500 dark:text-red-400">{error}</p>
+        </div>
+      )}
+
+      {/* Everything still needed before this can be posted */}
+      {missing.length > 0 && (
+        <div
+          id="listing-missing"
+          role="status"
+          className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-500/40 dark:bg-amber-500/10"
+        >
+          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+            Still needed before you can {isEdit ? "save" : saveAsDraft ? "save this draft" : "post"}:
+          </p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-amber-800 dark:text-amber-300">
+            {missing.map((m) => (
+              <li key={m}>{m}</li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -1148,8 +1204,11 @@ export function ListingForm({ mode, listing, viewerRole, members = [] }: Listing
         )}
         <button
           type="submit"
-          disabled={isPending || images.length === 0}
-          className="flex-1 rounded-lg bg-amber-500 px-4 py-3 text-sm font-medium text-black transition-colors hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={isPending}
+          aria-describedby={missing.length > 0 ? "listing-missing" : undefined}
+          className={`flex-1 rounded-lg bg-amber-500 px-4 py-3 text-sm font-medium text-black transition-colors hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50 ${
+            missing.length > 0 ? "opacity-70" : ""
+          }`}
         >
           {isPending
             ? isEdit

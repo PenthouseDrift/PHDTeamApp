@@ -1,11 +1,15 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
+import { redirectIfNewDashboard } from "@/lib/dashboard-pref";
 
 export const dynamic = "force-dynamic";
 
 export default async function TuningPage() {
   const session = await auth();
   if (!session?.user) return null;
+
+  // The Garage tab (My cars / Tuning advisor / Gear calculator) replaces this hub.
+  await redirectIfNewDashboard(session.user.id, "/cars");
 
   const tools = [
     {

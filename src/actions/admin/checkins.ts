@@ -5,6 +5,7 @@ import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import type { ActionResult } from "@/types";
 import { logActivity } from "@/lib/activity";
 import { recordCheckInCount } from "@/lib/checkin-count";
+import { requireStaff } from "@/lib/staff-auth";
 
 export interface CheckInEntry {
   userId: string;
@@ -171,14 +172,11 @@ export async function quickCheckIn(
   try {
     // Resolve the admin id from the session if the client didn't pass one
     // (session can be briefly unavailable client-side).
-    if (!adminId) {
-      const { auth } = await import("@/lib/auth");
-      const session = await auth();
-      if (!session?.user || (session.user.role !== "admin" && session.user.role !== "moderator")) {
-        return { success: false, error: "Unauthorized" };
-      }
-      adminId = session.user.id;
-    }
+    // Always verify staff server-side and use the session's id, never the
+    // client-supplied one.
+    const staff = await requireStaff();
+    if (!staff) return { success: false, error: "Unauthorized" };
+    adminId = staff.id;
 
     // No membership check required — admin override for manual tracking
     const now = Date.now();
@@ -240,6 +238,9 @@ export async function addNonMemberCheckIn(
   isUnpaid: boolean = false
 ): Promise<ActionResult<{ checkedIn: boolean }>> {
   try {
+    const staff = await requireStaff();
+    if (!staff) return { success: false, error: "Unauthorized" };
+    adminId = staff.id;
     const now = Date.now();
     const today = new Date().toISOString().split("T")[0];
     const guestId = `guest_${now}`;
@@ -416,6 +417,7 @@ export async function removeCheckIn(
   index: number
 ): Promise<ActionResult<null>> {
   try {
+    if (!(await requireStaff())) return { success: false, error: "Unauthorized" };
     const today = new Date().toISOString().split("T")[0];
     const key = `checkins:${today}`;
 
@@ -503,6 +505,9 @@ export async function checkInWithDayPass(
   isUnpaid: boolean = false
 ): Promise<ActionResult<{ checkedIn: boolean }>> {
   try {
+    const staff = await requireStaff();
+    if (!staff) return { success: false, error: "Unauthorized" };
+    adminId = staff.id;
     const { redeemDayPass } = await import("@/actions/wallet");
     // Only redeem a wallet pass for the actual wallet path. Cash (paid or
     // unpaid) never touches the wallet.
@@ -569,6 +574,9 @@ export async function checkInWithRental(
   isUnpaid: boolean = false
 ): Promise<ActionResult<{ checkedIn: boolean }>> {
   try {
+    const staff = await requireStaff();
+    if (!staff) return { success: false, error: "Unauthorized" };
+    adminId = staff.id;
     const { redeemRentalHour } = await import("@/actions/wallet");
     const { createRentalSession } = await import("@/actions/admin/rentals");
 
@@ -635,6 +643,9 @@ export async function checkInFriendWithPass(
   adminId: string
 ): Promise<ActionResult<{ message: string; remaining: number }>> {
   try {
+    const staff = await requireStaff();
+    if (!staff) return { success: false, error: "Unauthorized" };
+    adminId = staff.id;
     const cleanFriendName = friendName.trim() || `Guest of ${memberName}`;
     const now = Date.now();
     const today = new Date().toISOString().split("T")[0];
