@@ -12,6 +12,8 @@ export interface Member {
   checkinCount?: number;
   /** Timestamp (ms) of the member's most recent check-in. */
   lastCheckIn?: number;
+  /** Card pack credits the member can spend (1 earned per track check-in). */
+  cardCredits?: number;
   discounts?: {
     membership: number;
     daypass: number;

@@ -58,6 +58,7 @@ async function _getAllMembers(): Promise<MemberWithMembership[]> {
           createdAt: Number(memberData.createdAt) || 0,
           checkinCount: Number(memberData.checkinCount) || 0,
           lastCheckIn: Number(memberData.lastCheckIn) || 0,
+          cardCredits: Math.max(0, Number(memberData.cardCredits) || 0),
           discounts: parseDiscounts(memberData),
         };
 

@@ -15,6 +15,7 @@ import {
 import { BASE_PRICES, EMPTY_DISCOUNTS } from "@/lib/pricing";
 import { quickCheckIn, checkInWithDayPass, checkInWithRental } from "@/actions/admin/checkins";
 import { setUserRole } from "@/actions/admin/users";
+import { adminAdjustCardCredits } from "@/actions/admin/card-credits";
 import { getOrCreateQRCode } from "@/actions/qr";
 import type { MemberWithMembership } from "@/actions/admin/members";
 
@@ -43,6 +44,7 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate, ch
   const { data: session } = useSession();
   const [isPending, startTransition] = useTransition();
   const [localWallet, setLocalWallet] = useState(initialMember.wallet);
+  const [localCardCredits, setLocalCardCredits] = useState(initialMember.member.cardCredits ?? 0);
   const [localMembership, setLocalMembership] = useState(initialMember.membership);
   const [localRole, setLocalRole] = useState<"admin" | "moderator" | "member" | "asbo-rc">(initialMember.member.role);
   const [overrideDate, setOverrideDate] = useState("");
@@ -103,6 +105,18 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate, ch
       if (res.success) {
         setLocalWallet((prev) => ({ ...prev, ...res.data }));
         onUpdate({ type: "success", message: `Wallet updated for ${m.name}` });
+      } else {
+        onUpdate({ type: "error", message: res.error });
+      }
+    });
+  }
+
+  function handleAdjustCardCredits(delta: number) {
+    startTransition(async () => {
+      const res = await adminAdjustCardCredits(m.id, delta);
+      if (res.success) {
+        setLocalCardCredits(res.data.cardCredits);
+        onUpdate({ type: "success", message: `Card pack credits updated for ${m.name}: now ${res.data.cardCredits}` });
       } else {
         onUpdate({ type: "error", message: res.error });
       }
@@ -577,6 +591,40 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate, ch
                       +
                     </button>
                   </div>
+                </div>
+              </div>
+
+              {/* Card pack credits: earned by checking in, spent on a card pack */}
+              <div className="rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Card pack credits</span>
+                  <p className="text-2xl font-black text-zinc-900 dark:text-zinc-100" aria-live="polite">{localCardCredits}</p>
+                </div>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => handleAdjustCardCredits(-1)}
+                    disabled={isPending || localCardCredits <= 0}
+                    aria-label="Remove 1 card pack credit"
+                    className="flex-1 py-1.5 text-sm font-bold rounded-md bg-white dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300 hover:bg-red-50 hover:text-red-600 hover:border-red-200 disabled:opacity-40 transition-colors"
+                  >
+                    −1
+                  </button>
+                  <button
+                    onClick={() => handleAdjustCardCredits(1)}
+                    disabled={isPending}
+                    aria-label="Add 1 card pack credit"
+                    className="flex-1 py-1.5 text-sm font-bold rounded-md bg-white dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300 hover:bg-green-50 hover:text-green-600 hover:border-green-200 disabled:opacity-40 transition-colors"
+                  >
+                    +1
+                  </button>
+                  <button
+                    onClick={() => handleAdjustCardCredits(5)}
+                    disabled={isPending}
+                    aria-label="Add 5 card pack credits"
+                    className="flex-1 py-1.5 text-sm font-bold rounded-md bg-white dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300 hover:bg-green-50 hover:text-green-600 hover:border-green-200 disabled:opacity-40 transition-colors"
+                  >
+                    +5
+                  </button>
                 </div>
               </div>
             </div>

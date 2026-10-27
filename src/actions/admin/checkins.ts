@@ -90,6 +90,8 @@ export async function submitSelfCheckIn(memberId: string, memberName: string): P
 
     await redis.rpush(`checkins:${today}`, entry);
     await redis.set(dedupKey, "1", { ex: 86400 });
+    // Counts the visit and earns the day's card credit, like every other check-in path.
+    await recordCheckInCount(memberId, now);
 
     await logActivity({
       type: "checkin",

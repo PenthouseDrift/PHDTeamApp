@@ -5,7 +5,7 @@
  *
  * Information architecture (5 tabs):
  *   Home    – check in, events, guest check-in
- *   Garage  – My Cars, Tuning Advisor, Gear Calculator (+ shared setups)
+ *   Garage  – My Cars, Cards, Tuning Advisor, Gear Calculator (+ shared setups)
  *   Passes  – membership, day passes, rental hours (buy + balances)
  *   Market  – browse, my listings, orders (+ basket in the top bar)
  *   Menu    – profile, showcase, share, QR, reports/admin, switch back, sign out
@@ -40,6 +40,7 @@ export interface SectionChip {
 /** Secondary navigation shown under the top bar on a section's top-level pages. */
 export const GARAGE_CHIPS: SectionChip[] = [
   { label: "My cars", href: "/cars" },
+  { label: "Cards", href: "/cards" },
   { label: "Tuning advisor", href: "/tuning-advisor" },
   { label: "Gear calculator", href: "/calculator" },
 ];
@@ -73,6 +74,7 @@ export function tabForPath(pathname: string): TabKey {
   }
   if (
     p.startsWith("/cars") ||
+    p.startsWith("/cards") ||
     p.startsWith("/calculator") ||
     p.startsWith("/tuning") || // also covers /tuning-advisor
     p.startsWith("/share")
@@ -100,6 +102,7 @@ const ROOT_PATHS = new Set([
   "/dashboard2/passes",
   "/dashboard2/menu",
   "/cars",
+  "/cards",
   "/tuning",
   "/tuning-advisor",
   "/calculator",
@@ -143,6 +146,8 @@ export function titleFor(pathname: string): string {
   if (p.startsWith("/dashboard2/events")) return "Events";
   if (p.startsWith("/dashboard2/guest")) return "Guest check-in";
   if (p.startsWith("/track-checkin")) return "Check in";
+  if (p === "/cards") return "My cards";
+  if (p.startsWith("/cards/new")) return "Open a pack";
   if (p.startsWith("/profile")) return "Profile";
   if (p.startsWith("/showcase")) return "Showcase";
   if (p.startsWith("/asbo-rc")) return "ASBO-RC reports";

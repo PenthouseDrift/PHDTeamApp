@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { addDayPasses, addRentalHours } from "@/actions/wallet";
 import { logActivity } from "@/lib/activity";
 import { processSuccessfulMembershipPayment } from "@/lib/membership-activation";
+import { clearCardCredits, grantCardCredits } from "@/lib/card-credits";
 
 /** Impersonation cookie values. "member" = a regular member with NO active
  *  membership; "member_active" = a member WITH an active membership (so the
@@ -126,6 +127,31 @@ export async function devActivateMembership() {
   if (!session?.user?.id) return { success: false as const };
 
   await processSuccessfulMembershipPayment(session.user.id, `test_dev_${new Date().getTime()}`);
+  revalidatePath("/", "layout");
+  return { success: true as const };
+}
+
+/**
+ * DEV ONLY: give the signed-in user card credits without a track check-in, so the card pack flow
+ * can be tried straight away. Credits are normally earned by checking in (see lib/card-credits.ts).
+ */
+export async function devAddCardCredits(amount = 1) {
+  if (process.env.NODE_ENV !== "development") return { success: false as const };
+  const session = await auth();
+  if (!session?.user?.id) return { success: false as const };
+
+  await grantCardCredits(session.user.id, Math.min(20, Math.max(1, Math.floor(amount) || 1)));
+  revalidatePath("/", "layout");
+  return { success: true as const };
+}
+
+/** DEV ONLY: set the signed-in user's card credits back to zero. */
+export async function devResetCardCredits() {
+  if (process.env.NODE_ENV !== "development") return { success: false as const };
+  const session = await auth();
+  if (!session?.user?.id) return { success: false as const };
+
+  await clearCardCredits(session.user.id);
   revalidatePath("/", "layout");
   return { success: true as const };
 }

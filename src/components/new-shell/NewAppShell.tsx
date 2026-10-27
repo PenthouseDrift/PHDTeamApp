@@ -44,6 +44,7 @@ interface NewAppShellProps {
 }
 
 const EXPLORE_LINKS: { href: string; label: string; icon: ShellIconName }[] = [
+  { href: "/cards", label: "My cards", icon: "cards" },
   { href: "/showcase", label: "Shell showcase", icon: "showcase" },
   { href: "/dashboard2/events", label: "Track events", icon: "events" },
   { href: "/dashboard2/guest", label: "Guest check-in", icon: "guest" },

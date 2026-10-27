@@ -4,16 +4,18 @@ import { useEffect, useState, useSyncExternalStore, useTransition } from "react"
 import { createPortal } from "react-dom";
 import ImageUploader from "@/components/ui/ImageUploader";
 import { PhdCard } from "@/components/cards/PhdCard";
+import { ImageAdjuster } from "@/components/cards/ImageAdjuster";
 import {
   deleteCard,
   listShowcaseImages,
   saveCard,
   type ShowcaseImage,
 } from "@/actions/admin/cards";
-import { THEME_PRESETS, emptyCard, isHexColour, type CardData, type CardTheme } from "@/lib/card-maker";
+import { AiArtPanel } from "@/components/cards/AiArtPanel";
+import { ART_PRESETS, DEFAULT_HEADER_TEXT, HEADER_STYLES, MEDALLION_POSITIONS, MEDALLION_SHAPES, MEDALLION_SIZES, THEME_PRESETS, emptyCard, isHexColour, type CardData, type CardTheme } from "@/lib/card-maker";
 
 type PrintMode = "single" | "sheet" | null;
-type ImageTab = "upload" | "showcase";
+type ImageTab = "upload" | "showcase" | "ai";
 
 const subscribe = () => () => {};
 const useIsClient = () =>
@@ -27,45 +29,6 @@ const input =
   "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
 const label = "mb-1 block text-xs font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400";
 const panel = "space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900";
-
-function Slider({
-  id,
-  text,
-  value,
-  min,
-  max,
-  suffix,
-  onChange,
-}: {
-  id: string;
-  text: string;
-  value: number;
-  min: number;
-  max: number;
-  suffix: string;
-  onChange: (n: number) => void;
-}) {
-  return (
-    <div>
-      <label htmlFor={id} className={`${label} flex justify-between`}>
-        <span>{text}</span>
-        <span className="font-semibold normal-case tracking-normal">
-          {Math.round(value)}
-          {suffix}
-        </span>
-      </label>
-      <input
-        id={id}
-        type="range"
-        min={min}
-        max={max}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="h-8 w-full accent-amber-500"
-      />
-    </div>
-  );
-}
 
 function ColourField({ id, text, value, onChange }: { id: string; text: string; value: string; onChange: (hex: string) => void }) {
   const [draft, setDraft] = useState(value);
@@ -114,8 +77,9 @@ export function CardMaker({ initialSaved }: { initialSaved: CardData[] }) {
   const [showcase, setShowcase] = useState<ShowcaseImage[] | null>(null);
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
   const [printMode, setPrintMode] = useState<PrintMode>(null);
+  // Touch only drags the picture while this is on, so the page can still be scrolled with a finger.
+  const [touchAdjust, setTouchAdjust] = useState(false);
   const [pending, startTransition] = useTransition();
-
   const set = <K extends keyof CardData>(key: K, value: CardData[K]) => setCard((c) => ({ ...c, [key]: value }));
   const setStat = (key: keyof CardData["stats"], value: string) =>
     setCard((c) => ({ ...c, stats: { ...c.stats, [key]: value.slice(0, 3) } }));
@@ -220,7 +184,35 @@ export function CardMaker({ initialSaved }: { initialSaved: CardData[] }) {
       {/* Preview + actions (sticks on desktop so it stays visible while editing) */}
       <div className="space-y-4 lg:sticky lg:top-4">
         <div className="mx-auto w-full max-w-[320px] lg:max-w-none">
-          <PhdCard card={card} className="drop-shadow-xl" placeholders />
+          {/* The wrapper is a size container so the adjust layer can use the card's own cqw units. */}
+          <div className="relative" style={{ containerType: "inline-size" }}>
+            <PhdCard card={card} className="drop-shadow-xl" placeholders />
+            {card.imageUrl && (
+              <ImageAdjuster
+                value={{ x: card.imageX, y: card.imageY, zoom: card.imageZoom }}
+                onChange={(v) => setCard((c) => ({ ...c, imageX: v.x, imageY: v.y, imageZoom: v.zoom }))}
+                touchEnabled={touchAdjust}
+              />
+            )}
+          </div>
+          {card.imageUrl && (
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Zoom {card.imageZoom}%
+                <span className="hidden [@media(pointer:fine)]:inline"> · drag to move, scroll to zoom</span>
+              </p>
+              <button
+                type="button"
+                aria-pressed={touchAdjust}
+                onClick={() => setTouchAdjust((on) => !on)}
+                className={`min-h-11 rounded-full border-2 px-4 text-xs font-bold [@media(pointer:fine)]:hidden ${
+                  touchAdjust ? "border-amber-500 bg-amber-500/10" : "border-zinc-300 dark:border-zinc-700"
+                } text-zinc-800 dark:text-zinc-100`}
+              >
+                {touchAdjust ? "Done" : "Move & zoom"}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className={panel}>
@@ -279,7 +271,7 @@ export function CardMaker({ initialSaved }: { initialSaved: CardData[] }) {
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-black text-zinc-900 dark:text-zinc-100">Image</h2>
             <div className="flex rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800" role="tablist">
-              {(["upload", "showcase"] as const).map((t) => (
+              {(["upload", "ai", "showcase"] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
@@ -290,7 +282,7 @@ export function CardMaker({ initialSaved }: { initialSaved: CardData[] }) {
                     imageTab === t ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100" : "text-zinc-500 dark:text-zinc-400"
                   }`}
                 >
-                  {t === "upload" ? "Upload" : "From showcase"}
+                  {t === "upload" ? "Upload" : t === "ai" ? "AI art" : "From showcase"}
                 </button>
               ))}
             </div>
@@ -303,7 +295,7 @@ export function CardMaker({ initialSaved }: { initialSaved: CardData[] }) {
               initialUrls={card.imageUrl ? [card.imageUrl] : []}
               onUploadComplete={(urls) => set("imageUrl", urls[0] ?? "")}
             />
-          ) : showcase === null ? (
+          ) : imageTab !== "showcase" ? null : showcase === null ? (
             <p className="py-6 text-center text-sm text-zinc-500">Loading showcase photos…</p>
           ) : showcase.length === 0 ? (
             <p className="py-6 text-center text-sm text-zinc-500">No showcase photos yet.</p>
@@ -331,11 +323,33 @@ export function CardMaker({ initialSaved }: { initialSaved: CardData[] }) {
             </ul>
           )}
 
+          {/* Always mounted (just hidden) so the prompt and session list survive switching tabs. */}
+          <div hidden={imageTab !== "ai"}>
+            <AiArtPanel
+              presets={ART_PRESETS}
+              aspectRatio="5:4"
+              thumbClass="aspect-[5/4]"
+              currentImageUrl={card.imageUrl}
+              onUseImage={(url) => setCard((c) => ({ ...c, imageUrl: url, imageZoom: 100, imageX: 50, imageY: 50 }))}
+              storageKey="card-maker:art"
+              idPrefix="original"
+              footnote="Uses Gemini. The result is 5:4, the closest ratio it offers to the card’s 6:5 window, and replaces the card image."
+            />
+          </div>
+
           {card.imageUrl && (
             <div className="space-y-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
-              <Slider id="img-zoom" text="Zoom" value={card.imageZoom} min={100} max={300} suffix="%" onChange={(n) => set("imageZoom", n)} />
-              <Slider id="img-x" text="Left / right" value={card.imageX} min={0} max={100} suffix="%" onChange={(n) => set("imageX", n)} />
-              <Slider id="img-y" text="Up / down" value={card.imageY} min={0} max={100} suffix="%" onChange={(n) => set("imageY", n)} />
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Move and zoom the picture on the card preview: drag it, then scroll or pinch to zoom. On a phone, switch on
+                &ldquo;Move &amp; zoom&rdquo; under the preview first.
+              </p>
+              <button
+                type="button"
+                onClick={() => setCard((c) => ({ ...c, imageZoom: 100, imageX: 50, imageY: 50 }))}
+                className="mr-4 min-h-10 text-sm font-bold text-amber-600 hover:underline dark:text-amber-400"
+              >
+                Reset position
+              </button>
               <button
                 type="button"
                 onClick={() => setCard((c) => ({ ...c, imageUrl: "", imageZoom: 100, imageX: 50, imageY: 50 }))}
@@ -467,12 +481,164 @@ export function CardMaker({ initialSaved }: { initialSaved: CardData[] }) {
               })}
             </div>
           </fieldset>
+        </section>
+
+        {/* Header badge */}
+        <section className={panel} aria-label="Card header">
+          <h2 className="text-sm font-black text-zinc-900 dark:text-zinc-100">Header</h2>
+          <div role="group" aria-label="Header style" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {HEADER_STYLES.map((h) => {
+              const active = card.headerStyle === h.value;
+              return (
+                <button
+                  key={h.value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => set("headerStyle", h.value)}
+                  className={`min-h-11 rounded-xl border-2 px-3 py-2 text-left ${
+                    active ? "border-amber-500 bg-amber-500/10" : "border-zinc-200 dark:border-zinc-700"
+                  } text-zinc-800 dark:text-zinc-100`}
+                >
+                  <span className="block text-xs font-bold">{h.label}</span>
+                  <span className="block text-[11px] text-zinc-500 dark:text-zinc-400">{h.hint}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {card.headerStyle === "mark" && (
+            <div className="space-y-3">
+            <fieldset className="space-y-1.5">
+              <legend className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Medallion position</legend>
+              <div className="flex flex-wrap gap-2">
+                {MEDALLION_POSITIONS.map(([value, text]) => {
+                  const active = card.medallionPos === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => set("medallionPos", value)}
+                      className={`min-h-11 rounded-full border-2 px-4 text-xs font-bold ${
+                        active ? "border-amber-500 bg-amber-500/10" : "border-zinc-200 dark:border-zinc-700"
+                      } text-zinc-800 dark:text-zinc-100`}
+                    >
+                      {text}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+            <fieldset className="space-y-1.5">
+              <legend className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Medallion shape</legend>
+              <div className="flex flex-wrap gap-2">
+                {MEDALLION_SHAPES.map(([value, text]) => {
+                  const active = card.medallionShape === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => set("medallionShape", value)}
+                      className={`min-h-11 rounded-full border-2 px-4 text-xs font-bold ${
+                        active ? "border-amber-500 bg-amber-500/10" : "border-zinc-200 dark:border-zinc-700"
+                      } text-zinc-800 dark:text-zinc-100`}
+                    >
+                      {text}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+            <fieldset className="space-y-1.5">
+              <legend className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Medallion size</legend>
+              <div className="flex flex-wrap gap-2">
+                {MEDALLION_SIZES.map(([value, text]) => {
+                  const active = card.medallionSize === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => set("medallionSize", value)}
+                      className={`min-h-11 rounded-full border-2 px-4 text-xs font-bold ${
+                        active ? "border-amber-500 bg-amber-500/10" : "border-zinc-200 dark:border-zinc-700"
+                      } text-zinc-800 dark:text-zinc-100`}
+                    >
+                      {text}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+            </div>
+          )}
+
+          {card.headerStyle === "mark-text" && (
+            <div>
+              <label htmlFor="card-header-text" className={label}>Header text</label>
+              <input
+                id="card-header-text"
+                className={input}
+                value={card.headerText}
+                maxLength={24}
+                placeholder={DEFAULT_HEADER_TEXT}
+                onChange={(e) => set("headerText", e.target.value)}
+              />
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">The first word goes on the top line and the rest underneath.</p>
+            </div>
+          )}
+
+          {card.headerStyle === "mark" && card.medallionPos !== "centre" && (
+            <fieldset className="space-y-1.5">
+              <legend className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Team logo in the opposite corner</legend>
+              <div className="flex gap-2">
+                {([
+                  [false, "Off"],
+                  [true, "On"],
+                ] as const).map(([value, text]) => {
+                  const active = card.medallionTeam === value;
+                  return (
+                    <button
+                      key={text}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => set("medallionTeam", value)}
+                      className={`min-h-11 rounded-full border-2 px-4 text-xs font-bold ${
+                        active ? "border-amber-500 bg-amber-500/10" : "border-zinc-200 dark:border-zinc-700"
+                      } text-zinc-800 dark:text-zinc-100`}
+                    >
+                      {text}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+          )}
+
+          {(card.headerStyle === "team" || card.headerStyle === "team-mark" || (card.headerStyle === "mark" && card.medallionPos !== "centre" && card.medallionTeam)) && (
+            <div className="space-y-1.5">
+              <p className={label}>Team logo</p>
+              <ImageUploader
+                key={card.headerImageUrl || "no-team-logo"}
+                maxFiles={1}
+                label="Upload team logo"
+                initialUrls={card.headerImageUrl ? [card.headerImageUrl] : []}
+                onUploadComplete={(urls) => set("headerImageUrl", urls[0] ?? "")}
+              />
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                A transparent PNG works best. If the logo has a solid background or dark lettering, set the badge to White below.
+              </p>
+            </div>
+          )}
+
           <fieldset className="space-y-1.5">
-            <legend className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Logo background</legend>
-            <div className="flex gap-2">
+            <legend className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Badge background</legend>
+            <div className="flex flex-wrap gap-2">
               {([
                 ["white", "White"],
                 ["body", "Match card body"],
+                ["custom", "Custom colour"],
               ] as const).map(([value, label]) => {
                                 const active = card.logoStyle === value;
                 return (
@@ -490,9 +656,39 @@ export function CardMaker({ initialSaved }: { initialSaved: CardData[] }) {
                 );
               })}
             </div>
+            {card.logoStyle === "custom" && (
+              <div className="max-w-xs pt-1">
+                <ColourField id="colour-badge" text="Badge colour" value={card.logoCustomColour} onChange={(hex) => set("logoCustomColour", hex)} />
+              </div>
+            )}
           </fieldset>
           <fieldset className="space-y-1.5">
-            <legend className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Logo lettering</legend>
+            <legend className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Badge hexagon pattern</legend>
+            <div className="flex gap-2">
+              {([
+                [true, "On"],
+                [false, "Off"],
+              ] as const).map(([value, text]) => {
+                const active = card.hexPattern === value;
+                return (
+                  <button
+                    key={text}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => set("hexPattern", value)}
+                    className={`min-h-11 rounded-full border-2 px-4 text-xs font-bold ${
+                      active ? "border-amber-500 bg-amber-500/10" : "border-zinc-200 dark:border-zinc-700"
+                    } text-zinc-800 dark:text-zinc-100`}
+                  >
+                    {text}
+                  </button>
+                );
+              })}
+            </div>
+                      </fieldset>
+          {(card.headerStyle === "full" || card.headerStyle === "mark-text") && (
+          <fieldset className="space-y-1.5">
+            <legend className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Lettering</legend>
             <div className="flex gap-2">
               {([
                 ["black", "Black"],
@@ -515,8 +711,9 @@ export function CardMaker({ initialSaved }: { initialSaved: CardData[] }) {
               })}
             </div>
           </fieldset>
+          )}
           <fieldset className="space-y-1.5">
-            <legend className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Logo outline</legend>
+            <legend className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Outline</legend>
             <div className="flex gap-2">
               {([
                 [false, "None"],

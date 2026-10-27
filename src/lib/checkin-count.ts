@@ -1,4 +1,5 @@
 import { redis } from "@/lib/redis";
+import { awardCardCredit } from "@/lib/card-credits";
 
 /**
  * Increment a member's lifetime check-in counter and record the latest
@@ -7,6 +8,8 @@ import { redis } from "@/lib/redis";
  *
  * Guests (synthetic `guest_*` ids) have no member hash and get a new id every
  * visit, so they are skipped — there's nothing meaningful to count for them.
+ *
+ * Also gives the member their card credit for the day (see lib/card-credits.ts).
  */
 export async function recordCheckInCount(
   userId: string,
@@ -23,4 +26,7 @@ export async function recordCheckInCount(
     // Non-critical: never let counter bookkeeping break a check-in.
     console.error("[checkin-count] failed to record:", error);
   }
+  // Every member check-in goes through here, so this is also where the day's card credit is earned.
+  // It is once per member per day and never throws.
+  await awardCardCredit(userId, timestamp);
 }

@@ -121,6 +121,7 @@ export default async function MenuPage() {
 
         <Group title="Garage">
           <MenuRow href="/cars" icon="garage" title="My cars" subtitle="Your cars and saved setups" />
+          <MenuRow href="/cards" icon="cards" title="My cards" subtitle="Collect cards of your car. Earn credits by checking in" />
           <MenuRow href="/tuning-advisor" icon="tools" title="Tuning advisor" subtitle="Get setup suggestions" />
           <MenuRow href="/calculator" icon="tools" title="Gear calculator" subtitle="Gearing and ratios" />
         </Group>

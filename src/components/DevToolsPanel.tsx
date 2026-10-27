@@ -7,6 +7,8 @@ import {
   toggleForceSelfCheckIn,
   devAddWalletBalance,
   devActivateMembership,
+  devAddCardCredits,
+  devResetCardCredits,
 } from "@/actions/dev";
 
 interface DevToolsPanelProps {
@@ -21,6 +23,8 @@ interface DevToolsPanelProps {
   realRole: string;
   /** Whether the dev "force self check-in" override is active. */
   forceSelfCheckin: boolean;
+  /** The signed-in user's card credits, for the test shortcuts below. */
+  cardCredits: number;
 }
 
 /**
@@ -33,6 +37,7 @@ export function DevToolsPanel({
   impersonateVariant,
   realRole,
   forceSelfCheckin,
+  cardCredits,
 }: DevToolsPanelProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -156,6 +161,23 @@ export function DevToolsPanel({
               </DevActionButton>
               <DevActionButton disabled={isPending} onClick={() => runAction(() => devActivateMembership())}>
                 +28d member
+              </DevActionButton>
+            </div>
+            <p className="mb-1 mt-3 flex items-center justify-between text-[10px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+              <span>Card credits</span>
+              <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] normal-case text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
+                You have {cardCredits}
+              </span>
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              <DevActionButton disabled={isPending} onClick={() => runAction(() => devAddCardCredits(1))}>
+                +1 credit
+              </DevActionButton>
+              <DevActionButton disabled={isPending} onClick={() => runAction(() => devAddCardCredits(5))}>
+                +5 credits
+              </DevActionButton>
+              <DevActionButton disabled={isPending || cardCredits === 0} onClick={() => runAction(() => devResetCardCredits())}>
+                Reset to 0
               </DevActionButton>
             </div>
             {actionNote && <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">{actionNote}</p>}

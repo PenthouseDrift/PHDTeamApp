@@ -19,6 +19,8 @@ import { MembershipCard } from "@/components/new-shell/MembershipCard";
 import type { Product } from "@/components/new-shell/useCheckoutFlow";
 import { EventsSection } from "@/components/dashboard2/EventCards";
 import { ShareAppCard } from "@/components/dashboard2/ShareAppCard";
+import { CardsPromo } from "@/components/dashboard2/CardsPromo";
+import { getCardCredits } from "@/lib/card-credits";
 import { StaffQuickAccess } from "@/components/dashboard2/StaffQuickAccess";
 
 export const dynamic = "force-dynamic";
@@ -150,6 +152,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       membershipDays={MEMBERSHIP_DURATION_DAYS}
     />
   );
+  // Read after the check-in above has run, so a credit earned just now is counted.
+  const cardCredits = await getCardCredits(userId);
   const membershipActiveBlock = !isStaff && membershipState === "active" ? membershipCard(true) : undefined;
 
   return (
@@ -211,6 +215,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           }
         />
 
+        <CardsPromo credits={cardCredits} />
         {/* Join / renew prompts get their own card. (Active members see their
             time-left bar inside the check-in card above.) */}
         {!isStaff && membershipState !== "active" && membershipCard()}
