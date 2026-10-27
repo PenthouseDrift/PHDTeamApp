@@ -1,3 +1,4 @@
+import { redis } from "@/lib/redis";
 import type { StoredMemberCard } from "@/lib/card-roll";
 
 /**
@@ -6,6 +7,8 @@ import type { StoredMemberCard } from "@/lib/card-roll";
  *   usercard:<id>              one JSON string per card
  *   member:<userId>:usercards  sorted set of that member's own cards (scored by when opened); what "My cards" lists
  *   usercards:all              sorted set of EVERY card ever opened, including ones re-rolled away; what admins list
+ *   usercards:pool             the community pool: sorted set holding ONE card per driver and car (see below)
+ *   usercards:pool:bycar       hash from "driver and car" to the card id that stands for it in the pool
  *
  * A re-rolled card is not deleted: its old version is kept as an archived card that only appears in
  * the admin list.
@@ -26,4 +29,96 @@ export function parseStoredCard(raw: unknown): StoredMemberCard | null {
   } catch {
     return null;
   }
+}
+
+// ── The community pool ──────────────────────────────────────────────────────
+//
+// The extra card in a pack is built from a card in the pool. The pool holds one card for each
+// driver and car, however many cards were made of it: a member with three cars and thirty cards
+// adds three entries, the same as three members with one card each. That keeps one busy member from
+// filling the pool, so every driver and car is equally likely to be picked. The card standing in for
+// a driver and car is their newest one, so the details (parts, team) stay up to date.
+
+export const COMMUNITY_POOL_INDEX = "usercards:pool";
+const POOL_BY_CAR = "usercards:pool:bycar";
+/** Set once the pool has been built from the cards that existed before it did. */
+const POOL_BUILT = "usercards:pool:built";
+
+/** One driver and car: the member, the driver name on the card and the car's name, ignoring case and spacing. */
+export function communityKey(card: Pick<StoredMemberCard, "userId" | "driver" | "name">): string {
+  const norm = (v: string) => String(v ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+  return `${card.userId}|${norm(card.driver)}|${norm(card.name)}`;
+}
+
+/** A card can stand in the pool when it is a real, current card: not re-rolled away, not itself a second-slot card. */
+export const isCommunityCard = (card: StoredMemberCard | null): card is StoredMemberCard =>
+  Boolean(card && !card.archived && !card.bonus && card.driver?.trim());
+
+/** Make this card the pool's card for its driver and car, replacing the older one. */
+export async function addToCommunityPool(card: StoredMemberCard): Promise<void> {
+  if (!isCommunityCard(card)) return;
+  const field = communityKey(card);
+  const previous = await redis.hget<string>(POOL_BY_CAR, field);
+  const tx = redis.multi();
+  if (previous && previous !== card.id) tx.zrem(COMMUNITY_POOL_INDEX, previous);
+  tx.hset(POOL_BY_CAR, { [field]: card.id });
+  tx.zadd(COMMUNITY_POOL_INDEX, { score: card.createdAt, member: card.id });
+  await tx.exec();
+}
+
+/**
+ * A card has been deleted. If it was the one standing in the pool for its driver and car, another
+ * card of the same driver and car takes its place, or the driver and car leaves the pool if there is
+ * none. Call this after the card is gone from its owner's list.
+ */
+export async function removeFromCommunityPool(card: StoredMemberCard): Promise<void> {
+  const field = communityKey(card);
+  const standing = await redis.hget<string>(POOL_BY_CAR, field);
+  if (standing !== card.id) {
+    // Not the one in the pool, but make sure a stray entry for this id can't linger.
+    await redis.zrem(COMMUNITY_POOL_INDEX, card.id);
+    return;
+  }
+  await redis.multi().zrem(COMMUNITY_POOL_INDEX, card.id).hdel(POOL_BY_CAR, field).exec();
+
+  const ids = (await redis.zrange(memberCardsIndexKey(card.userId), 0, 499, { rev: true })) as string[];
+  if (!ids || ids.length === 0) return;
+  const rows = await redis.mget(...ids.map((id) => memberCardKey(String(id))));
+  const next = rows
+    .map(parseStoredCard)
+    .find((c) => isCommunityCard(c) && c.id !== card.id && communityKey(c) === field);
+  if (next) await addToCommunityPool(next);
+}
+
+/**
+ * Build the pool from every card that exists, newest card per driver and car. Safe to run any
+ * time: it replaces the pool with exactly what the cards say. Returns how many drivers and cars are in it.
+ */
+export async function rebuildCommunityPool(): Promise<number> {
+  const ids = (await redis.zrange(ALL_MEMBER_CARDS_INDEX, 0, -1)) as string[];
+  const newest = new Map<string, StoredMemberCard>();
+  for (let i = 0; i < ids.length; i += 100) {
+    const rows = await redis.mget(...ids.slice(i, i + 100).map((id) => memberCardKey(String(id))));
+    for (const row of rows) {
+      const card = parseStoredCard(row);
+      if (!isCommunityCard(card)) continue;
+      const field = communityKey(card);
+      const seen = newest.get(field);
+      if (!seen || card.createdAt > seen.createdAt) newest.set(field, card);
+    }
+  }
+
+  const tx = redis.multi().del(COMMUNITY_POOL_INDEX).del(POOL_BY_CAR);
+  for (const [field, card] of newest) {
+    tx.hset(POOL_BY_CAR, { [field]: card.id });
+    tx.zadd(COMMUNITY_POOL_INDEX, { score: card.createdAt, member: card.id });
+  }
+  tx.set(POOL_BUILT, "1");
+  await tx.exec();
+  return newest.size;
+}
+
+/** Build the pool the first time it is needed, from the cards made before the pool existed. */
+export async function ensureCommunityPool(): Promise<void> {
+  if (!(await redis.get(POOL_BUILT))) await rebuildCommunityPool();
 }

@@ -10,6 +10,8 @@ import {
   memberCardKey,
   memberCardsIndexKey,
   parseStoredCard,
+  rebuildCommunityPool,
+  removeFromCommunityPool,
 } from "@/lib/member-card-store";
 import { deleteImage } from "@/lib/blob";
 import { isBlobUrl } from "@/lib/card-art-generate";
@@ -86,6 +88,8 @@ export async function deleteMemberCard(cardId: string): Promise<ActionResult<{ i
     const tx = redis.multi().del(memberCardKey(id)).zrem(ALL_MEMBER_CARDS_INDEX, id);
     if (card) tx.zrem(memberCardsIndexKey(card.userId), id);
     await tx.exec();
+    // If it stood in the community pool for its driver and car, another of theirs takes over (or they leave the pool).
+    if (card) await removeFromCommunityPool(card);
 
     // Best-effort: the artwork file is only used by this card (the member's own car photo is not touched).
     if (card && isBlobUrl(card.imageUrl)) {
@@ -109,7 +113,7 @@ export async function deleteMemberCard(cardId: string): Promise<ActionResult<{ i
  * once for cards opened before the admin list existed. Safe to run again: it never changes a card
  * that is already listed.
  */
-export async function rebuildMemberCardIndex(): Promise<ActionResult<{ scanned: number; listed: number }>> {
+export async function rebuildMemberCardIndex(): Promise<ActionResult<{ scanned: number; listed: number; pool: number }>> {
   try {
     if (!(await requireAdmin())) return { success: false, error: "Only admins can do this" };
 
@@ -139,8 +143,11 @@ export async function rebuildMemberCardIndex(): Promise<ActionResult<{ scanned: 
       if (String(cursor) === "0") break;
     }
 
+    // Also rebuild the community pool (one card per driver and car) from the cards as they are now.
+    const pool = await rebuildCommunityPool();
+
     revalidatePath("/admin/member-cards");
-    return { success: true, data: { scanned, listed } };
+    return { success: true, data: { scanned, listed, pool } };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Could not rebuild the card list" };
   }

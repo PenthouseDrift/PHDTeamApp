@@ -21,7 +21,11 @@ import {
 import { tierArtPrompt, type FullArtTier } from "@/lib/full-art-card";
 import {
   ALL_MEMBER_CARDS_INDEX,
+  COMMUNITY_POOL_INDEX,
   MEMBER_CARD_ID_PATTERN,
+  addToCommunityPool,
+  ensureCommunityPool,
+  isCommunityCard,
   memberCardKey as cardKey,
   memberCardsIndexKey as indexKey,
   parseStoredCard as parseCard,
@@ -95,31 +99,49 @@ async function rollAndDraw(referenceUrl: string): Promise<{
   throw lastError;
 }
 
+/** Up to this many cards are looked at when the pool is big; a small pool is looked at in full. */
+const POOL_SAMPLE = 12;
+const POOL_LOAD_ALL_UNDER = 100;
+
 /**
- * A random earlier card to build the second card from, or null when there isn't one yet. It picks a
- * random place in the list of every card opened and checks what it finds, a few times over, so it
- * never loads the whole list. Another member's card is preferred; if none turns up (for example
- * while only one person has made cards) one of the opener's own is used instead. Skipped: re-rolled
- * away copies, second-slot cards (so a card is never a copy of a copy), and any without a car photo.
+ * A random card from the community pool to build the second card from, or null when the pool is
+ * empty. The pool holds one card for each driver and car (see member-card-store.ts), so a member
+ * who has made lots of cards is no more likely to be picked than one who has made a single card.
+ * Another member's driver and car is preferred; if the pool holds only the opener's own, one of
+ * those is used instead. Cards without a usable car photo are skipped.
  */
 async function pickBonusSource(userId: string): Promise<StoredMemberCard | null> {
-  let ownCard: StoredMemberCard | null = null;
   try {
-    const total = await redis.zcard(ALL_MEMBER_CARDS_INDEX);
+    await ensureCommunityPool();
+    const total = await redis.zcard(COMMUNITY_POOL_INDEX);
     if (!total) return null;
-    for (let attempt = 0; attempt < 12; attempt++) {
-      const position = Math.floor(rng() * total);
-      const [id] = (await redis.zrange(ALL_MEMBER_CARDS_INDEX, position, position)) as string[];
-      if (!id || !MEMBER_CARD_ID_PATTERN.test(String(id))) continue;
-      const card = parseCard(await redis.get(cardKey(String(id))));
-      if (!card || card.archived || card.bonus || !card.driver || !isBlobUrl(card.referenceUrl)) continue;
-      if (card.userId !== userId) return card;
-      ownCard ??= card;
+
+    // A small pool is read in full, so the pick is exactly even. A big one is sampled at random places.
+    let ids: string[];
+    if (total <= POOL_LOAD_ALL_UNDER) {
+      ids = (await redis.zrange(COMMUNITY_POOL_INDEX, 0, -1)) as string[];
+    } else {
+      const picks = await Promise.all(
+        Array.from({ length: POOL_SAMPLE }, () => {
+          const position = Math.floor(rng() * total);
+          return redis.zrange(COMMUNITY_POOL_INDEX, position, position) as Promise<string[]>;
+        })
+      );
+      ids = [...new Set(picks.flat())];
     }
+    ids = ids.map(String).filter((id) => MEMBER_CARD_ID_PATTERN.test(id));
+    if (ids.length === 0) return null;
+
+    const cards = (await redis.mget(...ids.map((id) => cardKey(id))))
+      .map(parseCard)
+      .filter((c): c is StoredMemberCard => isCommunityCard(c) && isBlobUrl(c.referenceUrl));
+    const others = cards.filter((c) => c.userId !== userId);
+    const candidates = others.length > 0 ? others : cards;
+    return candidates.length > 0 ? candidates[Math.floor(rng() * candidates.length)] : null;
   } catch (error) {
     console.error("[member-cards] could not pick a bonus card:", error);
+    return null;
   }
-  return ownCard;
 }
 
 function friendlyError(error: unknown): string {
@@ -233,6 +255,8 @@ export async function openCardPack(
     await redis.zadd(indexKey(user.id), { score: now, member: stored.id });
     // Every card is also listed for admins, who can see all stored cards.
     await redis.zadd(ALL_MEMBER_CARDS_INDEX, { score: now, member: stored.id });
+    // This driver and car now stands in the community pool with this card (replacing their older one).
+    await addToCommunityPool(stored).catch((error) => console.error("[member-cards] could not update the pool:", error));
 
     // The bonus card: the other member's card details, drawn again as a whole new card (its own
     // rarity, stats, art styles and picture). It goes straight into this member's collection and

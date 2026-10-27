@@ -101,7 +101,9 @@ export function MemberCardsAdmin({ initialCards: loadedCards, total: loadedTotal
     startTransition(async () => {
       const res = await rebuildMemberCardIndex();
       if (res.success) {
-        setNote({ text: `Checked ${res.data.scanned} stored cards. ${res.data.listed} were missing from the list and have been added.` });
+        setNote({
+          text: `Checked ${res.data.scanned} stored cards. ${res.data.listed} were missing from the list and have been added. The community pool now holds ${res.data.pool} unique driver and car combinations.`,
+        });
         router.refresh();
       } else {
         setNote({ text: res.error, error: true });
