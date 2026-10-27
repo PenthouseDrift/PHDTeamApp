@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { listSavedCards } from "@/actions/admin/cards";
-import { listFullArtCards } from "@/actions/admin/full-art-cards";
+import { listFeaturedCards, listFullArtCards } from "@/actions/admin/full-art-cards";
 import { CardMakerTabs } from "@/components/cards/CardMakerTabs";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export default async function CardMakerPage() {
   const session = await auth();
   if (!session?.user || session.user.role !== "admin") redirect("/admin");
 
-  const [originalSaved, fullArtSaved] = await Promise.all([listSavedCards(), listFullArtCards()]);
+  const [originalSaved, fullArtSaved, featured] = await Promise.all([listSavedCards(), listFullArtCards(), listFeaturedCards()]);
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
@@ -24,10 +24,10 @@ export default async function CardMakerPage() {
         <h1 className="text-2xl font-black text-zinc-900 dark:text-zinc-100">Card maker</h1>
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
           Build a PHD trading card: add an image, fill in the details, then save it or print it. On the Full art tab, pick a
-          bronze, silver, gold or legend tier and the AI art style follows it. The Original tab is the first card design.
+          bronze, silver, gold, legend or mythic tier and the AI art style follows it (mythic is admin only and never comes out of a normal pack). Saved cards can be made pullable as a rare bonus card in packs. The Original tab is the first card design.
         </p>
       </div>
-      <CardMakerTabs initialFullArtSaved={fullArtSaved} initialOriginalSaved={originalSaved} />
+      <CardMakerTabs initialFullArtSaved={fullArtSaved} initialOriginalSaved={originalSaved} initialFeatured={featured} />
     </div>
   );
 }

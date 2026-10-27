@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import { sanitizeFullArtCard, type FullArtCardData } from "@/lib/full-art-card";
+import { FEATURED_CARDS_KEY, MAX_FEATURED_WEIGHT, MIN_FEATURED_WEIGHT } from "@/lib/member-card-store";
 import type { ActionResult } from "@/types";
 
 /**
@@ -68,10 +69,50 @@ export async function deleteFullArtCard(id: string): Promise<ActionResult<null>>
 
     await redis.del(cardKey(id));
     await redis.zrem(INDEX, id);
+    // A deleted card can't stay pullable.
+    await redis.hdel(FEATURED_CARDS_KEY, id);
 
     revalidatePath("/admin/card-maker");
     return { success: true, data: null };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Could not delete the card" };
+  }
+}
+
+// ── Pullable cards ──────────────────────────────────────────────────────────
+
+/** The saved cards that can be pulled as a pack's bonus third card, with each one's odds weight. */
+export async function listFeaturedCards(): Promise<Record<string, number>> {
+  if (!(await requireAdmin())) return {};
+  const raw = (await redis.hgetall(FEATURED_CARDS_KEY)) ?? {};
+  const out: Record<string, number> = {};
+  for (const [id, weight] of Object.entries(raw)) {
+    const n = Number(weight);
+    if (Number.isFinite(n) && n > 0) out[id] = n;
+  }
+  return out;
+}
+
+/** Make a saved card pullable with this odds weight (1 to 100, higher = pulled more often), or pass null to stop it being pullable. */
+export async function setCardPullable(id: string, weight: number | null): Promise<ActionResult<null>> {
+  try {
+    if (!(await requireAdmin())) return { success: false, error: "Only admins can change this" };
+    if (!/^[a-z0-9-]{8,64}$/i.test(id)) return { success: false, error: "Invalid card" };
+
+    if (weight === null) {
+      await redis.hdel(FEATURED_CARDS_KEY, id);
+    } else {
+      const n = Math.round(Number(weight));
+      if (!Number.isFinite(n) || n < MIN_FEATURED_WEIGHT || n > MAX_FEATURED_WEIGHT) {
+        return { success: false, error: `Odds must be a number from ${MIN_FEATURED_WEIGHT} to ${MAX_FEATURED_WEIGHT}` };
+      }
+      const saved = parseCard(await redis.get(cardKey(id)));
+      if (!saved?.id) return { success: false, error: "Save the card first" };
+      if (!saved.imageUrl) return { success: false, error: "The card needs a picture before it can be pulled" };
+      await redis.hset(FEATURED_CARDS_KEY, { [id]: n });
+    }
+    return { success: true, data: null };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Could not update the card" };
   }
 }

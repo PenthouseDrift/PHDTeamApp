@@ -34,7 +34,7 @@ const SPARKS: Array<[number, number, number]> = [
   [50, 8, 0.8], [36, 14, 1.1], [66, 10, 0.4], [30, 92, 0.7], [70, 92, 1], [4, 36, 1.3],
   [96, 70, 0.1], [26, 40, 1.2], [74, 36, 0.35], [52, 96, 0.95],
 ];
-const SPARK_COUNT = { bronze: 0, silver: 6, gold: 10, legend: 16 } as const;
+const SPARK_COUNT = { bronze: 0, silver: 6, gold: 10, legend: 16, mythic: 16 } as const;
 
 function CardBack() {
   return (
@@ -64,6 +64,7 @@ export function PackOpening({
   ready,
   card,
   bonus = null,
+  featured = null,
   onRevealed,
 }: {
   /** The card has been drawn and saved, so the pack can be opened. */
@@ -72,12 +73,14 @@ export function PackOpening({
   card: MemberCard | null;
   /** The second card some packs hold, shown after the first in the same carousel. */
   bonus?: MemberCard | null;
+  /** The rare third card from the admin's pullable set, shown last. */
+  featured?: MemberCard | null;
   /** Called once the card has finished revealing, so the page can show what to do next. */
   onRevealed: () => void;
 }) {
   const reduced = useReducedMotion();
   const [anim, setAnim] = useState<Anim>("drifting");
-  const slides = card ? [card, ...(bonus ? [bonus] : [])] : [];
+  const slides = card ? [card, ...(bonus ? [bonus] : []), ...(featured ? [featured] : [])] : [];
   const scroller = useRef<HTMLDivElement>(null);
   const [slide, setSlide] = useState(0);
 
@@ -118,7 +121,7 @@ export function PackOpening({
 
   const info = card ? tierInfo(card.tier) : null;
   const glow = info?.palette.glow ?? "#fbbf24";
-  const isLegend = card?.tier === "legend";
+  const isLegend = card?.tier === "legend" || card?.tier === "mythic";
   const sparks = card ? SPARK_COUNT[card.tier] : 0;
 
   const caption =
@@ -198,6 +201,7 @@ export function PackOpening({
           <span className="sr-only" role="status">
             {`You got a ${info?.label} card: ${card.name}.`}
             {bonus ? ` Your pack also had a ${tierInfo(bonus.tier).label} card: ${bonus.name}. Use the arrows to move between your cards.` : ""}
+            {featured ? ` A rare ${tierInfo(featured.tier).label} card also dropped: ${featured.name}.` : ""}
           </span>
           <div className={`pc-rays ${isLegend ? "pc-rays-rainbow" : ""}`} aria-hidden style={card.tier === "bronze" ? { display: "none" } : undefined} />
           <div className="pc-burst" aria-hidden />

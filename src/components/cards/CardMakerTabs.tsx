@@ -9,7 +9,7 @@ import type { FullArtCardData } from "@/lib/full-art-card";
 type Kind = "full-art" | "original";
 
 const TABS: Array<{ id: Kind; label: string; hint: string }> = [
-  { id: "full-art", label: "Full art card", hint: "Picture fills the card. Pick a bronze, silver, gold or legend tier" },
+  { id: "full-art", label: "Full art card", hint: "Picture fills the card. Pick a bronze, silver, gold, legend or mythic tier" },
   { id: "original", label: "Original card", hint: "The first card design, with its own colours and header" },
 ];
 
@@ -20,9 +20,12 @@ const TABS: Array<{ id: Kind; label: string; hint: string }> = [
 export function CardMakerTabs({
   initialFullArtSaved,
   initialOriginalSaved,
+  initialFeatured = {},
 }: {
   initialFullArtSaved: FullArtCardData[];
   initialOriginalSaved: CardData[];
+  /** Saved full art card id -> odds weight, for the cards that can be pulled from packs. */
+  initialFeatured?: Record<string, number>;
 }) {
   const [kind, setKind] = useState<Kind>("full-art");
 
@@ -54,7 +57,7 @@ export function CardMakerTabs({
       </div>
 
       <div role="tabpanel" id="card-kind-panel-full-art" aria-labelledby="card-kind-tab-full-art" hidden={kind !== "full-art"}>
-        <FullArtCardMaker initialSaved={initialFullArtSaved} />
+        <FullArtCardMaker initialSaved={initialFullArtSaved} initialFeatured={initialFeatured} />
       </div>
       <div role="tabpanel" id="card-kind-panel-original" aria-labelledby="card-kind-tab-original" hidden={kind !== "original"}>
         <CardMaker initialSaved={initialOriginalSaved} />

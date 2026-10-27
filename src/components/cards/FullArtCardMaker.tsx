@@ -6,13 +6,12 @@ import ImageUploader from "@/components/ui/ImageUploader";
 import { AiArtPanel } from "@/components/cards/AiArtPanel";
 import { FullArtCard } from "@/components/cards/FullArtCard";
 import { FULL_CARD_AREA, ImageAdjuster } from "@/components/cards/ImageAdjuster";
-import { deleteFullArtCard, saveFullArtCard } from "@/actions/admin/full-art-cards";
+import { deleteFullArtCard, saveFullArtCard, setCardPullable } from "@/actions/admin/full-art-cards";
 import {
   FULL_ART_TIERS,
   emptyFullArtCard,
   tierArtPrompt,
   tierInfo,
-  uniqueCardName,
   type FullArtCardData,
   type FullArtStats,
 } from "@/lib/full-art-card";
@@ -41,7 +40,14 @@ const panel = "space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-
 const outlineButton =
   "min-h-12 rounded-xl border border-zinc-300 text-sm font-bold text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800";
 
-export function FullArtCardMaker({ initialSaved }: { initialSaved: FullArtCardData[] }) {
+export function FullArtCardMaker({
+  initialSaved,
+  initialFeatured = {},
+}: {
+  initialSaved: FullArtCardData[];
+  /** Saved card id -> odds weight, for the cards that can be pulled from packs. */
+  initialFeatured?: Record<string, number>;
+}) {
   const isClient = useIsClient();
   const [card, setCard] = useState<FullArtCardData>(emptyFullArtCard);
   const [saved, setSaved] = useState<FullArtCardData[]>(initialSaved);
@@ -51,6 +57,9 @@ export function FullArtCardMaker({ initialSaved }: { initialSaved: FullArtCardDa
   // Touch only drags the picture while this is on, so the page can still be scrolled with a finger.
   const [touchAdjust, setTouchAdjust] = useState(false);
   const [pending, startTransition] = useTransition();
+  // Cards that can drop as a pack's rare third card, and the odds weight typed for the open card.
+  const [featured, setFeatured] = useState<Record<string, number>>(initialFeatured);
+  const [weightText, setWeightText] = useState("10");
 
   const tier = tierInfo(card.tier);
 
@@ -72,22 +81,66 @@ export function FullArtCardMaker({ initialSaved }: { initialSaved: FullArtCardDa
   }, [printMode]);
 
   /**
-   * Saves the card. A new card (or "Save as new card") gets a name no other saved card uses, adding the
-   * tier when the name is taken, so the same car can be saved once per tier. "Save changes" updates the
-   * open card and keeps its name.
+   * Saves the card. A new card (or "Save as new card") keeps the name as typed and gets its own
+   * auto-generated id on the server, like member cards, so the same name can be saved many times
+   * (for example one per tier). "Save changes" updates the open card.
    */
-  function save(asNew = false) {
+  function save(asNew = false, thenPullable = false) {
     setMessage(null);
     const creating = asNew || !card.id;
-    const name = creating ? uniqueCardName(card.name, tier.label, saved.map((c) => c.name)) : card.name;
-    const toSave: FullArtCardData = creating ? { ...card, id: undefined, name } : card;
-    const renamed = creating && name !== card.name.replace(/\s+/g, " ").trim();
+    const toSave: FullArtCardData = creating ? { ...card, id: undefined } : card;
     startTransition(async () => {
       const res = await saveFullArtCard(toSave);
       if (res.success) {
         setCard(res.data);
         setSaved((list) => [res.data, ...list.filter((c) => c.id !== res.data.id)]);
-        setMessage({ text: renamed ? `Saved as “${res.data.name}” because that name was already used` : `“${res.data.name}” saved` });
+        const savedText = `“${res.data.name}” saved (card ${res.data.id?.slice(0, 8)})`;
+        const weight = Math.round(Number(weightText));
+        if (thenPullable && res.data.id && res.data.imageUrl && weight >= 1 && weight <= 100) {
+          const pull = await setCardPullable(res.data.id, weight);
+          if (pull.success) {
+            const id = res.data.id;
+            setFeatured((f) => ({ ...f, [id]: weight }));
+            setMessage({ text: `${savedText} and added to pullable cards` });
+          } else {
+            setMessage({ text: `${savedText}, but it could not be added to pullable cards: ${pull.error}`, error: true });
+          }
+        } else if (thenPullable) {
+          setMessage({ text: `${savedText}. Not added to pullable cards: it needs a picture and odds from 1 to 100`, error: true });
+        } else {
+          setMessage({ text: savedText });
+        }
+      } else {
+        setMessage({ text: res.error, error: true });
+      }
+    });
+  }
+
+  const featuredTotal = Object.values(featured).reduce((sum, w) => sum + w, 0);
+  const isPullable = Boolean(card.id && featured[card.id]);
+  // The picture on screen is not the one saved for this card (new art was made since), so it is a different card.
+  const pictureChanged = Boolean(card.id && saved.find((c) => c.id === card.id)?.imageUrl !== card.imageUrl);
+  const pullableCards = saved.filter((c) => c.id && featured[c.id]);
+
+  function setPullable(on: boolean) {
+    if (!card.id) return;
+    const id = card.id;
+    const weight = Math.round(Number(weightText));
+    if (on && (!Number.isFinite(weight) || weight < 1 || weight > 100)) {
+      setMessage({ text: "Odds must be a whole number from 1 to 100", error: true });
+      return;
+    }
+    setMessage(null);
+    startTransition(async () => {
+      const res = await setCardPullable(id, on ? weight : null);
+      if (res.success) {
+        setFeatured((f) => {
+          const next = { ...f };
+          if (on) next[id] = weight;
+          else delete next[id];
+          return next;
+        });
+        setMessage({ text: on ? `“${card.name}” can drop in packs (weight ${weight})` : `“${card.name}” removed from pullable cards` });
       } else {
         setMessage({ text: res.error, error: true });
       }
@@ -100,6 +153,11 @@ export function FullArtCardMaker({ initialSaved }: { initialSaved: FullArtCardDa
       const res = await deleteFullArtCard(target.id!);
       if (res.success) {
         setSaved((list) => list.filter((c) => c.id !== target.id));
+        setFeatured((f) => {
+          const next = { ...f };
+          delete next[target.id!];
+          return next;
+        });
         if (card.id === target.id) setCard(emptyFullArtCard());
         setMessage({ text: "Card deleted" });
       } else {
@@ -213,9 +271,71 @@ export function FullArtCardMaker({ initialSaved }: { initialSaved: FullArtCardDa
             </button>
           )}
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            To keep this car in more than one tier, change the tier, generate, then use &ldquo;Save as new card&rdquo;. If the
-            name is already taken, the tier is added to it, like &ldquo;Silvia (Gold)&rdquo;.
+            To keep this car in more than one tier, change the tier, generate, then use &ldquo;Save as new card&rdquo;. The name
+            stays the same; each saved card gets its own auto-generated id.
           </p>
+          <div className="space-y-2 rounded-xl border border-amber-500/40 bg-amber-500/5 p-3">
+            <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">Pullable in packs</p>
+            <p className="text-xs text-zinc-600 dark:text-zinc-400">
+              Optional. A pullable card is a set card: this exact picture is given out, never redrawn. Each pack has a 1 in 20
+              chance of a third bonus card, picked from the pullable cards by the odds weight.
+            </p>
+            <label htmlFor="fa-odds" className={label}>
+              Odds weight (1 to 100)
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                id="fa-odds"
+                className={`${input} w-24`}
+                value={weightText}
+                inputMode="numeric"
+                maxLength={3}
+                onChange={(e) => setWeightText(e.target.value.replace(/\D/g, ""))}
+              />
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Bigger number = shows up more often than your other pullable cards.
+                {Object.keys(featured).length > 0 ? ` Currently ${Object.keys(featured).length} pullable.` : ""}
+              </p>
+            </div>
+
+            {card.id && isPullable && !pictureChanged ? (
+              <>
+                <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                  This card is pullable: weight {featured[card.id]}, {Math.round((featured[card.id] / featuredTotal) * 100)}% of bonus drops.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setPullable(true)} disabled={pending} className={`${outlineButton} disabled:opacity-50`}>
+                    Update odds
+                  </button>
+                  <button type="button" onClick={() => setPullable(false)} disabled={pending} className={`${outlineButton} disabled:opacity-50`}>
+                    Remove
+                  </button>
+                </div>
+                <button type="button" onClick={startNew} disabled={pending} className={`${outlineButton} w-full disabled:opacity-50`}>
+                  Make another card
+                </button>
+              </>
+            ) : card.id && !pictureChanged ? (
+              <button type="button" onClick={() => setPullable(true)} disabled={pending || !card.imageUrl} className={`${outlineButton} w-full disabled:opacity-50`}>
+                Add this card to pullable cards
+              </button>
+            ) : (
+              <>
+                {pictureChanged && (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">The picture has changed, so this will be a new card. The earlier one stays as it was.</p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => save(true, true)}
+                  disabled={pending || !card.imageUrl || !card.name.trim()}
+                  className={`${outlineButton} w-full disabled:opacity-50`}
+                >
+                  Save as new card and add to pullable cards
+                </button>
+              </>
+            )}
+            {card.tier === "mythic" && <p className="text-xs font-bold text-rose-600 dark:text-rose-400">Mythic cards only ever reach members this way.</p>}
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setPrintMode("single")} className={outlineButton}>
               Print card
@@ -241,7 +361,7 @@ export function FullArtCardMaker({ initialSaved }: { initialSaved: FullArtCardDa
         {/* Tier */}
         <section className={panel} aria-label="Card tier">
           <h2 className="text-sm font-black text-zinc-900 dark:text-zinc-100">Tier</h2>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="group" aria-label="Card tier">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5" role="group" aria-label="Card tier">
             {FULL_ART_TIERS.map((t) => {
               const active = card.tier === t.id;
               return (
@@ -261,7 +381,9 @@ export function FullArtCardMaker({ initialSaved }: { initialSaved: FullArtCardDa
                       background:
                         t.id === "legend"
                           ? "conic-gradient(#7df9ff, #a78bfa, #ff7ad9, #ffd75e, #7df9ff)"
-                          : `linear-gradient(135deg, ${t.palette.light}, ${t.palette.accent} 55%, ${t.palette.dark})`,
+                          : t.id === "mythic"
+                            ? "conic-gradient(#fff1b8, #ff2d55, #ffb020, #ff2d55, #fff1b8)"
+                            : `linear-gradient(135deg, ${t.palette.light}, ${t.palette.accent} 55%, ${t.palette.dark})`,
                     }}
                   />
                   {t.label}
@@ -403,6 +525,40 @@ export function FullArtCardMaker({ initialSaved }: { initialSaved: FullArtCardDa
           </div>
         </section>
 
+        {/* Pullable cards: the set cards that can drop as a pack's bonus third card */}
+        <section className={panel} aria-label="Pullable cards">
+          <h2 className="text-sm font-black text-zinc-900 dark:text-zinc-100">Pullable in packs ({pullableCards.length})</h2>
+          {pullableCards.length === 0 ? (
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              No pullable cards yet. Save a card, then use &ldquo;Add to pullable cards&rdquo; next to the preview. Each pack has a 1 in 20 chance of
+              a bonus card from this list.
+            </p>
+          ) : (
+            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {pullableCards.map((c) => (
+                <li key={c.id} className={`space-y-2 rounded-xl border p-2 ${c.id === card.id ? "border-amber-500" : "border-zinc-200 dark:border-zinc-800"}`}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCard(c);
+                      setMessage(null);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    className="block w-full"
+                    aria-label={`Edit ${c.name}`}
+                  >
+                    <FullArtCard card={c} />
+                  </button>
+                  <p className="truncate text-center text-xs font-bold text-zinc-700 dark:text-zinc-200">{c.name}</p>
+                  <p className="text-center text-xs text-zinc-500 dark:text-zinc-400">
+                    {tierInfo(c.tier).label} · weight {featured[c.id!]} · {Math.round((featured[c.id!] / featuredTotal) * 100)}% of bonus drops
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
         {/* Saved cards */}
         <section className={panel} aria-label="Saved full art cards">
           <h2 className="text-sm font-black text-zinc-900 dark:text-zinc-100">Saved full art cards ({saved.length})</h2>
@@ -424,7 +580,11 @@ export function FullArtCardMaker({ initialSaved }: { initialSaved: FullArtCardDa
                   >
                     <FullArtCard card={c} />
                   </button>
-                  <p className="truncate text-center text-xs font-bold text-zinc-700 dark:text-zinc-200">{c.name}</p>
+                  <p className="truncate text-center text-xs font-bold text-zinc-700 dark:text-zinc-200">
+                    {c.name}
+                    {c.id && featured[c.id] ? " ★" : ""}
+                  </p>
+                  <p className="truncate text-center font-mono text-[10px] text-zinc-400">{c.id?.slice(0, 8)}</p>
                   <button type="button" onClick={() => remove(c)} disabled={pending} className="min-h-9 w-full rounded-lg text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/30">
                     Delete
                   </button>

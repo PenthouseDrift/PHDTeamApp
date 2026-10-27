@@ -185,6 +185,8 @@ function CardPackWizardForm({
   const [card, setCard] = useState<MemberCard | null>(null);
   /** The second card some packs hold, built from another member's card. */
   const [bonus, setBonus] = useState<MemberCard | null>(null);
+  /** The rare third card from the admin's pullable set. */
+  const [featured, setFeatured] = useState<MemberCard | null>(null);
   const [ready, setReady] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [confirmReroll, setConfirmReroll] = useState(false);
@@ -217,6 +219,7 @@ function CardPackWizardForm({
     setError(null);
     setCard(null);
     setBonus(null);
+    setFeatured(null);
     setReady(false);
     setRevealed(false);
     setConfirmReroll(false);
@@ -237,6 +240,7 @@ function CardPackWizardForm({
         saveRememberedPack(userId, { driver: driver.trim(), team: team.trim(), carId, chassis: chassis.trim(), photoUrl, parts });
         setCard(res.data.card);
         setBonus(res.data.bonus);
+        setFeatured(res.data.featured);
         setCredits(res.data.credits);
         setReady(true);
       } else {
@@ -312,7 +316,7 @@ function CardPackWizardForm({
     const finalCard = card?.rerolled || !REROLL_ENABLED;
     return (
       <div className="space-y-4">
-        <PackOpening key={run} ready={ready} card={card} bonus={bonus} onRevealed={onRevealed} />
+        <PackOpening key={run} ready={ready} card={card} bonus={bonus} featured={featured} onRevealed={onRevealed} />
 
         {error && (
           <p role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-xs font-semibold text-red-600 dark:text-red-400">
@@ -330,6 +334,11 @@ function CardPackWizardForm({
                 <p className="mt-2 text-sm font-bold text-amber-600 dark:text-amber-400">
                   Your pack also had a {rarityLabel(bonus.tier)} card from the community. Swipe the cards above to see it. Both are in
                   your collection.
+                </p>
+              )}
+              {featured && (
+                <p className="mt-2 text-sm font-black text-rose-600 dark:text-rose-400">
+                  Rare drop! A {rarityLabel(featured.tier)} card, {featured.name}, was also in your pack. Swipe to the last card to see it.
                 </p>
               )}
             </div>

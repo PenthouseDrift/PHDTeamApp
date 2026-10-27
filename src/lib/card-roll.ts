@@ -13,7 +13,8 @@ export type Rng = () => number;
 // ── Rarity ──────────────────────────────────────────────────────────────────
 
 /**
- * Pack odds. Legend is 1 in 20, gold 1 in 10 and silver 1 in 5. Each is its own slice of one roll
+ * Pack odds. Mythic is deliberately not in this list: it can't be rolled, only set by an admin.
+ * Legend is 1 in 20, gold 1 in 10 and silver 1 in 5. Each is its own slice of one roll
  * (so exactly 5%, 10% and 20%), and bronze is everything left over (65%), so a pack always gives a card.
  */
 export const RARITY_ODDS: Array<{ tier: FullArtTier; oneIn: number; chance: number }> = [
@@ -33,7 +34,7 @@ export function rollRarity(rng: Rng): FullArtTier {
 }
 
 /** Rarity order for sorting, lowest first. */
-export const RARITY_RANK: Record<FullArtTier, number> = { bronze: 0, silver: 1, gold: 2, legend: 3 };
+export const RARITY_RANK: Record<FullArtTier, number> = { bronze: 0, silver: 1, gold: 2, legend: 3, mythic: 4 };
 
 // ── Art styles ──────────────────────────────────────────────────────────────
 
@@ -69,6 +70,8 @@ const STAT_RANGE: Record<FullArtTier, [number, number]> = {
   silver: [4, 8],
   gold: [6, 9],
   legend: [8, 10],
+  // Never rolled in packs; here only so the table covers every tier.
+  mythic: [9, 10],
 };
 
 export function rollStats(tier: FullArtTier, rng: Rng): FullArtCardData["stats"] {
@@ -99,6 +102,8 @@ export interface MemberCard extends Omit<FullArtCardData, "id" | "updatedAt"> {
    * card (their name, team and car details), drawn again with its own rarity, stats and art style.
    */
   bonus?: boolean;
+  /** A set card from the admin's pullable list (a third card in a pack). Its picture is fixed, not drawn. */
+  featured?: boolean;
 }
 
 /** Server-side copy, which also remembers the car photo so a re-roll can use it again. */
@@ -113,6 +118,12 @@ export interface StoredMemberCard extends MemberCard {
  * every pack has one (as long as there is an earlier card to build it from); lower it for a rarer extra.
  */
 export const BONUS_CARD_CHANCE = 1;
+
+/**
+ * The chance a pack also holds a third card: one of the set cards an admin chose to make pullable
+ * (see the admin card maker). 1 in 20. These are fixed card images, never redrawn.
+ */
+export const FEATURED_CARD_CHANCE = 1 / 20;
 
 /**
  * Member cards are shown slightly zoomed in. If the AI still draws a border around its picture despite

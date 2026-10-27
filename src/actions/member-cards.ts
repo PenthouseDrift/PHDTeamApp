@@ -8,6 +8,7 @@ import { getCardCredits, refundCardCredit, spendCardCredit } from "@/lib/card-cr
 import { CardArtError, generateArtImage, isBlobUrl } from "@/lib/card-art-generate";
 import {
   BONUS_CARD_CHANCE,
+  FEATURED_CARD_CHANCE,
   MEMBER_ART_ZOOM,
   REROLL_ENABLED,
   canRerollCard,
@@ -18,13 +19,15 @@ import {
   type MemberCard,
   type StoredMemberCard,
 } from "@/lib/card-roll";
-import { tierArtPrompt, type FullArtTier } from "@/lib/full-art-card";
+import { sanitizeFullArtCard, tierArtPrompt, type FullArtTier } from "@/lib/full-art-card";
 import {
   ALL_MEMBER_CARDS_INDEX,
   COMMUNITY_POOL_INDEX,
+  FEATURED_CARDS_KEY,
   MEMBER_CARD_ID_PATTERN,
   addToCommunityPool,
   ensureCommunityPool,
+  fullArtCardKey,
   isCommunityCard,
   memberCardKey as cardKey,
   memberCardsIndexKey as indexKey,
@@ -97,6 +100,45 @@ async function rollAndDraw(referenceUrl: string): Promise<{
     }
   }
   throw lastError;
+}
+
+/**
+ * A set card from the admin's pullable list, picked in proportion to its odds weight, or null when
+ * the list is empty. These are saved admin cards with a fixed picture, so nothing is drawn.
+ */
+async function pickFeaturedCard(): Promise<(ReturnType<typeof sanitizeFullArtCard> & { id: string }) | null> {
+  try {
+    const raw = (await redis.hgetall(FEATURED_CARDS_KEY)) ?? {};
+    const entries = Object.entries(raw)
+      .map(([id, w]) => ({ id, weight: Number(w) }))
+      .filter((e) => MEMBER_CARD_ID_PATTERN.test(e.id) && Number.isFinite(e.weight) && e.weight > 0);
+    if (entries.length === 0) return null;
+
+    const rows = await redis.mget(...entries.map((e) => fullArtCardKey(e.id)));
+    const cards = entries
+      .map((e, i) => {
+        try {
+          const value = typeof rows[i] === "string" ? JSON.parse(rows[i] as string) : rows[i];
+          if (!value || typeof value !== "object") return null;
+          const card = sanitizeFullArtCard(value as never);
+          return card.imageUrl ? { card: { ...card, id: e.id }, weight: e.weight } : null;
+        } catch {
+          return null;
+        }
+      })
+      .filter((c): c is { card: ReturnType<typeof sanitizeFullArtCard> & { id: string }; weight: number } => c !== null);
+    if (cards.length === 0) return null;
+
+    let r = rng() * cards.reduce((sum, c) => sum + c.weight, 0);
+    for (const c of cards) {
+      if (r < c.weight) return c.card;
+      r -= c.weight;
+    }
+    return cards[cards.length - 1].card;
+  } catch (error) {
+    console.error("[member-cards] could not pick a pullable card:", error);
+    return null;
+  }
 }
 
 /** Up to this many cards are looked at when the pool is big; a small pool is looked at in full. */
@@ -189,7 +231,7 @@ export interface NewCardInput {
 /** Spend a credit, roll a pack, draw the card and add it to the collection. */
 export async function openCardPack(
   input: NewCardInput
-): Promise<ActionResult<{ card: MemberCard; bonus: MemberCard | null; credits: number }>> {
+): Promise<ActionResult<{ card: MemberCard; bonus: MemberCard | null; featured: MemberCard | null; credits: number }>> {
   const user = await currentUser();
   if (!user) return { success: false, error: "Please sign in to open a card pack." };
 
@@ -298,10 +340,57 @@ export async function openCardPack(
       }
     }
 
+    // A 1 in 20 chance of a third card: one of the admin's set cards. Its picture is fixed (not drawn), so
+    // this is instant. Anything going wrong here leaves the rest of the pack untouched.
+    let featured: StoredMemberCard | null = null;
+    if (rng() < FEATURED_CARD_CHANCE) {
+      try {
+        const source = await pickFeaturedCard();
+        if (source) {
+          const featuredNow = Date.now();
+          featured = {
+            id: randomUUID(),
+            userId: user.id,
+            createdAt: featuredNow,
+            name: source.name,
+            ability: source.ability,
+            effect: source.effect,
+            tier: source.tier,
+            stats: source.stats,
+            imageUrl: source.imageUrl,
+            imageZoom: source.imageZoom,
+            imageX: source.imageX,
+            imageY: source.imageY,
+            driver: source.driver,
+            team: source.team,
+            styleIds: [],
+            kept: true,
+            rerolled: false,
+            ownerName: user.name,
+            referenceUrl: "",
+            bonus: true,
+            featured: true,
+            bonusFromCardId: source.id,
+          };
+          await redis.set(cardKey(featured.id), JSON.stringify(featured));
+          await redis.zadd(indexKey(user.id), { score: featuredNow, member: featured.id });
+          await redis.zadd(ALL_MEMBER_CARDS_INDEX, { score: featuredNow, member: featured.id });
+        }
+      } catch (error) {
+        console.error("[member-cards] could not save the pullable card:", error);
+        featured = null;
+      }
+    }
+
     revalidatePath("/cards");
     return {
       success: true,
-      data: { card: publicCard(stored), bonus: bonus ? publicCard(bonus) : null, credits: await getCardCredits(user.id) },
+      data: {
+        card: publicCard(stored),
+        bonus: bonus ? publicCard(bonus) : null,
+        featured: featured ? publicCard(featured) : null,
+        credits: await getCardCredits(user.id),
+      },
     };
   } catch (error) {
     // The pack didn't open, so the member gets their credit back.

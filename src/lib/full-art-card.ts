@@ -6,7 +6,8 @@ import { ART_STYLES } from "@/lib/card-maker";
  * renderer and the server actions share one definition.
  */
 
-export type FullArtTier = "bronze" | "silver" | "gold" | "legend";
+/** "mythic" is admin-only: it is never rolled in a card pack, only set by hand in the admin card maker. */
+export type FullArtTier = "bronze" | "silver" | "gold" | "legend" | "mythic";
 
 export interface TierPalette {
   /** Brightest highlight on the frame. */
@@ -31,6 +32,7 @@ export const FULL_ART_TIERS: FullArtTierInfo[] = [
   { id: "silver", label: "Silver", hint: "Rain-slick blue hour", palette: { light: "#f4f7fb", accent: "#b8c0cc", dark: "#5d6572", glow: "#bfe3ff" } },
   { id: "gold", label: "Gold", hint: "Penthouse golden hour", palette: { light: "#fff2a8", accent: "#e8b923", dark: "#8a6508", glow: "#ffd75e" } },
   { id: "legend", label: "Legend", hint: "Mythic cosmic drift", palette: { light: "#e8f4ff", accent: "#a78bfa", dark: "#3b2a85", glow: "#7df9ff" } },
+  { id: "mythic", label: "Mythic", hint: "Molten crimson & gold. Admin only", palette: { light: "#ffe9b0", accent: "#ff2d55", dark: "#4a0618", glow: "#ff4d6d" } },
 ];
 
 export const tierInfo = (tier: FullArtTier): FullArtTierInfo => FULL_ART_TIERS.find((t) => t.id === tier) ?? FULL_ART_TIERS[0];
@@ -66,6 +68,8 @@ const TIER_LOOKS: Record<FullArtTier, string> = {
     "Silver tier. Look: sleek and precise, with crisp mirror reflections and a clean finish. Time of day: blue hour, early night. Setting: a rain-slicked circuit under cool white floodlights. Colours: polished chrome, steel blue, and platinum. Effects: silver sparks and cool-lit tire smoke with glints of platinum light on the wet asphalt. Mood: refined, precise, and high-performance.",
   gold:
     "Gold tier. Look: polished and high-contrast, with rich metallic paint, like premium racing game key art. Time of day: golden hour, low warm sun. Setting: a luxurious penthouse rooftop drift arena with a glowing city skyline behind it. Colours: gold, amber, and warm white. Effects: sunbeams, lens flares, golden sparks, drifting gold dust, and tire smoke glowing amber and gold. Mood: prestigious, a championship winner.",
+  mythic:
+    "Mythic tier. Look: the rarest card in existence, ferocious and regal, with molten metallic detail and an ultra-premium finish. Time of day: none, a blazing eclipse. Setting: a volcanic penthouse arena split by rivers of lava under a black sun with a crimson corona. Colours: deep crimson, molten gold, obsidian black, and white-hot highlights. Effects: erupting embers, golden lightning, a swirling vortex of fire behind the car, wheels glowing like forged metal, and tire smoke turning into burning phoenix-like plumes. Mood: unstoppable, mythical, the one-of-a-kind prize.",
   legend:
     "Legend tier. Look: epic, where racing meets myth, with glowing energy and iridescent detail. Time of day: none, a cosmic night sky beyond time. Setting: swirling nebulae and aurora with a radiant halo of light behind the car. Colours: violet, cyan, magenta, and gold. Effects: crackling lightning, prismatic energy trails, floating embers, shafts of divine light, ethereal glowing wheels, and tire smoke turning into glowing storm clouds. Mood: legendary, awe-inspiring, the ultimate rarity.",
 };

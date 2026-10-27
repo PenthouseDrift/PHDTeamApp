@@ -23,6 +23,24 @@ const MAX_TOTAL_SCORE = MAX_STAT * 4;
 
 const abs = (style: React.CSSProperties): React.CSSProperties => ({ position: "absolute", ...style });
 
+/** A small seeded random generator, so each card's shine is different but never changes between renders. */
+function seededRandom(seed: string): () => number {
+  let h = 1779033703 ^ seed.length;
+  for (let i = 0; i < seed.length; i++) {
+    h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  let a = (h ^ (h >>> 16)) >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+
 export function FullArtCard({
   card,
   className,
@@ -39,11 +57,39 @@ export function FullArtCard({
   const uid = useId().replace(/:/g, "");
   const tier = tierInfo(card.tier);
   const { light, accent, dark, glow } = tier.palette;
+  const isMythic = card.tier === "mythic";
   const isLegend = card.tier === "legend";
   const pale = lighten(accent, 0.72);
 
+  // Every Legend and Mythic card shines differently: its own timing, angle and sparkle spots, seeded from the card.
+  const rand = seededRandom(`${card.id ?? ""}|${card.name}|${card.driver}|${card.imageUrl.slice(-24)}`);
+  const shine = {
+    duration: 3.5 + rand() * 5,
+    delay: -rand() * 8,
+    angle: 95 + Math.round(rand() * 50),
+    mirror: rand() < 0.5,
+    gloss: 0.4 + rand() * 0.25,
+    hue: Math.round(rand() * 360),
+  };
+  const sparkleCount = isMythic ? 9 : isLegend ? 4 : 0;
+  const sparkles = Array.from({ length: sparkleCount }, () => ({
+    x: 6 + rand() * 88,
+    y: 5 + rand() * 62,
+    size: 2.2 + rand() * 3.6,
+    duration: 1.8 + rand() * 3,
+    delay: -rand() * 5,
+  }));
+
   // The legend frame is a prismatic gradient; the others are brushed metal in the tier colour.
-  const frameStops = isLegend
+  const frameStops = isMythic
+    ? [
+        ["0", "#fff1b8"],
+        ["0.25", "#ff2d55"],
+        ["0.5", "#ffb020"],
+        ["0.75", "#ff2d55"],
+        ["1", "#fff1b8"],
+      ]
+    : isLegend
     ? [
         ["0", "#7df9ff"],
         ["0.25", "#a78bfa"],
@@ -58,7 +104,9 @@ export function FullArtCard({
         ["0.74", accent],
         ["1", light],
       ];
-  const tagBackground = isLegend
+  const tagBackground = isMythic
+    ? "linear-gradient(120deg, #fff1b8, #ff2d55 40%, #ffb020 70%, #fff1b8)"
+    : isLegend
     ? "linear-gradient(120deg, #7df9ff, #a78bfa 35%, #ff7ad9 65%, #ffd75e)"
     : `linear-gradient(135deg, ${light} 0%, ${accent} 45%, ${darken(accent, 0.3)} 100%)`;
 
@@ -136,6 +184,64 @@ export function FullArtCard({
 
         {/* Foil: a soft diagonal sheen, plus a rainbow wash on Legend cards */}
         <div style={{ ...abs({ inset: 0 }), background: "linear-gradient(115deg, rgba(255,255,255,0) 30%, rgba(255,255,255,0.16) 48%, rgba(255,255,255,0) 66%)", mixBlendMode: "screen", pointerEvents: "none" }} />
+        {/* Legend and Mythic: a bright glint sweeps across, with twinkling sparkles. */}
+        {(isLegend || isMythic) && (
+          <div aria-hidden style={{ ...abs({ inset: 0 }), overflow: "hidden", pointerEvents: "none" }}>
+            <div
+              className={flat ? undefined : "fa-crystal-glint"}
+              style={{
+                ...abs({ inset: 0 }),
+                mixBlendMode: "screen",
+                opacity: flat ? 0 : shine.gloss,
+                transform: shine.mirror ? "scaleX(-1)" : undefined,
+                ["--fa-dur" as string]: `${shine.duration}s`,
+                ["--fa-delay" as string]: `${shine.delay}s`,
+                ["--fa-angle" as string]: `${shine.angle}deg`,
+              }}
+            />
+            {!flat &&
+              sparkles.map((sp, i) => (
+                <span
+                  key={i}
+                  className="fa-sparkle"
+                  style={{
+                    left: `${sp.x}%`,
+                    top: `${sp.y}%`,
+                    width: `${sp.size}cqw`,
+                    height: `${sp.size}cqw`,
+                    ["--fa-dur" as string]: `${sp.duration}s`,
+                    ["--fa-delay" as string]: `${sp.delay}s`,
+                    ["--fa-sparkle" as string]: isMythic ? "#fff1b8" : "#e8f4ff",
+                  }}
+                />
+              ))}
+            {/* Mythic only: a second, golden glint, shifting prismatic refractions and a pulsing crimson aura. */}
+            {isMythic && !flat && (
+              <>
+                <div
+                  className="fa-prism"
+                  style={{ ...abs({ inset: 0 }), ["--fa-dur" as string]: `${shine.duration * 2.2}s`, ["--fa-delay" as string]: `${shine.delay}s`, ["--fa-hue" as string]: `${shine.hue}deg` }}
+                />
+                <div
+                  className="fa-crystal-glint fa-crystal-glint-gold"
+                  style={{
+                    ...abs({ inset: 0 }),
+                    mixBlendMode: "screen",
+                    opacity: 0.55,
+                    transform: shine.mirror ? undefined : "scaleX(-1)",
+                    ["--fa-dur" as string]: `${shine.duration * 1.6}s`,
+                    ["--fa-delay" as string]: `${shine.delay * 0.6}s`,
+                    ["--fa-angle" as string]: `${shine.angle - 25}deg`,
+                  }}
+                />
+                <div className="fa-mythic-aura" style={{ ...abs({ inset: 0 }), borderRadius: "5cqw", ["--fa-dur" as string]: `${2.6 + (shine.duration % 2)}s`, ["--fa-delay" as string]: `${shine.delay}s` }} />
+              </>
+            )}
+          </div>
+        )}
+        {isMythic && (
+          <div style={{ ...abs({ inset: 0 }), background: "linear-gradient(135deg, rgba(255,45,85,0.22), rgba(255,176,32,0.16) 40%, rgba(255,241,184,0.14) 60%, rgba(255,45,85,0.22))", mixBlendMode: "soft-light", pointerEvents: "none" }} />
+        )}
         {isLegend && (
           <div style={{ ...abs({ inset: 0 }), background: "linear-gradient(135deg, rgba(125,249,255,0.2), rgba(167,139,250,0.14) 35%, rgba(255,122,217,0.18) 65%, rgba(255,215,94,0.2))", mixBlendMode: "soft-light", pointerEvents: "none" }} />
         )}
@@ -180,7 +286,7 @@ export function FullArtCard({
               position: "static",
               width: "100%",
               background: tagBackground,
-              color: isLegend ? "#12082e" : darken(accent, 0.72),
+              color: isMythic ? "#2a0310" : isLegend ? "#12082e" : darken(accent, 0.72),
               borderColor: pale,
               boxShadow: `0 0 3cqw ${glow}aa, 0 0.6cqw 1cqw rgba(0,0,0,0.5)`,
             }}
@@ -237,7 +343,7 @@ export function FullArtCard({
               {name}
             </div>
           )}
-          <div style={{ height: "0.7cqw", margin: "1.6cqw 0", background: isLegend ? "linear-gradient(90deg, #7df9ff, #a78bfa, #ff7ad9, #ffd75e)" : `linear-gradient(90deg, ${light}, ${accent} 55%, transparent)`, borderRadius: "1cqw", boxShadow: `0 0 2cqw ${glow}aa` }} />
+          <div style={{ height: "0.7cqw", margin: "1.6cqw 0", background: isMythic ? "linear-gradient(90deg, #fff1b8, #ff2d55, #ffb020, #fff1b8)" : isLegend ? "linear-gradient(90deg, #7df9ff, #a78bfa, #ff7ad9, #ffd75e)" : `linear-gradient(90deg, ${light}, ${accent} 55%, transparent)`, borderRadius: "1cqw", boxShadow: `0 0 2cqw ${glow}aa` }} />
           {ability && (
             <div style={{ fontSize: "3.9cqw", fontWeight: 700, color: light, lineHeight: 1.1, opacity: card.ability.trim() ? 1 : 0.7, overflowWrap: "anywhere" }}>{ability}</div>
           )}

@@ -17,6 +17,16 @@ export const memberCardKey = (id: string) => `usercard:${id}`;
 export const memberCardsIndexKey = (userId: string) => `member:${userId}:usercards`;
 export const ALL_MEMBER_CARDS_INDEX = "usercards:all";
 
+/**
+ * The pullable set cards. An admin marks a saved full art card (`fullart:<id>`, made in the admin card
+ * maker) as pullable, and it goes in this hash as card id -> odds weight. A pack's third card is one of
+ * these, picked in proportion to its weight. Their pictures are fixed and never drawn again.
+ */
+export const FEATURED_CARDS_KEY = "fullart:featured";
+export const fullArtCardKey = (id: string) => `fullart:${id}`;
+export const MIN_FEATURED_WEIGHT = 1;
+export const MAX_FEATURED_WEIGHT = 100;
+
 export const MEMBER_CARD_ID_PATTERN = /^[a-z0-9-]{8,64}$/i;
 
 /** A stored card from whatever Redis returned (a JSON string or an already-parsed object), or null if it isn't one. */
