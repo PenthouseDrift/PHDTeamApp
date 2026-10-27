@@ -19,7 +19,7 @@ export const PART_CATEGORIES: PartCategory[] = [
     label: "Motor",
     catalog: {
       Acuvance: ["Luce"],
-      Hobbywing: ["XeRun V10 G3", "XeRun V10 G4", "XeRun Justock 3650 SD G2", "XeRun Justock 3650 SD G3"],
+      Hobbywing: ["XeRun D10", "XeRun V10 G3", "XeRun V10 G4", "XeRun Justock 3650 SD G2", "XeRun Justock 3650 SD G3"],
       Reedy: ["Sonic 540-FT"],
       Tekin: ["Redline Gen3"],
     },
@@ -29,7 +29,7 @@ export const PART_CATEGORIES: PartCategory[] = [
     label: "ESC",
     catalog: {
       Acuvance: ["Xarvis XX", "Xarvis"],
-      Hobbywing: ["XeRun D10", "XeRun XR10 Justock", "XeRun XR10 Pro G2", "XeRun XR10 Pro G3", "XeRun XR10 Pro Legacy"],
+      Hobbywing: ["XeRun XD10", "XeRun XR10 Justock", "XeRun XR10 Pro G2", "XeRun XR10 Pro G3", "XeRun XR10 Pro Legacy"],
       Muchmore: ["Fleta ZX V2"],
       Reedy: ["Blackbox 410R"],
       SkyRC: ["Toro TS120"],
@@ -41,6 +41,8 @@ export const PART_CATEGORIES: PartCategory[] = [
     label: "Gyro",
     catalog: {
       Futaba: ["GYC480", "GYD550", "GYD560"],
+      OMG: ["OMG Gyro"],
+      Onisinki: ["Onisinki Gyro"],
       "Power HD": ["G1"],
       "Reve D": ["REVOX"],
       Yokomo: ["DP-302", "DP-302 V4", "YG-302"],

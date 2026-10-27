@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useCallback, useState, useSyncExternalStore, useTransition } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import ImageUploader from "@/components/ui/ImageUploader";
 import { PackOpening } from "@/components/member-cards/PackOpening";
 import { ChassisSelector } from "@/components/cars/ChassisSelector";
@@ -121,7 +121,7 @@ function startingAnswers(cars: GarageCar[], defaultName: string, remembered: Rem
     if (savedCar) {
       start.carId = savedCar.carId;
       start.chassis = remembered.chassis || chassisFor(savedCar);
-      start.photoUrl = savedCar.images.includes(remembered.photoUrl) ? remembered.photoUrl : (savedCar.images[0] ?? remembered.photoUrl);
+      start.photoUrl = remembered.photoUrl || (savedCar.images[0] ?? "");
     }
   } else if (remembered.photoUrl) {
     // "A different car", with the photo uploaded last time.
@@ -202,6 +202,14 @@ function CardPackWizardForm({
   };
 
   const canNext = step === 1 ? driver.trim().length > 0 : step === 3 ? Boolean(photoUrl) : step === 4 ? !partsTooLong : true;
+
+  const resultRef = useRef<HTMLDivElement>(null);
+  // On small screens the card fills the view, so bring the result text and buttons into sight once revealed.
+  useEffect(() => {
+    if (!revealed || !resultRef.current) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    resultRef.current.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  }, [revealed]);
 
   const onRevealed = useCallback(() => setRevealed(true), []);
 
@@ -313,7 +321,7 @@ function CardPackWizardForm({
         )}
 
         {revealed && card && (
-          <div className={`${panel} space-y-4`}>
+          <div ref={resultRef} className={`${panel} scroll-mt-20 space-y-4`}>
             <div className="text-center">
               <p className="text-xs font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">You pulled a</p>
               <p className="text-2xl font-black text-zinc-900 dark:text-zinc-100">{rarityLabel(card.tier)} card</p>
@@ -511,7 +519,7 @@ function CardPackWizardForm({
 
             <div className="space-y-2">
               <p className={label}>Photo of the car</p>
-              {car && car.images.length > 1 && (
+              {car && car.images.length > 0 && (
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Choose a photo">
                   {car.images.map((url, i) => (
                     <button
@@ -519,7 +527,10 @@ function CardPackWizardForm({
                       type="button"
                       aria-pressed={photoUrl === url}
                       aria-label={`Use photo ${i + 1}`}
-                      onClick={() => setPhotoUrl(url)}
+                      onClick={() => {
+                        setPhotoUrl(url);
+                        setUploadKey((k) => k + 1);
+                      }}
                       className={`h-16 w-24 overflow-hidden rounded-lg border-2 ${photoUrl === url ? "border-amber-500" : "border-transparent"}`}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -528,19 +539,17 @@ function CardPackWizardForm({
                   ))}
                 </div>
               )}
-              {(!car || car.images.length === 0) && (
-                <ImageUploader
-                  key={uploadKey}
-                  maxFiles={1}
-                  label="Upload a photo of your car"
-                  initialUrls={photoUrl ? [photoUrl] : []}
-                  onUploadComplete={(urls) => setPhotoUrl(urls[0] ?? "")}
-                />
-              )}
-              {car && car.images.length === 1 && photoUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={photoUrl} alt={`${car.name}`} className="max-h-48 rounded-xl object-cover" />
-              )}
+              {/* Always available: take or upload a different photo instead of the garage ones. */}
+              <ImageUploader
+                key={uploadKey}
+                maxFiles={1}
+                label={car && car.images.length > 0 ? "Or take / upload a different photo" : "Take or upload a photo of your car"}
+                initialUrls={photoUrl && !(car?.images ?? []).includes(photoUrl) ? [photoUrl] : []}
+                onUploadComplete={(urls) => {
+                  if (urls[0]) setPhotoUrl(urls[0]);
+                  else setPhotoUrl(car?.images[0] ?? "");
+                }}
+              />
             </div>
           </>
         )}
