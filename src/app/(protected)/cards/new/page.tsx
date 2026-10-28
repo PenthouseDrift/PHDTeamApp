@@ -5,6 +5,7 @@ import { getMemberCars } from "@/actions/cars";
 import { getMemberHash } from "@/lib/dashboard-pref";
 import { getCardCredits } from "@/lib/card-credits";
 import { listMyCards } from "@/actions/member-cards";
+import { getMemberSpecSheets } from "@/actions/spec-sheets";
 import { CardPackWizard } from "@/components/member-cards/CardPackWizard";
 
 export const dynamic = "force-dynamic";
@@ -16,11 +17,12 @@ export default async function NewCardPage() {
   if (!session?.user) redirect("/auth/signin");
   const userId = session.user.id;
 
-  const [hash, carsResult, credits, myCards] = await Promise.all([
+  const [hash, carsResult, credits, myCards, initialSpecSheets] = await Promise.all([
     getMemberHash(userId),
     getMemberCars(userId),
     getCardCredits(userId),
     listMyCards(),
+    getMemberSpecSheets(userId),
   ]);
   const nickname = typeof hash?.nickname === "string" ? hash.nickname.trim() : "";
   const accountName = session.user.name?.trim() ?? "";
@@ -48,7 +50,15 @@ export default async function NewCardPage() {
             You have {credits} card credit{credits === 1 ? "" : "s"}. Earn 1 each time you check in at the track, or 2 with a membership.
           </p>
         </div>
-        <CardPackWizard userId={userId} defaultName={defaultName} nameOptions={nameOptions} recentTeams={recentTeams} cars={cars} initialCredits={credits} />
+        <CardPackWizard
+          userId={userId}
+          defaultName={defaultName}
+          nameOptions={nameOptions}
+          recentTeams={recentTeams}
+          cars={cars}
+          initialCredits={credits}
+          initialSpecSheets={initialSpecSheets}
+        />
       </div>
     </div>
   );

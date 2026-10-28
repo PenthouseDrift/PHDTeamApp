@@ -33,6 +33,9 @@ import {
   memberCardsIndexKey as indexKey,
   parseStoredCard as parseCard,
 } from "@/lib/member-card-store";
+import { saveSpecSheet } from "@/actions/spec-sheets";
+import { parsePartsFromDescription } from "@/lib/spec-sheets";
+import type { PartValues } from "@/lib/rc-parts-data";
 import type { ActionResult } from "@/types";
 
 /**
@@ -224,6 +227,10 @@ export interface NewCardInput {
   description: string;
   /** Name of the garage car, if one was chosen; it becomes the card's title. */
   carName?: string;
+  /** Garage car id, if one was chosen. */
+  carId?: string | null;
+  /** Structured parts selected in Step 4 so the spec sheet can be saved accurately. */
+  parts?: Partial<PartValues>;
   /** Photo of the car the art is drawn from. */
   referenceUrl: string;
 }
@@ -300,6 +307,20 @@ export async function openCardPack(
     await redis.hincrby(`member:${user.id}`, "packsOpened", 1).catch(() => {});
     // This driver and car now stands in the community pool with this card (replacing their older one).
     await addToCommunityPool(stored).catch((error) => console.error("[member-cards] could not update the pool:", error));
+    // Also save/update this setup in the member's spec sheets so they can select it anytime later.
+    await saveSpecSheet(
+      {
+        name: carName || chassis || title,
+        driver,
+        team,
+        carId: input.carId ?? null,
+        carName: carName || title,
+        chassis,
+        photoUrl: input.referenceUrl,
+        parts: input.parts ?? parsePartsFromDescription(description),
+      },
+      user.id
+    ).catch(() => {});
 
     // The bonus card: the other member's card details, drawn again as a whole new card (its own
     // rarity, stats, art styles and picture). It goes straight into this member's collection and

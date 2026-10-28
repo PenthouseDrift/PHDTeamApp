@@ -4,6 +4,8 @@ import { redis } from "@/lib/redis";
 import { deleteImage } from "@/lib/blob";
 import { carProfileSchema } from "@/lib/validators";
 import { revalidatePath } from "next/cache";
+import { saveSpecSheet } from "@/actions/spec-sheets";
+import type { PartValues } from "@/lib/rc-parts-data";
 import type { CarProfile, ActionResult } from "@/types";
 
 const MAX_CARS_PER_MEMBER = 20;
@@ -24,7 +26,7 @@ function parseImages(images: unknown): string[] {
 
 export async function createCar(
   userId: string,
-  data: { name: string; chassis?: string; images: string[] }
+  data: { name: string; chassis?: string; images: string[]; parts?: Partial<PartValues>; specSheetName?: string }
 ): Promise<ActionResult<CarProfile>> {
   try {
     const parsed = carProfileSchema.safeParse(data);
@@ -67,7 +69,21 @@ export async function createCar(
 
     await redis.sadd(`member:${userId}:cars`, carId);
 
+    // Automatically save this car setup as a selectable spec sheet
+    await saveSpecSheet(
+      {
+        name: data.specSheetName?.trim() || car.name,
+        carId: car.carId,
+        carName: car.name,
+        chassis: car.chassis || car.name,
+        photoUrl: car.images[0] || "",
+        parts: data.parts,
+      },
+      userId
+    ).catch(() => {});
+
     revalidatePath("/cars");
+    revalidatePath("/cards/new");
     return { success: true, data: car };
   } catch (error) {
     return {
@@ -80,7 +96,7 @@ export async function createCar(
 export async function updateCar(
   carId: string,
   userId: string,
-  data: { name: string; chassis?: string; images: string[] }
+  data: { name: string; chassis?: string; images: string[]; parts?: Partial<PartValues>; specSheetName?: string }
 ): Promise<ActionResult<CarProfile>> {
   try {
     // Verify ownership
@@ -120,6 +136,22 @@ export async function updateCar(
       createdAt: updatedCar.createdAt,
     });
 
+    if (data.parts || data.specSheetName) {
+      await saveSpecSheet(
+        {
+          name: data.specSheetName?.trim() || updatedCar.name,
+          carId: updatedCar.carId,
+          carName: updatedCar.name,
+          chassis: updatedCar.chassis || updatedCar.name,
+          photoUrl: updatedCar.images[0] || "",
+          parts: data.parts,
+        },
+        userId
+      ).catch(() => {});
+    }
+
+    revalidatePath("/cars");
+    revalidatePath("/cards/new");
     return { success: true, data: updatedCar };
   } catch (error) {
     return {

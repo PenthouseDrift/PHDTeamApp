@@ -6,10 +6,12 @@ import ImageUploader from "@/components/ui/ImageUploader";
 import { PackOpening } from "@/components/member-cards/PackOpening";
 import { ChassisSelector } from "@/components/cars/ChassisSelector";
 import { keepCard, openCardPack, rerollCard } from "@/actions/member-cards";
+import { deleteSpecSheet, getMemberSpecSheets, saveSpecSheet } from "@/actions/spec-sheets";
 import { PartSelector } from "@/components/member-cards/PartSelector";
 import { REROLL_ENABLED, rarityLabel, type MemberCard } from "@/lib/card-roll";
 import { parseRememberedPack, readRememberedPack, saveRememberedPack, type RememberedPack } from "@/lib/card-pack-memory";
 import { PARTS_LINE_MAX, PART_CATEGORIES, composeParts, emptyParts, type PartKey, type PartValues } from "@/lib/rc-parts-data";
+import { specSheetSummary, type CarSpecSheet } from "@/lib/spec-sheets";
 
 /**
  * The step-by-step card pack flow:
@@ -97,6 +99,7 @@ interface WizardProps {
   recentTeams: string[];
   cars: GarageCar[];
   initialCredits: number;
+  initialSpecSheets?: CarSpecSheet[];
 }
 
 /** What the form starts with: the garage defaults, replaced by the last pack's answers when there are any. */
@@ -161,9 +164,14 @@ function CardPackWizardForm({
   recentTeams,
   cars,
   initialCredits,
+  initialSpecSheets = [],
   remembered,
 }: WizardProps & { remembered: RememberedPack | null }) {
   const [credits, setCredits] = useState(initialCredits);
+  const [specSheets, setSpecSheets] = useState<CarSpecSheet[]>(initialSpecSheets);
+  const [activeSpecId, setActiveSpecId] = useState<string | null>(null);
+  const [specSavedMsg, setSpecSavedMsg] = useState<string | null>(null);
+  const [savingSpec, startSpecTransition] = useTransition();
   const [start] = useState(() => startingAnswers(cars, defaultName, remembered));
 
   // The answers
@@ -201,7 +209,58 @@ function CardPackWizardForm({
     setChassis(chassisFor(next));
     setPhotoUrl(next?.images[0] ?? "");
     setUploadKey((k) => k + 1);
+    setActiveSpecId(null);
   };
+
+  function applySpecSheet(sheet: CarSpecSheet) {
+    if (sheet.driver) setDriver(sheet.driver);
+    setTeam(sheet.team || "");
+    const matchingCar =
+      (sheet.carId ? cars.find((c) => c.carId === sheet.carId) : null) ??
+      (sheet.carName ? cars.find((c) => c.name.trim().toLowerCase() === sheet.carName.trim().toLowerCase()) : null) ??
+      null;
+    setCarId(matchingCar?.carId ?? null);
+    setChassis(sheet.chassis || chassisFor(matchingCar));
+    setPhotoUrl(sheet.photoUrl || matchingCar?.images[0] || "");
+    setParts({ ...emptyParts(), ...sheet.parts });
+    setUploadKey((k) => k + 1);
+    setActiveSpecId(sheet.id);
+    setSpecSavedMsg(`Loaded spec sheet: ${sheet.name}`);
+  }
+
+  function handleSaveCurrentAsSpecSheet() {
+    setSpecSavedMsg(null);
+    startSpecTransition(async () => {
+      const sheetName = car?.name || chassis.trim() || "My Car Setup";
+      const res = await saveSpecSheet({
+        name: sheetName,
+        driver: driver.trim(),
+        team: team.trim(),
+        carId,
+        carName: car?.name || chassis.trim(),
+        chassis: chassis.trim(),
+        photoUrl,
+        parts,
+      });
+      if (res.success) {
+        setSpecSheets(res.data.sheets);
+        setActiveSpecId(res.data.sheet.id);
+        setSpecSavedMsg(`Saved "${res.data.sheet.name}" to your spec sheets.`);
+      } else {
+        setError(res.error);
+      }
+    });
+  }
+
+  function handleDeleteSpecSheet(id: string) {
+    startSpecTransition(async () => {
+      const res = await deleteSpecSheet(id);
+      if (res.success) {
+        setSpecSheets(res.data.sheets);
+        if (activeSpecId === id) setActiveSpecId(null);
+      }
+    });
+  }
 
   const canNext = step === 1 ? driver.trim().length > 0 : step === 3 ? Boolean(photoUrl) : step === 4 ? !partsTooLong : true;
 
@@ -233,11 +292,14 @@ function CardPackWizardForm({
         chassis,
         description,
         carName: car?.name,
+        carId,
+        parts,
         referenceUrl: photoUrl,
       });
       if (res.success) {
         // Remember these answers so the next pack starts filled in.
         saveRememberedPack(userId, { driver: driver.trim(), team: team.trim(), carId, chassis: chassis.trim(), photoUrl, parts });
+        getMemberSpecSheets(userId).then(setSpecSheets).catch(() => {});
         setCard(res.data.card);
         setBonus(res.data.bonus);
         setFeatured(res.data.featured);
@@ -399,6 +461,101 @@ function CardPackWizardForm({
   // ── The form ──
   return (
     <div className="space-y-5">
+      {/* Saved Spec Sheets quick-selector */}
+      <section className={`${panel} space-y-3`} aria-label="Saved spec sheets">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-black text-zinc-900 dark:text-zinc-100">Saved Spec Sheets</h2>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Tap a spec sheet to auto-fill your car, chassis, photo and parts, or save your current fields as a new spec sheet.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleSaveCurrentAsSpecSheet}
+            disabled={savingSpec || (!chassis.trim() && !car && !description.trim())}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-700 transition-colors hover:bg-amber-500/20 disabled:opacity-40 dark:text-amber-300"
+          >
+            {savingSpec ? "Saving…" : "+ Save current setup as spec sheet"}
+          </button>
+        </div>
+
+        {specSheets.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-zinc-200 px-3.5 py-2.5 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+            No saved spec sheets yet. Fill in your car details below (or open a pack) and it will be saved here automatically for next time.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {specSheets.map((s) => {
+              const selected = activeSpecId === s.id;
+              return (
+                <div
+                  key={s.id}
+                  className={`group relative flex items-center gap-2.5 rounded-xl border-2 p-2 text-left transition-colors ${
+                    selected
+                      ? "border-amber-500 bg-amber-500/10"
+                      : "border-zinc-200 bg-zinc-50/60 hover:border-amber-400 dark:border-zinc-800 dark:bg-zinc-800/40"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => applySpecSheet(s)}
+                    className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                  >
+                    {s.photoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={s.photoUrl} alt="" className="h-11 w-14 shrink-0 rounded-lg object-cover bg-zinc-200 dark:bg-zinc-700" />
+                    ) : (
+                      <span className="flex h-11 w-14 shrink-0 items-center justify-center rounded-lg bg-zinc-200 text-[10px] font-bold text-zinc-500 dark:bg-zinc-700 dark:text-zinc-300">
+                        SPEC
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate text-xs font-black text-zinc-900 dark:text-zinc-100">{s.name}</span>
+                        {selected && (
+                          <span className="shrink-0 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-black text-black">
+                            Loaded
+                          </span>
+                        )}
+                      </span>
+                      <span className="block truncate text-[11px] text-zinc-500 dark:text-zinc-400">
+                        {specSheetSummary(s)}
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteSpecSheet(s.id)}
+                    disabled={savingSpec}
+                    aria-label={`Delete spec sheet ${s.name}`}
+                    title="Delete spec sheet"
+                    className="shrink-0 rounded-lg p-1.5 text-xs text-zinc-400 hover:bg-red-500/10 hover:text-red-500"
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {specSavedMsg && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+            <span>✓ {specSavedMsg}</span>
+            {step < 5 && Boolean(driver.trim() && photoUrl && !partsTooLong) && (
+              <button
+                type="button"
+                onClick={() => setStep(5)}
+                className="rounded-lg bg-amber-500 px-2.5 py-1 text-xs font-black text-black hover:bg-amber-400"
+              >
+                Jump to Review &amp; Open →
+              </button>
+            )}
+          </div>
+        )}
+      </section>
+
       {/* Progress */}
       <ol className="flex items-center justify-between gap-1" aria-label="Steps">
         {STEPS.map((s, i) => {

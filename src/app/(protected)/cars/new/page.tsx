@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createCar } from "@/actions/cars";
+import { getMemberSpecSheets, deleteSpecSheet } from "@/actions/spec-sheets";
 import ImageUploader from "@/components/ui/ImageUploader";
 import { useSession } from "next-auth/react";
 import { ChassisSelector } from "@/components/cars/ChassisSelector";
+import { PartSelector } from "@/components/member-cards/PartSelector";
+import { PART_CATEGORIES, emptyParts, type PartKey, type PartValues } from "@/lib/rc-parts-data";
+import { specSheetSummary, type CarSpecSheet } from "@/lib/spec-sheets";
 
 export default function NewCarPage() {
   const router = useRouter();
@@ -14,9 +18,36 @@ export default function NewCarPage() {
   const [name, setName] = useState("");
   const [chassis, setChassis] = useState("");
   const [images, setImages] = useState<string[]>([]);
+  const [parts, setParts] = useState<PartValues>(emptyParts);
+  const [specSheets, setSpecSheets] = useState<CarSpecSheet[]>([]);
+  const [activeSpecId, setActiveSpecId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    getMemberSpecSheets(session.user.id).then(setSpecSheets).catch(() => {});
+  }, [session?.user?.id]);
+
+  function applySpecSheet(sheet: CarSpecSheet) {
+    setName(sheet.carName || sheet.name || "");
+    setChassis(sheet.chassis || "");
+    if (sheet.photoUrl && !images.includes(sheet.photoUrl)) {
+      setImages((prev) => [sheet.photoUrl, ...prev].slice(0, 10));
+    }
+    setParts({ ...emptyParts(), ...sheet.parts });
+    setActiveSpecId(sheet.id);
+    setFieldError(null);
+  }
+
+  async function handleRemoveSpecSheet(id: string) {
+    const res = await deleteSpecSheet(id);
+    if (res.success) {
+      setSpecSheets(res.data.sheets);
+      if (activeSpecId === id) setActiveSpecId(null);
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +76,7 @@ export default function NewCarPage() {
         name: name.trim(),
         chassis: chassis || undefined,
         images,
+        parts,
       });
 
       if (result.success) {
@@ -75,9 +107,67 @@ export default function NewCarPage() {
         <div>
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Add New Car</h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Add your RC car with photos to track calibrations and setups.
+            Add your RC car with photos and electronics. Your car setup is automatically saved as a reusable Spec Sheet.
           </p>
         </div>
+
+        {/* Saved Spec Sheets Quick-Select */}
+        {specSheets.length > 0 && (
+          <div className="rounded-xl border border-zinc-200 bg-white p-4 space-y-2.5 dark:border-zinc-800 dark:bg-zinc-900">
+            <div>
+              <h2 className="text-xs font-black uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                Quick-Fill from a Saved Spec Sheet
+              </h2>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Click any saved spec sheet to populate the fields below.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {specSheets.map((s) => {
+                const selected = activeSpecId === s.id;
+                return (
+                  <div
+                    key={s.id}
+                    className={`flex items-center gap-2.5 rounded-xl border-2 p-2 text-left transition-colors ${
+                      selected
+                        ? "border-amber-500 bg-amber-500/10"
+                        : "border-zinc-200 bg-zinc-50/60 hover:border-amber-400 dark:border-zinc-800 dark:bg-zinc-800/40"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => applySpecSheet(s)}
+                      className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                    >
+                      {s.photoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={s.photoUrl} alt="" className="h-10 w-12 shrink-0 rounded-lg object-cover bg-zinc-200 dark:bg-zinc-700" />
+                      ) : (
+                        <span className="flex h-10 w-12 shrink-0 items-center justify-center rounded-lg bg-zinc-200 text-[10px] font-bold text-zinc-500 dark:bg-zinc-700 dark:text-zinc-300">
+                          SPEC
+                        </span>
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-bold text-zinc-900 dark:text-zinc-100">{s.name}</span>
+                        <span className="block truncate text-[11px] text-zinc-500 dark:text-zinc-400">
+                          {specSheetSummary(s)}
+                        </span>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSpecSheet(s.id)}
+                      aria-label={`Delete spec sheet ${s.name}`}
+                      className="shrink-0 rounded-lg p-1.5 text-xs text-zinc-400 hover:bg-red-500/10 hover:text-red-500"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -118,6 +208,28 @@ export default function NewCarPage() {
               Selecting your chassis will auto-fill internal gear ratios in the Calculator.
             </p>
             <ChassisSelector value={chassis} onChange={setChassis} />
+          </div>
+
+          {/* Spec Sheet Electronics & Parts */}
+          <div className="space-y-3 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+            <div>
+              <h2 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                Spec Sheet — Electronics &amp; Parts <span className="text-zinc-400 font-normal">(Optional)</span>
+              </h2>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Saved as a selectable spec sheet you can use anytime when creating cars or opening card packs.
+              </p>
+            </div>
+            <div className="space-y-3">
+              {PART_CATEGORIES.map((c) => (
+                <PartSelector
+                  key={c.key}
+                  category={c}
+                  value={parts[c.key]}
+                  onChange={(v) => setParts((p) => ({ ...p, [c.key as PartKey]: v }))}
+                />
+              ))}
+            </div>
           </div>
 
           {/* Images */}
