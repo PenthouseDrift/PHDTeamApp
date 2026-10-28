@@ -1,7 +1,7 @@
 "use server";
 
 import { randomInt, randomUUID } from "crypto";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import { getCardCredits, refundCardCredit, spendCardCredit } from "@/lib/card-credits";
@@ -297,6 +297,7 @@ export async function openCardPack(
     await redis.zadd(indexKey(user.id), { score: now, member: stored.id });
     // Every card is also listed for admins, who can see all stored cards.
     await redis.zadd(ALL_MEMBER_CARDS_INDEX, { score: now, member: stored.id });
+    await redis.hincrby(`member:${user.id}`, "packsOpened", 1).catch(() => {});
     // This driver and car now stands in the community pool with this card (replacing their older one).
     await addToCommunityPool(stored).catch((error) => console.error("[member-cards] could not update the pool:", error));
 
@@ -383,6 +384,7 @@ export async function openCardPack(
     }
 
     revalidatePath("/cards");
+    revalidateTag("admin-members", "max");
     return {
       success: true,
       data: {
@@ -449,6 +451,7 @@ export async function rerollCard(cardId: string): Promise<ActionResult<{ card: M
     }
 
     revalidatePath("/cards");
+    revalidateTag("admin-members", "max");
     return { success: true, data: { card: publicCard(updated) } };
   } catch (error) {
     // Nothing was changed, so the member still has their card and their re-roll.

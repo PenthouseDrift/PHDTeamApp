@@ -1,4 +1,5 @@
 import { redis } from "@/lib/redis";
+import { bustAdminMembers } from "@/lib/cache-bust";
 
 /**
  * Card credits: a check-in at the track earns 1 credit, or 2 when the member has an active paid
@@ -35,7 +36,12 @@ export async function getCardCredits(userId: string): Promise<number> {
  */
 async function creditsForCheckIn(userId: string, timestamp: number): Promise<number> {
   try {
-    const expiresAt = Number(await redis.hget(`membership:${userId}`, "expiresAt"));
+    const [expiresAtRaw, role] = await Promise.all([
+      redis.hget(`membership:${userId}`, "expiresAt"),
+      redis.hget(memberKey(userId), "role"),
+    ]);
+    if (role === "admin" || role === "moderator") return CREDITS_PER_CHECKIN_MEMBER;
+    const expiresAt = Number(expiresAtRaw);
     return Number.isFinite(expiresAt) && expiresAt > timestamp ? CREDITS_PER_CHECKIN_MEMBER : CREDITS_PER_CHECKIN;
   } catch (error) {
     console.error("[card-credits] could not check membership:", error);
@@ -57,6 +63,7 @@ export async function awardCardCredit(userId: string, timestamp: number = Date.n
     if (!claimed) return false;
     try {
       await redis.hincrby(memberKey(userId), FIELD, amount);
+      bustAdminMembers();
     } catch (error) {
       await redis.del(claimKey).catch(() => {});
       throw error;

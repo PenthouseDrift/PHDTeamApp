@@ -14,6 +14,8 @@ export interface Member {
   lastCheckIn?: number;
   /** Card pack credits the member can spend (1 earned per track check-in). */
   cardCredits?: number;
+  /** Total number of card packs opened by this member. */
+  packsOpened?: number;
   discounts?: {
     membership: number;
     daypass: number;

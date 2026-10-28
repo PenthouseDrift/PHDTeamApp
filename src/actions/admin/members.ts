@@ -3,6 +3,7 @@
 import { redis } from "@/lib/redis";
 import { unstable_cache } from "next/cache";
 import { parseDiscounts } from "@/lib/pricing";
+import { ALL_MEMBER_CARDS_INDEX, memberCardKey, parseStoredCard } from "@/lib/member-card-store";
 import type { Member, Membership, Wallet, ActionResult } from "@/types";
 
 export interface MemberWithMembership {
@@ -18,7 +19,26 @@ async function _getAllMembers(): Promise<MemberWithMembership[]> {
     // Member ids come from the maintained index (one SMEMBERS) rather than a
     // SCAN over the whole keyspace.
     const { getMemberIds } = await import("@/lib/member-roster");
-    const uniqueKeys = (await getMemberIds()).map((id) => `member:${id}`);
+    const [rawMemberIds, allCardIds] = await Promise.all([
+      getMemberIds(),
+      (redis.zrange(ALL_MEMBER_CARDS_INDEX, 0, -1) as Promise<string[]>).catch(() => [] as string[]),
+    ]);
+    const uniqueKeys = rawMemberIds.map((id) => `member:${id}`);
+
+    // Count packs opened per member from stored primary cards (!bonus && !archived)
+    const packsByUser = new Map<string, number>();
+    if (allCardIds && allCardIds.length > 0) {
+      for (let i = 0; i < allCardIds.length; i += 100) {
+        const chunk = allCardIds.slice(i, i + 100).map((id) => memberCardKey(String(id)));
+        const rows = await redis.mget(...chunk);
+        for (const row of rows) {
+          const card = parseStoredCard(row);
+          if (card && !card.bonus && !card.archived && card.userId) {
+            packsByUser.set(card.userId, (packsByUser.get(card.userId) || 0) + 1);
+          }
+        }
+      }
+    }
 
     // Fetch all member data in parallel (batch) using pipeline
     const pipeline = redis.pipeline();
@@ -46,6 +66,10 @@ async function _getAllMembers(): Promise<MemberWithMembership[]> {
 
         if (!memberData || !memberData.email) continue;
 
+        const storedPacks = Math.max(0, Number(memberData.packsOpened) || 0);
+        const countedPacks = packsByUser.get(userId) || 0;
+        const packsOpened = Math.max(storedPacks, countedPacks);
+
         const member: Member = {
           id: userId,
           email: (memberData.email as string) || "",
@@ -59,6 +83,7 @@ async function _getAllMembers(): Promise<MemberWithMembership[]> {
           checkinCount: Number(memberData.checkinCount) || 0,
           lastCheckIn: Number(memberData.lastCheckIn) || 0,
           cardCredits: Math.max(0, Number(memberData.cardCredits) || 0),
+          packsOpened,
           discounts: parseDiscounts(memberData),
         };
 

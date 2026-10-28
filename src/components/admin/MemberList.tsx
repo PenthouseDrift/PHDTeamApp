@@ -83,6 +83,19 @@ function CheckInCount({ m }: { m: MemberWithMembership }) {
   );
 }
 
+function PacksOpenedCount({ m }: { m: MemberWithMembership }) {
+  const n = m.member.packsOpened ?? 0;
+  if (n <= 0) return null;
+  return (
+    <span
+      title={`${n} card pack${n !== 1 ? "s" : ""} opened`}
+      className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[10px] font-bold px-1.5 py-0.5 align-middle whitespace-nowrap"
+    >
+      🃏 {n}
+    </span>
+  );
+}
+
 interface RowProps {
   m: MemberWithMembership;
   isCheckedIn: boolean;
@@ -115,6 +128,7 @@ function MemberCard({ m, isCheckedIn, isModerator, onSelect }: RowProps) {
                 {m.member.name}
               </span>
               <CheckInCount m={m} />
+              <PacksOpenedCount m={m} />
             </span>
             {m.member.nickname && (
               <span className="block truncate text-xs font-bold text-amber-600 dark:text-amber-400">
@@ -166,6 +180,7 @@ function MemberRow({ m, isCheckedIn, isModerator, onSelect }: RowProps) {
             <span className="text-xs font-bold text-amber-600 dark:text-amber-400">(&quot;{m.member.nickname}&quot;)</span>
           )}
           <CheckInCount m={m} />
+          <PacksOpenedCount m={m} />
         </span>
       </td>
       <td className="max-w-[16rem] truncate px-4 py-3 text-zinc-600 dark:text-zinc-400" title={m.member.email}>

@@ -51,6 +51,11 @@ export async function getSelfCheckInStatus(): Promise<boolean> {
 
     const events = await getUpcomingEvents();
 
+    // Whenever there is an active (non-cancelled) event scheduled for today, ensure all admins are auto-checked in.
+    if (events.some((e) => e.date === localToday && e.status !== "cancelled")) {
+      await ensureAdminsCheckedInForTodayEvent();
+    }
+
     // Open only while an event today is actively running (between its open
     // and close times). Pre-open ("today") and finished events do not count.
     return events.some(
@@ -110,7 +115,88 @@ export async function submitSelfCheckIn(memberId: string, memberName: string): P
   }
 }
 
+/**
+ * Automatically check in all admins (and award their daily card credits) whenever there is a
+ * non-cancelled event scheduled for today. Idempotent: safe to call repeatedly on any page load
+ * or event mutation; each admin is checked in at most once per day.
+ */
+export async function ensureAdminsCheckedInForTodayEvent(): Promise<void> {
+  try {
+    const now = Date.now();
+    const utcToday = new Date(now).toISOString().split("T")[0];
+    const doneKey = `admin:autocheckin:done:${utcToday}`;
+    if (await redis.get(doneKey)) return;
+
+    const formatter = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/London",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    const parts = formatter.formatToParts(new Date(now));
+    const partMap: Record<string, string> = {};
+    parts.forEach((p) => {
+      partMap[p.type] = p.value;
+    });
+    const localToday = `${partMap.year}-${partMap.month}-${partMap.day}`;
+
+    const { getUpcomingEvents } = await import("@/actions/events");
+    const events = await getUpcomingEvents();
+    const hasEventToday = events.some(
+      (e) => (e.date === localToday || e.date === utcToday) && e.status !== "cancelled"
+    );
+    if (!hasEventToday) return;
+
+    const lockKey = `admin:autocheckin:lock:${utcToday}`;
+    const locked = await redis.set(lockKey, "1", { nx: true, ex: 60 });
+    if (!locked) return;
+
+    try {
+      const { getMemberRoster } = await import("@/lib/member-roster");
+      const roster = await getMemberRoster();
+      const admins = roster.filter((m) => m.role === "admin");
+
+      for (const admin of admins) {
+        const already = await isUserCheckedInToday(admin.id);
+        if (already) continue;
+
+        const displayName = admin.nickname?.trim()
+          ? `${admin.name} ("${admin.nickname.trim()}")`
+          : admin.name;
+
+        const entry = JSON.stringify({
+          userId: admin.id,
+          adminId: admin.id,
+          timestamp: now,
+          method: "membership",
+          memberName: displayName,
+        });
+
+        await redis.rpush(`checkins:${utcToday}`, entry);
+        await redis.set(`checkin:dedup:${admin.id}`, "1", { ex: 86400 });
+        await recordCheckInCount(admin.id, now);
+
+        await logActivity({
+          type: "checkin",
+          memberId: admin.id,
+          memberName: displayName,
+          description: "Auto checked in for today's event (Admin)",
+          method: "membership",
+          isDev: false,
+        });
+      }
+
+      await redis.set(doneKey, "1", { ex: 86400 });
+    } finally {
+      await redis.del(lockKey).catch(() => {});
+    }
+  } catch (error) {
+    console.error("[ensureAdminsCheckedInForTodayEvent] failed:", error);
+  }
+}
+
 export async function getTodayCheckIns(): Promise<CheckInEntry[]> {
+  await ensureAdminsCheckedInForTodayEvent();
   const today = new Date().toISOString().split("T")[0];
   const entries = await redis.lrange(`checkins:${today}`, 0, -1);
 

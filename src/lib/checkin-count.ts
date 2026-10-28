@@ -1,5 +1,6 @@
 import { redis } from "@/lib/redis";
 import { awardCardCredit } from "@/lib/card-credits";
+import { bustAdminMembers } from "@/lib/cache-bust";
 
 /**
  * Increment a member's lifetime check-in counter and record the latest
@@ -29,4 +30,5 @@ export async function recordCheckInCount(
   // Every member check-in goes through here, so this is also where the day's card credit is earned.
   // It is once per member per day and never throws.
   await awardCardCredit(userId, timestamp);
+  bustAdminMembers();
 }

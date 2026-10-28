@@ -57,8 +57,19 @@ export async function createEvent(
   await redis.hset(`event:${eventId}`, event as unknown as Record<string, unknown>);
   await redis.lpush("events:all", eventId);
 
+  const { revalidateTag } = await import("next/cache");
+  try {
+    revalidateTag("events", "max");
+  } catch {
+    /* ignore */
+  }
+  const { ensureAdminsCheckedInForTodayEvent } = await import("@/actions/admin/checkins");
+  await ensureAdminsCheckedInForTodayEvent();
+
   revalidatePath("/dashboard");
   revalidatePath("/admin/events");
+  revalidatePath("/admin/members");
+  revalidatePath("/admin/check-in");
   return { success: true, data: event };
 }
 
@@ -80,8 +91,19 @@ export async function updateEvent(
     imageUrl: data.imageUrl || "",
   } as Record<string, unknown>);
 
+  const { revalidateTag } = await import("next/cache");
+  try {
+    revalidateTag("events", "max");
+  } catch {
+    /* ignore */
+  }
+  const { ensureAdminsCheckedInForTodayEvent } = await import("@/actions/admin/checkins");
+  await ensureAdminsCheckedInForTodayEvent();
+
   revalidatePath("/dashboard");
   revalidatePath("/admin/events");
+  revalidatePath("/admin/members");
+  revalidatePath("/admin/check-in");
   return { success: true, data: null };
 }
 
