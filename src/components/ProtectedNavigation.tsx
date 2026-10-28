@@ -168,6 +168,15 @@ export function ProtectedNavigation({ user, unreadNotifications = 0, winnerSelec
           ) : (
             <ThemeAppIcon size={28} className="h-7 w-7 rounded-md overflow-hidden" priority />
           )}
+          {(user.role === "admin" || user.role === "moderator") && (
+            <Link
+              href="/admin"
+              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/15 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-purple-600 transition-colors hover:bg-purple-500/25 dark:text-purple-400"
+              title="Switch to Admin dashboard"
+            >
+              <span aria-hidden>⇄</span> {user.role === "moderator" ? "Mod" : "Admin"}
+            </Link>
+          )}
         </div>
         <div className="flex items-center gap-1.5 sm:gap-3">
           <QRPopover userId={user.id} variant="button" buttonText="Show QR code" />

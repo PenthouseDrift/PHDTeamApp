@@ -340,7 +340,7 @@ export async function openCardPack(
       }
     }
 
-    // A 1 in 20 chance of a third card: one of the admin's set cards. Its picture is fixed (not drawn), so
+    // A 1 in 30 chance of a third card: one of the admin's set cards. Its picture is fixed (not drawn), so
     // this is instant. Anything going wrong here leaves the rest of the pack untouched.
     let featured: StoredMemberCard | null = null;
     if (rng() < FEATURED_CARD_CHANCE) {

@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { put } from "@vercel/blob";
+import sharp from "sharp";
 
 /**
  * Server-side AI card art, shared by the admin card maker and the member card packs. Sends a
@@ -81,12 +82,16 @@ export async function generateArtImage(input: {
     );
   }
 
-  // Save to Blob.
-  const outMime = imagePart.inlineData.mimeType ?? "image/png";
-  const ext = outMime === "image/jpeg" ? "jpg" : outMime === "image/webp" ? "webp" : "png";
-  const blob = await put(`${input.folder ?? "card-art"}/ai-${randomUUID()}.${ext}`, Buffer.from(imagePart.inlineData.data, "base64"), {
+  // Compress and save to Blob as WebP (~60–100 KB instead of ~2 MB raw PNG).
+  const rawBuffer = Buffer.from(imagePart.inlineData.data, "base64");
+  const optimizedBuffer = await sharp(rawBuffer)
+    .resize({ width: 900, withoutEnlargement: true })
+    .webp({ quality: 82, effort: 4 })
+    .toBuffer();
+
+  const blob = await put(`${input.folder ?? "card-art"}/ai-${randomUUID()}.webp`, optimizedBuffer, {
     access: "public",
-    contentType: outMime,
+    contentType: "image/webp",
     addRandomSuffix: true,
     token: process.env.BLOB_READ_WRITE_TOKEN,
   });

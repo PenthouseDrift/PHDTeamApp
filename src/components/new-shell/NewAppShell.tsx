@@ -91,6 +91,7 @@ function TopBarContent({
 }) {
   const { count } = useBasket();
   const atRoot = isRootPath(pathname);
+  const isStaff = user.role === "admin" || user.role === "moderator";
   // The basket is only relevant while shopping or when it has something in it.
   const showBasket = count > 0 || tabForPath(pathname) === "market";
 
@@ -105,6 +106,15 @@ function TopBarContent({
           </Link>
         )}
         <span className="truncate text-sm font-bold text-zinc-900 dark:text-zinc-100">{titleFor(pathname)}</span>
+        {isStaff && (
+          <Link
+            href="/admin"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/15 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-purple-600 transition-colors hover:bg-purple-500/25 dark:text-purple-400"
+            title="Switch to Admin dashboard"
+          >
+            <span aria-hidden>⇄</span> {user.role === "moderator" ? "Mod" : "Admin"}
+          </Link>
+        )}
       </div>
 
       <div className="flex shrink-0 items-center gap-0.5">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useEffect, useId, useRef } from "react";
 import { Barlow_Condensed } from "next/font/google";
 import { darken, lighten } from "@/lib/card-maker";
 import { tierInfo, type FullArtCardData } from "@/lib/full-art-card";
@@ -16,12 +16,30 @@ const cardFont = Barlow_Condensed({ subsets: ["latin"], weight: ["600", "700", "
  */
 
 const H = 139.7;
+const PAD = 13; // Canvas padding around the 100 x 139.7 card in card units
+const CW = 100 + PAD * 2; // 126
+const CH = H + PAD * 2; // 165.7
 
 /** Each stat is out of 10, so the total score is out of 40. */
 const MAX_STAT = 10;
 const MAX_TOTAL_SCORE = MAX_STAT * 4;
 
 const abs = (style: React.CSSProperties): React.CSSProperties => ({ position: "absolute", ...style });
+
+const BLOB_HOST_RE = /^https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\//i;
+const NEXT_IMAGE_WIDTHS = [256, 384, 640, 750, 828] as const;
+
+function getOptimizedCardImageProps(url: string, flat: boolean) {
+  if (flat || !BLOB_HOST_RE.test(url)) {
+    return { src: url, srcSet: undefined, sizes: undefined };
+  }
+  const encoded = encodeURIComponent(url);
+  return {
+    src: `/_next/image?url=${encoded}&w=640&q=75`,
+    srcSet: NEXT_IMAGE_WIDTHS.map((w) => `/_next/image?url=${encoded}&w=${w}&q=75 ${w}w`).join(", "),
+    sizes: "(max-width: 640px) 46vw, (max-width: 1024px) 30vw, 320px",
+  };
+}
 
 /** A small seeded random generator, so each card's shine is different but never changes between renders. */
 function seededRandom(seed: string): () => number {
@@ -40,6 +58,398 @@ function seededRandom(seed: string): () => number {
   };
 }
 
+const MYTHIC_VERTEX_SHADER = `
+  attribute vec2 a_position;
+  void main() {
+    gl_Position = vec4(a_position, 0.0, 1.0);
+  }
+`;
+
+/**
+ * WebGL fragment shader adapted directly from the Ashima 3D Simplex Noise Fire & Sparks shader
+ * (snoise + noiseStack + noiseStackUV + pow(1.0 - flames^3, 8.0) + prng spark grid),
+ * mapped around the Mythic card's rounded-rectangle border.
+ */
+const MYTHIC_FRAGMENT_SHADER = `
+  precision highp float;
+  uniform vec2 resolution;
+  uniform float time;
+
+  // Ashima 3D Simplex Noise (Ian McEwan, Ashima Arts)
+  vec3 mod289(vec3 x) {
+    return x - floor(x * (1.0 / 289.0)) * 289.0;
+  }
+
+  vec4 mod289(vec4 x) {
+    return x - floor(x * (1.0 / 289.0)) * 289.0;
+  }
+
+  vec4 permute(vec4 x) {
+    return mod289(((x * 34.0) + 1.0) * x);
+  }
+
+  float snoise(vec3 v) {
+    const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
+    const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+
+    vec3 i  = floor(v + dot(v, C.yyy));
+    vec3 x0 = v - i + dot(i, C.xxx);
+
+    vec3 g = step(x0.yzx, x0.xyz);
+    vec3 l = 1.0 - g;
+    vec3 i1 = min(g.xyz, l.zxy);
+    vec3 i2 = max(g.xyz, l.zxy);
+
+    vec3 x1 = x0 - i1 + C.xxx;
+    vec3 x2 = x0 - i2 + C.yyy;
+    vec3 x3 = x0 - D.yyy;
+
+    i = mod289(i);
+    vec4 p = permute(
+      permute(
+        permute(i.z + vec4(0.0, i1.z, i2.z, 1.0))
+        + i.y + vec4(0.0, i1.y, i2.y, 1.0)
+      )
+      + i.x + vec4(0.0, i1.x, i2.x, 1.0)
+    );
+
+    float n_ = 0.142857142857;
+    vec3 ns = n_ * D.wyz - D.xzx;
+
+    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+
+    vec4 x_ = floor(j * ns.z);
+    vec4 y_ = floor(j - 7.0 * x_);
+
+    vec4 x = x_ * ns.x + ns.yyyy;
+    vec4 y = y_ * ns.x + ns.yyyy;
+    vec4 h = 1.0 - abs(x) - abs(y);
+
+    vec4 b0 = vec4(x.xy, y.xy);
+    vec4 b1 = vec4(x.zw, y.zw);
+
+    vec4 s0 = floor(b0) * 2.0 + 1.0;
+    vec4 s1 = floor(b1) * 2.0 + 1.0;
+    vec4 sh = -step(h, vec4(0.0));
+
+    vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+    vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+
+    vec3 p0 = vec3(a0.xy, h.x);
+    vec3 p1 = vec3(a0.zw, h.y);
+    vec3 p2 = vec3(a1.xy, h.z);
+    vec3 p3 = vec3(a1.zw, h.w);
+
+    vec4 norm = inversesqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+    p0 *= norm.x;
+    p1 *= norm.y;
+    p2 *= norm.z;
+    p3 *= norm.w;
+
+    vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
+    m = m * m;
+    return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+  }
+
+  float prng(in vec2 seed) {
+    seed = fract(seed * vec2(5.3983, 5.4427));
+    seed += dot(seed.yx, seed.xy + vec2(21.5351, 14.3137));
+    return fract(seed.x * seed.y);
+  }
+
+  const float PI = 3.1415926535897932384626433832795;
+
+  float noiseStack(vec3 pos, int octaves, float falloff) {
+    float noise = snoise(vec3(pos));
+    float off = 1.0;
+    if (octaves > 1) {
+      pos *= 2.0;
+      off *= falloff;
+      noise = (1.0 - off) * noise + off * snoise(vec3(pos));
+    }
+    if (octaves > 2) {
+      pos *= 2.0;
+      off *= falloff;
+      noise = (1.0 - off) * noise + off * snoise(vec3(pos));
+    }
+    if (octaves > 3) {
+      pos *= 2.0;
+      off *= falloff;
+      noise = (1.0 - off) * noise + off * snoise(vec3(pos));
+    }
+    return (1.0 + noise) / 2.0;
+  }
+
+  vec2 noiseStackUV(vec3 pos, int octaves, float falloff, float diff) {
+    float displaceA = noiseStack(pos, octaves, falloff);
+    float displaceB = noiseStack(pos + vec3(3984.293, 423.21, 5235.19), octaves, falloff);
+    return vec2(displaceA, displaceB);
+  }
+
+  float sdRoundedBox(vec2 p, vec2 b, float r) {
+    vec2 q = abs(p) - b + r;
+    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
+  }
+
+  void main() {
+    vec2 uv01 = gl_FragCoord.xy / resolution.xy;
+    // Map canvas UV to the 100 x 139.7 card coordinate space (with PAD-unit padding on all 4 sides)
+    vec2 cardPos = vec2(uv01.x * ${CW.toFixed(1)} - ${PAD.toFixed(1)}, (1.0 - uv01.y) * ${CH.toFixed(1)} - ${PAD.toFixed(1)});
+    vec2 p = cardPos - vec2(50.0, ${(H / 2).toFixed(2)});
+
+    // Signed distance to the card's metallic frame (x=1.3..98.7, y=1.3..138.4, rx=4.2)
+    float sd = sdRoundedBox(p, vec2(48.7, ${(H / 2 - 1.3).toFixed(2)}), 4.2);
+
+    // Keep the card interior untouched and discard far outside the border
+    if (sd < -1.9 || sd > 12.2) {
+      gl_FragColor = vec4(0.0);
+      return;
+    }
+
+    // Flame reach around the border: larger reach along the sides/bottom, licking higher on corners and top
+    float topBoost = smoothstep(25.0, -68.0, p.y) * 2.0;
+    float cornerBoost = smoothstep(32.0, 48.0, abs(p.x)) * smoothstep(46.0, 68.0, abs(p.y)) * 1.45;
+    float flameWidth = 6.8 + topBoost + cornerBoost;
+
+    // Map perpendicular border distance to the original shader's fragCoord.y (0 at base -> clip=210 at outer tip)
+    float clip = 210.0;
+    float ypartClip = sd >= -0.45
+      ? (sd + 0.45) / flameWidth
+      : (-0.45 - sd) / 1.35;
+
+    float ypartClippedFalloff = clamp(2.0 - ypartClip, 0.0, 1.0);
+    float ypartClipped = min(ypartClip, 1.0);
+    float ypartClippedn = 1.0 - ypartClipped;
+
+    // Fuel intensity along the border
+    float xfuel = 0.96;
+
+    float timeSpeed = 0.55;
+    float realTime = timeSpeed * time;
+
+    // Continuous, seamless perimeter coordinates for X/Z and full 0..2.1 outward range for Y
+    float fragY = ypartClip * clip;
+    float driftY = p.y + realTime * 14.0;
+    vec3 position = vec3(
+      (p.x + driftY) * 0.026,
+      0.01 * fragY,
+      (p.x - driftY) * 0.026
+    ) + vec3(1223.0, 6434.0, 8425.0);
+
+    vec3 flow = vec3(
+      0.0,
+      -2.0 * xfuel * pow(ypartClippedn, 64.0),
+      0.0
+    );
+    vec3 timing = realTime * vec3(0.0, -1.7, 1.1) + flow;
+
+    vec3 displacePos = vec3(1.0, 0.5, 1.0) * 2.4 * position + realTime * vec3(0.01, -0.7, 1.3);
+    vec3 displace3 = vec3(noiseStackUV(displacePos, 2, 0.4, 0.1), 0.0);
+
+    vec3 noiseCoord = (vec3(2.0, 1.0, 2.0) * position + timing + 0.4 * displace3);
+    float noise = noiseStack(noiseCoord, 3, 0.4);
+
+    float flames = pow(ypartClipped, 0.3 * xfuel) * pow(noise, 0.3 * xfuel);
+
+    float f = ypartClippedFalloff * pow(max(0.0, 1.0 - flames * flames * flames), 8.0);
+
+    // Sparks from the shader, rising in virtual pixel space around the border
+    vec2 virtualCoord = vec2(cardPos.x + ${PAD.toFixed(1)}, (${CH.toFixed(1)} - (cardPos.y + ${PAD.toFixed(1)}))) * 4.2;
+    float sparkZone = smoothstep(-0.5, 0.1, sd) * (1.0 - smoothstep(flameWidth * 0.55, flameWidth * 1.65, sd));
+    float sparkGridSize = 25.0;
+    vec2 sparkCoord = virtualCoord - vec2(0.0, 160.0 * realTime);
+    sparkCoord -= 25.0 * noiseStackUV(0.01 * vec3(sparkCoord, 24.0 * time), 1, 0.4, 0.1);
+    if (mod(sparkCoord.y / sparkGridSize, 2.0) < 1.0) sparkCoord.x += 0.5 * sparkGridSize;
+    vec2 sparkGridIndex = vec2(floor(sparkCoord / sparkGridSize));
+    float sparkRandom = prng(sparkGridIndex);
+    float sparkLife = min(10.0 * (1.0 - min((sparkGridIndex.y + (160.0 * realTime / sparkGridSize)) / (24.0 - 20.0 * sparkRandom), 1.0)), 1.0);
+
+    float sparkMask = 0.0;
+    if (sparkLife > 0.0 && sparkZone > 0.01) {
+      float sparkSize = xfuel * xfuel * sparkRandom * 0.115;
+      float sparkRadians = 999.0 * sparkRandom * 2.0 * PI + 2.0 * time;
+      vec2 sparkCircular = vec2(sin(sparkRadians), cos(sparkRadians));
+      vec2 sparkOffset = (0.5 - sparkSize) * sparkGridSize * sparkCircular;
+      vec2 sparkModulus = mod(sparkCoord + sparkOffset, sparkGridSize) - 0.5 * vec2(sparkGridSize);
+      float sparkLength = length(sparkModulus);
+      float sparksGray = max(0.0, 1.0 - sparkLength / max(0.001, sparkSize * sparkGridSize));
+      sparkMask = clamp(sparkLife * sparksGray * sparkZone * 1.35, 0.0, 1.0);
+    }
+
+    // Pure fire hue (R=1.0 everywhere so it NEVER produces black/grey soot on white backgrounds)
+    float heat = clamp(f * 1.15, 0.0, 1.0);
+    vec3 fireHue = vec3(
+      1.0,
+      clamp(pow(heat, 1.65) * 1.08, 0.0, 1.0),
+      clamp(pow(heat, 4.2) * 1.25, 0.0, 1.0)
+    );
+    float fireAlpha = clamp(smoothstep(0.015, 0.58, f) * 0.96, 0.0, 1.0);
+
+    vec3 sparkHue = vec3(1.0, 0.48, 0.08);
+    float finalAlpha = max(fireAlpha, sparkMask);
+    vec3 finalHue = mix(fireHue, sparkHue, clamp(sparkMask * (1.0 - fireAlpha * 0.7), 0.0, 1.0));
+
+    gl_FragColor = vec4(finalHue * finalAlpha, finalAlpha);
+  }
+`;
+
+/**
+ * Renders the Simplex Noise Fire & Sparks WebGL shader directly in front of the Mythic card border.
+ */
+function MythicFlameCanvases({ seed, animated }: { seed: string; animated: boolean }) {
+  const glCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const glCanvas = glCanvasRef.current;
+    if (!glCanvas) return;
+
+    const prefersReducedMotion =
+      typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const shouldAnimate = animated && !prefersReducedMotion;
+
+    const gl = (glCanvas.getContext("webgl", { alpha: true, premultipliedAlpha: true }) ||
+      glCanvas.getContext("experimental-webgl", { alpha: true, premultipliedAlpha: true })) as WebGLRenderingContext | null;
+    if (!gl) return;
+
+    const compile = (type: number, src: string) => {
+      const shader = gl.createShader(type);
+      if (!shader) return null;
+      gl.shaderSource(shader, src);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        gl.deleteShader(shader);
+        return null;
+      }
+      return shader;
+    };
+
+    const vs = compile(gl.VERTEX_SHADER, MYTHIC_VERTEX_SHADER);
+    const fs = compile(gl.FRAGMENT_SHADER, MYTHIC_FRAGMENT_SHADER);
+    if (!vs || !fs) return;
+
+    const program = gl.createProgram();
+    if (!program) return;
+    gl.attachShader(program, vs);
+    gl.attachShader(program, fs);
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      gl.deleteProgram(program);
+      return;
+    }
+
+    gl.useProgram(program);
+    const posBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
+      gl.STATIC_DRAW
+    );
+    const posAttr = gl.getAttribLocation(program, "a_position");
+    gl.enableVertexAttribArray(posAttr);
+    gl.vertexAttribPointer(posAttr, 2, gl.FLOAT, false, 0, 0);
+
+    const timeLoc = gl.getUniformLocation(program, "time");
+    const resLoc = gl.getUniformLocation(program, "resolution");
+
+    const updateSize = () => {
+      const rect = glCanvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const glW = Math.max(240, Math.min(520, Math.round((rect.width || 300) * dpr)));
+      const glH = Math.round(glW * (CH / CW));
+      if (glCanvas.width !== glW || glCanvas.height !== glH) {
+        glCanvas.width = glW;
+        glCanvas.height = glH;
+        gl.viewport(0, 0, glW, glH);
+      }
+    };
+
+    updateSize();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(updateSize) : null;
+    ro?.observe(glCanvas);
+
+    const rand = seededRandom(`${seed}|simplex-fire`);
+    const timeOffset = rand() * 50 + 10;
+    const startTime = performance.now();
+    let rafId = 0;
+
+    const renderFrame = (now: number) => {
+      const elapsed = (now - startTime) * 0.001 + timeOffset;
+      if (resLoc) gl.uniform2f(resLoc, glCanvas.width, glCanvas.height);
+      if (timeLoc) gl.uniform1f(timeLoc, elapsed);
+
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+      if (shouldAnimate) {
+        rafId = requestAnimationFrame(renderFrame);
+      }
+    };
+
+    rafId = requestAnimationFrame(renderFrame);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      ro?.disconnect();
+      if (posBuffer) gl.deleteBuffer(posBuffer);
+      gl.deleteProgram(program);
+    };
+  }, [seed, animated]);
+
+  const overlayStyle: React.CSSProperties = abs({
+    left: `${(-PAD).toFixed(2)}%`,
+    top: `${((-PAD / H) * 100).toFixed(2)}%`,
+    width: `${CW.toFixed(2)}%`,
+    height: `${((CH / H) * 100).toFixed(2)}%`,
+    pointerEvents: "none",
+  });
+
+  return <canvas ref={glCanvasRef} style={overlayStyle} />;
+}
+
+
+/**
+ * The animated border on a Legend or Mythic card.
+ *  - Legend: a clean prismatic rainbow border and outer neon aura that continuously sweeps around the frame.
+ *  - Mythic: combines the WebGL atmospheric fire/Voronoi spark shader and the 2D FlameParticle canvas
+ *    directly in front of the card's border rim.
+ * When `animated` is false (printing) or the member prefers reduced motion, it renders as a still border.
+ */
+function BorderEffects({ variant, seed, animated }: { variant: "legend" | "mythic"; seed: string; animated: boolean }) {
+  const rand = seededRandom(`${seed}|border|${variant}`);
+  const cls = animated ? "" : " fa-still";
+  const phaseDelay = `-${(rand() * 5).toFixed(2)}s`;
+
+  if (variant === "legend") {
+    return (
+      <div
+        aria-hidden
+        className={`fa-border${cls}`}
+        style={{
+          ...abs({ inset: "-0.8cqw", borderRadius: "5.7cqw", pointerEvents: "none" }),
+          ["--fa-delay" as string]: phaseDelay,
+        }}
+      >
+        <div className="fa-legend-aura" />
+        <div className="fa-legend-ring" />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      aria-hidden
+      className={`fa-border${cls}`}
+      style={{
+        ...abs({ inset: 0, zIndex: 4, pointerEvents: "none" }),
+        ["--fa-delay" as string]: phaseDelay,
+      }}
+    >
+      <MythicFlameCanvases seed={seed} animated={animated} />
+    </div>
+  );
+}
 
 export function FullArtCard({
   card,
@@ -143,12 +553,18 @@ export function FullArtCard({
         width: "100%",
         aspectRatio: "63 / 88",
         containerType: "inline-size",
+        // Prevent parent drop-shadow filters from casting grey/black shadows behind the semi-transparent Mythic flames
+        filter: isMythic ? "none" : undefined,
         // Text inherits text-align, and a <button> parent (card grids) would centre it. The design is left aligned.
         textAlign: "left",
         WebkitPrintColorAdjust: "exact",
         printColorAdjust: "exact",
       }}
     >
+      {/* Legend: spinning rainbow glow behind the card edge. */}
+      {isLegend && (
+        <BorderEffects variant="legend" seed={`${card.id ?? ""}|${card.name}|${card.imageUrl.slice(-24)}`} animated={!flat} />
+      )}
       <div
         style={{
           ...abs({ inset: 0 }),
@@ -160,22 +576,31 @@ export function FullArtCard({
       >
         {/* The picture, edge to edge */}
         {card.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={card.imageUrl}
-            data-card-image
-            alt={card.name}
-            style={{
-              ...abs({ inset: 0 }),
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              objectPosition: `${card.imageX}% ${card.imageY}%`,
-              transform: `scale(${card.imageZoom / 100})`,
-              transformOrigin: `${card.imageX}% ${card.imageY}%`,
-              display: "block",
-            }}
-          />
+          (() => {
+            const imgProps = getOptimizedCardImageProps(card.imageUrl, flat);
+            return (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={imgProps.src}
+                srcSet={imgProps.srcSet}
+                sizes={imgProps.sizes}
+                loading={flat ? "eager" : "lazy"}
+                decoding="async"
+                data-card-image
+                alt={card.name}
+                style={{
+                  ...abs({ inset: 0 }),
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  objectPosition: `${card.imageX}% ${card.imageY}%`,
+                  transform: `scale(${card.imageZoom / 100})`,
+                  transformOrigin: `${card.imageX}% ${card.imageY}%`,
+                  display: "block",
+                }}
+              />
+            );
+          })()
         ) : (
           <div style={{ ...abs({ inset: 0 }), display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.45)", fontSize: "9cqw", fontWeight: 800, textAlign: "center", lineHeight: 1 }}>
             PLACE IMAGE HERE
@@ -373,6 +798,10 @@ export function FullArtCard({
           </div>
         </div>
       </div>
+      {/* Mythic: molten lava border rendered in front of the card so the rim, drips and sparks sit on top of the frame. */}
+      {isMythic && (
+        <BorderEffects variant="mythic" seed={`${card.id ?? ""}|${card.name}|${card.imageUrl.slice(-24)}`} animated={!flat} />
+      )}
     </div>
   );
 }

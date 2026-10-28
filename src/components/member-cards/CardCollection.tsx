@@ -57,8 +57,8 @@ export function CardCollection({
 
   const sorted = useMemo(() => sortCards(cards, sortKey, direction), [cards, sortKey, direction]);
   const tally = useMemo(() => {
-    const counts: Record<string, number> = { bronze: 0, silver: 0, gold: 0, legend: 0 };
-    for (const c of cards) counts[c.tier]++;
+    const counts: Record<string, number> = { bronze: 0, silver: 0, gold: 0, legend: 0, mythic: 0 };
+    for (const c of cards) counts[c.tier] = (counts[c.tier] ?? 0) + 1;
     return counts;
   }, [cards]);
 

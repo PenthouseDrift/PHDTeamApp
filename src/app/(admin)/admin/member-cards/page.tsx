@@ -5,6 +5,7 @@ import { listAllMemberCards } from "@/actions/admin/member-cards";
 import { MemberCardsAdmin } from "@/components/admin/MemberCardsAdmin";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export default async function MemberCardsPage() {
   const session = await auth();

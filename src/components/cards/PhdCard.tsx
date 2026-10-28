@@ -107,6 +107,20 @@ const LOGO_OUTLINE_W = 0.2;
 // The gold P mark (public/logo.png, 1398 x 812).
 const MARK_SRC = "/logo.png";
 const MARK_RATIO = 812 / 1398;
+const BLOB_HOST_RE = /^https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\//i;
+const NEXT_IMAGE_WIDTHS = [256, 384, 640, 750, 828] as const;
+
+function getOptimizedCardImageProps(url: string, flat: boolean) {
+  if (flat || !BLOB_HOST_RE.test(url)) {
+    return { src: url, srcSet: undefined, sizes: undefined };
+  }
+  const encoded = encodeURIComponent(url);
+  return {
+    src: `/_next/image?url=${encoded}&w=640&q=75`,
+    srcSet: NEXT_IMAGE_WIDTHS.map((w) => `/_next/image?url=${encoded}&w=${w}&q=75 ${w}w`).join(", "),
+    sizes: "(max-width: 640px) 46vw, (max-width: 1024px) 30vw, 320px",
+  };
+}
 
 function TeamPlaceholder({ x, y, size = 3.4 }: { x: number; y: number; size?: number }) {
   return (
@@ -465,21 +479,30 @@ export function PhdCard({
           }}
         >
           {card.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={card.imageUrl}
-              data-card-image
-              alt={card.name}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                objectPosition: `${card.imageX}% ${card.imageY}%`,
-                transform: `scale(${card.imageZoom / 100})`,
-                transformOrigin: `${card.imageX}% ${card.imageY}%`,
-                display: "block",
-              }}
-            />
+            (() => {
+              const imgProps = getOptimizedCardImageProps(card.imageUrl, flat);
+              return (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={imgProps.src}
+                  srcSet={imgProps.srcSet}
+                  sizes={imgProps.sizes}
+                  loading={flat ? "eager" : "lazy"}
+                  decoding="async"
+                  data-card-image
+                  alt={card.name}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    objectPosition: `${card.imageX}% ${card.imageY}%`,
+                    transform: `scale(${card.imageZoom / 100})`,
+                    transformOrigin: `${card.imageX}% ${card.imageY}%`,
+                    display: "block",
+                  }}
+                />
+              );
+            })()
           ) : (
             <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#9a9894", fontSize: "9cqw", fontWeight: 800, textAlign: "center", lineHeight: 1 }}>
               PLACE IMAGE HERE

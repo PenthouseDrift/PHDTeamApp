@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { FullArtCard } from "@/components/cards/FullArtCard";
 import { DeleteCardButton } from "@/components/member-cards/DeleteCardButton";
-import { rebuildMemberCardIndex, type AdminMemberCard } from "@/actions/admin/member-cards";
+import { optimizeStoredCardImages, rebuildMemberCardIndex, type AdminMemberCard } from "@/actions/admin/member-cards";
 import { ART_STYLES } from "@/lib/card-maker";
 import { FULL_ART_TIERS, type FullArtTier } from "@/lib/full-art-card";
 import { DEFAULT_SORT_DIRECTION, rarityLabel, sortCards, type CardSortKey, type SortDirection } from "@/lib/card-roll";
@@ -51,7 +51,14 @@ export function MemberCardsAdmin({ initialCards: loadedCards, total: loadedTotal
   const router = useRouter();
   // Cards deleted from this page disappear straight away, without waiting for a refresh.
   const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set());
-  const initialCards = useMemo(() => loadedCards.filter((c) => !removed.has(c.id)), [loadedCards, removed]);
+  const [urlOverrides, setUrlOverrides] = useState<Readonly<Record<string, string>>>({});
+  const initialCards = useMemo(
+    () =>
+      loadedCards
+        .filter((c) => !removed.has(c.id))
+        .map((c) => (urlOverrides[c.imageUrl] ? { ...c, imageUrl: urlOverrides[c.imageUrl] } : c)),
+    [loadedCards, removed, urlOverrides]
+  );
   const total = Math.max(0, loadedTotal - removed.size);
   const [query, setQuery] = useState("");
   const [tier, setTier] = useState<FullArtTier | "all">("all");
@@ -61,13 +68,14 @@ export function MemberCardsAdmin({ initialCards: loadedCards, total: loadedTotal
   const [openId, setOpenId] = useState<string | null>(null);
   const [note, setNote] = useState<{ text: string; error?: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
+  const [optimizing, setOptimizing] = useState(false);
 
   const tally = useMemo(() => {
-    const counts: Record<string, number> = { bronze: 0, silver: 0, gold: 0, legend: 0 };
+    const counts: Record<string, number> = { bronze: 0, silver: 0, gold: 0, legend: 0, mythic: 0 };
     let archived = 0;
     for (const c of initialCards) {
       if (c.archived) archived++;
-      else counts[c.tier]++;
+      else counts[c.tier] = (counts[c.tier] ?? 0) + 1;
     }
     return { counts, archived };
   }, [initialCards]);
@@ -111,6 +119,48 @@ export function MemberCardsAdmin({ initialCards: loadedCards, total: loadedTotal
     });
   }
 
+  async function optimizeImages() {
+    if (optimizing) return;
+    setOptimizing(true);
+    setNote({ text: "Scanning and optimising stored card images to WebP…" });
+    let totalImages = 0;
+    let totalCards = 0;
+    let totalBytesSaved = 0;
+    try {
+      for (let round = 0; round < 50; round++) {
+        const res = await optimizeStoredCardImages();
+        if (!res.success) {
+          setNote({ text: res.error, error: true });
+          return;
+        }
+        totalImages += res.data.optimizedImages;
+        totalCards += res.data.updatedCards;
+        totalBytesSaved += res.data.bytesSaved;
+        if (Object.keys(res.data.urlMap).length > 0) {
+          setUrlOverrides((prev) => ({ ...prev, ...res.data.urlMap }));
+        }
+        if (res.data.remainingImages <= 0 || res.data.optimizedImages === 0) break;
+        const mbSavedSoFar = (totalBytesSaved / (1024 * 1024)).toFixed(1);
+        setNote({
+          text: `Optimising card images… ${totalImages} converted (${mbSavedSoFar} MB saved), ${res.data.remainingImages} remaining…`,
+        });
+      }
+      if (totalImages === 0) {
+        setNote({ text: "All stored card images are already optimised as WebP." });
+      } else {
+        const mbSaved = (totalBytesSaved / (1024 * 1024)).toFixed(1);
+        setNote({
+          text: `Optimised ${totalImages} card image${totalImages === 1 ? "" : "s"} across ${totalCards} stored card${totalCards === 1 ? "" : "s"} and resaved as WebP (saved ${mbSaved} MB).`,
+        });
+        router.refresh();
+      }
+    } catch (err) {
+      setNote({ text: err instanceof Error ? err.message : "Could not optimise card images", error: true });
+    } finally {
+      setOptimizing(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       {/* Summary */}
@@ -123,14 +173,24 @@ export function MemberCardsAdmin({ initialCards: loadedCards, total: loadedTotal
               <p className="text-xs text-zinc-500 dark:text-zinc-400">Showing the newest {initialCards.length}.</p>
             )}
           </div>
-          <button
-            type="button"
-            onClick={rebuild}
-            disabled={pending}
-            className="min-h-11 rounded-xl border border-zinc-300 px-4 text-sm font-bold text-zinc-800 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
-          >
-            {pending ? "Checking…" : "Find missing cards"}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={optimizeImages}
+              disabled={pending || optimizing}
+              className="min-h-11 rounded-xl bg-amber-500 px-4 text-sm font-black text-black hover:bg-amber-400 disabled:opacity-50"
+            >
+              {optimizing ? "Optimising images…" : "Optimise card images"}
+            </button>
+            <button
+              type="button"
+              onClick={rebuild}
+              disabled={pending || optimizing}
+              className="min-h-11 rounded-xl border border-zinc-300 px-4 text-sm font-bold text-zinc-800 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
+            >
+              {pending ? "Checking…" : "Find missing cards"}
+            </button>
+          </div>
         </div>
         <ul className="grid grid-cols-2 gap-2 sm:grid-cols-5" aria-label="Cards by rarity">
           {[...FULL_ART_TIERS].reverse().map((t) => (

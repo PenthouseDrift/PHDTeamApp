@@ -277,7 +277,7 @@ export function FullArtCardMaker({
           <div className="space-y-2 rounded-xl border border-amber-500/40 bg-amber-500/5 p-3">
             <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">Pullable in packs</p>
             <p className="text-xs text-zinc-600 dark:text-zinc-400">
-              Optional. A pullable card is a set card: this exact picture is given out, never redrawn. Each pack has a 1 in 20
+              Optional. A pullable card is a set card: this exact picture is given out, never redrawn. Each pack has a 1 in 30
               chance of a third bonus card, picked from the pullable cards by the odds weight.
             </p>
             <label htmlFor="fa-odds" className={label}>
@@ -530,7 +530,7 @@ export function FullArtCardMaker({
           <h2 className="text-sm font-black text-zinc-900 dark:text-zinc-100">Pullable in packs ({pullableCards.length})</h2>
           {pullableCards.length === 0 ? (
             <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              No pullable cards yet. Save a card, then use &ldquo;Add to pullable cards&rdquo; next to the preview. Each pack has a 1 in 20 chance of
+              No pullable cards yet. Save a card, then use &ldquo;Add to pullable cards&rdquo; next to the preview. Each pack has a 1 in 30 chance of
               a bonus card from this list.
             </p>
           ) : (

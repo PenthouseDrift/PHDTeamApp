@@ -121,9 +121,9 @@ export const BONUS_CARD_CHANCE = 1;
 
 /**
  * The chance a pack also holds a third card: one of the set cards an admin chose to make pullable
- * (see the admin card maker). 1 in 20. These are fixed card images, never redrawn.
+ * (see the admin card maker). 1 in 30. These are fixed card images, never redrawn.
  */
-export const FEATURED_CARD_CHANCE = 1 / 20;
+export const FEATURED_CARD_CHANCE = 1 / 30;
 
 /**
  * Member cards are shown slightly zoomed in. If the AI still draws a border around its picture despite

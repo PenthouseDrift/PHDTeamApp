@@ -12,14 +12,19 @@ export function CardsPromo({ credits }: { credits: number }) {
       className="relative overflow-hidden rounded-2xl border border-amber-500/40 bg-gradient-to-br from-zinc-950 via-zinc-900 to-amber-950/60 p-5 text-zinc-100 shadow-sm"
     >
       <div className="flex items-center gap-4">
-        {/* A little card back */}
-        <div
-          aria-hidden
-          className="flex h-24 w-[4.3rem] shrink-0 -rotate-6 items-center justify-center rounded-lg border-2 border-amber-400 bg-gradient-to-br from-zinc-800 to-black shadow-[0_0_1.2rem_rgba(232,185,35,0.35)]"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="" className="w-3/5" />
-        </div>
+        {/* The cards on offer. Two pre-sized WebP files (240 and 480 wide) so phones download the small one. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/cards-promo-480.webp"
+          srcSet="/cards-promo-240.webp 240w, /cards-promo-480.webp 480w"
+          sizes="(min-width: 640px) 176px, 128px"
+          width={480}
+          height={382}
+          alt="Mythic and Legend cards from the card packs"
+          loading="lazy"
+          decoding="async"
+          className="h-auto w-32 shrink-0 drop-shadow-[0_0_1rem_rgba(232,185,35,0.35)] sm:w-44"
+        />
         <div className="min-w-0 flex-1 space-y-1">
           <p className="text-xs font-bold uppercase tracking-widest text-amber-400">New · Collect your cards</p>
           <h2 className="text-lg font-black leading-tight">
@@ -27,7 +32,7 @@ export function CardsPromo({ credits }: { credits: number }) {
           </h2>
           <p className="text-sm text-zinc-300">
             {has
-              ? "Open a pack to get a card of your own car. Bronze, silver, gold or a rare legend."
+              ? "Open a pack to get a card of your own car. Bronze, silver, gold, legend and even a mythic."
               : "Every check-in at the track earns 1 credit, or 2 with a membership. Spend it on a pack and get a card of your own car."}
           </p>
         </div>

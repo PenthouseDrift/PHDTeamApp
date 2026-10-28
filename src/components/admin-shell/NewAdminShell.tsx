@@ -92,6 +92,13 @@ function TopBarContent({
         <span className="shrink-0 rounded-full border border-purple-500/30 bg-purple-500/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-purple-600 dark:text-purple-400">
           {roleLabel}
         </span>
+        <Link
+          href="/dashboard2"
+          className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-700 transition-colors hover:bg-amber-500/25 dark:text-amber-300"
+          title="Switch to Member dashboard"
+        >
+          <span aria-hidden>⇄</span> Member
+        </Link>
       </div>
       <div className="flex shrink-0 items-center gap-0.5">
         <NotificationsPopover userId={user.id} initialUnreadCount={unreadNotifications} />

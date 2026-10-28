@@ -1,12 +1,16 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
+import { put } from "@vercel/blob";
+import sharp from "sharp";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import type { MemberCard } from "@/lib/card-roll";
 import {
   ALL_MEMBER_CARDS_INDEX,
   MEMBER_CARD_ID_PATTERN,
+  fullArtCardKey,
   memberCardKey,
   memberCardsIndexKey,
   parseStoredCard,
@@ -150,5 +154,162 @@ export async function rebuildMemberCardIndex(): Promise<ActionResult<{ scanned: 
     return { success: true, data: { scanned, listed, pool } };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Could not rebuild the card list" };
+  }
+}
+
+export interface OptimizeCardsResult {
+  /** Number of unique images converted to WebP in this batch. */
+  optimizedImages: number;
+  /** Number of stored card records updated with the new image URL in this batch. */
+  updatedCards: number;
+  /** Number of unique unoptimised images still remaining after this batch. */
+  remainingImages: number;
+  /** Total bytes saved across the images optimised in this batch. */
+  bytesSaved: number;
+  /** Mapping of old imageUrl -> new imageUrl so the client UI can update immediately. */
+  urlMap: Record<string, string>;
+}
+
+const OPTIMIZE_BATCH_SIZE = 16;
+const OPTIMIZE_CONCURRENCY = 4;
+
+function isAlreadyOptimizedWebp(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.pathname.toLowerCase().endsWith(".webp");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Compress existing stored card images (across member cards, admin full-art cards, and admin original cards)
+ * into ~60–100 KB WebP files in Vercel Blob, resave every card record with its new imageUrl, and delete
+ * the old unoptimised PNG/JPEG blob. Processes up to OPTIMIZE_BATCH_SIZE unique images per call so it never
+ * hits serverless timeouts; call repeatedly until `remainingImages === 0`.
+ */
+export async function optimizeStoredCardImages(): Promise<ActionResult<OptimizeCardsResult>> {
+  try {
+    if (!(await requireAdmin())) return { success: false, error: "Only admins can optimise card images" };
+
+    const [memberIds, fullArtIds, origIds] = await Promise.all([
+      redis.zrange(ALL_MEMBER_CARDS_INDEX, 0, -1) as Promise<string[]>,
+      redis.zrange("fullart:index", 0, -1) as Promise<string[]>,
+      redis.zrange("cards:index", 0, -1) as Promise<string[]>,
+    ]);
+
+    const keysToLoad: string[] = [
+      ...(memberIds ?? []).map((id) => memberCardKey(String(id))),
+      ...(fullArtIds ?? []).map((id) => fullArtCardKey(String(id))),
+      ...(origIds ?? []).map((id) => `card:${String(id)}`),
+    ];
+
+    type CardRecord = { redisKey: string; data: Record<string, unknown> };
+    const recordsByUrl = new Map<string, CardRecord[]>();
+    const protectedReferenceUrls = new Set<string>();
+
+    for (let i = 0; i < keysToLoad.length; i += 100) {
+      const slice = keysToLoad.slice(i, i + 100);
+      if (slice.length === 0) continue;
+      const rows = await redis.mget(...slice);
+      for (let j = 0; j < slice.length; j++) {
+        const raw = rows[j];
+        if (!raw) continue;
+        try {
+          const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+          if (!parsed || typeof parsed !== "object") continue;
+          const obj = parsed as Record<string, unknown>;
+          if (typeof obj.referenceUrl === "string" && isBlobUrl(obj.referenceUrl)) {
+            protectedReferenceUrls.add(obj.referenceUrl);
+          }
+          const imageUrl = typeof obj.imageUrl === "string" ? obj.imageUrl.trim() : "";
+          if (!isBlobUrl(imageUrl) || isAlreadyOptimizedWebp(imageUrl)) continue;
+          const list = recordsByUrl.get(imageUrl) ?? [];
+          list.push({ redisKey: slice[j], data: obj });
+          recordsByUrl.set(imageUrl, list);
+        } catch {
+          /* skip malformed row */
+        }
+      }
+    }
+
+    const allUnoptimizedUrls = [...recordsByUrl.keys()];
+    const batchUrls = allUnoptimizedUrls.slice(0, OPTIMIZE_BATCH_SIZE);
+    let optimizedImages = 0;
+    let updatedCards = 0;
+    let bytesSaved = 0;
+    const urlMap: Record<string, string> = {};
+
+    for (let i = 0; i < batchUrls.length; i += OPTIMIZE_CONCURRENCY) {
+      const group = batchUrls.slice(i, i + OPTIMIZE_CONCURRENCY);
+      await Promise.all(
+        group.map(async (oldUrl) => {
+          try {
+            const res = await fetch(oldUrl, { cache: "no-store" });
+            if (!res.ok) return;
+            const rawBuffer = Buffer.from(await res.arrayBuffer());
+            const optimizedBuffer = await sharp(rawBuffer)
+              .resize({ width: 900, withoutEnlargement: true })
+              .webp({ quality: 82, effort: 4 })
+              .toBuffer();
+
+            const folder = oldUrl.includes("/member-cards/") ? "member-cards" : "card-art";
+            const blob = await put(`${folder}/ai-${randomUUID()}.webp`, optimizedBuffer, {
+              access: "public",
+              contentType: "image/webp",
+              addRandomSuffix: true,
+              token: process.env.BLOB_READ_WRITE_TOKEN,
+            });
+
+            const cards = recordsByUrl.get(oldUrl) ?? [];
+            const tx = redis.multi();
+            for (const rec of cards) {
+              rec.data.imageUrl = blob.url;
+              tx.set(rec.redisKey, JSON.stringify(rec.data));
+            }
+            await tx.exec();
+
+            // Delete the old ~2 MB PNG blob unless it is also referenced as a car reference photo.
+            if (!protectedReferenceUrls.has(oldUrl)) {
+              try {
+                await deleteImage(oldUrl);
+              } catch {
+                /* best-effort cleanup */
+              }
+            }
+
+            optimizedImages++;
+            updatedCards += cards.length;
+            bytesSaved += Math.max(0, rawBuffer.length - optimizedBuffer.length);
+            urlMap[oldUrl] = blob.url;
+          } catch (err) {
+            console.error("[optimizeStoredCardImages] failed for", oldUrl, err);
+          }
+        })
+      );
+    }
+
+    const remainingImages = Math.max(0, allUnoptimizedUrls.length - batchUrls.length);
+    if (optimizedImages > 0) {
+      revalidatePath("/cards");
+      revalidatePath("/admin/member-cards");
+      revalidatePath("/admin/card-maker");
+    }
+
+    return {
+      success: true,
+      data: {
+        optimizedImages,
+        updatedCards,
+        remainingImages,
+        bytesSaved,
+        urlMap,
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Could not optimise stored card images",
+    };
   }
 }

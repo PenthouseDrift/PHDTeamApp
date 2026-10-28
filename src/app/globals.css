@@ -794,3 +794,59 @@ body {
     transform: scale(0.8);
   }
 }
+
+/* ── Animated borders: Legend rainbow glow and Mythic flames ─────────────────── */
+@property --fa-spin {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes fa-spin {
+  to {
+    --fa-spin: 360deg;
+  }
+}
+
+/* Legend: crisp iridescent neon edge + multi-layer rainbow bloom */
+.fa-legend-aura,
+.fa-legend-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--fa-spin),
+    #7df9ff 0deg,
+    #38bdf8 55deg,
+    #a78bfa 115deg,
+    #ff7ad9 180deg,
+    #ffd75e 245deg,
+    #5eead4 305deg,
+    #7df9ff 360deg
+  );
+  animation: fa-spin 5.5s linear var(--fa-delay, 0s) infinite;
+}
+.fa-legend-aura {
+  inset: -0.6cqw;
+  filter: blur(2.2cqw);
+  opacity: 0.9;
+}
+.fa-legend-ring {
+  padding: 0.95cqw;
+  box-shadow: 0 0 1.4cqw rgba(125, 249, 255, 0.55);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+/* Printing, and anyone who prefers less motion, gets a still border. */
+.fa-still .fa-legend-aura,
+.fa-still .fa-legend-ring {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fa-legend-aura,
+  .fa-legend-ring {
+    animation: none;
+  }
+}
