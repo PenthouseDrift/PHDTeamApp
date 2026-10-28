@@ -1,6 +1,5 @@
 import { randomUUID } from "crypto";
 import { put } from "@vercel/blob";
-import sharp from "sharp";
 
 /**
  * Server-side AI card art, shared by the admin card maker and the member card packs. Sends a
@@ -82,16 +81,32 @@ export async function generateArtImage(input: {
     );
   }
 
-  // Compress and save to Blob as WebP (~60–100 KB instead of ~2 MB raw PNG).
+  // Compress to WebP (~60–100 KB instead of ~2 MB raw PNG) when sharp is available; fall back cleanly otherwise.
   const rawBuffer = Buffer.from(imagePart.inlineData.data, "base64");
-  const optimizedBuffer = await sharp(rawBuffer)
-    .resize({ width: 900, withoutEnlargement: true })
-    .webp({ quality: 82, effort: 4 })
-    .toBuffer();
+  let uploadBuffer: Buffer = rawBuffer;
+  let outMime = imagePart.inlineData.mimeType ?? "image/png";
+  try {
+    type SharpInstance = {
+      resize(opts: { width: number; withoutEnlargement: boolean }): SharpInstance;
+      webp(opts: { quality: number; effort: number }): { toBuffer(): Promise<Buffer> };
+    };
+    const importDynamic = new Function("m", "return import(m)") as (
+      m: string
+    ) => Promise<{ default: (input: Buffer) => SharpInstance }>;
+    const sharpMod = (await importDynamic("sharp")).default;
+    uploadBuffer = await sharpMod(rawBuffer)
+      .resize({ width: 900, withoutEnlargement: true })
+      .webp({ quality: 82, effort: 4 })
+      .toBuffer();
+    outMime = "image/webp";
+  } catch {
+    // Native sharp binary unavailable; upload raw buffer (Next.js /_next/image still optimises delivery).
+  }
+  const ext = outMime === "image/jpeg" ? "jpg" : outMime === "image/webp" ? "webp" : "png";
 
-  const blob = await put(`${input.folder ?? "card-art"}/ai-${randomUUID()}.webp`, optimizedBuffer, {
+  const blob = await put(`${input.folder ?? "card-art"}/ai-${randomUUID()}.${ext}`, uploadBuffer, {
     access: "public",
-    contentType: "image/webp",
+    contentType: outMime,
     addRandomSuffix: true,
     token: process.env.BLOB_READ_WRITE_TOKEN,
   });

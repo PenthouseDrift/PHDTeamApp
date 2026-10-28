@@ -4,7 +4,12 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { FullArtCard } from "@/components/cards/FullArtCard";
 import { DeleteCardButton } from "@/components/member-cards/DeleteCardButton";
-import { optimizeStoredCardImages, rebuildMemberCardIndex, type AdminMemberCard } from "@/actions/admin/member-cards";
+import {
+  listUnoptimizedCardImages,
+  rebuildMemberCardIndex,
+  saveOptimizedCardImage,
+  type AdminMemberCard,
+} from "@/actions/admin/member-cards";
 import { ART_STYLES } from "@/lib/card-maker";
 import { FULL_ART_TIERS, type FullArtTier } from "@/lib/full-art-card";
 import { DEFAULT_SORT_DIRECTION, rarityLabel, sortCards, type CardSortKey, type SortDirection } from "@/lib/card-roll";
@@ -45,6 +50,50 @@ function statusOf(c: AdminMemberCard): string {
   if (c.rerolled) return "Re-rolled, final";
   if (c.kept) return "Kept";
   return "Not decided yet";
+}
+
+/** Compress a remote card image URL into a 900px-wide WebP base64 string using browser Canvas. */
+async function compressImageUrlToWebpBase64(url: string): Promise<{ webpBase64: string; originalBytes: number }> {
+  const res = await fetch(url, { mode: "cors" });
+  if (!res.ok) throw new Error(`Failed to fetch image (${res.status})`);
+  const srcBlob = await res.blob();
+  const originalBytes = srcBlob.size;
+
+  const bitmap = await createImageBitmap(srcBlob);
+  try {
+    let width = bitmap.width;
+    let height = bitmap.height;
+    const maxWidth = 900;
+    if (width > maxWidth) {
+      height = Math.round((height * maxWidth) / width);
+      width = maxWidth;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Could not create canvas context");
+    ctx.drawImage(bitmap, 0, 0, width, height);
+
+    const webpBlob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error("Canvas WebP encoding failed"))),
+        "image/webp",
+        0.82
+      );
+    });
+
+    const buf = await webpBlob.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    }
+    return { webpBase64: btoa(binary), originalBytes };
+  } finally {
+    bitmap.close();
+  }
 }
 
 export function MemberCardsAdmin({ initialCards: loadedCards, total: loadedTotal }: { initialCards: AdminMemberCard[]; total: number }) {
@@ -122,38 +171,56 @@ export function MemberCardsAdmin({ initialCards: loadedCards, total: loadedTotal
   async function optimizeImages() {
     if (optimizing) return;
     setOptimizing(true);
-    setNote({ text: "Scanning and optimising stored card images to WebP…" });
-    let totalImages = 0;
-    let totalCards = 0;
-    let totalBytesSaved = 0;
+    setNote({ text: "Scanning stored cards for unoptimised images…" });
     try {
-      for (let round = 0; round < 50; round++) {
-        const res = await optimizeStoredCardImages();
-        if (!res.success) {
-          setNote({ text: res.error, error: true });
-          return;
-        }
-        totalImages += res.data.optimizedImages;
-        totalCards += res.data.updatedCards;
-        totalBytesSaved += res.data.bytesSaved;
-        if (Object.keys(res.data.urlMap).length > 0) {
-          setUrlOverrides((prev) => ({ ...prev, ...res.data.urlMap }));
-        }
-        if (res.data.remainingImages <= 0 || res.data.optimizedImages === 0) break;
-        const mbSavedSoFar = (totalBytesSaved / (1024 * 1024)).toFixed(1);
-        setNote({
-          text: `Optimising card images… ${totalImages} converted (${mbSavedSoFar} MB saved), ${res.data.remainingImages} remaining…`,
-        });
+      const scanRes = await listUnoptimizedCardImages();
+      if (!scanRes.success) {
+        setNote({ text: scanRes.error, error: true });
+        return;
       }
-      if (totalImages === 0) {
+      const { urls } = scanRes.data;
+      if (urls.length === 0) {
         setNote({ text: "All stored card images are already optimised as WebP." });
-      } else {
-        const mbSaved = (totalBytesSaved / (1024 * 1024)).toFixed(1);
-        setNote({
-          text: `Optimised ${totalImages} card image${totalImages === 1 ? "" : "s"} across ${totalCards} stored card${totalCards === 1 ? "" : "s"} and resaved as WebP (saved ${mbSaved} MB).`,
-        });
-        router.refresh();
+        return;
       }
+
+      let totalImages = 0;
+      let totalCards = 0;
+      let totalBytesSaved = 0;
+      const CONCURRENCY = 3;
+
+      for (let i = 0; i < urls.length; i += CONCURRENCY) {
+        const chunk = urls.slice(i, i + CONCURRENCY);
+        await Promise.all(
+          chunk.map(async (oldUrl) => {
+            try {
+              const { webpBase64, originalBytes } = await compressImageUrlToWebpBase64(oldUrl);
+              const saveRes = await saveOptimizedCardImage({ oldUrl, webpBase64, originalBytes });
+              if (saveRes.success && saveRes.data.updatedCards > 0) {
+                totalImages++;
+                totalCards += saveRes.data.updatedCards;
+                totalBytesSaved += saveRes.data.bytesSaved;
+                setUrlOverrides((prev) => ({ ...prev, [oldUrl]: saveRes.data.newUrl }));
+              }
+            } catch (err) {
+              console.error("Failed to optimise card image:", oldUrl, err);
+            }
+          })
+        );
+        const remaining = Math.max(0, urls.length - (i + chunk.length));
+        if (remaining > 0) {
+          const mbSavedSoFar = (totalBytesSaved / (1024 * 1024)).toFixed(1);
+          setNote({
+            text: `Optimising card images… ${totalImages} of ${urls.length} converted (${mbSavedSoFar} MB saved)…`,
+          });
+        }
+      }
+
+      const mbSaved = (totalBytesSaved / (1024 * 1024)).toFixed(1);
+      setNote({
+        text: `Optimised ${totalImages} card image${totalImages === 1 ? "" : "s"} across ${totalCards} stored card${totalCards === 1 ? "" : "s"} and resaved as WebP (saved ${mbSaved} MB).`,
+      });
+      router.refresh();
     } catch (err) {
       setNote({ text: err instanceof Error ? err.message : "Could not optimise card images", error: true });
     } finally {
