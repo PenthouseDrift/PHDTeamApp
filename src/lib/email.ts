@@ -195,3 +195,92 @@ export function renderOrderConfirmation(params: OrderConfirmationParams): {
 
   return { subject: `Your Penthouse Drift order ${shortId} is confirmed`, html };
 }
+
+export interface PCreditsConfirmationParams {
+  buyerName: string;
+  orderId: string;
+  bundleName: string;
+  pCredits: number;
+  newBalance: number;
+  totalAmount: number;
+  currency: string;
+}
+
+/**
+ * Build the Penthouse TCG P-Credits purchase confirmation email.
+ */
+export function renderPCreditsConfirmation(params: PCreditsConfirmationParams): {
+  subject: string;
+  html: string;
+} {
+  const shortId = params.orderId.slice(0, 8).toUpperCase();
+  const html = `<!doctype html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"></head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:24px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="width:520px;max-width:100%;background-color:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="background-color:#f59e0b;padding:22px 28px;">
+              <h1 style="margin:0;color:#111827;font-size:20px;font-weight:bold;font-family:Arial,Helvetica,sans-serif;">Penthouse Drift TCG</h1>
+              <p style="margin:4px 0 0;color:#111827;font-size:13px;font-weight:bold;font-family:Arial,Helvetica,sans-serif;">P-Credits purchase confirmed</p>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:28px;">
+              <p style="margin:0 0 20px;color:#111827;font-size:15px;line-height:1.5;font-family:Arial,Helvetica,sans-serif;">
+                Thanks ${escapeHtml(params.buyerName)}, your payment was successful and your P-Credits have been added to your Penthouse TCG wallet.
+              </p>
+
+              <!-- Credits summary box -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#fffbeb;border:1px solid #fcd34d;border-radius:8px;margin-bottom:24px;">
+                <tr>
+                  <td style="padding:16px;">
+                    <p style="margin:0 0 4px;color:#92400e;font-size:12px;text-transform:uppercase;letter-spacing:0.05em;font-family:Arial,Helvetica,sans-serif;">Credited to your account</p>
+                    <p style="margin:0;color:#b45309;font-size:24px;font-weight:bold;letter-spacing:0.04em;font-family:Arial,Helvetica,sans-serif;">+${params.pCredits.toLocaleString()} P-Credits</p>
+                    <p style="margin:6px 0 0;color:#78350f;font-size:13px;font-family:Arial,Helvetica,sans-serif;">
+                      New balance: <strong>${params.newBalance.toLocaleString()} P-Credits</strong> &middot; Ref: <strong>${shortId}</strong>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Line item -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:8px;">
+                <tr>
+                  <td style="padding:10px 0;border-bottom:1px solid #eeeeee;color:#111827;font-size:14px;font-family:Arial,Helvetica,sans-serif;">
+                    ${escapeHtml(params.bundleName)} (${params.pCredits.toLocaleString()} P-Credits)
+                  </td>
+                  <td style="padding:10px 0;border-bottom:1px solid #eeeeee;color:#111827;font-size:14px;text-align:right;white-space:nowrap;font-family:Arial,Helvetica,sans-serif;">
+                    ${formatMoney(params.totalAmount, params.currency)}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:14px 0 0;color:#111827;font-weight:bold;font-size:15px;font-family:Arial,Helvetica,sans-serif;">Total paid</td>
+                  <td style="padding:14px 0 0;color:#111827;font-weight:bold;font-size:15px;text-align:right;font-family:Arial,Helvetica,sans-serif;">
+                    ${formatMoney(params.totalAmount, params.currency)}
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:24px 0 0;color:#9ca3af;font-size:12px;line-height:1.5;font-family:Arial,Helvetica,sans-serif;">
+                You can spend your P-Credits anytime in the Penthouse TCG Pack Store or Card Marketplace. Keep this email for your records.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  return {
+    subject: `Your ${params.pCredits.toLocaleString()} P-Credits are ready (${shortId})`,
+    html,
+  };
+}

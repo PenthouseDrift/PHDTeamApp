@@ -18,6 +18,7 @@ import {
 } from "@/lib/member-card-store";
 import { deleteImage } from "@/lib/blob";
 import { isBlobUrl } from "@/lib/card-art-generate";
+import { getListingIdForCard, removeMarketListingRecord } from "@/tcg/storage";
 import type { ActionResult } from "@/types";
 
 /**
@@ -85,6 +86,10 @@ export async function deleteMemberCard(cardId: string): Promise<ActionResult<{ i
     if (!MEMBER_CARD_ID_PATTERN.test(id)) return { success: false, error: "Invalid card" };
 
     const card = parseStoredCard(await redis.get(memberCardKey(id)));
+    const listingId = await getListingIdForCard(id);
+    if (listingId) {
+      await removeMarketListingRecord(listingId, id).catch(() => {});
+    }
 
     // The record and both lists in one go. The lists are cleaned even if the record is already gone,
     // so a stray entry can't linger in the pool.
@@ -94,8 +99,8 @@ export async function deleteMemberCard(cardId: string): Promise<ActionResult<{ i
     // If it stood in the community pool for its driver and car, another of theirs takes over (or they leave the pool).
     if (card) await removeFromCommunityPool(card);
 
-    // Best-effort: the artwork file is only used by this card (the member's own car photo is not touched).
-    if (card && isBlobUrl(card.imageUrl)) {
+    // Best-effort: the artwork file is only used by this card (skip shared set/pack card images).
+    if (card && !card.featured && !card.packId && isBlobUrl(card.imageUrl)) {
       try {
         await deleteImage(card.imageUrl);
       } catch {

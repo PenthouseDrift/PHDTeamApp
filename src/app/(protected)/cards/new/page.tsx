@@ -6,6 +6,7 @@ import { getMemberHash } from "@/lib/dashboard-pref";
 import { getCardCredits } from "@/lib/card-credits";
 import { listMyCards } from "@/actions/member-cards";
 import { getMemberSpecSheets } from "@/actions/spec-sheets";
+import { getMergedPartCategories } from "@/actions/custom-parts";
 import { CardPackWizard } from "@/components/member-cards/CardPackWizard";
 
 export const dynamic = "force-dynamic";
@@ -17,12 +18,13 @@ export default async function NewCardPage() {
   if (!session?.user) redirect("/auth/signin");
   const userId = session.user.id;
 
-  const [hash, carsResult, credits, myCards, initialSpecSheets] = await Promise.all([
+  const [hash, carsResult, credits, myCards, initialSpecSheets, partCategories] = await Promise.all([
     getMemberHash(userId),
     getMemberCars(userId),
     getCardCredits(userId),
     listMyCards(),
     getMemberSpecSheets(userId),
+    getMergedPartCategories(),
   ]);
   const nickname = typeof hash?.nickname === "string" ? hash.nickname.trim() : "";
   const accountName = session.user.name?.trim() ?? "";
@@ -36,6 +38,7 @@ export default async function NewCardPage() {
     name: c.name,
     chassis: c.chassis ?? "",
     images: c.images,
+    parts: c.parts,
   }));
 
   return (
@@ -58,6 +61,7 @@ export default async function NewCardPage() {
           cars={cars}
           initialCredits={credits}
           initialSpecSheets={initialSpecSheets}
+          partCategories={partCategories}
         />
       </div>
     </div>

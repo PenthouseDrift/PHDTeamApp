@@ -84,6 +84,7 @@ async function _getAllMembers(): Promise<MemberWithMembership[]> {
           lastCheckIn: Number(memberData.lastCheckIn) || 0,
           cardCredits: Math.max(0, Number(memberData.cardCredits) || 0),
           packsOpened,
+          clashEarlyAccess: memberData.clashEarlyAccess === "true" || memberData.role === "admin",
           discounts: parseDiscounts(memberData),
         };
 

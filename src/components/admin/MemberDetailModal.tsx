@@ -15,6 +15,7 @@ import {
 import { BASE_PRICES, EMPTY_DISCOUNTS } from "@/lib/pricing";
 import { quickCheckIn, checkInWithDayPass, checkInWithRental } from "@/actions/admin/checkins";
 import { setUserRole } from "@/actions/admin/users";
+import { grantClashEarlyAccessAction, revokeClashEarlyAccessAction } from "@/tcg/actions";
 import { adminAdjustCardCredits } from "@/actions/admin/card-credits";
 import { getOrCreateQRCode } from "@/actions/qr";
 import type { MemberWithMembership } from "@/actions/admin/members";
@@ -53,6 +54,9 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate, ch
   const [showCheckInModal, setShowCheckInModal] = useState(false);
   const [confirmingInPersonMembership, setConfirmingInPersonMembership] = useState(false);
   const [pendingRole, setPendingRole] = useState<"admin" | "moderator" | "member" | "asbo-rc" | null>(null);
+  const [localEarlyAccess, setLocalEarlyAccess] = useState<boolean>(
+    Boolean(initialMember.member.clashEarlyAccess)
+  );
   const [revokeStep, setRevokeStep] = useState<1 | 2>(1);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [discounts, setDiscounts] = useState({
@@ -275,6 +279,25 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate, ch
         });
       } else {
         onUpdate({ type: "error", message: res.error });
+      }
+    });
+  }
+
+  function handleToggleEarlyAccess(grant: boolean) {
+    startTransition(async () => {
+      const res = grant
+        ? await grantClashEarlyAccessAction(m.id)
+        : await revokeClashEarlyAccessAction(m.id);
+      if (res.success) {
+        setLocalEarlyAccess(grant);
+        onUpdate({
+          type: "success",
+          message: grant
+            ? `Tandem Clash Early Access granted to ${m.name}`
+            : `Tandem Clash Early Access revoked for ${m.name}`,
+        });
+      } else {
+        onUpdate({ type: "error", message: res.error || "Action failed" });
       }
     });
   }
@@ -769,6 +792,53 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate, ch
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Tandem Clash Early Access (Admin Only) */}
+          {isAdminViewer && (
+            <div className="rounded-xl border border-amber-500/40 p-4 space-y-2 bg-amber-500/5 dark:bg-amber-950/20">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-amber-500 flex items-center gap-1.5">
+                  <span>🎮</span> Tandem Clash Early Access
+                </h3>
+                <span
+                  className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                    localEarlyAccess || localRole === "admin"
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                      : "bg-zinc-800 text-zinc-400"
+                  }`}
+                >
+                  {localRole === "admin"
+                    ? "Admin (Auto Access)"
+                    : localEarlyAccess
+                    ? "Access Granted ✓"
+                    : "No Access 🔒"}
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                Grant or revoke permission to play the closed beta of Tandem Clash:
+              </p>
+              <div className="pt-1">
+                {localRole === "admin" ? (
+                  <p className="text-xs italic text-zinc-400">
+                    Track Administrators automatically have permanent access to Tandem Clash.
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => handleToggleEarlyAccess(!localEarlyAccess)}
+                    className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 ${
+                      localEarlyAccess
+                        ? "border border-rose-500/50 bg-rose-500/15 text-rose-300 hover:bg-rose-500/25"
+                        : "border border-emerald-500/50 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 shadow-sm"
+                    }`}
+                  >
+                    <span>{localEarlyAccess ? "✕ Revoke Early Access" : "⚡ Grant Early Access"}</span>
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>

@@ -66,6 +66,9 @@ export async function POST(request: Request) {
       // Clear whichever per-user pointer applies.
       await redis.del(`pending_checkout:${session.user.id}`);
       await redis.del(`pending_wallet_checkout:${session.user.id}`);
+      await redis.del(`pending_pcredits_checkout:${session.user.id}`);
+      const { revalidatePath } = await import("next/cache");
+      revalidatePath("/cards");
       return NextResponse.json({
         status: "paid",
         itemType: typeof meta.itemType === "string" ? meta.itemType : undefined,

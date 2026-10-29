@@ -43,10 +43,12 @@ const outlineButton =
 export function FullArtCardMaker({
   initialSaved,
   initialFeatured = {},
+  onSavedCardsChange,
 }: {
   initialSaved: FullArtCardData[];
   /** Saved card id -> odds weight, for the cards that can be pulled from packs. */
   initialFeatured?: Record<string, number>;
+  onSavedCardsChange?: (cards: FullArtCardData[]) => void;
 }) {
   const isClient = useIsClient();
   const [card, setCard] = useState<FullArtCardData>(emptyFullArtCard);
@@ -93,7 +95,11 @@ export function FullArtCardMaker({
       const res = await saveFullArtCard(toSave);
       if (res.success) {
         setCard(res.data);
-        setSaved((list) => [res.data, ...list.filter((c) => c.id !== res.data.id)]);
+        setSaved((list) => {
+          const updated = [res.data, ...list.filter((c) => c.id !== res.data.id)];
+          onSavedCardsChange?.(updated);
+          return updated;
+        });
         const savedText = `“${res.data.name}” saved (card ${res.data.id?.slice(0, 8)})`;
         const weight = Math.round(Number(weightText));
         if (thenPullable && res.data.id && res.data.imageUrl && weight >= 1 && weight <= 100) {
@@ -152,7 +158,11 @@ export function FullArtCardMaker({
     startTransition(async () => {
       const res = await deleteFullArtCard(target.id!);
       if (res.success) {
-        setSaved((list) => list.filter((c) => c.id !== target.id));
+        setSaved((list) => {
+          const updated = list.filter((c) => c.id !== target.id);
+          onSavedCardsChange?.(updated);
+          return updated;
+        });
         setFeatured((f) => {
           const next = { ...f };
           delete next[target.id!];

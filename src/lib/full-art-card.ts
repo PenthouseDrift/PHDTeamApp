@@ -128,6 +128,12 @@ export interface FullArtCardData {
   imageY: number;
   driver: string;
   team: string;
+  /** Distinguishes standard RC drift car cards from Crew Advantage, Debuff Hazard, and UK Track cards. */
+  cardType?: "car" | "crew" | "debuff" | "track";
+  /** If cardType is "crew" | "debuff" | "track", the definition ID (e.g. "crew-01-...", "debuff-01-...", "track-01-..."). */
+  crewCardId?: string;
+  /** Emoji/icon for Crew, Debuff, or Track cards. */
+  crewIcon?: string;
   updatedAt?: number;
 }
 
@@ -190,11 +196,19 @@ export function sanitizeFullArtCard(input: Partial<FullArtCardData> | null | und
       grip: clampStr(stats.grip, 3),
       steer: clampStr(stats.steer, 3),
     },
-    imageUrl: /^https:\/\/\S+$/i.test(url) && url.length <= 600 ? url : "",
+    imageUrl:
+      (/^https:\/\/\S+$/i.test(url) && url.length <= 600) || url.startsWith("data:image/svg+xml;utf8,")
+        ? url
+        : "",
     imageZoom: clampNum(i.imageZoom, 100, 300, 100),
     imageX: clampNum(i.imageX, 0, 100, 50),
     imageY: clampNum(i.imageY, 0, 100, 50),
     driver: clampStr(i.driver, 30),
     team: clampStr(i.team, 30),
+    ...(i.cardType === "crew" || i.cardType === "debuff" || i.cardType === "track"
+      ? { cardType: i.cardType }
+      : {}),
+    ...(typeof i.crewCardId === "string" && i.crewCardId ? { crewCardId: clampStr(i.crewCardId, 64) } : {}),
+    ...(typeof i.crewIcon === "string" && i.crewIcon ? { crewIcon: clampStr(i.crewIcon, 16) } : {}),
   };
 }

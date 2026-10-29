@@ -5,7 +5,7 @@ import { deleteImage } from "@/lib/blob";
 import { carProfileSchema } from "@/lib/validators";
 import { revalidatePath } from "next/cache";
 import { saveSpecSheet } from "@/actions/spec-sheets";
-import type { PartValues } from "@/lib/rc-parts-data";
+import { emptyParts, type PartValues } from "@/lib/rc-parts-data";
 import type { CarProfile, ActionResult } from "@/types";
 
 const MAX_CARS_PER_MEMBER = 20;
@@ -22,6 +22,18 @@ function parseImages(images: unknown): string[] {
     }
   }
   return [];
+}
+
+function parseParts(raw: unknown): PartValues | undefined {
+  if (!raw) return undefined;
+  if (typeof raw === "object") return raw as PartValues;
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") return { ...emptyParts(), ...parsed };
+    } catch {}
+  }
+  return undefined;
 }
 
 export async function createCar(
@@ -56,6 +68,7 @@ export async function createCar(
       chassis: parsed.data.chassis || undefined,
       images: parsed.data.images,
       createdAt: Date.now(),
+      parts: data.parts ? { ...emptyParts(), ...data.parts } : undefined,
     };
 
     await redis.hset(`car:${carId}`, {
@@ -64,6 +77,7 @@ export async function createCar(
       name: car.name,
       ...(car.chassis ? { chassis: car.chassis } : {}),
       images: JSON.stringify(car.images),
+      ...(car.parts ? { parts: JSON.stringify(car.parts) } : {}),
       createdAt: car.createdAt,
     });
 
@@ -125,6 +139,7 @@ export async function updateCar(
       chassis: parsed.data.chassis || undefined,
       images: parsed.data.images,
       createdAt: existing ? Number(existing) : Date.now(),
+      parts: data.parts ? { ...emptyParts(), ...data.parts } : undefined,
     };
 
     await redis.hset(`car:${carId}`, {
@@ -133,6 +148,7 @@ export async function updateCar(
       name: updatedCar.name,
       ...(updatedCar.chassis ? { chassis: updatedCar.chassis } : { chassis: "" }),
       images: JSON.stringify(updatedCar.images),
+      ...(updatedCar.parts ? { parts: JSON.stringify(updatedCar.parts) } : {}),
       createdAt: updatedCar.createdAt,
     });
 
@@ -236,6 +252,7 @@ export async function getMemberCars(
           chassis: (carData.chassis as string) || undefined,
           images: parseImages(carData.images),
           createdAt: Number(carData.createdAt),
+          parts: parseParts(carData.parts),
         };
       }
       return null;
@@ -279,6 +296,7 @@ export async function getCar(
       chassis: (carData.chassis as string) || undefined,
       images: parseImages(carData.images),
       createdAt: Number(carData.createdAt),
+      parts: parseParts(carData.parts),
     };
 
     return { success: true, data: car };
@@ -286,6 +304,63 @@ export async function getCar(
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to load car",
+    };
+  }
+}
+
+export async function updateCarParts(
+  carId: string,
+  userId: string,
+  parts: Partial<PartValues>,
+  chassis?: string
+): Promise<ActionResult<CarProfile>> {
+  try {
+    const isMember = await redis.sismember(`member:${userId}:cars`, carId);
+    if (!isMember) {
+      return { success: false, error: "Car not found or access denied" };
+    }
+
+    const carData = await redis.hgetall(`car:${carId}`);
+    if (!carData || Object.keys(carData).length === 0) {
+      return { success: false, error: "Car not found" };
+    }
+
+    const existingParts = parseParts(carData.parts) || emptyParts();
+    const mergedParts: PartValues = {
+      motor: parts.motor?.trim() || existingParts.motor || "",
+      esc: parts.esc?.trim() || existingParts.esc || "",
+      gyro: parts.gyro?.trim() || existingParts.gyro || "",
+      servo: parts.servo?.trim() || existingParts.servo || "",
+      controller: parts.controller?.trim() || existingParts.controller || "",
+    };
+
+    const updates: Record<string, string> = {
+      parts: JSON.stringify(mergedParts),
+    };
+    if (chassis && chassis.trim()) {
+      updates.chassis = chassis.trim();
+    }
+
+    await redis.hset(`car:${carId}`, updates);
+
+    revalidatePath("/cars");
+    revalidatePath("/cards/new");
+
+    const updatedCar: CarProfile = {
+      carId,
+      userId,
+      name: carData.name as string,
+      chassis: chassis?.trim() || (carData.chassis as string) || undefined,
+      images: parseImages(carData.images),
+      createdAt: Number(carData.createdAt),
+      parts: mergedParts,
+    };
+
+    return { success: true, data: updatedCar };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to update car parts",
     };
   }
 }

@@ -71,6 +71,7 @@ export async function POST(request: Request) {
       const { revalidatePath } = await import("next/cache");
       revalidatePath("/dashboard");
       revalidatePath("/wallet");
+      revalidatePath("/cards");
       revalidatePath("/membership");
       revalidatePath("/orders");
       revalidatePath("/admin/members");

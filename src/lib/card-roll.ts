@@ -10,27 +10,72 @@ import { FULL_ART_TIERS, MAX_ART_STYLES, type FullArtCardData, type FullArtTier 
 /** A function returning a number in [0, 1). The server passes a crypto-based one; tests pass a fixed one. */
 export type Rng = () => number;
 
-// ── Rarity ──────────────────────────────────────────────────────────────────
+// ── Rarity & Stats (1–10 per stat -> Total /40 determines Rarity) ──────────
 
 /**
- * Pack odds. Mythic is deliberately not in this list: it can't be rolled, only set by an admin.
- * Legend is 1 in 20, gold 1 in 10 and silver 1 in 5. Each is its own slice of one roll
- * (so exactly 5%, 10% and 20%), and bronze is everything left over (65%), so a pack always gives a card.
+ * Each of the 4 stats (DRIFT, ACCEL, GRIP, STEER) is rolled independently from 1 to 10 (total 4–40).
+ * The card's rarity tier is derived directly from its total /40 score:
+ *   - Bronze:  4 – 23  (5,680 / 10,000 = 56.80%)
+ *   - Silver: 24 – 27  (2,490 / 10,000 = 24.90%, ~1 in 4)
+ *   - Gold:   28 – 31  (1,355 / 10,000 = 13.55%, ~1 in 7)
+ *   - Legend: 32 – 40  (  475 / 10,000 =  4.75%, ~1 in 21)
+ * Mythic is never rolled in packs; it can only be created by an admin.
  */
-export const RARITY_ODDS: Array<{ tier: FullArtTier; oneIn: number; chance: number }> = [
-  { tier: "legend", oneIn: 20, chance: 1 / 20 },
-  { tier: "gold", oneIn: 10, chance: 1 / 10 },
-  { tier: "silver", oneIn: 5, chance: 1 / 5 },
-  { tier: "bronze", oneIn: 1, chance: 1 - 1 / 20 - 1 / 10 - 1 / 5 },
+export const RARITY_STAT_BRACKETS: Array<{
+  tier: FullArtTier;
+  minTotal: number;
+  maxTotal: number;
+  oneIn: number;
+  chance: number;
+}> = [
+  { tier: "legend", minTotal: 32, maxTotal: 40, oneIn: 21, chance: 475 / 10000 },
+  { tier: "gold", minTotal: 28, maxTotal: 31, oneIn: 7, chance: 1355 / 10000 },
+  { tier: "silver", minTotal: 24, maxTotal: 27, oneIn: 4, chance: 2490 / 10000 },
+  { tier: "bronze", minTotal: 4, maxTotal: 23, oneIn: 2, chance: 5680 / 10000 },
 ];
 
-export function rollRarity(rng: Rng): FullArtTier {
-  let r = rng();
-  for (const { tier, chance } of RARITY_ODDS) {
-    if (r < chance) return tier;
-    r -= chance;
-  }
+export const RARITY_ODDS: Array<{ tier: FullArtTier; oneIn: number; chance: number }> =
+  RARITY_STAT_BRACKETS.map(({ tier, oneIn, chance }) => ({ tier, oneIn, chance }));
+
+export function statTotal(stats: FullArtCardData["stats"]): number {
+  return (
+    (Number(stats.drift) || 0) +
+    (Number(stats.accel) || 0) +
+    (Number(stats.grip) || 0) +
+    (Number(stats.steer) || 0)
+  );
+}
+
+/** Determine a pack card's rarity tier from its 4 rolled stats (total 4–40). Mythic remains admin-only. */
+export function tierFromStats(stats: FullArtCardData["stats"]): FullArtTier {
+  const total = statTotal(stats);
+  if (total >= 32) return "legend";
+  if (total >= 28) return "gold";
+  if (total >= 24) return "silver";
   return "bronze";
+}
+
+/** Roll all 4 stats independently from 1 to 10. */
+export function rollStats(tierOrRng: FullArtTier | Rng, maybeRng?: Rng): FullArtCardData["stats"] {
+  const rng = typeof tierOrRng === "function" ? tierOrRng : (maybeRng as Rng);
+  const one = () => String(1 + Math.floor(rng() * 10));
+  return { drift: one(), accel: one(), grip: one(), steer: one() };
+}
+
+/** Roll all 4 stats (1–10 each) and derive the corresponding rarity tier from their sum (/40). */
+export function rollStatsAndRarity(rng: Rng): {
+  stats: FullArtCardData["stats"];
+  tier: FullArtTier;
+  total: number;
+} {
+  const stats = rollStats(rng);
+  const total = statTotal(stats);
+  const tier = tierFromStats(stats);
+  return { stats, tier, total };
+}
+
+export function rollRarity(rng: Rng): FullArtTier {
+  return rollStatsAndRarity(rng).tier;
 }
 
 /** Rarity order for sorting, lowest first. */
@@ -62,24 +107,6 @@ export function rollStyleIds(rng: Rng): string[] {
   return picked;
 }
 
-// ── Stats ───────────────────────────────────────────────────────────────────
-
-/** Each stat is a whole number in this range, so higher tiers tend to be stronger cars. */
-const STAT_RANGE: Record<FullArtTier, [number, number]> = {
-  bronze: [3, 7],
-  silver: [4, 8],
-  gold: [6, 9],
-  legend: [8, 10],
-  // Never rolled in packs; here only so the table covers every tier.
-  mythic: [9, 10],
-};
-
-export function rollStats(tier: FullArtTier, rng: Rng): FullArtCardData["stats"] {
-  const [lo, hi] = STAT_RANGE[tier];
-  const one = () => String(lo + Math.floor(rng() * (hi - lo + 1)));
-  return { drift: one(), accel: one(), grip: one(), steer: one() };
-}
-
 // ── Member cards ────────────────────────────────────────────────────────────
 
 /** A card in a member's collection: the full art card plus who owns it and where it is in the pack flow. */
@@ -104,6 +131,14 @@ export interface MemberCard extends Omit<FullArtCardData, "id" | "updatedAt"> {
   bonus?: boolean;
   /** A set card from the admin's pullable list (a third card in a pack). Its picture is fixed, not drawn. */
   featured?: boolean;
+  /** Custom pack ID if pulled from a custom set pack in the TCG store. */
+  packId?: string;
+  /** Custom pack name if pulled from a custom set pack in the TCG store. */
+  packName?: string;
+  /** Present when this card is currently listed for sale on the TCG Marketplace. */
+  listingId?: string;
+  /** Asking price in P-Credits when listed on the TCG Marketplace. */
+  listedPrice?: number;
 }
 
 /** Server-side copy, which also remembers the car photo so a re-roll can use it again. */

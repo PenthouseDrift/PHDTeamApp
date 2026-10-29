@@ -41,7 +41,10 @@ export default function EditCarPage() {
         const matchingSheet =
           sheets.find((s) => s.carId === carId) ??
           sheets.find((s) => s.carName.toLowerCase() === result.data.name.trim().toLowerCase());
-        if (matchingSheet) {
+        if (result.data.parts) {
+          setParts({ ...emptyParts(), ...result.data.parts });
+          if (matchingSheet) setActiveSpecId(matchingSheet.id);
+        } else if (matchingSheet) {
           setParts({ ...emptyParts(), ...matchingSheet.parts });
           setActiveSpecId(matchingSheet.id);
         }

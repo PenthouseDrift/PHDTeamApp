@@ -8,6 +8,7 @@ import { OfflineIndicator } from "@/components/ui/OfflineIndicator";
 import { PushNotificationSubscriber } from "@/components/PushNotificationSubscriber";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { InstallBanner } from "@/components/InstallBanner";
+import { DriftWheelIntro } from "@/components/ui/DriftWheelIntro";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -66,6 +67,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-zinc-50 dark:bg-zinc-950">
         <SessionProvider>
           <ThemeProvider>
+            <DriftWheelIntro autoPlayInitial />
             <InstallBanner />
             <ServiceWorkerRegister />
             <OfflineIndicator />

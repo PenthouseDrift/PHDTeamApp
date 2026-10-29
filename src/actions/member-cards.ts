@@ -13,13 +13,13 @@ import {
   REROLL_ENABLED,
   canRerollCard,
   cardTitle,
-  rollRarity,
-  rollStats,
+  rollStatsAndRarity,
   rollStyleIds,
   type MemberCard,
   type StoredMemberCard,
 } from "@/lib/card-roll";
 import { sanitizeFullArtCard, tierArtPrompt, type FullArtTier } from "@/lib/full-art-card";
+import { crewDefinitionToCardData, rollCrewCardDefinition } from "@/lib/crew-cards";
 import {
   ALL_MEMBER_CARDS_INDEX,
   COMMUNITY_POOL_INDEX,
@@ -34,8 +34,11 @@ import {
   parseStoredCard as parseCard,
 } from "@/lib/member-card-store";
 import { saveSpecSheet } from "@/actions/spec-sheets";
+import { updateCarParts } from "@/actions/cars";
+import { recordCommunityParts } from "@/actions/custom-parts";
 import { parsePartsFromDescription } from "@/lib/spec-sheets";
 import type { PartValues } from "@/lib/rc-parts-data";
+import { attachListingStateToCards, getClashGameCardsConfig, getListingIdForCard } from "@/tcg/storage";
 import type { ActionResult } from "@/types";
 
 /**
@@ -79,16 +82,15 @@ async function loadOwnCard(userId: string, cardId: string): Promise<StoredMember
   return card && card.userId === userId && !card.archived ? card : null;
 }
 
-/** The art for a freshly rolled card: random rarity, random styles, random stats, then Gemini draws it. */
+/** The art for a freshly rolled card: roll 1–10 stats, derive rarity tier from total (/40), roll styles, then Gemini draws it. */
 async function rollAndDraw(referenceUrl: string): Promise<{
   tier: FullArtTier;
   styleIds: string[];
   stats: MemberCard["stats"];
   imageUrl: string;
 }> {
-  const tier = rollRarity(rng);
+  const { stats, tier } = rollStatsAndRarity(rng);
   const styleIds = rollStyleIds(rng);
-  const stats = rollStats(tier, rng);
   const prompt = tierArtPrompt(tier, styleIds);
 
   // Image models sometimes return no picture. Try once more with the same roll before giving up.
@@ -209,10 +211,11 @@ export async function listMyCards(): Promise<MemberCard[]> {
   const ids = (await redis.zrange(indexKey(user.id), 0, MAX_LISTED - 1, { rev: true })) as string[];
   if (!ids || ids.length === 0) return [];
   const rows = await redis.mget(...ids.map((id) => cardKey(String(id))));
-  return rows
+  const cards = rows
     .map(parseCard)
     .filter((c): c is StoredMemberCard => c !== null && c.userId === user.id && !c.archived)
     .map(publicCard);
+  return attachListingStateToCards(cards);
 }
 
 // ── Opening a pack ──────────────────────────────────────────────────────────
@@ -238,7 +241,15 @@ export interface NewCardInput {
 /** Spend a credit, roll a pack, draw the card and add it to the collection. */
 export async function openCardPack(
   input: NewCardInput
-): Promise<ActionResult<{ card: MemberCard; bonus: MemberCard | null; featured: MemberCard | null; credits: number }>> {
+): Promise<
+  ActionResult<{
+    card: MemberCard;
+    bonus: MemberCard | null;
+    crew: MemberCard | null;
+    featured: MemberCard | null;
+    credits: number;
+  }>
+> {
   const user = await currentUser();
   if (!user) return { success: false, error: "Please sign in to open a card pack." };
 
@@ -282,8 +293,8 @@ export async function openCardPack(
       userId: user.id,
       createdAt: now,
       name: title,
-      // The chassis line is skipped when it would only repeat the card's title.
-      ability: chassis.toLowerCase() === title.toLowerCase() ? "" : chassis,
+      // Always store the chassis so it pulls through to card art, details, and clash arena
+      ability: chassis.trim() || carName.trim() || title,
       effect: description,
       tier: drawn.tier,
       stats: drawn.stats,
@@ -307,6 +318,12 @@ export async function openCardPack(
     await redis.hincrby(`member:${user.id}`, "packsOpened", 1).catch(() => {});
     // This driver and car now stands in the community pool with this card (replacing their older one).
     await addToCommunityPool(stored).catch((error) => console.error("[member-cards] could not update the pool:", error));
+    const resolvedParts = input.parts ?? parsePartsFromDescription(description);
+
+    if (input.carId) {
+      await updateCarParts(input.carId, user.id, resolvedParts, chassis).catch(() => {});
+    }
+
     // Also save/update this setup in the member's spec sheets so they can select it anytime later.
     await saveSpecSheet(
       {
@@ -317,10 +334,12 @@ export async function openCardPack(
         carName: carName || title,
         chassis,
         photoUrl: input.referenceUrl,
-        parts: input.parts ?? parsePartsFromDescription(description),
+        parts: resolvedParts,
       },
       user.id
     ).catch(() => {});
+
+    await recordCommunityParts(resolvedParts).catch(() => {});
 
     // The bonus card: the other member's card details, drawn again as a whole new card (its own
     // rarity, stats, art styles and picture). It goes straight into this member's collection and
@@ -335,7 +354,7 @@ export async function openCardPack(
           userId: user.id,
           createdAt: bonusNow,
           name: bonusSource.name,
-          ability: bonusSource.ability,
+          ability: bonusSource.ability || bonusSource.name,
           effect: bonusSource.effect,
           tier: bonusDrawn.tier,
           stats: bonusDrawn.stats,
@@ -362,14 +381,42 @@ export async function openCardPack(
       }
     }
 
-    // A 1 in 30 chance of a third card: one of the admin's set cards. Its picture is fixed (not drawn), so
+    // 3. Every Standard Pack includes 1 Crew Card rolled from the Crew Advantage Set (including any bespoke admin cards).
+    let crew: StoredMemberCard | null = null;
+    try {
+      const clashConfig = await getClashGameCardsConfig().catch(() => null);
+      const crewDef = rollCrewCardDefinition(rng, clashConfig?.crewCards);
+      const crewData = crewDefinitionToCardData(crewDef);
+      const crewNow = Date.now() + 1;
+      crew = {
+        id: randomUUID(),
+        userId: user.id,
+        createdAt: crewNow,
+        ...crewData,
+        styleIds: [],
+        kept: true,
+        rerolled: false,
+        ownerName: user.name,
+        referenceUrl: "",
+        bonus: true,
+        bonusFromCardId: crewDef.id,
+      };
+      await redis.set(cardKey(crew.id), JSON.stringify(crew));
+      await redis.zadd(indexKey(user.id), { score: crewNow, member: crew.id });
+      await redis.zadd(ALL_MEMBER_CARDS_INDEX, { score: crewNow, member: crew.id });
+    } catch (error) {
+      console.error("[member-cards] could not save the crew card:", error);
+      crew = null;
+    }
+
+    // 4. A 1 in 30 chance of a fourth bonus card: one of the admin's set cards. Its picture is fixed (not drawn), so
     // this is instant. Anything going wrong here leaves the rest of the pack untouched.
     let featured: StoredMemberCard | null = null;
     if (rng() < FEATURED_CARD_CHANCE) {
       try {
         const source = await pickFeaturedCard();
         if (source) {
-          const featuredNow = Date.now();
+          const featuredNow = Date.now() + 2;
           featured = {
             id: randomUUID(),
             userId: user.id,
@@ -411,6 +458,7 @@ export async function openCardPack(
       data: {
         card: publicCard(stored),
         bonus: bonus ? publicCard(bonus) : null,
+        crew: crew ? publicCard(crew) : null,
         featured: featured ? publicCard(featured) : null,
         credits: await getCardCredits(user.id),
       },
@@ -434,6 +482,9 @@ export async function rerollCard(cardId: string): Promise<ActionResult<{ card: M
   if (!user) return { success: false, error: "Please sign in." };
   const existing = await loadOwnCard(user.id, cardId);
   if (!existing) return { success: false, error: "We couldn't find that card." };
+  if (await getListingIdForCard(cardId)) {
+    return { success: false, error: "Unlist this card from the Marketplace before re-rolling." };
+  }
   if (!canRerollCard(existing)) {
     return { success: false, error: "This card can't be re-rolled any more." };
   }

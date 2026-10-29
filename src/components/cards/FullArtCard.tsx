@@ -4,6 +4,7 @@ import { useEffect, useId, useRef } from "react";
 import { Barlow_Condensed } from "next/font/google";
 import { darken, lighten } from "@/lib/card-maker";
 import { tierInfo, type FullArtCardData } from "@/lib/full-art-card";
+import { getCrewCardDefinition } from "@/lib/crew-cards";
 import { HEADER_LOGO_SRC, headerLogoStyle, headerTagLayout } from "@/components/cards/card-header";
 
 const cardFont = Barlow_Condensed({ subsets: ["latin"], weight: ["600", "700", "800"] });
@@ -523,7 +524,11 @@ export function FullArtCard({
   const name = card.name.trim() || (placeholders ? "CAR NAME" : "");
   // One line only: long names step down in size instead of wrapping (average glyph ~0.42 of the font size).
   const nameSize = Math.min(10.5, 80 / Math.max(1, name.length * 0.46));
-  const ability = card.ability.trim() || (placeholders ? "[Ability / Chassis Type]" : "");
+  const isCar = !card.cardType && !card.crewCardId && (card.tier as string) !== "track";
+  const ability =
+    card.ability?.trim() ||
+    (isCar ? (card as { chassis?: string }).chassis?.trim() || card.name.trim() : "") ||
+    (placeholders ? "[Ability / Chassis Type]" : "");
   const effect = card.effect.trim() || (placeholders ? "[Effect / flavour text]" : "");
   const driver = card.driver.trim() || (placeholders ? "[Name]" : "");
   const team = card.team.trim() || (placeholders ? "[Name]" : "");
@@ -535,11 +540,17 @@ export function FullArtCard({
     ["Steer", card.stats.steer],
   ];
 
+  const isCrew = card.cardType === "crew" || (!card.cardType && Boolean(card.crewCardId));
+  const isDebuff = card.cardType === "debuff";
+  const isTrack = card.cardType === "track";
+  const isSpecialClashCard = isCrew || isDebuff || isTrack;
+
   // The four stats added up, each counted as 0 to 10, so the most a card can score is 40.
   // Nothing is shown while the stats are empty (a blank "__/40" only in the editor preview).
   const statNumbers = stats.map(([, value]) => Number.parseInt(value, 10)).filter((n) => Number.isFinite(n));
-  const score: number | "placeholder" | null =
-    statNumbers.length > 0
+  const score: number | "placeholder" | null = isSpecialClashCard
+    ? null
+    : statNumbers.length > 0
       ? statNumbers.reduce((sum, n) => sum + Math.min(MAX_STAT, Math.max(0, n)), 0)
       : placeholders
         ? "placeholder"
@@ -604,6 +615,34 @@ export function FullArtCard({
         ) : (
           <div style={{ ...abs({ inset: 0 }), display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.45)", fontSize: "9cqw", fontWeight: 800, textAlign: "center", lineHeight: 1 }}>
             PLACE IMAGE HERE
+          </div>
+        )}
+
+        {/* For special clash cards with SVG background, render the icon in crisp DOM HTML so emojis ALWAYS render across all OS & browsers */}
+        {isSpecialClashCard && (!card.imageUrl || card.imageUrl.startsWith("data:image/svg+xml")) && (
+          <div
+            style={{
+              position: "absolute",
+              top: "37%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              pointerEvents: "none",
+              zIndex: 3,
+            }}
+          >
+            <span
+              style={{
+                fontSize: "22cqw",
+                lineHeight: 1,
+                filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.85))",
+                userSelect: "none",
+              }}
+            >
+              {card.crewIcon || getCrewCardDefinition(card.crewCardId || card.name)?.icon || (isCrew ? "⚡" : isDebuff ? "⚠️" : "🏁")}
+            </span>
           </div>
         )}
 
@@ -719,27 +758,47 @@ export function FullArtCard({
             {tier.label}
           </div>
 
-          {/* Total score, e.g. 23/40 */}
-          {score !== null && (
+          {/* Total score, e.g. 23/40, or CREW / DEBUFF / TRACK badge */}
+          {isSpecialClashCard ? (
             <span
-              role="img"
-              aria-label={score === "placeholder" ? `Total score out of ${MAX_TOTAL_SCORE}` : `Total score ${score} out of ${MAX_TOTAL_SCORE}`}
               style={{
                 padding: "0.9cqw 2.6cqw",
                 borderRadius: "1.2cqw",
-                background: "rgba(0,0,0,0.5)",
+                background: "rgba(0,0,0,0.65)",
                 border: `0.3cqw solid ${accent}`,
                 color: pale,
-                fontSize: "4cqw",
+                fontSize: "3.7cqw",
                 fontWeight: 800,
-                letterSpacing: "0.04em",
+                letterSpacing: "0.06em",
                 lineHeight: 1,
                 whiteSpace: "nowrap",
                 textShadow: "0 0.2cqw 0.6cqw rgba(0,0,0,0.9)",
               }}
             >
-              {score === "placeholder" ? "__" : score}/{MAX_TOTAL_SCORE}
+              {isTrack ? "🇬🇧 TRACK" : isDebuff ? "⚠️ DEBUFF" : "⚡ CREW"}
             </span>
+          ) : (
+            score !== null && (
+              <span
+                role="img"
+                aria-label={score === "placeholder" ? `Total score out of ${MAX_TOTAL_SCORE}` : `Total score ${score} out of ${MAX_TOTAL_SCORE}`}
+                style={{
+                  padding: "0.9cqw 2.6cqw",
+                  borderRadius: "1.2cqw",
+                  background: "rgba(0,0,0,0.5)",
+                  border: `0.3cqw solid ${accent}`,
+                  color: pale,
+                  fontSize: "4cqw",
+                  fontWeight: 800,
+                  letterSpacing: "0.04em",
+                  lineHeight: 1,
+                  whiteSpace: "nowrap",
+                  textShadow: "0 0.2cqw 0.6cqw rgba(0,0,0,0.9)",
+                }}
+              >
+                {score === "placeholder" ? "__" : score}/{MAX_TOTAL_SCORE}
+              </span>
+            )
           )}
         </div>
 
@@ -749,14 +808,16 @@ export function FullArtCard({
             <div style={{ fontSize: "3.6cqw", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em", lineHeight: 1.15, opacity: 0.95, marginBottom: "1.4cqw" }}>
               {driver && (
                 <span style={{ opacity: card.driver.trim() ? 1 : 0.6 }}>
-                  <span style={{ color: light }}>Driver </span>
+                  <span style={{ color: light }}>
+                    {isTrack ? "Venue " : isDebuff ? "Hazard " : isCrew ? "Type " : "Driver "}
+                  </span>
                   {driver}
                 </span>
               )}
               {driver && team && <span style={{ color: accent }}> · </span>}
               {team && (
                 <span style={{ opacity: card.team.trim() ? 1 : 0.6 }}>
-                  <span style={{ color: light }}>Team </span>
+                  {!isSpecialClashCard && <span style={{ color: light }}>Team </span>}
                   {team}
                 </span>
               )}
@@ -776,7 +837,7 @@ export function FullArtCard({
             <div style={{ fontSize: "3.3cqw", fontWeight: 600, lineHeight: 1.15, marginTop: "0.8cqw", opacity: card.effect.trim() ? 0.92 : 0.55, overflowWrap: "anywhere" }}>{effect}</div>
           )}
 
-          {/* Stats */}
+          {/* Stats or Crew Tactical Banner */}
           <div
             style={{
               marginTop: "2.4cqw",
@@ -790,11 +851,35 @@ export function FullArtCard({
               boxShadow: `0 0 2.4cqw ${glow}66`,
             }}
           >
-            {stats.map(([statLabel, value]) => (
-              <span key={statLabel} style={{ fontSize: "4.8cqw", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.02em", color: accent, whiteSpace: "nowrap", textShadow: "none" }}>
-                {statLabel}: <span style={{ color: pale }}>{value.trim() || "__"}</span>
+            {isSpecialClashCard ? (
+              <span
+                style={{
+                  fontSize: "4.2cqw",
+                  fontWeight: 800,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  color: pale,
+                  whiteSpace: "nowrap",
+                  textShadow: "none",
+                }}
+              >
+                {(() => {
+                  const resolvedIcon = card.crewIcon || getCrewCardDefinition(card.crewCardId || card.name)?.icon;
+                  return resolvedIcon ? `${resolvedIcon} ` : isTrack ? "🏁 " : isDebuff ? "⚠️ " : "⚡ ";
+                })()}
+                {isTrack
+                  ? "UK DRIFT TRACK · BUFF & DEBUFF"
+                  : isDebuff
+                    ? "CORNER HAZARD · BOTH DRIVERS"
+                    : "CREW ADVANTAGE · TANDEM CLASH"}
               </span>
-            ))}
+            ) : (
+              stats.map(([statLabel, value]) => (
+                <span key={statLabel} style={{ fontSize: "4.8cqw", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.02em", color: accent, whiteSpace: "nowrap", textShadow: "none" }}>
+                  {statLabel}: <span style={{ color: pale }}>{value.trim() || "__"}</span>
+                </span>
+              ))
+            )}
           </div>
         </div>
       </div>

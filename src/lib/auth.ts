@@ -65,6 +65,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               image: user.image ?? "",
               role,
               theme: "light",
+              cardCredits: 1,
               createdAt: Date.now(),
             });
             // Keep the member directory current (see lib/member-roster).
@@ -92,14 +93,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             });
           }
         } else if (token.sub) {
-          // One-time lazy load for existing sessions that don't have customAvatar loaded yet
-          if (token.avatarChecked === undefined) {
+          // Always keep elevated roles (admin / moderator) synced with Redis so demotions take effect immediately
+          if (token.role === "admin" || token.role === "moderator" || token.avatarChecked === undefined) {
             try {
-              const avatar = await redis.hget(`member:${token.sub}`, "customAvatar");
-              if (avatar) token.customAvatar = avatar;
-              token.avatarChecked = true; // Never check again for this session
+              const fields = await redis.hmget<Record<string, unknown>>(
+                `member:${token.sub}`,
+                "role",
+                "customAvatar"
+              );
+              if (typeof fields?.role === "string" && fields.role) token.role = fields.role;
+              if (typeof fields?.customAvatar === "string" && fields.customAvatar) {
+                token.customAvatar = fields.customAvatar;
+              }
+              token.avatarChecked = true;
             } catch (err) {
-              console.error("[Auth] Lazy load avatar error:", err);
+              console.error("[Auth] Role/avatar sync error:", err);
             }
           }
 

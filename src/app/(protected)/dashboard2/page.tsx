@@ -48,8 +48,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   if (!session?.user) return null;
 
   const userId = session.user.id;
-  const isStaff = session.user.role === "admin" || session.user.role === "moderator";
-  const isModerator = session.user.role === "moderator";
+  const sessionStaff = session.user.role === "admin" || session.user.role === "moderator";
   const isAsboRc = session.user.role === "asbo-rc";
   const params = await searchParams;
 
@@ -96,9 +95,17 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       getSelfCheckInStatus(),
       // Cached for 60s inside getUpcomingEvents, so this adds no DB load per view.
       getUpcomingEvents(),
-      isStaff ? getCurrentWeekWinnerInfo() : Promise.resolve(null),
+      sessionStaff ? getCurrentWeekWinnerInfo() : Promise.resolve(null),
       isAsboRc ? getAsboRcReport() : Promise.resolve(null),
     ]);
+
+  // Always trust the live Redis role (unless dev impersonation is active) so demoted moderators lose staff check-in immediately.
+  const isImpersonating = Boolean((session.user as { realRole?: string }).realRole);
+  const liveRole = isImpersonating
+    ? session.user.role
+    : ((memberData?.role as string) || session.user.role);
+  const isStaff = liveRole === "admin" || liveRole === "moderator";
+  const isModerator = liveRole === "moderator";
   const eventRsvps = await getBulkEventRSVPs(
     upcomingEvents.map((e) => e.eventId),
     userId

@@ -850,3 +850,50 @@ body {
     animation: none;
   }
 }
+
+/* ── Drift Clash Arcade Battle Arena Keyframes ───────────────────────────── */
+@keyframes clash-battle-shake {
+  0% { transform: translate(0, 0) rotate(0deg); }
+  12% { transform: translate(-6px, 2px) rotate(-2.5deg); }
+  25% { transform: translate(6px, -3px) rotate(2.5deg); }
+  37% { transform: translate(-7px, -1px) rotate(-3.5deg); }
+  50% { transform: translate(7px, 3px) rotate(3deg); }
+  62% { transform: translate(-5px, 1px) rotate(-2deg); }
+  75% { transform: translate(5px, -2px) rotate(2deg); }
+  87% { transform: translate(-3px, 2px) rotate(-1deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+@keyframes clash-spinout-left {
+  0% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
+  25% { transform: translate(-30px, -20px) rotate(-20deg) scale(0.95); opacity: 0.9; }
+  100% { transform: translate(-160%, 80px) rotate(-90deg) scale(0.35); opacity: 0; pointer-events: none; }
+}
+
+@keyframes clash-spinout-right {
+  0% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
+  25% { transform: translate(30px, -20px) rotate(20deg) scale(0.95); opacity: 0.9; }
+  100% { transform: translate(160%, 80px) rotate(90deg) scale(0.35); opacity: 0; pointer-events: none; }
+}
+
+@keyframes clash-winner-pulse {
+  0% { transform: scale(1.05); filter: drop-shadow(0 0 25px rgba(245, 158, 11, 0.7)); }
+  50% { transform: scale(1.1); filter: drop-shadow(0 0 45px rgba(245, 158, 11, 0.95)); }
+  100% { transform: scale(1.05); filter: drop-shadow(0 0 25px rgba(245, 158, 11, 0.7)); }
+}
+
+.animate-clash-shake {
+  animation: clash-battle-shake 0.32s ease-in-out infinite;
+}
+
+.animate-spinout-left {
+  animation: clash-spinout-left 0.9s cubic-bezier(0.32, 0, 0.67, 0) forwards;
+}
+
+.animate-spinout-right {
+  animation: clash-spinout-right 0.9s cubic-bezier(0.32, 0, 0.67, 0) forwards;
+}
+
+.animate-winner-pulse {
+  animation: clash-winner-pulse 1.3s ease-in-out infinite;
+}

@@ -1,3 +1,5 @@
+import type { PartValues } from "@/lib/rc-parts-data";
+
 export interface Member {
   id: string;
   email: string;
@@ -16,6 +18,8 @@ export interface Member {
   cardCredits?: number;
   /** Total number of card packs opened by this member. */
   packsOpened?: number;
+  /** Whether member has early access permission to play Tandem Clash */
+  clashEarlyAccess?: boolean;
   discounts?: {
     membership: number;
     daypass: number;
@@ -64,6 +68,7 @@ export interface CarProfile {
   chassis?: string;
   images: string[];
   createdAt: number;
+  parts?: PartValues;
 }
 
 export interface CalibrationSetup {

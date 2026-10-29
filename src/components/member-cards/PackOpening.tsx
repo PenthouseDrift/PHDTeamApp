@@ -64,6 +64,7 @@ export function PackOpening({
   ready,
   card,
   bonus = null,
+  crew = null,
   featured = null,
   onRevealed,
 }: {
@@ -71,16 +72,18 @@ export function PackOpening({
   ready: boolean;
   /** The card the member made. Its rarity sets the colour of the burst. */
   card: MemberCard | null;
-  /** The second card some packs hold, shown after the first in the same carousel. */
+  /** The second card from the community pool, shown after the first in the same carousel. */
   bonus?: MemberCard | null;
-  /** The rare third card from the admin's pullable set, shown last. */
+  /** The tactical Crew Modifier card included in every Standard Pack. */
+  crew?: MemberCard | null;
+  /** The rare bonus card from the admin's pullable set, shown last. */
   featured?: MemberCard | null;
   /** Called once the card has finished revealing, so the page can show what to do next. */
   onRevealed: () => void;
 }) {
   const reduced = useReducedMotion();
   const [anim, setAnim] = useState<Anim>("drifting");
-  const slides = card ? [card, ...(bonus ? [bonus] : []), ...(featured ? [featured] : [])] : [];
+  const slides = card ? [card, ...(bonus ? [bonus] : []), ...(crew ? [crew] : []), ...(featured ? [featured] : [])] : [];
   const scroller = useRef<HTMLDivElement>(null);
   const [slide, setSlide] = useState(0);
 
@@ -200,8 +203,9 @@ export function PackOpening({
         <>
           <span className="sr-only" role="status">
             {`You got a ${info?.label} card: ${card.name}.`}
-            {bonus ? ` Your pack also had a ${tierInfo(bonus.tier).label} card: ${bonus.name}. Use the arrows to move between your cards.` : ""}
-            {featured ? ` A rare ${tierInfo(featured.tier).label} card also dropped: ${featured.name}.` : ""}
+            {bonus ? ` Your pack also had a ${tierInfo(bonus.tier).label} community card: ${bonus.name}.` : ""}
+            {crew ? ` Plus a ${tierInfo(crew.tier).label} Crew Modifier card: ${crew.name}.` : ""}
+            {featured ? ` A rare ${tierInfo(featured.tier).label} bonus card also dropped: ${featured.name}.` : ""}
           </span>
           <div className={`pc-rays ${isLegend ? "pc-rays-rainbow" : ""}`} aria-hidden style={card.tier === "bronze" ? { display: "none" } : undefined} />
           <div className="pc-burst" aria-hidden />

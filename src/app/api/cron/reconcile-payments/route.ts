@@ -84,6 +84,7 @@ export async function GET(request: Request) {
       const { revalidatePath } = await import("next/cache");
       revalidatePath("/dashboard");
       revalidatePath("/wallet");
+      revalidatePath("/cards");
       revalidatePath("/membership");
       revalidatePath("/admin/members");
       revalidatePath("/admin/activity");

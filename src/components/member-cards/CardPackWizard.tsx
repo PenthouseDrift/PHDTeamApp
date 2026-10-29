@@ -10,7 +10,7 @@ import { deleteSpecSheet, getMemberSpecSheets, saveSpecSheet } from "@/actions/s
 import { PartSelector } from "@/components/member-cards/PartSelector";
 import { REROLL_ENABLED, rarityLabel, type MemberCard } from "@/lib/card-roll";
 import { parseRememberedPack, readRememberedPack, saveRememberedPack, type RememberedPack } from "@/lib/card-pack-memory";
-import { PARTS_LINE_MAX, PART_CATEGORIES, composeParts, emptyParts, type PartKey, type PartValues } from "@/lib/rc-parts-data";
+import { PARTS_LINE_MAX, PART_CATEGORIES, composeParts, emptyParts, type PartCategory, type PartKey, type PartValues } from "@/lib/rc-parts-data";
 import { specSheetSummary, type CarSpecSheet } from "@/lib/spec-sheets";
 
 /**
@@ -69,6 +69,7 @@ export interface GarageCar {
   name: string;
   chassis: string;
   images: string[];
+  parts?: PartValues;
 }
 
 type Step = 1 | 2 | 3 | 4 | 5;
@@ -100,23 +101,53 @@ interface WizardProps {
   cars: GarageCar[];
   initialCredits: number;
   initialSpecSheets?: CarSpecSheet[];
+  partCategories?: PartCategory[];
 }
 
 /** What the form starts with: the garage defaults, replaced by the last pack's answers when there are any. */
-function startingAnswers(cars: GarageCar[], defaultName: string, remembered: RememberedPack | null) {
-  const start: { driver: string; team: string; carId: string | null; chassis: string; photoUrl: string; parts: PartValues } = {
+function startingAnswers(
+  cars: GarageCar[],
+  defaultName: string,
+  remembered: RememberedPack | null,
+  specSheets: CarSpecSheet[] = []
+) {
+  const firstCar = cars[0];
+  const matchingFirstSheet = firstCar
+    ? specSheets.find(
+        (s) =>
+          (s.carId && s.carId === firstCar.carId) ||
+          (s.carName && s.carName.trim().toLowerCase() === firstCar.name.trim().toLowerCase()) ||
+          (s.name && s.name.trim().toLowerCase() === firstCar.name.trim().toLowerCase())
+      )
+    : null;
+
+  const initialCarParts: PartValues = {
+    motor: firstCar?.parts?.motor || matchingFirstSheet?.parts?.motor || "",
+    esc: firstCar?.parts?.esc || matchingFirstSheet?.parts?.esc || "",
+    gyro: firstCar?.parts?.gyro || matchingFirstSheet?.parts?.gyro || "",
+    servo: firstCar?.parts?.servo || matchingFirstSheet?.parts?.servo || "",
+    controller: firstCar?.parts?.controller || matchingFirstSheet?.parts?.controller || "",
+  };
+
+  const start: {
+    driver: string;
+    team: string;
+    carId: string | null;
+    chassis: string;
+    photoUrl: string;
+    parts: PartValues;
+  } = {
     driver: defaultName,
     team: "",
-    carId: cars[0]?.carId ?? null,
-    chassis: chassisFor(cars[0]),
-    photoUrl: cars[0]?.images[0] ?? "",
-    parts: emptyParts(),
+    carId: firstCar?.carId ?? null,
+    chassis: chassisFor(firstCar),
+    photoUrl: firstCar?.images[0] ?? "",
+    parts: initialCarParts,
   };
   if (!remembered) return start;
 
   if (remembered.driver) start.driver = remembered.driver;
   start.team = remembered.team;
-  start.parts = remembered.parts;
 
   if (remembered.carId) {
     // A garage car that has since been deleted is ignored, so the defaults stay.
@@ -125,12 +156,29 @@ function startingAnswers(cars: GarageCar[], defaultName: string, remembered: Rem
       start.carId = savedCar.carId;
       start.chassis = remembered.chassis || chassisFor(savedCar);
       start.photoUrl = remembered.photoUrl || (savedCar.images[0] ?? "");
+      const matchingSheet = specSheets.find(
+        (s) =>
+          (s.carId && s.carId === savedCar.carId) ||
+          (s.carName && s.carName.trim().toLowerCase() === savedCar.name.trim().toLowerCase()) ||
+          (s.name && s.name.trim().toLowerCase() === savedCar.name.trim().toLowerCase())
+      );
+      start.parts = {
+        motor: remembered.parts?.motor || savedCar.parts?.motor || matchingSheet?.parts?.motor || "",
+        esc: remembered.parts?.esc || savedCar.parts?.esc || matchingSheet?.parts?.esc || "",
+        gyro: remembered.parts?.gyro || savedCar.parts?.gyro || matchingSheet?.parts?.gyro || "",
+        servo: remembered.parts?.servo || savedCar.parts?.servo || matchingSheet?.parts?.servo || "",
+        controller: remembered.parts?.controller || savedCar.parts?.controller || matchingSheet?.parts?.controller || "",
+      };
     }
-  } else if (remembered.photoUrl) {
-    // "A different car", with the photo uploaded last time.
-    start.carId = null;
-    start.chassis = remembered.chassis;
-    start.photoUrl = remembered.photoUrl;
+  } else {
+    if (remembered.photoUrl) {
+      start.carId = null;
+      start.chassis = remembered.chassis;
+      start.photoUrl = remembered.photoUrl;
+    }
+    if (remembered.parts) {
+      start.parts = remembered.parts;
+    }
   }
   return start;
 }
@@ -165,6 +213,7 @@ function CardPackWizardForm({
   cars,
   initialCredits,
   initialSpecSheets = [],
+  partCategories,
   remembered,
 }: WizardProps & { remembered: RememberedPack | null }) {
   const [credits, setCredits] = useState(initialCredits);
@@ -172,7 +221,8 @@ function CardPackWizardForm({
   const [activeSpecId, setActiveSpecId] = useState<string | null>(null);
   const [specSavedMsg, setSpecSavedMsg] = useState<string | null>(null);
   const [savingSpec, startSpecTransition] = useTransition();
-  const [start] = useState(() => startingAnswers(cars, defaultName, remembered));
+  const [start] = useState(() => startingAnswers(cars, defaultName, remembered, initialSpecSheets));
+  const categories = partCategories && partCategories.length > 0 ? partCategories : PART_CATEGORIES;
 
   // The answers
   const [step, setStep] = useState<Step>(1);
@@ -193,7 +243,9 @@ function CardPackWizardForm({
   const [card, setCard] = useState<MemberCard | null>(null);
   /** The second card some packs hold, built from another member's card. */
   const [bonus, setBonus] = useState<MemberCard | null>(null);
-  /** The rare third card from the admin's pullable set. */
+  /** The tactical Crew Modifier card included in every Standard Pack. */
+  const [crew, setCrew] = useState<MemberCard | null>(null);
+  /** The rare fourth card from the admin's pullable set. */
   const [featured, setFeatured] = useState<MemberCard | null>(null);
   const [ready, setReady] = useState(false);
   const [revealed, setRevealed] = useState(false);
@@ -209,7 +261,32 @@ function CardPackWizardForm({
     setChassis(chassisFor(next));
     setPhotoUrl(next?.images[0] ?? "");
     setUploadKey((k) => k + 1);
-    setActiveSpecId(null);
+
+    if (next) {
+      const matchingSheet = specSheets.find(
+        (s) =>
+          (s.carId && s.carId === next.carId) ||
+          (s.carName && s.carName.trim().toLowerCase() === next.name.trim().toLowerCase()) ||
+          (s.name && s.name.trim().toLowerCase() === next.name.trim().toLowerCase())
+      );
+      const prefilledParts: PartValues = {
+        motor: next.parts?.motor || matchingSheet?.parts?.motor || "",
+        esc: next.parts?.esc || matchingSheet?.parts?.esc || "",
+        gyro: next.parts?.gyro || matchingSheet?.parts?.gyro || "",
+        servo: next.parts?.servo || matchingSheet?.parts?.servo || "",
+        controller: next.parts?.controller || matchingSheet?.parts?.controller || "",
+      };
+      setParts(prefilledParts);
+      if (matchingSheet) {
+        setActiveSpecId(matchingSheet.id);
+        if (matchingSheet.driver) setDriver(matchingSheet.driver);
+        if (matchingSheet.team) setTeam(matchingSheet.team);
+      } else {
+        setActiveSpecId(null);
+      }
+    } else {
+      setActiveSpecId(null);
+    }
   };
 
   function applySpecSheet(sheet: CarSpecSheet) {
@@ -278,6 +355,7 @@ function CardPackWizardForm({
     setError(null);
     setCard(null);
     setBonus(null);
+    setCrew(null);
     setFeatured(null);
     setReady(false);
     setRevealed(false);
@@ -302,6 +380,7 @@ function CardPackWizardForm({
         getMemberSpecSheets(userId).then(setSpecSheets).catch(() => {});
         setCard(res.data.card);
         setBonus(res.data.bonus);
+        setCrew(res.data.crew);
         setFeatured(res.data.featured);
         setCredits(res.data.credits);
         setReady(true);
@@ -378,7 +457,7 @@ function CardPackWizardForm({
     const finalCard = card?.rerolled || !REROLL_ENABLED;
     return (
       <div className="space-y-4">
-        <PackOpening key={run} ready={ready} card={card} bonus={bonus} featured={featured} onRevealed={onRevealed} />
+        <PackOpening key={run} ready={ready} card={card} bonus={bonus} crew={crew} featured={featured} onRevealed={onRevealed} />
 
         {error && (
           <p role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-xs font-semibold text-red-600 dark:text-red-400">
@@ -394,15 +473,22 @@ function CardPackWizardForm({
               <p className="text-sm text-zinc-600 dark:text-zinc-400">{card.name}</p>
               {bonus && (
                 <p className="mt-2 text-sm font-bold text-amber-600 dark:text-amber-400">
-                  Your pack also had a {rarityLabel(bonus.tier)} card from the community. Swipe the cards above to see it. Both are in
-                  your collection.
+                  + Community Card: {rarityLabel(bonus.tier)} {bonus.name}
+                </p>
+              )}
+              {crew && (
+                <p className="mt-1.5 text-sm font-bold text-cyan-600 dark:text-cyan-400">
+                  + Tactical Crew Card: {crew.crewIcon ?? "⚡"} {rarityLabel(crew.tier)} {crew.name} ({crew.ability})
                 </p>
               )}
               {featured && (
                 <p className="mt-2 text-sm font-black text-rose-600 dark:text-rose-400">
-                  Rare drop! A {rarityLabel(featured.tier)} card, {featured.name}, was also in your pack. Swipe to the last card to see it.
+                  🔥 Rare Bonus Drop! A {rarityLabel(featured.tier)} card, {featured.name}, was also in your pack!
                 </p>
               )}
+              <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                Swipe the cards above to inspect every card in your pack. All of them have been added to your collection.
+              </p>
             </div>
 
             {saved || finalCard ? (
@@ -731,7 +817,7 @@ function CardPackWizardForm({
             </div>
 
             <div className="space-y-3">
-              {PART_CATEGORIES.map((c) => (
+              {categories.map((c) => (
                 <PartSelector key={c.key} category={c} value={parts[c.key]} onChange={(v) => setParts((p) => ({ ...p, [c.key as PartKey]: v }))} />
               ))}
             </div>
@@ -760,8 +846,7 @@ function CardPackWizardForm({
             <div>
               <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Ready to open your pack?</h2>
               <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                It costs 1 card credit (you have {credits}). Everything on the card is a surprise: its rarity, its art style and its stats.
-                Every pack also holds a second card from the community.
+                It costs 1 card credit (you have {credits}). Every Standard Pack contains <strong>1 of your car</strong>, <strong>1 Community card</strong>, and <strong>1 Tactical Crew card</strong> (for Clash Arena), plus a chance to pull a rare <strong>Bonus Set card</strong>!
               </p>
             </div>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
@@ -773,7 +858,7 @@ function CardPackWizardForm({
               <dd className="text-zinc-900 dark:text-zinc-100">{car?.name ?? "Another car"}</dd>
               <dt className="font-bold text-zinc-500 dark:text-zinc-400">Chassis</dt>
               <dd className="text-zinc-900 dark:text-zinc-100">{chassis.trim() || "Not set"}</dd>
-              {PART_CATEGORIES.map((c) => (
+              {categories.map((c) => (
                 <Fragment key={c.key}>
                   <dt className="font-bold text-zinc-500 dark:text-zinc-400">{c.label}</dt>
                   <dd className="text-zinc-900 dark:text-zinc-100">{parts[c.key].trim() || "Not set"}</dd>

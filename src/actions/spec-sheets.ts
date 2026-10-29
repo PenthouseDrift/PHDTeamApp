@@ -4,15 +4,19 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
-import { composeParts, emptyParts, type PartValues } from "@/lib/rc-parts-data";
 import {
-  parsePartsFromDescription,
+  PART_KEYS,
+  composeParts,
+  emptyParts,
+  type PartValues,
+} from "@/lib/rc-parts-data";
+import {
   sanitizeParts,
   sanitizeSpecSheet,
   type CarSpecSheet,
 } from "@/lib/spec-sheets";
-import { memberCardKey, memberCardsIndexKey, parseStoredCard } from "@/lib/member-card-store";
-import { getMemberCars } from "@/actions/cars";
+import { getMemberCars, updateCarParts } from "@/actions/cars";
+import { recordCommunityParts } from "@/actions/custom-parts";
 import type { ActionResult } from "@/types";
 
 const MAX_SPEC_SHEETS = 25;
@@ -21,14 +25,18 @@ const specSheetsKey = (userId: string) => `member:${userId}:specsheets`;
 const cleanText = (v: unknown, max: number) =>
   typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "";
 
-function fingerprint(s: {
-  carId: string | null;
-  carName: string;
-  chassis: string;
-  parts: PartValues;
+const norm = (v?: string | null) => (v ? v.trim().toLowerCase() : "");
+
+function getCarIdentityKey(s: {
+  carId?: string | null;
+  carName?: string | null;
+  name?: string | null;
+  id?: string;
 }): string {
-  const norm = (v: string) => v.trim().toLowerCase();
-  return [s.carId ?? "", norm(s.carName), norm(s.chassis), norm(composeParts(s.parts))].join("|");
+  if (s.carId && s.carId.trim()) return `car:${s.carId.trim()}`;
+  if (s.carName && s.carName.trim()) return `name:${norm(s.carName)}`;
+  if (s.name && s.name.trim()) return `name:${norm(s.name)}`;
+  return `id:${s.id || randomUUID()}`;
 }
 
 async function loadRawSpecSheets(userId: string): Promise<CarSpecSheet[]> {
@@ -43,9 +51,9 @@ async function loadRawSpecSheets(userId: string): Promise<CarSpecSheet[]> {
 }
 
 /**
- * Load all spec sheets for a member, newest first. Also backfills from their existing
- * garage cars and previously opened cards so returning members already have clickable
- * spec sheets for cars/cards they created earlier.
+ * Load unique spec sheets for a member, newest first.
+ * Consolidates duplicate variations for the same car build into one canonical spec sheet,
+ * and backfills from garage cars so returning members already have clickable spec sheets.
  */
 export async function getMemberSpecSheets(userIdArg?: string): Promise<CarSpecSheet[]> {
   try {
@@ -54,44 +62,64 @@ export async function getMemberSpecSheets(userIdArg?: string): Promise<CarSpecSh
     if (!userId) return [];
 
     const existing = await loadRawSpecSheets(userId);
-    const seenFingerprints = new Set(existing.map(fingerprint));
-    const seenCarIds = new Set(existing.map((s) => s.carId).filter(Boolean));
-    const additions: CarSpecSheet[] = [];
 
-    // 1. Backfill from earlier non-bonus member cards (which have driver, team, chassis, parts & referenceUrl)
-    const cardIds = (await redis.zrange(memberCardsIndexKey(userId), 0, 30, { rev: true })) as string[];
-    if (cardIds && cardIds.length > 0) {
-      const rows = await redis.mget(...cardIds.map((id) => memberCardKey(String(id))));
-      for (const row of rows) {
-        const card = parseStoredCard(row);
-        if (!card || card.bonus || card.archived || card.userId !== userId) continue;
-        const parts = parsePartsFromDescription(card.effect);
-        const chassis = card.ability || card.name;
-        const candidate: CarSpecSheet = {
-          id: randomUUID(),
-          name: card.name || chassis || "Saved Car Setup",
-          driver: card.driver,
-          team: card.team,
-          carId: null,
-          carName: card.name,
-          chassis,
-          photoUrl: card.referenceUrl || "",
-          parts,
-          updatedAt: card.createdAt,
-        };
-        const fp = fingerprint(candidate);
-        if (!seenFingerprints.has(fp)) {
-          seenFingerprints.add(fp);
-          additions.push(candidate);
+    // 1. Group and deduplicate existing spec sheets by car identity
+    const groups = new Map<string, CarSpecSheet[]>();
+    for (const sheet of existing) {
+      const key = getCarIdentityKey(sheet);
+      const group = groups.get(key) || [];
+      group.push(sheet);
+      groups.set(key, group);
+    }
+
+    const dedupedList: CarSpecSheet[] = [];
+    const redundantIdsToDelete: string[] = [];
+    const canonicalUpdates: Record<string, string> = {};
+
+    for (const group of groups.values()) {
+      group.sort((a, b) => b.updatedAt - a.updatedAt);
+      const canonical = { ...group[0] };
+
+      // Merge non-empty part values across all variations so no hardware choice is lost
+      const mergedParts: PartValues = { ...emptyParts() };
+      for (const k of PART_KEYS) {
+        for (const item of group) {
+          if (item.parts?.[k]?.trim()) {
+            mergedParts[k] = item.parts[k].trim();
+            break;
+          }
         }
       }
+      canonical.parts = mergedParts;
+
+      if (group.length > 1) {
+        // Collect duplicate IDs to remove from Redis
+        for (const dup of group.slice(1)) {
+          redundantIdsToDelete.push(dup.id);
+        }
+        canonicalUpdates[canonical.id] = JSON.stringify(canonical);
+      }
+
+      dedupedList.push(canonical);
+    }
+
+    // Clean up duplicate entries in Redis in the background
+    if (redundantIdsToDelete.length > 0) {
+      await redis.hdel(specSheetsKey(userId), ...redundantIdsToDelete).catch(() => {});
+    }
+    if (Object.keys(canonicalUpdates).length > 0) {
+      await redis.hset(specSheetsKey(userId), canonicalUpdates).catch(() => {});
     }
 
     // 2. Backfill from garage cars that don't have a spec sheet yet
+    const seenCarIds = new Set(dedupedList.map((s) => s.carId).filter(Boolean));
+    const seenNames = new Set(dedupedList.map((s) => norm(s.carName || s.name)).filter(Boolean));
     const carsRes = await getMemberCars(userId);
+
     if (carsRes.success) {
+      const newCarSheets: CarSpecSheet[] = [];
       for (const car of carsRes.data) {
-        if (seenCarIds.has(car.carId)) continue;
+        if (seenCarIds.has(car.carId) || seenNames.has(norm(car.name))) continue;
         const candidate: CarSpecSheet = {
           id: randomUUID(),
           name: car.name,
@@ -101,30 +129,26 @@ export async function getMemberSpecSheets(userIdArg?: string): Promise<CarSpecSh
           carName: car.name,
           chassis: car.chassis ?? car.name,
           photoUrl: car.images[0] ?? "",
-          parts: emptyParts(),
+          parts: car.parts ? { ...emptyParts(), ...car.parts } : emptyParts(),
           updatedAt: car.createdAt,
         };
-        const fp = fingerprint(candidate);
-        if (!seenFingerprints.has(fp)) {
-          seenFingerprints.add(fp);
-          seenCarIds.add(car.carId);
-          additions.push(candidate);
-        }
+        seenCarIds.add(car.carId);
+        seenNames.add(norm(car.name));
+        newCarSheets.push(candidate);
+        dedupedList.push(candidate);
       }
-    }
 
-    if (additions.length > 0) {
-      const toSave: Record<string, string> = {};
-      for (const item of additions.slice(0, MAX_SPEC_SHEETS)) {
-        toSave[item.id] = JSON.stringify(item);
-      }
-      if (Object.keys(toSave).length > 0) {
+      if (newCarSheets.length > 0) {
+        const toSave: Record<string, string> = {};
+        for (const item of newCarSheets) {
+          toSave[item.id] = JSON.stringify(item);
+        }
         await redis.hset(specSheetsKey(userId), toSave).catch(() => {});
       }
     }
 
-    const combined = [...existing, ...additions].sort((a, b) => b.updatedAt - a.updatedAt);
-    return combined.slice(0, MAX_SPEC_SHEETS);
+    dedupedList.sort((a, b) => b.updatedAt - a.updatedAt);
+    return dedupedList.slice(0, MAX_SPEC_SHEETS);
   } catch (error) {
     console.error("[spec-sheets] getMemberSpecSheets failed:", error);
     return [];
@@ -144,9 +168,9 @@ export interface SaveSpecSheetInput {
 }
 
 /**
- * Save or update a spec sheet for a member. If an identical setup (same car, chassis and parts)
- * already exists and no explicit `id` was passed, it updates that spec sheet; otherwise it creates
- * a new spec sheet so the member can keep multiple spec sheets.
+ * Save or update a spec sheet for a member uniquely.
+ * If a spec sheet already exists for this car (matched by id, carId, or normalized car/setup name),
+ * it updates that spec sheet in-place without creating duplicate variations.
  */
 export async function saveSpecSheet(
   input: SaveSpecSheetInput,
@@ -169,25 +193,53 @@ export async function saveSpecSheet(
     const defaultName = carName || chassis || (composeParts(parts) ? composeParts(parts).slice(0, 40) : "Car Spec Sheet");
     const name = cleanText(input.name, 60) || defaultName;
 
-    const candidateFp = fingerprint({ carId, carName, chassis, parts });
+    // Match existing sheet uniquely:
+    // 1. By input.id
+    // 2. By carId
+    // 3. By normalized carName or sheet name
     const matched =
       (input.id ? existing.find((s) => s.id === input.id) : null) ??
-      existing.find((s) => fingerprint(s) === candidateFp);
+      (carId ? existing.find((s) => s.carId === carId) : null) ??
+      (carName
+        ? existing.find(
+            (s) =>
+              (s.carName && norm(s.carName) === norm(carName)) ||
+              (s.name && norm(s.name) === norm(carName))
+          )
+        : null) ??
+      (name ? existing.find((s) => norm(s.name) === norm(name)) : null);
+
+    // Merge parts so non-empty fields are preserved
+    const finalParts: PartValues = {
+      motor: parts.motor?.trim() || matched?.parts?.motor || "",
+      esc: parts.esc?.trim() || matched?.parts?.esc || "",
+      gyro: parts.gyro?.trim() || matched?.parts?.gyro || "",
+      servo: parts.servo?.trim() || matched?.parts?.servo || "",
+      controller: parts.controller?.trim() || matched?.parts?.controller || "",
+    };
 
     const sheet: CarSpecSheet = {
       id: matched?.id ?? randomUUID(),
-      name,
+      name: name || matched?.name || defaultName,
       driver: driver || matched?.driver || "",
       team: team || matched?.team || "",
-      carId,
-      carName: carName || matched?.carName || "",
+      carId: carId || matched?.carId || null,
+      carName: carName || matched?.carName || name,
       chassis: chassis || matched?.chassis || "",
       photoUrl: photoUrl || matched?.photoUrl || "",
-      parts,
+      parts: finalParts,
       updatedAt: Date.now(),
     };
 
     await redis.hset(specSheetsKey(userId), { [sheet.id]: JSON.stringify(sheet) });
+
+    // If this sheet is tied to a garage car, update the car's parts directly in Redis as well
+    if (sheet.carId) {
+      await updateCarParts(sheet.carId, userId, sheet.parts, sheet.chassis).catch(() => {});
+    }
+
+    // Record any new community parts
+    await recordCommunityParts(sheet.parts).catch(() => {});
 
     // Trim oldest if above limit
     const updatedList = [sheet, ...existing.filter((s) => s.id !== sheet.id)].sort(
@@ -237,4 +289,3 @@ export async function deleteSpecSheet(
     };
   }
 }
-

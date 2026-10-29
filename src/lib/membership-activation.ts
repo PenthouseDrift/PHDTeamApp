@@ -62,7 +62,7 @@ export async function processSuccessfulMembershipPayment(
   return { success: true, expiresAt: newExpiresAt };
 }
 
-type FinalizerItemType = "membership" | "daypass" | "rental" | "marketplace";
+type FinalizerItemType = "membership" | "daypass" | "rental" | "marketplace" | "pcredits";
 
 export async function processSuccessfulPaymentReference(
   checkoutReference: string,
@@ -140,7 +140,7 @@ export async function processSuccessfulPaymentReference(
     const cleanParts = parts[0] === "phd" ? parts.slice(1) : parts;
     
     if (cleanParts.length >= 3) {
-      itemType = cleanParts[0] as "membership" | "daypass" | "rental";
+      itemType = cleanParts[0] as "membership" | "daypass" | "rental" | "pcredits";
       memberId = cleanParts[1];
       quantity = parseInt(cleanParts[2], 10) || 1;
     } else if (cleanParts.length >= 2) {
@@ -407,6 +407,55 @@ export async function processSuccessfulPaymentReference(
     }
     await clearPendingCheckout(checkoutId);
     return { success: true, itemType: "marketplace", memberId, guestName };
+  } else if (itemType === "pcredits") {
+    if (await claim(`payment:processed:${checkoutId}`)) {
+      const { grantPCredits } = await import("@/tcg/storage");
+      const newBalance = await grantPCredits(memberId, quantity);
+      bustAdminMembers();
+
+      const paidAmount =
+        storedAmount !== undefined && storedAmount > 0
+          ? storedAmount
+          : Number.isFinite(amount) && amount > 0
+          ? amount
+          : 0;
+      const saleCurrency = storedCurrency || currency;
+      const bundleLabel = itemLabel || `${quantity.toLocaleString()} P-Credits`;
+
+      await logActivity({
+        type: "purchase",
+        memberId,
+        memberName: finalName,
+        description: `TCG Store: ${bundleLabel}`,
+        amount: paidAmount,
+        currency: saleCurrency,
+      });
+
+      // Send P-Credits confirmation email via Resend (best-effort)
+      try {
+        const buyerEmail = (await redis.hget(`member:${memberId}`, "email")) as string | null;
+        if (buyerEmail) {
+          const { sendEmail, renderPCreditsConfirmation } = await import("@/lib/email");
+          const { subject, html } = renderPCreditsConfirmation({
+            buyerName: memberName,
+            orderId: checkoutId,
+            bundleName: bundleLabel,
+            pCredits: quantity,
+            newBalance,
+            totalAmount: paidAmount,
+            currency: saleCurrency,
+          });
+          await sendEmail({ to: buyerEmail, subject, html });
+        } else {
+          console.warn(`[pcredits] No email on file for member ${memberId}; skipping confirmation`);
+        }
+      } catch (e) {
+        console.error("P-Credits confirmation email failed:", e);
+      }
+    }
+    await redis.del(`pending_pcredits_checkout:${memberId}`).catch(() => {});
+    await clearPendingCheckout(checkoutId);
+    return { success: true, itemType: "pcredits", memberId, guestName };
   }
 
   throw new Error(`Unsupported item type: ${itemType}`);

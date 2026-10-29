@@ -71,6 +71,13 @@ export async function getSelfCheckInStatus(): Promise<boolean> {
 
 export async function submitSelfCheckIn(memberId: string, memberName: string): Promise<ActionResult<{ checkedIn: boolean }>> {
   try {
+    // Only live staff (admin / moderator verified in Redis) may use the free staff self check-in path.
+    const staff = await requireStaff();
+    if (!staff) {
+      return { success: false, error: "Staff access is required for free self check-in. Please check in with a membership or pass." };
+    }
+    memberId = staff.id;
+
     const isActive = await getSelfCheckInStatus();
     if (!isActive) {
       return { success: false, error: "Self check-in is not currently active." };

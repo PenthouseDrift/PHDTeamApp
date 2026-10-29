@@ -1,5 +1,6 @@
 import { redis } from "@/lib/redis";
 import type { StoredMemberCard } from "@/lib/card-roll";
+import { crewDefinitionToCardData, getCrewCardDefinition } from "@/lib/crew-cards";
 
 /**
  * Where member cards live in Redis, shared by the member actions and the admin view.
@@ -35,7 +36,34 @@ export function parseStoredCard(raw: unknown): StoredMemberCard | null {
     const value = typeof raw === "string" ? JSON.parse(raw) : raw;
     if (!value || typeof value !== "object") return null;
     const c = value as StoredMemberCard;
-    return typeof c.id === "string" && typeof c.userId === "string" ? c : null;
+    if (typeof c.id !== "string" || typeof c.userId !== "string") return null;
+    if ((c.cardType === "crew" || c.crewCardId) && c.crewCardId) {
+      const def = getCrewCardDefinition(c.crewCardId);
+      if (def) {
+        const fresh = crewDefinitionToCardData(def);
+        return {
+          ...c,
+          name: fresh.name,
+          ability: fresh.ability,
+          effect: fresh.effect,
+          tier: fresh.tier,
+          driver: fresh.driver,
+          team: fresh.team,
+          imageUrl: fresh.imageUrl,
+          cardType: "crew",
+          crewCardId: def.id,
+          crewIcon: def.icon,
+        };
+      }
+    }
+    // Auto-heal car cards where chassis/ability was previously stored as empty string
+    if (!c.cardType && !c.crewCardId && (!c.ability || c.ability.trim() === "")) {
+      return {
+        ...c,
+        ability: (c as { chassis?: string }).chassis?.trim() || c.name || "",
+      };
+    }
+    return c;
   } catch {
     return null;
   }
@@ -60,9 +88,9 @@ export function communityKey(card: Pick<StoredMemberCard, "userId" | "driver" | 
   return `${card.userId}|${norm(card.driver)}|${norm(card.name)}`;
 }
 
-/** A card can stand in the pool when it is a real, current card: not re-rolled away, not itself a second-slot card. */
+/** A card can stand in the pool when it is a real, current card: not re-rolled away, not itself a second-slot card, and not a Crew modifier card. */
 export const isCommunityCard = (card: StoredMemberCard | null): card is StoredMemberCard =>
-  Boolean(card && !card.archived && !card.bonus && card.driver?.trim());
+  Boolean(card && !card.archived && !card.bonus && card.cardType !== "crew" && !card.crewCardId && card.driver?.trim());
 
 /** Make this card the pool's card for its driver and car, replacing the older one. */
 export async function addToCommunityPool(card: StoredMemberCard): Promise<void> {

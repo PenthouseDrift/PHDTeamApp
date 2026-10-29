@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { FullArtCard } from "@/components/cards/FullArtCard";
 import { DeleteCardButton } from "@/components/member-cards/DeleteCardButton";
 import { keepCard, rerollCard } from "@/actions/member-cards";
@@ -16,6 +17,9 @@ import {
 } from "@/lib/card-roll";
 import { ART_STYLES } from "@/lib/card-maker";
 import { FULL_ART_TIERS } from "@/lib/full-art-card";
+import { QUICK_SELL_PRICES, getQuickSellPrice } from "@/tcg/config";
+import { listCardOnMarket, quickSellCard, unlistCardFromMarket } from "@/tcg/actions";
+import type { TcgMarketListing } from "@/tcg/types";
 
 /**
  * "My cards": the member's collection. Sort by newest, name, team, driver or rarity; tap a card for a
@@ -42,32 +46,91 @@ const formatDate = (ms: number) => new Date(ms).toLocaleDateString(undefined, { 
 export function CardCollection({
   initialCards,
   credits,
+  pCredits = 0,
   canDelete = false,
+  onCardsChange,
+  onPCreditsChange,
+  onListingCreated,
+  onListingRemoved,
 }: {
   initialCards: MemberCard[];
   credits: number;
+  pCredits?: number;
   /** Admins only: show a delete button in the large view. The server checks the role again. */
   canDelete?: boolean;
+  onCardsChange?: (cards: MemberCard[]) => void;
+  onPCreditsChange?: (nextPCredits: number) => void;
+  onListingCreated?: (listing: TcgMarketListing) => void;
+  onListingRemoved?: (cardId: string) => void;
 }) {
   const [cards, setCards] = useState(initialCards);
+  const [tierFilter, setTierFilter] = useState<string>("all");
   const [sortKey, setSortKey] = useState<CardSortKey>("newest");
   const [direction, setDirection] = useState<SortDirection>("desc");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [quickSellTarget, setQuickSellTarget] = useState<MemberCard | null>(null);
+  const [quickSellError, setQuickSellError] = useState<string | null>(null);
+  const [quickSellPending, startQuickSellTransition] = useTransition();
   const [now] = useState(() => Date.now());
 
-  const sorted = useMemo(() => sortCards(cards, sortKey, direction), [cards, sortKey, direction]);
+  // Sync when parent passes updated cards (e.g. after buying a card on the Marketplace or opening a Custom Pack)
+  useEffect(() => {
+    setCards(initialCards);
+  }, [initialCards]);
+
+  // Lock body scroll and close on Escape while the Quick Sell modal is open
+  useEffect(() => {
+    if (!quickSellTarget) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !quickSellPending) setQuickSellTarget(null);
+    };
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [quickSellTarget, quickSellPending]);
+
+  const filteredCards = useMemo(
+    () =>
+      tierFilter === "all"
+        ? cards
+        : tierFilter === "crew"
+          ? cards.filter((c) => c.cardType === "crew" || Boolean(c.crewCardId))
+          : cards.filter((c) => c.tier === tierFilter),
+    [cards, tierFilter]
+  );
+  const sorted = useMemo(
+    () => sortCards(filteredCards, sortKey, direction),
+    [filteredCards, sortKey, direction]
+  );
   const tally = useMemo(() => {
-    const counts: Record<string, number> = { bronze: 0, silver: 0, gold: 0, legend: 0, mythic: 0 };
-    for (const c of cards) counts[c.tier] = (counts[c.tier] ?? 0) + 1;
+    const counts: Record<string, number> = { bronze: 0, silver: 0, gold: 0, legend: 0, mythic: 0, crew: 0 };
+    for (const c of cards) {
+      counts[c.tier] = (counts[c.tier] ?? 0) + 1;
+      if (c.cardType === "crew" || c.crewCardId) counts.crew += 1;
+    }
     return counts;
   }, [cards]);
 
   const openIndex = openId ? sorted.findIndex((c) => c.id === openId) : -1;
   const openCard = openIndex >= 0 ? sorted[openIndex] : null;
 
-  const replaceCard = (next: MemberCard) => setCards((list) => list.map((c) => (c.id === next.id ? next : c)));
+  const replaceCard = (next: MemberCard) => {
+    setCards((list) => {
+      const updated = list.map((c) => (c.id === next.id ? next : c));
+      onCardsChange?.(updated);
+      return updated;
+    });
+  };
   const removeCard = (id: string) => {
-    setCards((list) => list.filter((c) => c.id !== id));
+    setCards((list) => {
+      const updated = list.filter((c) => c.id !== id);
+      onCardsChange?.(updated);
+      return updated;
+    });
     setOpenId(null);
   };
 
@@ -76,115 +139,295 @@ export function CardCollection({
     setDirection(DEFAULT_SORT_DIRECTION[key]);
   }
 
+  function confirmGridQuickSell() {
+    if (!quickSellTarget) return;
+    const target = quickSellTarget;
+    setQuickSellError(null);
+    startQuickSellTransition(async () => {
+      const res = await quickSellCard(target.id);
+      if (res.success) {
+        if (target.listedPrice) onListingRemoved?.(target.id);
+        onPCreditsChange?.(res.data.pCredits);
+        removeCard(target.id);
+        setQuickSellTarget(null);
+      } else {
+        setQuickSellError(res.error);
+      }
+    });
+  }
+
   return (
-    <div className="space-y-5">
-      {/* Summary */}
-      <section className={`${panel} space-y-4`} aria-label="Collection summary">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">Card credits</p>
-            <p className="text-3xl font-black text-zinc-900 dark:text-zinc-100">{credits}</p>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">Earn 1 every time you check in at the track, or 2 with a membership.</p>
+    <div className="space-y-3.5">
+      {/* Compact Unopened Pack Banner (only takes 1 slim row on mobile) */}
+      {credits > 0 && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15 px-3.5 py-2.5 shadow-sm">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="text-lg shrink-0" aria-hidden>
+              🎟️
+            </span>
+            <p className="truncate text-xs font-black text-zinc-900 dark:text-zinc-100 sm:text-sm">
+              {credits} Unopened Pack{credits === 1 ? "" : "s"} Ready!
+            </p>
           </div>
-          <Link href="/cards/new" className={primary}>
-            {credits > 0 ? "Open a card pack" : "Make a card"}
+          <Link
+            href="/cards/new"
+            className="shrink-0 rounded-xl bg-amber-500 px-3.5 py-2 text-xs font-black text-black shadow-sm transition-colors hover:bg-amber-400"
+          >
+            Open Pack →
           </Link>
         </div>
-        <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Cards by rarity">
-          {[...FULL_ART_TIERS].reverse().map((t) => (
-            <li key={t.id} className="rounded-xl border border-zinc-200 px-3 py-2 dark:border-zinc-700">
-              <span className="flex items-center gap-2 text-xs font-black text-zinc-900 dark:text-zinc-100">
-                <span
-                  aria-hidden
-                  className="h-3 w-3 rounded-full border border-black/20"
-                  style={{
-                    background:
-                      t.id === "legend"
-                        ? "conic-gradient(#7df9ff, #a78bfa, #ff7ad9, #ffd75e, #7df9ff)"
-                        : `linear-gradient(135deg, ${t.palette.light}, ${t.palette.accent} 55%, ${t.palette.dark})`,
-                  }}
-                />
-                {t.label}
-              </span>
-              <span className="block text-lg font-black text-zinc-900 dark:text-zinc-100">{tally[t.id]}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      )}
 
       {cards.length === 0 ? (
         <section className={`${panel} space-y-3 py-10 text-center`}>
-          <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">No cards yet</h2>
-          <p className="mx-auto max-w-md text-sm text-zinc-600 dark:text-zinc-400">
-            Check in at the track to earn a card credit, then open a pack to get a card of your own car. Cards come in bronze,
-            silver, gold and legend, and legend cards are rare.
+          <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">No cards in your deck yet</h2>
+          <p className="mx-auto max-w-md text-xs text-zinc-600 dark:text-zinc-400 sm:text-sm">
+            Check in at the track or visit the Pack Store to open a pack and forge a custom Full-Art card of your drift car.
           </p>
           <div>
             <Link href="/cards/new" className={primary}>
-              {credits > 0 ? "Open your first pack" : "See how it works"}
+              {credits > 0 ? "Open your first pack" : "Forge a card"}
             </Link>
           </div>
         </section>
       ) : (
         <>
-          {/* Sorting */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Sort cards by">
-              {SORTS.map((s) => {
-                const active = sortKey === s.key;
+          {/* Compact Mobile-Friendly Filter & Sort Bar */}
+          <div className="space-y-2 rounded-2xl border border-zinc-200 bg-white p-2.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            {/* Rarity Filter Strip (Horizontally Scrollable on Mobile) */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
+              <button
+                type="button"
+                onClick={() => setTierFilter("all")}
+                className={`shrink-0 rounded-xl px-3 py-1.5 text-[11px] font-black transition-colors ${
+                  tierFilter === "all"
+                    ? "bg-amber-500 text-black shadow-sm"
+                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300"
+                }`}
+              >
+                All ({cards.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTierFilter(tierFilter === "crew" ? "all" : "crew")}
+                className={`inline-flex shrink-0 items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] font-black transition-colors ${
+                  tierFilter === "crew"
+                    ? "bg-cyan-500 text-black shadow-sm"
+                    : "bg-cyan-500/10 text-cyan-700 hover:bg-cyan-500/20 dark:bg-cyan-500/15 dark:text-cyan-300"
+                }`}
+              >
+                <span>⚡ Crew</span>
+                <span className="opacity-75">({tally.crew ?? 0})</span>
+              </button>
+              {[...FULL_ART_TIERS].reverse().map((t) => {
+                const count = tally[t.id] ?? 0;
+                const active = tierFilter === t.id;
                 return (
                   <button
-                    key={s.key}
+                    key={t.id}
                     type="button"
-                    aria-pressed={active}
-                    onClick={() => chooseSort(s.key)}
-                    className={`min-h-10 rounded-full border-2 px-4 text-xs font-bold ${
+                    onClick={() => setTierFilter(active ? "all" : t.id)}
+                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[11px] font-black transition-colors ${
                       active
-                        ? "border-amber-500 bg-amber-500 text-black"
-                        : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                        ? "bg-amber-500 text-black shadow-sm"
+                        : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300"
                     }`}
                   >
-                    {s.label}
+                    <span
+                      aria-hidden
+                      className="h-2.5 w-2.5 rounded-full border border-black/20"
+                      style={{
+                        background:
+                          t.id === "legend"
+                            ? "conic-gradient(#7df9ff, #a78bfa, #ff7ad9, #ffd75e, #7df9ff)"
+                            : t.id === "mythic"
+                              ? "linear-gradient(135deg, #fb7185, #e11d48 55%, #4c0519)"
+                              : `linear-gradient(135deg, ${t.palette.light}, ${t.palette.accent} 55%, ${t.palette.dark})`,
+                      }}
+                    />
+                    <span>{t.label}</span>
+                    <span className="opacity-75">({count})</span>
                   </button>
                 );
               })}
             </div>
-            <button
-              type="button"
-              className={secondary}
-              onClick={() => setDirection((d) => (d === "asc" ? "desc" : "asc"))}
-              aria-label={`Sort order: ${direction === "asc" ? "ascending" : "descending"}. Tap to reverse.`}
-            >
-              {direction === "asc" ? "A → Z / low → high" : "Z → A / high → low"}
-            </button>
+
+            {/* Sort Strip */}
+            <div className="flex items-center justify-between gap-2 border-t border-zinc-100 pt-2 dark:border-zinc-800">
+              <div
+                className="flex items-center gap-1 overflow-x-auto no-scrollbar"
+                role="group"
+                aria-label="Sort cards by"
+              >
+                <span className="mr-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                  Sort:
+                </span>
+                {SORTS.map((s) => {
+                  const active = sortKey === s.key;
+                  return (
+                    <button
+                      key={s.key}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => chooseSort(s.key)}
+                      className={`shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                        active
+                          ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                          : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setDirection((d) => (d === "asc" ? "desc" : "asc"))}
+                aria-label={`Sort order: ${direction === "asc" ? "ascending" : "descending"}. Tap to reverse.`}
+                className="shrink-0 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-black text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+              >
+                {direction === "asc" ? "↑ Asc" : "↓ Desc"}
+              </button>
+            </div>
           </div>
 
-          <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4" aria-label="Your cards">
-            {sorted.map((c) => (
-              <li key={c.id} className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setOpenId(c.id)}
-                  className="block w-full rounded-2xl transition-transform hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-400/70"
-                  aria-label={`View ${c.name}, ${rarityLabel(c.tier)} card`}
-                >
-                  <FullArtCard card={c} className="drop-shadow-lg" />
-                </button>
-                <p className="truncate text-center text-xs font-bold text-zinc-700 dark:text-zinc-200">
-                  {rarityLabel(c.tier)}
-                  {canRerollCard(c, now) ? " · re-roll available" : ""}
-                </p>
-              </li>
-            ))}
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4" aria-label="Your cards">
+            {sorted.map((c) => {
+              const payout = getQuickSellPrice(c.tier);
+              return (
+                <li key={c.id} className="space-y-2">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setOpenId(c.id)}
+                      className="block w-full rounded-2xl transition-transform hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-400/70"
+                      aria-label={`View ${c.name}, ${rarityLabel(c.tier)} card`}
+                    >
+                      <FullArtCard card={c} className="drop-shadow-lg" />
+                    </button>
+                    {c.listedPrice ? (
+                      <span className="pointer-events-none absolute right-2 top-2 rounded-full border border-amber-300 bg-amber-500 px-2.5 py-0.5 text-[11px] font-black text-black shadow-md">
+                        Listed · {c.listedPrice.toLocaleString()} P
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center justify-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuickSellError(null);
+                        setQuickSellTarget(c);
+                      }}
+                      className="inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-extrabold text-zinc-800 shadow-sm transition-colors hover:border-amber-500 hover:bg-amber-500/10 hover:text-amber-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-amber-500/60 dark:hover:bg-amber-500/10 dark:hover:text-amber-400"
+                    >
+                      <span>Quick sell</span>
+                      <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-black text-amber-600 dark:text-amber-400">
+                        +{payout} P
+                      </span>
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </>
       )}
+
+      {quickSellTarget &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[9999] flex h-[100dvh] w-screen items-stretch justify-center overscroll-contain sm:items-center sm:p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="quick-sell-dialog-title"
+          >
+            {/* Full-viewport backdrop */}
+            <div
+              className="fixed inset-0 bg-black/80 backdrop-blur-sm"
+              onClick={() => {
+                if (!quickSellPending) setQuickSellTarget(null);
+              }}
+              aria-hidden="true"
+            />
+
+            {/* Full-screen overlay on mobile, centered window modal on sm+ */}
+            <div className="relative z-10 flex h-full w-full flex-col justify-between overflow-y-auto bg-zinc-950 p-6 text-zinc-100 shadow-2xl sm:h-auto sm:max-h-[90dvh] sm:max-w-md sm: justify-start sm:space-y-5 sm:rounded-3xl sm:border sm:border-amber-500/30">
+              <div className="flex items-center justify-between sm:hidden">
+                <span className="text-xs font-bold uppercase tracking-widest text-amber-400">
+                  Quick Sell Card
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setQuickSellTarget(null)}
+                  disabled={quickSellPending}
+                  className="rounded-xl border border-zinc-800 px-3 py-1.5 text-xs font-bold text-zinc-300"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="my-auto space-y-5 sm:my-0">
+                <div className="mx-auto w-48 sm:w-44">
+                  <FullArtCard card={quickSellTarget} className="drop-shadow-2xl" />
+                </div>
+
+                <div className="space-y-2 text-center">
+                  <h3 id="quick-sell-dialog-title" className="text-xl font-black sm:text-lg">
+                    Quick sell &ldquo;{quickSellTarget.name}&rdquo;?
+                  </h3>
+                  <p className="mx-auto max-w-xs text-xs leading-relaxed text-zinc-400">
+                    You will receive{" "}
+                    <strong className="text-amber-400">
+                      +{getQuickSellPrice(quickSellTarget.tier)} P-Credits
+                    </strong>{" "}
+                    instantly. This permanently deletes the card from your collection.
+                  </p>
+                </div>
+
+                {quickSellError && (
+                  <p
+                    role="alert"
+                    className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-center text-xs font-semibold text-red-400"
+                  >
+                    {quickSellError}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-4 sm:pt-1">
+                <button
+                  type="button"
+                  onClick={() => setQuickSellTarget(null)}
+                  disabled={quickSellPending}
+                  className="min-h-12 flex-1 rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-xs font-bold text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmGridQuickSell}
+                  disabled={quickSellPending}
+                  className="min-h-12 flex-1 rounded-xl bg-amber-500 px-4 text-xs font-black text-black hover:bg-amber-400 disabled:opacity-50"
+                >
+                  {quickSellPending
+                    ? "Selling…"
+                    : `Confirm (+${getQuickSellPrice(quickSellTarget.tier)} P)`}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
 
       <CardViewer
         card={openCard}
         index={openIndex}
         total={sorted.length}
         now={now}
+        pCredits={pCredits}
         onClose={() => setOpenId(null)}
         onMove={(step) => {
           const next = sorted[openIndex + step];
@@ -193,6 +436,9 @@ export function CardCollection({
         onChange={replaceCard}
         canDelete={canDelete}
         onDeleted={removeCard}
+        onPCreditsChange={onPCreditsChange}
+        onListingCreated={onListingCreated}
+        onListingRemoved={onListingRemoved}
       />
     </div>
   );
@@ -209,20 +455,30 @@ function CardViewer({
   onChange,
   canDelete,
   onDeleted,
+  onPCreditsChange,
+  onListingCreated,
+  onListingRemoved,
 }: {
   card: MemberCard | null;
   index: number;
   total: number;
   now: number;
+  pCredits?: number;
   onClose: () => void;
   onMove: (step: -1 | 1) => void;
   onChange: (card: MemberCard) => void;
   canDelete: boolean;
   onDeleted: (id: string) => void;
+  onPCreditsChange?: (nextPCredits: number) => void;
+  onListingCreated?: (listing: TcgMarketListing) => void;
+  onListingRemoved?: (cardId: string) => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [confirm, setConfirm] = useState(false);
+  const [confirmQuickSell, setConfirmQuickSell] = useState(false);
+  const [listPriceText, setListPriceText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [shownId, setShownId] = useState<string | null>(null);
 
@@ -230,7 +486,10 @@ function CardViewer({
   if ((card?.id ?? null) !== shownId) {
     setShownId(card?.id ?? null);
     setConfirm(false);
+    setConfirmQuickSell(false);
     setError(null);
+    setStatusMessage(null);
+    setListPriceText(card ? String(getQuickSellPrice(card.tier) * 2) : "");
   }
 
   useEffect(() => {
@@ -274,6 +533,58 @@ function CardViewer({
     });
   }
 
+  function handleQuickSell() {
+    if (!card) return;
+    setError(null);
+    setStatusMessage(null);
+    startTransition(async () => {
+      const res = await quickSellCard(card.id);
+      if (res.success) {
+        if (card.listedPrice) onListingRemoved?.(card.id);
+        onPCreditsChange?.(res.data.pCredits);
+        onDeleted(card.id);
+      } else {
+        setError(res.error);
+      }
+    });
+  }
+
+  function handleListForSale() {
+    if (!card) return;
+    setError(null);
+    setStatusMessage(null);
+    const price = Math.round(Number(listPriceText));
+    startTransition(async () => {
+      const res = await listCardOnMarket(card.id, price);
+      if (res.success) {
+        onChange(res.data.card);
+        onListingCreated?.(res.data.listing);
+        setStatusMessage(`Listed on the Marketplace for ${res.data.listing.price.toLocaleString()} P-Credits.`);
+      } else {
+        setError(res.error);
+      }
+    });
+  }
+
+  function handleUnlist() {
+    if (!card) return;
+    setError(null);
+    setStatusMessage(null);
+    startTransition(async () => {
+      const res = await unlistCardFromMarket(card.id);
+      if (res.success) {
+        const updatedCard: MemberCard = res.data.card ?? { ...card, listingId: undefined, listedPrice: undefined };
+        onChange(updatedCard);
+        onListingRemoved?.(card.id);
+        setStatusMessage("Removed from the Marketplace.");
+      } else {
+        setError(res.error);
+      }
+    });
+  }
+
+  const quickSellPayout = card ? getQuickSellPrice(card.tier) : 0;
+
   return (
     <dialog
       ref={ref}
@@ -283,7 +594,7 @@ function CardViewer({
         if (e.target === ref.current) onClose();
       }}
       aria-labelledby="card-viewer-title"
-      className="m-auto w-[min(60rem,94vw)] max-h-[94vh] overflow-y-auto rounded-3xl border border-amber-500/30 bg-zinc-950 p-0 text-zinc-100 backdrop:bg-black/80 backdrop:backdrop-blur-sm"
+      className="fixed inset-0 m-0 h-[100dvh] max-h-[100dvh] w-screen max-w-none overflow-y-auto rounded-none border-0 bg-zinc-950 p-0 text-zinc-100 backdrop:bg-black/80 backdrop:backdrop-blur-sm sm:m-auto sm:h-auto sm:max-h-[92dvh] sm:w-[min(60rem,94vw)] sm:rounded-3xl sm:border sm:border-amber-500/30"
     >
       {card && (
         <div className="grid gap-6 p-5 sm:p-7 md:grid-cols-[minmax(0,22rem)_1fr]">
@@ -304,26 +615,172 @@ function CardViewer({
               </button>
             </div>
 
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-              <dt className="font-bold text-zinc-400">Driver</dt>
-              <dd>{card.driver || "—"}</dd>
-              <dt className="font-bold text-zinc-400">Team</dt>
-              <dd>{card.team || "—"}</dd>
-              <dt className="font-bold text-zinc-400">Chassis</dt>
-              <dd>{card.ability || "—"}</dd>
-              <dt className="font-bold text-zinc-400">About</dt>
-              <dd>{card.effect || "—"}</dd>
-              <dt className="font-bold text-zinc-400">Art style</dt>
-              <dd>{styles.length > 0 ? styles.join(" + ") : "Tier default"}</dd>
-              <dt className="font-bold text-zinc-400">Opened</dt>
-              <dd>{formatDate(card.createdAt)}</dd>
-            </dl>
+            {card.cardType === "crew" || card.crewCardId ? (
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                <dt className="font-bold text-zinc-400">Card Type</dt>
+                <dd className="font-bold text-cyan-300">⚡ Tactical Crew Modifier (Clash Slot 4)</dd>
+                <dt className="font-bold text-zinc-400">Category</dt>
+                <dd>{card.driver || "Pit Crew"}</dd>
+                <dt className="font-bold text-zinc-400">Crew Set</dt>
+                <dd>{card.team || "Crew Set"}</dd>
+                <dt className="font-bold text-zinc-400">Trigger</dt>
+                <dd className="font-semibold text-amber-300">{card.ability || "—"}</dd>
+                <dt className="font-bold text-zinc-400">Track Effect</dt>
+                <dd className="leading-relaxed text-zinc-200">{card.effect || "—"}</dd>
+                <dt className="font-bold text-zinc-400">Opened</dt>
+                <dd>{formatDate(card.createdAt)}</dd>
+                {card.packName ? (
+                  <>
+                    <dt className="font-bold text-zinc-400">Pack</dt>
+                    <dd className="text-amber-300 font-semibold">{card.packName}</dd>
+                  </>
+                ) : null}
+              </dl>
+            ) : (
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                <dt className="font-bold text-zinc-400">Driver</dt>
+                <dd>{card.driver || "—"}</dd>
+                <dt className="font-bold text-zinc-400">Team</dt>
+                <dd>{card.team || "—"}</dd>
+                <dt className="font-bold text-zinc-400">Chassis</dt>
+                <dd>{card.ability?.trim() || (card as { chassis?: string }).chassis?.trim() || card.name || "—"}</dd>
+                <dt className="font-bold text-zinc-400">About</dt>
+                <dd>{card.effect || "—"}</dd>
+                <dt className="font-bold text-zinc-400">Art style</dt>
+                <dd>{styles.length > 0 ? styles.join(" + ") : "Tier default"}</dd>
+                <dt className="font-bold text-zinc-400">Opened</dt>
+                <dd>{formatDate(card.createdAt)}</dd>
+                {card.packName ? (
+                  <>
+                    <dt className="font-bold text-zinc-400">Pack</dt>
+                    <dd className="text-amber-300 font-semibold">{card.packName}</dd>
+                  </>
+                ) : null}
+              </dl>
+            )}
 
             {error && (
               <p role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs font-semibold text-red-400">
                 {error}
               </p>
             )}
+
+            {statusMessage && (
+              <p role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs font-semibold text-emerald-300">
+                {statusMessage}
+              </p>
+            )}
+
+            {/* TCG Trading & Quick Sell Controls */}
+            <div className="space-y-3 rounded-2xl border border-zinc-800 bg-zinc-900/90 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-black uppercase tracking-wider text-amber-400">
+                  Sell or Trade Card
+                </p>
+                <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-bold text-amber-300">
+                  Quick Sell: {quickSellPayout} P-Credits
+                </span>
+              </div>
+
+              {card.listedPrice ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+                  <div>
+                    <p className="text-xs font-bold text-amber-300">
+                      Listed on Marketplace for {card.listedPrice.toLocaleString()} P-Credits
+                    </p>
+                    <p className="text-[11px] text-zinc-400">
+                      Another member can buy this card at your asking price.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleUnlist}
+                    disabled={pending}
+                    className="min-h-10 rounded-xl border border-amber-400/50 bg-zinc-900 px-3.5 text-xs font-bold text-amber-200 hover:bg-zinc-800 disabled:opacity-50"
+                  >
+                    Unlist card
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label htmlFor="market-price-input" className="block text-xs font-semibold text-zinc-300">
+                    List on Marketplace (set your price in P-Credits)
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative flex-1 min-w-[9rem]">
+                      <input
+                        id="market-price-input"
+                        type="number"
+                        min={5}
+                        max={100000}
+                        step={5}
+                        value={listPriceText}
+                        onChange={(e) => setListPriceText(e.target.value)}
+                        className="min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 pr-20 text-sm font-bold text-zinc-100 focus:border-amber-500 focus:outline-none"
+                        placeholder="Price"
+                      />
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-400">
+                        P-Credits
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleListForSale}
+                      disabled={pending}
+                      className={primary}
+                    >
+                      List for sale
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Sell section */}
+              <div className="border-t border-zinc-800 pt-3">
+                {confirmQuickSell ? (
+                  <div className="space-y-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3">
+                    <p className="text-xs font-bold text-red-200">
+                      Quick sell this {rarityLabel(card.tier)} card for {quickSellPayout} P-Credits?
+                    </p>
+                    <p className="text-[11px] text-red-300/90">
+                      This permanently deletes the card from your collection and immediately credits {quickSellPayout} P-Credits to your balance.
+                    </p>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={handleQuickSell}
+                        disabled={pending}
+                        className="min-h-10 rounded-xl bg-red-600 px-3.5 text-xs font-black text-white hover:bg-red-500 disabled:opacity-50"
+                      >
+                        {pending ? "Selling…" : `Confirm Quick Sell (+${quickSellPayout} P-Credits)`}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmQuickSell(false)}
+                        disabled={pending}
+                        className="min-h-10 rounded-xl border border-zinc-700 px-3.5 text-xs font-bold text-zinc-200 hover:bg-zinc-800"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[11px] text-zinc-400">
+                      Don&apos;t want to wait for a buyer? Instant payout ({rarityLabel(card.tier)} = {quickSellPayout} P-Credits).
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmQuickSell(true)}
+                      disabled={pending}
+                      className="min-h-10 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 text-xs font-extrabold text-amber-300 hover:bg-amber-500/20 disabled:opacity-50"
+                    >
+                      Quick Sell (+{quickSellPayout} P-Credits)
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
 
             {pendingChoice && (
               <div className="space-y-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4">
