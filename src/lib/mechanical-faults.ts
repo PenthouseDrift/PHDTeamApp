@@ -232,7 +232,7 @@ export function buildMaintenanceCardSvgDataUrl(def: {
     <text x="300" y="115" text-anchor="middle" fill="${def.accentColor}" font-family="system-ui, sans-serif" font-size="20" font-weight="900" letter-spacing="4">PIT GARAGE · MAINTENANCE</text>
     <text x="300" y="145" text-anchor="middle" fill="#d4d4d8" font-family="system-ui, sans-serif" font-size="14" font-weight="700" letter-spacing="2">TARGET: ${def.targetFaultName.toUpperCase()}</text>
     <!-- Center Icon -->
-    <text x="300" y="340" text-anchor="middle" font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif" font-size="105" dominant-baseline="central">${def.icon}</text>
+    <text x="300" y="300" text-anchor="middle" font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif" font-size="105" dominant-baseline="central">${def.icon}</text>
     <!-- Repair Badge -->
     <rect x="150" y="470" width="300" height="38" rx="19" fill="#000000" fill-opacity="0.75" stroke="${def.accentColor}" stroke-width="2"/>
     <text x="300" y="495" text-anchor="middle" fill="${def.accentColor}" font-family="system-ui, sans-serif" font-size="16" font-weight="900" letter-spacing="2">${badgeLabel}</text>

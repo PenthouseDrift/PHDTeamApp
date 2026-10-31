@@ -198,7 +198,7 @@ export function buildCrewCardSvgDataUrl(def: {
     <circle cx="300" cy="295" r="145" fill="none" stroke="${def.accentColor}" stroke-opacity="0.45" stroke-width="4" stroke-dasharray="14 10"/>
     <circle cx="300" cy="295" r="112" fill="#09090b" fill-opacity="0.78" stroke="${def.accentColor}" stroke-opacity="0.85" stroke-width="3"/>
     <text x="300" y="120" text-anchor="middle" fill="${def.accentColor}" font-family="system-ui, sans-serif" font-size="22" font-weight="900" letter-spacing="5">${def.category.toUpperCase()}</text>
-    <text x="300" y="336" text-anchor="middle" font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif" font-size="110" dominant-baseline="central">${def.icon}</text>
+    <text x="300" y="295" text-anchor="middle" font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif" font-size="110" dominant-baseline="central">${def.icon}</text>
     <text x="300" y="478" text-anchor="middle" fill="#a1a1aa" font-family="system-ui, sans-serif" font-size="18" font-weight="800" letter-spacing="4">${footerText}</text>
   </svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;

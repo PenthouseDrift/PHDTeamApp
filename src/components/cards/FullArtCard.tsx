@@ -31,6 +31,14 @@ const BLOB_HOST_RE = /^https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\/
 const NEXT_IMAGE_WIDTHS = [256, 384, 640, 750, 828] as const;
 
 function getOptimizedCardImageProps(url: string, flat: boolean) {
+  if (url.startsWith("data:image/svg+xml")) {
+    const fixedUrl = url
+      .replace(/y%3D%22336%22/g, 'y%3D%22295%22')
+      .replace(/y%3D%22340%22/g, 'y%3D%22300%22')
+      .replace(/y="336"/g, 'y="295"')
+      .replace(/y="340"/g, 'y="300"');
+    return { src: fixedUrl, srcSet: undefined, sizes: undefined };
+  }
   if (flat || !BLOB_HOST_RE.test(url)) {
     return { src: url, srcSet: undefined, sizes: undefined };
   }
@@ -647,8 +655,8 @@ export function FullArtCard({
           </div>
         )}
 
-        {/* For special clash cards with SVG background, render the icon in crisp DOM HTML so emojis ALWAYS render across all OS & browsers */}
-        {isSpecialClashCard && (!card.imageUrl || card.imageUrl.startsWith("data:image/svg+xml")) && (
+        {/* For special clash cards without an image, render fallback icon in DOM */}
+        {isSpecialClashCard && !card.imageUrl && (
           <div
             style={{
               position: "absolute",

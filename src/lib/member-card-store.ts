@@ -58,6 +58,12 @@ export function parseStoredCard(raw: unknown): StoredMemberCard | null {
         };
       }
     }
+    // Auto-heal maintenance card SVGs to centered crosshairs
+    if (c.cardType === "maintenance" && typeof c.imageUrl === "string" && c.imageUrl.startsWith("data:image/svg+xml")) {
+      c.imageUrl = c.imageUrl
+        .replace(/y%3D%22340%22/g, 'y%3D%22300%22')
+        .replace(/y="340"/g, 'y="300"');
+    }
     // Auto-heal car cards: stats scale (25 max, x/100 total), mythic (25 25 25 25), high legend for set cards, chassis/ability or initial durability
     if (!c.cardType && !c.crewCardId) {
       const ability =
