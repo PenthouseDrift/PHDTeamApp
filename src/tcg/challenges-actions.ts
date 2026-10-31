@@ -37,6 +37,7 @@ import {
   type AdminChallengeInput,
   type TandemClashChallenge,
 } from "./challenges-types";
+import { getUtcMidnightCountdown } from "./progression";
 import type { ClashOpponent, ClashPlayerStats } from "./types";
 
 function todayUtc(): string {
@@ -400,7 +401,7 @@ export async function startChallengeBattleAction(
     if (alreadyWonToday) {
       return {
         success: false,
-        error: "You have already completed this Challenge Cup today! Resets daily at 00:00 UTC.",
+        error: `You have already completed this Challenge Cup today! Resets in ${getUtcMidnightCountdown().formatted}.`,
       };
     }
 

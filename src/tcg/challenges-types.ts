@@ -1,6 +1,6 @@
 import type { FullArtTier } from "@/lib/full-art-card";
 import type { MemberCard } from "@/lib/card-roll";
-import { normalizeStatValue } from "@/tcg/progression";
+import { getNormalizedCardStats, normalizeStatValue } from "@/tcg/progression";
 import {
   CREW_CARD_SET,
   scaleCrewCardDefinition,
@@ -155,14 +155,10 @@ export const CHALLENGE_THEME_CONFIGS: Record<ChallengeThemeStyle, ChallengeTheme
 };
 
 /** Compute the normalized total score of all 4 stats on a car card (out of 100). */
-export function getCarNormalizedTotalScore(card: Pick<MemberCard, "stats">): number {
+export function getCarNormalizedTotalScore(card: Pick<MemberCard, "stats" | "tier">): number {
   if (!card?.stats) return 0;
-  return (
-    normalizeStatValue(card.stats.drift) +
-    normalizeStatValue(card.stats.accel) +
-    normalizeStatValue(card.stats.grip) +
-    normalizeStatValue(card.stats.steer)
-  );
+  const s = getNormalizedCardStats(card);
+  return s.drift + s.accel + s.grip + s.steer;
 }
 
 /** Check if a car card satisfies all restrictions of a given challenge. */

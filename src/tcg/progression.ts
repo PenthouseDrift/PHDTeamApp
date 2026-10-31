@@ -11,6 +11,7 @@ import {
   crewDefinitionToCardData,
   getCrewCardDefinition,
   rollClashRarityTier,
+  scaleCrewCardDefinition,
   scaleDebuffCardDefinition,
   type CrewCardDefinition,
   type DebuffCardDefinition,
@@ -80,13 +81,108 @@ export const TIER_CLASH_BONUS: Record<FullArtTier, number> = {
 export const DAILY_CLASH_WIN_REWARD_PCREDITS = 25;
 export const STREAK_MILESTONE_REWARD_PCREDITS = 10;
 
-/** Normalize stat value to 1..25 scale, self-healing legacy 1..10 cards */
-export function normalizeStatValue(val: unknown): number {
+/**
+ * Calculates remaining time until next 00:00:00 UTC.
+ */
+export function getUtcMidnightCountdown(now = new Date()): {
+  hours: number;
+  minutes: number;
+  seconds: number;
+  formatted: string;
+  totalMs: number;
+} {
+  const nextMidnight = new Date(
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() + 1,
+      0,
+      0,
+      0,
+      0
+    )
+  );
+  const diffMs = Math.max(0, nextMidnight.getTime() - now.getTime());
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const formatted = `${hours}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
+  return { hours, minutes, seconds, formatted, totalMs: diffMs };
+}
+
+export interface CardStatsObject {
+  drift?: unknown;
+  accel?: unknown;
+  grip?: unknown;
+  steer?: unknown;
+}
+
+/** Check if card stats are strictly on the legacy 1..10 scale (all 4 stats <= 10). */
+export function isLegacyCardStats(stats?: CardStatsObject | null): boolean {
+  if (!stats) return false;
+  const vals = [
+    Number(stats.drift),
+    Number(stats.accel),
+    Number(stats.grip),
+    Number(stats.steer),
+  ].filter((n) => Number.isFinite(n) && n > 0);
+  if (vals.length === 0) return false;
+  // A legacy card had all 4 stats on a 1..10 scale.
+  // If ANY stat is > 10, the card was rolled on the 1..25 scale.
+  return Math.max(...vals) <= 10;
+}
+
+/** Retrieve normalized stats for a card (1..25 scale). Self-heals legacy 1..10 cards only if all stats <= 10. */
+export function getNormalizedCardStats(card?: { stats?: CardStatsObject; tier?: string } | CardStatsObject | null): {
+  drift: number;
+  accel: number;
+  grip: number;
+  steer: number;
+} {
+  const isCard = Boolean(card && typeof card === "object" && "stats" in card);
+  const stats = (isCard ? (card as { stats?: CardStatsObject }).stats : card) as CardStatsObject | undefined;
+  const isMythic = isCard && (card as { tier?: string }).tier === "mythic";
+
+  if (isMythic) {
+    return { drift: 25, accel: 25, grip: 25, steer: 25 };
+  }
+
+  const isLegacy = isLegacyCardStats(stats);
+  const scale = (val: unknown): number => {
+    const num = Number(val);
+    if (!Number.isFinite(num) || num <= 0) return 1;
+    if (isLegacy) {
+      return Math.min(25, Math.max(1, Math.round(num * 2.5)));
+    }
+    return Math.min(25, Math.max(1, Math.round(num)));
+  };
+
+  return {
+    drift: scale(stats?.drift),
+    accel: scale(stats?.accel),
+    grip: scale(stats?.grip),
+    steer: scale(stats?.steer),
+  };
+}
+
+/** Normalize stat value to 1..25 scale. If card/stats context is provided and it's a legacy card, scale by 2.5x. */
+export function normalizeStatValue(
+  val: unknown,
+  cardOrStats?: { stats?: CardStatsObject; tier?: string } | CardStatsObject
+): number {
   const num = Number(val);
   if (!Number.isFinite(num) || num <= 0) return 1;
-  if (num <= 10) {
-    return Math.min(25, Math.max(1, Math.round(num * 2.5)));
+
+  if (cardOrStats && typeof cardOrStats === "object") {
+    const isCard = "stats" in cardOrStats;
+    if (isCard && (cardOrStats as { tier?: string }).tier === "mythic") return 25;
+    const stats = (isCard ? (cardOrStats as { stats?: CardStatsObject }).stats : cardOrStats) as CardStatsObject | undefined;
+    if (isLegacyCardStats(stats)) {
+      return Math.min(25, Math.max(1, Math.round(num * 2.5)));
+    }
   }
+
   return Math.min(25, Math.max(1, Math.round(num)));
 }
 
@@ -95,11 +191,8 @@ export function getCardPower(card: Pick<MemberCard, "tier" | "stats" | "cardType
   if (card.cardType === "crew" || card.crewCardId) {
     return base + 45;
   }
-  const statSum =
-    normalizeStatValue(card.stats?.drift) +
-    normalizeStatValue(card.stats?.accel) +
-    normalizeStatValue(card.stats?.grip) +
-    normalizeStatValue(card.stats?.steer);
+  const s = getNormalizedCardStats(card);
+  const statSum = s.drift + s.accel + s.grip + s.steer;
   return base + statSum * 3;
 }
 
@@ -439,7 +532,7 @@ export function scoreCardForSector(
   card: Pick<MemberCard, "tier" | "stats">,
   sectorId: ClashSectorSpec["id"],
   trackCondition?: ClashTrackCondition | null,
-  crewCard?: Pick<MemberCard, "crewCardId" | "name"> | null
+  crewCard?: Pick<MemberCard, "crewCardId" | "name" | "tier"> | null
 ): {
   total: number;
   statScore: number;
@@ -447,10 +540,7 @@ export function scoreCardForSector(
   breakdown: string;
   warning?: string | null;
 } {
-  const rawDrift = normalizeStatValue(card.stats?.drift);
-  const rawAccel = normalizeStatValue(card.stats?.accel);
-  const rawGrip = normalizeStatValue(card.stats?.grip);
-  const rawSteer = normalizeStatValue(card.stats?.steer);
+  const { drift: rawDrift, accel: rawAccel, grip: rawGrip, steer: rawSteer } = getNormalizedCardStats(card);
 
   let drift = rawDrift;
   let accel = rawAccel;
@@ -458,7 +548,10 @@ export function scoreCardForSector(
   let steer = rawSteer;
 
   const crewId = crewCard?.crewCardId ?? crewCard?.name ?? null;
-  const crewDef = crewId ? getCrewCardDefinition(crewId) : null;
+  const rawCrewDef = crewId ? getCrewCardDefinition(crewId) : null;
+  const crewDef = rawCrewDef && crewCard?.tier
+    ? scaleCrewCardDefinition(rawCrewDef, crewCard.tier)
+    : rawCrewDef;
   const crewMods = crewDef?.modifiers;
 
   // Symmetric / Self Stat Modifiers from Crew Card (100% positive buffs, capped at max 25)
@@ -909,8 +1002,10 @@ export function evaluateClashMatchup(params: {
     trackCondition,
   } = params;
 
-  const pCrewDef = getCrewCardDefinition(crewCard?.crewCardId ?? crewCard?.name ?? crewCard?.id);
-  const rCrewDef = getCrewCardDefinition(rivalCrewCard?.crewCardId ?? rivalCrewCard?.name ?? rivalCrewCard?.id);
+  const rawPCrewDef = getCrewCardDefinition(crewCard?.crewCardId ?? crewCard?.name ?? crewCard?.id);
+  const pCrewDef = rawPCrewDef && crewCard?.tier ? scaleCrewCardDefinition(rawPCrewDef, crewCard.tier) : rawPCrewDef;
+  const rawRCrewDef = getCrewCardDefinition(rivalCrewCard?.crewCardId ?? rivalCrewCard?.name ?? rivalCrewCard?.id);
+  const rCrewDef = rawRCrewDef && rivalCrewCard?.tier ? scaleCrewCardDefinition(rawRCrewDef, rivalCrewCard.tier) : rawRCrewDef;
   const pCrewId = pCrewDef?.id ?? crewCard?.crewCardId ?? null;
   const rCrewId = rCrewDef?.id ?? rivalCrewCard?.crewCardId ?? null;
 
@@ -1098,10 +1193,7 @@ export function computeDebuffBreakdown(params: {
   const shield = Math.min(1, Math.max(0, rawShield));
   const shieldPercent = Math.round(shield * 100);
 
-  const rawDrift = normalizeStatValue(card?.stats?.drift);
-  const rawAccel = normalizeStatValue(card?.stats?.accel);
-  const rawGrip = normalizeStatValue(card?.stats?.grip);
-  const rawSteer = normalizeStatValue(card?.stats?.steer);
+  const { drift: rawDrift, accel: rawAccel, grip: rawGrip, steer: rawSteer } = getNormalizedCardStats(card);
   const rawMap = { drift: rawDrift, accel: rawAccel, grip: rawGrip, steer: rawSteer };
 
   const pen = debuffCard?.penalties ?? {};
@@ -1173,7 +1265,7 @@ export function computeDebuffBreakdown(params: {
     }
   }
 
-  const totalDebuffPoints = effectiveFlatPenalty + effectiveConditionPenalty + effectiveTrackHazardPenalty;
+  const totalDebuffPoints = effectiveFlatPenalty + effectiveConditionPenalty;
 
   const statSummaryParts: string[] = [];
   if (effectiveDriftPenalty > 0) statSummaryParts.push(`-${effectiveDriftPenalty} DRIFT`);
@@ -1187,9 +1279,6 @@ export function computeDebuffBreakdown(params: {
   }
   if (effectiveFlatPenalty > 0) {
     pointSummaryParts.push(`-${effectiveFlatPenalty} PTS`);
-  }
-  if (effectiveTrackHazardPenalty > 0) {
-    pointSummaryParts.push(`-${effectiveTrackHazardPenalty} Track PTS`);
   }
 
   const hasAnyDebuff = statSummaryParts.length > 0 || totalDebuffPoints > 0;
@@ -1242,6 +1331,196 @@ export function computeDebuffBreakdown(params: {
   };
 }
 
+export interface TrackBreakdownBadge {
+  text: string;
+  type: "buff" | "hazard" | "neutral";
+}
+
+export interface TrackBreakdown {
+  trackName: string;
+  trackIcon: string;
+  region: string;
+  statBuffParts: string[];
+  buffConditionMet: boolean;
+  buffPoints: number;
+  buffConditionLabel?: string;
+  hazardTriggered: boolean;
+  hazardPenalty: number;
+  effectiveHazardPenalty: number;
+  hazardLabel?: string;
+  totalNetPoints: number;
+  totalSummary: string;
+  badges: TrackBreakdownBadge[];
+}
+
+export function computeTrackBreakdown(params: {
+  card: MemberCard;
+  trackCard?: TrackCardDefinition | null;
+  shield?: number;
+}): TrackBreakdown {
+  const { card, trackCard, shield: rawShield = 0 } = params;
+  const shield = Math.min(1, Math.max(0, rawShield));
+  const shieldPercent = Math.round(shield * 100);
+
+  const tRules = trackCard?.rules ?? {};
+  const stats = getNormalizedCardStats(card);
+  const rawDrift = stats.drift;
+  const rawAccel = stats.accel;
+  const rawGrip = stats.grip;
+  const rawSteer = stats.steer;
+  const rawTotal = rawDrift + rawAccel + rawGrip + rawSteer;
+  const rawMap = { drift: rawDrift, accel: rawAccel, grip: rawGrip, steer: rawSteer };
+
+  // 1. Stat Buffs
+  const statBuffParts: string[] = [];
+  if (tRules.driftBuff && tRules.driftBuff > 0) statBuffParts.push(`+${tRules.driftBuff} DRIFT`);
+  if (tRules.accelBuff && tRules.accelBuff > 0) statBuffParts.push(`+${tRules.accelBuff} ACCEL`);
+  if (tRules.gripBuff && tRules.gripBuff > 0) statBuffParts.push(`+${tRules.gripBuff} GRIP`);
+  if (tRules.steerBuff && tRules.steerBuff > 0) statBuffParts.push(`+${tRules.steerBuff} STEER`);
+
+  // 2. Conditional Buff Points
+  let buffConditionMet = false;
+  let buffPoints = 0;
+  let buffConditionLabel: string | undefined;
+
+  if (tRules.buffCondition) {
+    const bc = tRules.buffCondition;
+    const resolveStatThreshold = (th?: number, fallback = 15) => {
+      if (th === undefined) return fallback;
+      return th <= 10 ? Math.round(th * 2.5) : th;
+    };
+
+    if (bc.type === "always") {
+      buffConditionMet = true;
+      buffConditionLabel = `+${bc.bonusPoints} PTS (Track Bonus)`;
+    } else if (bc.type === "underdog_tier" && (card.tier === "bronze" || card.tier === "silver")) {
+      buffConditionMet = true;
+      buffConditionLabel = `+${bc.bonusPoints} PTS (Underdog Tier: ${card.tier.toUpperCase()})`;
+    } else if (
+      bc.type === "balanced_stats" &&
+      Math.min(rawDrift, rawAccel, rawGrip, rawSteer) >= resolveStatThreshold(bc.threshold, 15)
+    ) {
+      buffConditionMet = true;
+      buffConditionLabel = `+${bc.bonusPoints} PTS (Balanced Setup)`;
+    } else if (
+      bc.type === "stat_min" &&
+      bc.stat &&
+      rawMap[bc.stat] >= resolveStatThreshold(bc.threshold, 20)
+    ) {
+      buffConditionMet = true;
+      const th = resolveStatThreshold(bc.threshold, 20);
+      buffConditionLabel = `+${bc.bonusPoints} PTS (${bc.stat.toUpperCase()} >= ${th})`;
+    } else if (
+      bc.type === "stat_max" &&
+      bc.stat &&
+      rawMap[bc.stat] <= resolveStatThreshold(bc.threshold, 15)
+    ) {
+      buffConditionMet = true;
+      const th = resolveStatThreshold(bc.threshold, 15);
+      buffConditionLabel = `+${bc.bonusPoints} PTS (${bc.stat.toUpperCase()} <= ${th})`;
+    } else if (
+      bc.type === "low_total" &&
+      rawTotal <= (bc.threshold && bc.threshold > 40 ? bc.threshold : bc.threshold ? Math.round(bc.threshold * 2.5) : 67)
+    ) {
+      buffConditionMet = true;
+      buffConditionLabel = `+${bc.bonusPoints} PTS (Club Spec Total)`;
+    }
+
+    if (buffConditionMet) {
+      buffPoints = bc.bonusPoints;
+    }
+  }
+
+  // 3. Track Hazard Debuff
+  let hazardTriggered = false;
+  let hazardPenalty = 0;
+  let effectiveHazardPenalty = 0;
+  let hazardLabel: string | undefined;
+
+  if (tRules.debuffCondition) {
+    const dc = tRules.debuffCondition;
+    const resolveDcThreshold = (th?: number, fallback = 20) => {
+      if (th === undefined) return fallback;
+      return th <= 10 ? Math.round(th * 2.5) : th;
+    };
+
+    if (dc.type === "high_tier" && (card.tier === "legend" || card.tier === "mythic")) {
+      hazardTriggered = true;
+      hazardLabel = `High Tier Penalty (-${dc.penaltyPoints} PTS)`;
+    } else if (dc.type === "stat_min" && dc.stat && rawMap[dc.stat] >= resolveDcThreshold(dc.threshold, 22)) {
+      hazardTriggered = true;
+      const th = resolveDcThreshold(dc.threshold, 22);
+      hazardLabel = `${dc.stat.toUpperCase()} >= ${th} (-${dc.penaltyPoints} PTS)`;
+    } else if (dc.type === "stat_max" && dc.stat && rawMap[dc.stat] <= resolveDcThreshold(dc.threshold, 15)) {
+      hazardTriggered = true;
+      const th = resolveDcThreshold(dc.threshold, 15);
+      hazardLabel = `${dc.stat.toUpperCase()} <= ${th} (-${dc.penaltyPoints} PTS)`;
+    }
+
+    if (hazardTriggered) {
+      hazardPenalty = dc.penaltyPoints;
+      effectiveHazardPenalty = Math.round(dc.penaltyPoints * (1 - shield));
+      if (shield > 0 && effectiveHazardPenalty < hazardPenalty) {
+        hazardLabel = `${hazardLabel} (🛡️ -${effectiveHazardPenalty} PTS)`;
+      }
+    }
+  }
+
+  const totalNetPoints = buffPoints - effectiveHazardPenalty;
+
+  // Build badges
+  const badges: TrackBreakdownBadge[] = [];
+  statBuffParts.forEach((sb) => {
+    badges.push({ text: sb, type: "buff" });
+  });
+  if (buffConditionMet && buffConditionLabel) {
+    badges.push({ text: buffConditionLabel, type: "buff" });
+  }
+  if (hazardTriggered) {
+    badges.push({
+      text: `Track Hazard: -${effectiveHazardPenalty} PTS${hazardLabel ? ` (${hazardLabel})` : ""}`,
+      type: "hazard",
+    });
+  }
+  if (badges.length === 0) {
+    badges.push({ text: "Neutral track conditions", type: "neutral" });
+  }
+
+  // Summary
+  const summaryParts: string[] = [];
+  if (statBuffParts.length > 0) {
+    summaryParts.push(statBuffParts.join(", "));
+  }
+  if (totalNetPoints > 0) {
+    summaryParts.push(`+${totalNetPoints} PTS`);
+  } else if (totalNetPoints < 0) {
+    summaryParts.push(`${totalNetPoints} PTS`);
+  } else if (buffPoints > 0 && effectiveHazardPenalty > 0) {
+    summaryParts.push(`0 PTS (+${buffPoints}/-${effectiveHazardPenalty})`);
+  }
+  let totalSummary = summaryParts.length > 0 ? summaryParts.join(" & ") : "Neutral";
+  if (hazardTriggered && shieldPercent > 0 && effectiveHazardPenalty < hazardPenalty) {
+    totalSummary += ` (🛡️ ${shieldPercent}% shielded)`;
+  }
+
+  return {
+    trackName: trackCard?.name ?? "UK Drift Circuit",
+    trackIcon: trackCard?.icon ?? "🇬🇧",
+    region: trackCard?.region ?? "UK",
+    statBuffParts,
+    buffConditionMet,
+    buffPoints,
+    buffConditionLabel,
+    hazardTriggered,
+    hazardPenalty,
+    effectiveHazardPenalty,
+    hazardLabel,
+    totalNetPoints,
+    totalSummary,
+    badges,
+  };
+}
+
 export interface EvaluatedCornerResult {
   cornerIdx: 0 | 1 | 2;
   sector: ClashSectorSpec;
@@ -1261,6 +1540,8 @@ export interface EvaluatedCornerResult {
   rivalCrewBonusLabel: string;
   playerDebuffBreakdown?: DebuffBreakdown;
   rivalDebuffBreakdown?: DebuffBreakdown;
+  playerTrackBreakdown?: TrackBreakdown;
+  rivalTrackBreakdown?: TrackBreakdown;
   debuffImpactLabel: string;
   trackImpactLabel: string;
   effectsTriggered: string[];
@@ -1283,6 +1564,7 @@ function evaluateDriverOnCorner(params: {
   breakdown: string;
   crewBonusLabel: string;
   debuffBreakdown: DebuffBreakdown;
+  trackBreakdown: TrackBreakdown;
 } {
   const {
     myCard,
@@ -1296,23 +1578,24 @@ function evaluateDriverOnCorner(params: {
     effectsTriggered,
   } = params;
 
-  const crewDef =
+  const rawCrewDef =
     getCrewCardDefinition(myCrewCard.crewCardId ?? myCrewCard.name ?? myCrewCard.id, crewPool) ??
     STARTER_LOANER_CREW_DEFINITION;
+  const targetTier = myCrewCard.tier ?? rawCrewDef.tier ?? "bronze";
+  const crewDef = scaleCrewCardDefinition(rawCrewDef, targetTier);
   const mods = crewDef.modifiers ?? {};
   const shield = Math.min(1, Math.max(0, mods.debuffShield ?? 0));
 
-  const rawDrift = normalizeStatValue(myCard.stats?.drift);
-  const rawAccel = normalizeStatValue(myCard.stats?.accel);
-  const rawGrip = normalizeStatValue(myCard.stats?.grip);
-  const rawSteer = normalizeStatValue(myCard.stats?.steer);
+  const myStats = getNormalizedCardStats(myCard);
+  const oppStats = getNormalizedCardStats(oppCard);
+
+  const rawDrift = myStats.drift;
+  const rawAccel = myStats.accel;
+  const rawGrip = myStats.grip;
+  const rawSteer = myStats.steer;
   const myRawTotal = rawDrift + rawAccel + rawGrip + rawSteer;
 
-  const oppRawTotal =
-    normalizeStatValue(oppCard.stats?.drift) +
-    normalizeStatValue(oppCard.stats?.accel) +
-    normalizeStatValue(oppCard.stats?.grip) +
-    normalizeStatValue(oppCard.stats?.steer);
+  const oppRawTotal = oppStats.drift + oppStats.accel + oppStats.grip + oppStats.steer;
 
   let drift = rawDrift;
   let accel = rawAccel;
@@ -1407,45 +1690,12 @@ function evaluateDriverOnCorner(params: {
   }
 
   // 7. UK Track Conditional Buff & Debuff Points
-  let trackPts = 0;
-  if (tRules.buffCondition) {
-    const bc = tRules.buffCondition;
-    const rawMap = { drift: rawDrift, accel: rawAccel, grip: rawGrip, steer: rawSteer };
-    const resolveStatThreshold = (th?: number, fallback = 15) => {
-      if (th === undefined) return fallback;
-      return th <= 10 ? Math.round(th * 2.5) : th;
-    };
-    if (bc.type === "always") {
-      trackPts += bc.bonusPoints;
-    } else if (bc.type === "underdog_tier" && (myCard.tier === "bronze" || myCard.tier === "silver")) {
-      trackPts += bc.bonusPoints;
-    } else if (
-      bc.type === "balanced_stats" &&
-      Math.min(rawDrift, rawAccel, rawGrip, rawSteer) >= resolveStatThreshold(bc.threshold, 15)
-    ) {
-      trackPts += bc.bonusPoints;
-    } else if (
-      bc.type === "stat_min" &&
-      bc.stat &&
-      rawMap[bc.stat] >= resolveStatThreshold(bc.threshold, 20)
-    ) {
-      trackPts += bc.bonusPoints;
-    } else if (
-      bc.type === "stat_max" &&
-      bc.stat &&
-      rawMap[bc.stat] <= resolveStatThreshold(bc.threshold, 15)
-    ) {
-      trackPts += bc.bonusPoints;
-    } else if (
-      bc.type === "low_total" &&
-      myRawTotal <= (bc.threshold && bc.threshold > 40 ? bc.threshold : bc.threshold ? Math.round(bc.threshold * 2.5) : 67)
-    ) {
-      trackPts += bc.bonusPoints;
-    }
-  }
-  if (debuffBreakdown.effectiveTrackHazardPenalty > 0) {
-    trackPts -= debuffBreakdown.effectiveTrackHazardPenalty;
-  }
+  const trackBreakdown = computeTrackBreakdown({
+    card: myCard,
+    trackCard,
+    shield,
+  });
+  const trackPts = trackBreakdown.totalNetPoints;
 
   // 8. Random Corner Debuff Flat & Conditional Penalty
   const debuffPts = -(debuffBreakdown.effectiveFlatPenalty + debuffBreakdown.effectiveConditionPenalty);
@@ -1470,7 +1720,7 @@ function evaluateDriverOnCorner(params: {
   if (shield > 0) crewSummaryParts.push(`${Math.round(shield * 100)}% Shield`);
 
   const debuffBreakdownText = debuffBreakdown.pointSummaryParts.length > 0
-    ? ` - ${debuffBreakdown.effectiveFlatPenalty + debuffBreakdown.effectiveConditionPenalty} Debuff (${debuffBreakdown.pointSummaryParts.filter((p) => !p.includes("Track")).join(", ")})`
+    ? ` - ${debuffBreakdown.effectiveFlatPenalty + debuffBreakdown.effectiveConditionPenalty} Debuff (${debuffBreakdown.pointSummaryParts.join(", ")})`
     : debuffPts < 0
       ? ` - ${Math.abs(debuffPts)} Debuff`
       : "";
@@ -1480,6 +1730,7 @@ function evaluateDriverOnCorner(params: {
     breakdown: `${formulaStr}${tierBonus ? ` + ${tierBonus} Tier` : ""}${crewPts > 0 ? ` + ${crewPts} Crew` : ""}${trackPts !== 0 ? ` ${trackPts > 0 ? `+ ${trackPts}` : `- ${Math.abs(trackPts)}`} Track` : ""}${debuffBreakdownText}`,
     crewBonusLabel: `${crewDef.icon} ${crewDef.name} (${crewSummaryParts.join(" · ") || "Active"})`,
     debuffBreakdown,
+    trackBreakdown,
   };
 }
 
@@ -1571,6 +1822,8 @@ export function evaluateCornerMatchup(params: {
     rivalCrewBonusLabel: rRes.crewBonusLabel,
     playerDebuffBreakdown: pRes.debuffBreakdown,
     rivalDebuffBreakdown: rRes.debuffBreakdown,
+    playerTrackBreakdown: pRes.trackBreakdown,
+    rivalTrackBreakdown: rRes.trackBreakdown,
     debuffImpactLabel: `You: ${playerDebuffCard.name} (${pRes.debuffBreakdown.totalSummary}) · Rival: ${rivalDebuffCard.name} (${rRes.debuffBreakdown.totalSummary})`,
     trackImpactLabel: `${trackCard.icon} ${trackCard.name}: ${trackCard.ability}`,
     effectsTriggered,

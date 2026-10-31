@@ -46,8 +46,10 @@ import {
   STARTER_LOANER_CREW_CARDS,
   STREAK_MILESTONE_REWARD_PCREDITS,
   computeDebuffBreakdown,
+  computeTrackBreakdown,
   evaluateCornerMatchup,
   getCardPower,
+  getNormalizedCardStats,
   normalizeStatValue,
   rollThreeClashSectors,
   rollThreeDebuffCards,
@@ -56,11 +58,13 @@ import {
   type ClashSectorSpec,
   type DebuffBreakdown,
   type EvaluatedCornerResult,
+  type TrackBreakdown,
 } from "@/tcg/progression";
 import type { ClashGameCardsConfig } from "@/tcg/storage";
 import type { ClashOpponent, ClashPlayerStats } from "@/tcg/types";
 import { ClashHowToPlayModal, type HowToPlayTab } from "./ClashHowToPlayModal";
 import { ClashChallengesView } from "./ClashChallengesView";
+import { useUtcMidnightCountdown } from "../hooks/useUtcCountdown";
 import {
   CHALLENGE_THEME_CONFIGS,
   isCarEligibleForChallenge,
@@ -670,6 +674,7 @@ export function DriftClashArena({
 
   const [clashStats, setClashStats] = useState<ClashPlayerStats>(startingStats);
   const [opponent, setOpponent] = useState<ClashOpponent>(initialOpponent);
+  const utcCountdown = useUtcMidnightCountdown();
 
   // Guard against playing against oneself in casual lobby (never override challenge cups)
   useEffect(() => {
@@ -1665,8 +1670,8 @@ export function DriftClashArena({
                   Enter Arena
                   <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
                 </span>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300/80">
-                  Resets 00:00 UTC
+                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300/80 tabular-nums">
+                  ⏳ Resets in {utcCountdown}
                 </span>
               </div>
             </div>
@@ -1688,8 +1693,8 @@ export function DriftClashArena({
                   🎁 +{DAILY_CLASH_WIN_REWARD_PCREDITS} P-Credits First Win Today
                 </span>
               ) : (
-                <span className="rounded-full border border-zinc-700 bg-zinc-800/90 px-2.5 py-0.5 text-[11px] font-bold text-zinc-400">
-                  ✓ Daily Win Claimed (+{STREAK_MILESTONE_REWARD_PCREDITS} P every 3-streak)
+                <span className="rounded-full border border-zinc-700 bg-zinc-800/90 px-2.5 py-0.5 text-[11px] font-bold text-zinc-400 tabular-nums">
+                  ✓ Daily Win Claimed (+{STREAK_MILESTONE_REWARD_PCREDITS} P every 3-streak) · ⏳ Resets in {utcCountdown}
                 </span>
               )}
             </div>
@@ -3102,6 +3107,23 @@ export function DriftClashArena({
                             </span>
                             <span className="text-zinc-400 hidden sm:inline">({sector.subtitle})</span>
                           </div>
+
+                          {/* Dynamic Track Surface Buff & Hazard Callouts */}
+                          {(activeTrackDef.buffLabel || activeTrackDef.debuffLabel) && (
+                            <div className="flex flex-wrap items-center justify-center gap-2 pt-1 text-[11px]">
+                              {activeTrackDef.buffLabel && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-0.5 font-bold text-emerald-300">
+                                  <span>🟢 Track Buff:</span> {activeTrackDef.buffLabel}
+                                </span>
+                              )}
+                              {activeTrackDef.debuffLabel && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/20 border border-rose-500/40 px-2.5 py-0.5 font-bold text-rose-300">
+                                  <span>⚠️ Track Hazard:</span> {activeTrackDef.debuffLabel}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
                           <p className="text-xs text-zinc-400 max-w-md mx-auto">
                             Pick a car card from your hand below to deploy into the tandem clash!
                           </p>
@@ -3256,19 +3278,9 @@ export function DriftClashArena({
                     const rivalDebuffDef = rivalMatchDebuffs[activeCornerIdx];
                     const currentResult = cornerResults[activeCornerIdx];
 
-                    // Base Stats
-                    const pBase = {
-                      drift: normalizeStatValue(playerCar.stats.drift),
-                      accel: normalizeStatValue(playerCar.stats.accel),
-                      grip: normalizeStatValue(playerCar.stats.grip),
-                      steer: normalizeStatValue(playerCar.stats.steer),
-                    };
-                    const rBase = {
-                      drift: normalizeStatValue(rivalCar.stats.drift),
-                      accel: normalizeStatValue(rivalCar.stats.accel),
-                      grip: normalizeStatValue(rivalCar.stats.grip),
-                      steer: normalizeStatValue(rivalCar.stats.steer),
-                    };
+                    // Base Stats (Normalized)
+                    const pBase = getNormalizedCardStats(playerCar);
+                    const rBase = getNormalizedCardStats(rivalCar);
 
                     // Crew Stats
                     const pCrewDef = resolveCrewDef(playerCrew);
@@ -3279,9 +3291,21 @@ export function DriftClashArena({
                     const pCrewStats = applyCrewModsToStats(pBase, pCrewMods);
                     const rCrewStats = applyCrewModsToStats(rBase, rCrewMods);
 
-                    // Debuff / Final Stats (shielded by crew debuffShield)
+                    // Track & Debuff Stats (shielded by crew debuffShield)
                     const pShield = Math.min(1, Math.max(0, pCrewMods?.debuffShield ?? 0));
                     const rShield = Math.min(1, Math.max(0, rCrewMods?.debuffShield ?? 0));
+
+                    const tRules = activeTrackDef.rules ?? {};
+                    const pTrackBreakdown = computeTrackBreakdown({
+                      card: playerCar,
+                      trackCard: activeTrackDef,
+                      shield: pShield,
+                    });
+                    const rTrackBreakdown = computeTrackBreakdown({
+                      card: rivalCar,
+                      trackCard: activeTrackDef,
+                      shield: rShield,
+                    });
 
                     const pDebuffBreakdown = computeDebuffBreakdown({
                       card: playerCar,
@@ -3297,17 +3321,30 @@ export function DriftClashArena({
                       shield: rShield,
                     });
 
+                    const pTrackStats = {
+                      drift: Math.min(25, pCrewStats.drift + (tRules.driftBuff ?? 0)),
+                      accel: Math.min(25, pCrewStats.accel + (tRules.accelBuff ?? 0)),
+                      grip: Math.min(25, pCrewStats.grip + (tRules.gripBuff ?? 0)),
+                      steer: Math.min(25, pCrewStats.steer + (tRules.steerBuff ?? 0)),
+                    };
+                    const rTrackStats = {
+                      drift: Math.min(25, rCrewStats.drift + (tRules.driftBuff ?? 0)),
+                      accel: Math.min(25, rCrewStats.accel + (tRules.accelBuff ?? 0)),
+                      grip: Math.min(25, rCrewStats.grip + (tRules.gripBuff ?? 0)),
+                      steer: Math.min(25, rCrewStats.steer + (tRules.steerBuff ?? 0)),
+                    };
+
                     const pFinalStats = {
-                      drift: Math.max(1, pCrewStats.drift - pDebuffBreakdown.effectiveDriftPenalty),
-                      accel: Math.max(1, pCrewStats.accel - pDebuffBreakdown.effectiveAccelPenalty),
-                      grip: Math.max(1, pCrewStats.grip - pDebuffBreakdown.effectiveGripPenalty),
-                      steer: Math.max(1, pCrewStats.steer - pDebuffBreakdown.effectiveSteerPenalty),
+                      drift: Math.max(1, pTrackStats.drift - pDebuffBreakdown.effectiveDriftPenalty),
+                      accel: Math.max(1, pTrackStats.accel - pDebuffBreakdown.effectiveAccelPenalty),
+                      grip: Math.max(1, pTrackStats.grip - pDebuffBreakdown.effectiveGripPenalty),
+                      steer: Math.max(1, pTrackStats.steer - pDebuffBreakdown.effectiveSteerPenalty),
                     };
                     const rFinalStats = {
-                      drift: Math.max(1, rCrewStats.drift - rDebuffBreakdown.effectiveDriftPenalty),
-                      accel: Math.max(1, rCrewStats.accel - rDebuffBreakdown.effectiveAccelPenalty),
-                      grip: Math.max(1, rCrewStats.grip - rDebuffBreakdown.effectiveGripPenalty),
-                      steer: Math.max(1, rCrewStats.steer - rDebuffBreakdown.effectiveSteerPenalty),
+                      drift: Math.max(1, rTrackStats.drift - rDebuffBreakdown.effectiveDriftPenalty),
+                      accel: Math.max(1, rTrackStats.accel - rDebuffBreakdown.effectiveAccelPenalty),
+                      grip: Math.max(1, rTrackStats.grip - rDebuffBreakdown.effectiveGripPenalty),
+                      steer: Math.max(1, rTrackStats.steer - rDebuffBreakdown.effectiveSteerPenalty),
                     };
 
                     const isCrewStage =
@@ -3560,33 +3597,52 @@ export function DriftClashArena({
                         </div>
 
                         {/* Top Telemetry & Track Banner */}
-                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/80 px-4 py-2.5">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[10px] font-black text-emerald-300">
-                              🇬🇧 {activeTrackDef.icon} {activeTrackDef.name}
-                            </span>
-                            <span className="rounded-full bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-black text-amber-300">
-                              {cornerInfo.formulaBadge}
-                            </span>
-                            <span className="text-xs font-black text-white">
-                              {sector.icon} {cornerInfo.title}
-                            </span>
+                        <div className="flex flex-col gap-1.5 rounded-2xl border border-zinc-800 bg-zinc-900/80 px-4 py-2.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-cyan-500/15 border border-cyan-500/30 px-2.5 py-0.5 text-[10px] font-black text-cyan-300">
+                                🇬🇧 {activeTrackDef.icon} {activeTrackDef.name}
+                              </span>
+                              <span className="rounded-full bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-black text-amber-300">
+                                {cornerInfo.formulaBadge}
+                              </span>
+                              <span className="text-xs font-black text-white">
+                                {sector.icon} {cornerInfo.title}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <span className="rounded-full bg-zinc-950 px-3 py-1 text-xs font-black text-zinc-200 border border-zinc-700">
+                                SCORE: <strong className="text-amber-400">{runningScore.you}</strong> – <strong className="text-rose-400">{runningScore.rival}</strong>
+                              </span>
+                              {battleAnimStep !== "corner_finished" && (
+                                <button
+                                  type="button"
+                                  onClick={handleSkipBattleAnimation}
+                                  className="rounded-xl border border-zinc-700 bg-zinc-800/80 px-2.5 py-1 text-[10px] font-bold text-zinc-300 hover:bg-zinc-700"
+                                >
+                                  ⚡ Skip Animation
+                                </button>
+                              )}
+                            </div>
                           </div>
 
-                          <div className="flex items-center gap-2">
-                            <span className="rounded-full bg-zinc-950 px-3 py-1 text-xs font-black text-zinc-200 border border-zinc-700">
-                              SCORE: <strong className="text-amber-400">{runningScore.you}</strong> – <strong className="text-rose-400">{runningScore.rival}</strong>
-                            </span>
-                            {battleAnimStep !== "corner_finished" && (
-                              <button
-                                type="button"
-                                onClick={handleSkipBattleAnimation}
-                                className="rounded-xl border border-zinc-700 bg-zinc-800/80 px-2.5 py-1 text-[10px] font-bold text-zinc-300 hover:bg-zinc-700"
-                              >
-                                ⚡ Skip Animation
-                              </button>
-                            )}
-                          </div>
+                          {/* Dynamic Track Surface Buff & Hazard Sub-strip */}
+                          {(activeTrackDef.buffLabel || activeTrackDef.debuffLabel) && (
+                            <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-zinc-800/60 text-[10px]">
+                              <span className="text-[9px] font-black uppercase text-zinc-500 tracking-wider">TRACK CONDITIONS:</span>
+                              {activeTrackDef.buffLabel && (
+                                <span className="inline-flex items-center gap-1 rounded bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 font-bold text-emerald-300">
+                                  <span>🟢 Buff:</span> {activeTrackDef.buffLabel}
+                                </span>
+                              )}
+                              {activeTrackDef.debuffLabel && (
+                                <span className="inline-flex items-center gap-1 rounded bg-rose-500/15 border border-rose-500/30 px-2 py-0.5 font-bold text-rose-300">
+                                  <span>⚠️ Hazard:</span> {activeTrackDef.debuffLabel}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         {/* ── ARCADE GAME VIEW BATTLE ARENA ── */}
@@ -4164,6 +4220,20 @@ export function DriftClashArena({
                       <span className="inline-block rounded-full bg-white/10 px-3 py-0.5 text-[11px] font-black uppercase tracking-widest text-amber-300">
                         Final Judge Decision · 🇬🇧 {activeTrackDef.icon} {activeTrackDef.name}
                       </span>
+                      {(activeTrackDef.buffLabel || activeTrackDef.debuffLabel) && (
+                        <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-[10px]">
+                          {activeTrackDef.buffLabel && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-0.5 font-bold text-emerald-300">
+                              <span>🟢 Track Buff:</span> {activeTrackDef.buffLabel}
+                            </span>
+                          )}
+                          {activeTrackDef.debuffLabel && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/20 border border-rose-500/40 px-2.5 py-0.5 font-bold text-rose-300">
+                              <span>⚠️ Track Hazard:</span> {activeTrackDef.debuffLabel}
+                            </span>
+                          )}
+                        </div>
+                      )}
                       <h3 className="mt-1 text-3xl font-black uppercase tracking-tight text-white sm:text-4xl">
                         {battleBanner.won ? "🏆 TANDEM VICTORY!" : "😤 DEFEATED ON TRACK"}
                       </h3>
@@ -4255,6 +4325,16 @@ export function DriftClashArena({
                           trackCard: s.trackCard,
                           shield: rShield,
                         });
+                        const pTrack = s.playerTrackBreakdown ?? computeTrackBreakdown({
+                          card: s.playerCard,
+                          trackCard: s.trackCard,
+                          shield: pShield,
+                        });
+                        const rTrack = s.rivalTrackBreakdown ?? computeTrackBreakdown({
+                          card: s.rivalCard,
+                          trackCard: s.trackCard,
+                          shield: rShield,
+                        });
 
                         // Player buffs
                         const pBuffBadges: string[] = [];
@@ -4280,9 +4360,6 @@ export function DriftClashArena({
                           );
                         }
                         if (pDebuff.effectiveFlatPenalty > 0) pPenBadges.push(`-${pDebuff.effectiveFlatPenalty} PTS`);
-                        if (pDebuff.trackHazardMet && pDebuff.effectiveTrackHazardPenalty > 0) {
-                          pPenBadges.push(`Track Hazard: -${pDebuff.effectiveTrackHazardPenalty} PTS`);
-                        }
 
                         // Rival buffs
                         const rBuffBadges: string[] = [];
@@ -4308,9 +4385,6 @@ export function DriftClashArena({
                           );
                         }
                         if (rDebuff.effectiveFlatPenalty > 0) rPenBadges.push(`-${rDebuff.effectiveFlatPenalty} PTS`);
-                        if (rDebuff.trackHazardMet && rDebuff.effectiveTrackHazardPenalty > 0) {
-                          rPenBadges.push(`Track Hazard: -${rDebuff.effectiveTrackHazardPenalty} PTS`);
-                        }
 
                         return (
                           <div
@@ -4487,6 +4561,33 @@ export function DriftClashArena({
                                     </div>
                                   </div>
 
+                                  {/* 🇬🇧 Track Card Buffs & Hazards */}
+                                  <div className="flex flex-col gap-1 pt-1 border-t border-zinc-800/70">
+                                    <div className="flex items-center gap-1.5 font-bold text-cyan-400">
+                                      <span>🇬🇧 {s.trackCard.icon}</span>
+                                      <span className="truncate">{s.trackCard.name}</span>
+                                      <span className="ml-auto text-[8px] font-black uppercase text-cyan-200 bg-cyan-950 border border-cyan-500/50 rounded px-1.5 py-0.2">
+                                        TOTAL: {pTrack.totalSummary}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {pTrack.badges.map((b, bIdx) => (
+                                        <span
+                                          key={bIdx}
+                                          className={`rounded px-1.5 py-0.5 text-[9px] font-black ${
+                                            b.type === "buff"
+                                              ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-300"
+                                              : b.type === "hazard"
+                                                ? "bg-rose-500/20 border border-rose-500/40 text-rose-300"
+                                                : "bg-cyan-500/20 border border-cyan-500/40 text-cyan-300"
+                                          }`}
+                                        >
+                                          {b.text}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+
                                   {/* Hazard / Debuff */}
                                   <div className="flex flex-col gap-1 pt-1 border-t border-zinc-800/70">
                                     <div className="flex items-center gap-1.5 font-bold text-rose-400">
@@ -4541,6 +4642,33 @@ export function DriftClashArena({
                                       ) : (
                                         <span className="text-[9px] text-zinc-400">{rCrewDef.ability}</span>
                                       )}
+                                    </div>
+                                  </div>
+
+                                  {/* 🇬🇧 Rival Track Card Buffs & Hazards */}
+                                  <div className="flex flex-col gap-1 pt-1 border-t border-zinc-800/70">
+                                    <div className="flex items-center gap-1.5 font-bold text-cyan-400">
+                                      <span>🇬🇧 {s.trackCard.icon}</span>
+                                      <span className="truncate">{s.trackCard.name}</span>
+                                      <span className="ml-auto text-[8px] font-black uppercase text-cyan-200 bg-cyan-950 border border-cyan-500/50 rounded px-1.5 py-0.2">
+                                        TOTAL: {rTrack.totalSummary}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {rTrack.badges.map((b, bIdx) => (
+                                        <span
+                                          key={bIdx}
+                                          className={`rounded px-1.5 py-0.5 text-[9px] font-black ${
+                                            b.type === "buff"
+                                              ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-300"
+                                              : b.type === "hazard"
+                                                ? "bg-rose-500/20 border border-rose-500/40 text-rose-300"
+                                                : "bg-cyan-500/20 border border-cyan-500/40 text-cyan-300"
+                                          }`}
+                                        >
+                                          {b.text}
+                                        </span>
+                                      ))}
                                     </div>
                                   </div>
 
@@ -4640,8 +4768,8 @@ export function DriftClashArena({
                               <span className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-emerald-500/40 bg-emerald-950/60 px-6 text-sm font-black uppercase text-emerald-300 shadow-lg">
                                 ✓ Challenge Completed Today
                               </span>
-                              <span className="text-[11px] font-bold text-zinc-400">
-                                Daily purse claimed · Resets at 00:00 UTC
+                              <span className="text-[11px] font-bold text-zinc-400 tabular-nums">
+                                Daily purse claimed · Resets in {utcCountdown}
                               </span>
                             </div>
                           ) : (

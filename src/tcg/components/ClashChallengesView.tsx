@@ -19,6 +19,7 @@ import {
   deleteAdminChallengeAction,
   listAdminChallengeCandidateCardsAction,
 } from "../challenges-actions";
+import { useUtcMidnightCountdown } from "../hooks/useUtcCountdown";
 
 export interface ClashChallengesViewProps {
   userCards: MemberCard[];
@@ -39,6 +40,7 @@ export function ClashChallengesView({
   onSelectChallenge,
   onPCreditsChange,
 }: ClashChallengesViewProps) {
+  const utcCountdown = useUtcMidnightCountdown();
   const [challenges, setChallenges] = useState<TandemClashChallenge[]>([]);
   const [completedIds, setCompletedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -274,12 +276,15 @@ export function ClashChallengesView({
       <div className="relative overflow-hidden rounded-3xl border border-zinc-800 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-5 sm:p-6 shadow-2xl">
         <div className="relative z-10 flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-1.5 max-w-xl">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-3 py-0.5 text-xs font-black uppercase tracking-wider text-amber-300">
                 <span>🏆</span> Tandem Clash Series
               </span>
               <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold text-emerald-400">
                 {completedIds.length} / {challenges.length} Won Today
+              </span>
+              <span className="rounded-full border border-purple-500/30 bg-purple-950/50 px-2.5 py-0.5 text-xs font-bold text-purple-300 tabular-nums">
+                ⏳ Resets in {utcCountdown}
               </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
@@ -358,8 +363,8 @@ export function ClashChallengesView({
 
                     <div className="flex items-center gap-1.5">
                       {isCompleted && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/50 bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-300">
-                          ✓ Already Played Today
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/50 bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-300 tabular-nums">
+                          ✓ Played Today · ⏳ {utcCountdown}
                         </span>
                       )}
                       {isAdmin && (
@@ -483,7 +488,7 @@ export function ClashChallengesView({
                   >
                     <span>
                       {isCompleted
-                        ? "✓ Already Played Today (Resets 00:00 UTC)"
+                        ? `✓ Already Played Today (Resets in ${utcCountdown})`
                         : !hasEnoughCars
                         ? `🔒 Need 3 ${challenge.allowedRarity !== "any" ? challenge.allowedRarity.toUpperCase() : "Eligible"} Cars (${qualifyingCars.length}/3 Available)`
                         : challenge.entryCostPCredits > 0
