@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { FullArtCard } from "@/components/cards/FullArtCard";
-import { triggerDriftWheelIntro } from "@/components/ui/DriftWheelIntro";
 import { rarityLabel, type MemberCard } from "@/lib/card-roll";
 import type { FullArtTier } from "@/lib/full-art-card";
 import {
@@ -204,6 +203,366 @@ export const DEBUFF_SCENARIOS: DebuffScenario[] = [
     title: "Extreme Backward Entry!",
     description: "Driver attempted an absurd 85-degree backward entry and gave the outer tyre wall a solid high-five.",
   },
+  {
+    id: 21,
+    icon: "🧲",
+    title: "Stealth Body Mount Pop-Off!",
+    description: "A violent clipping curb hit popped the magnetic body mounts. The shell is flying half-cocked at 45 degrees!",
+  },
+  {
+    id: 22,
+    icon: "💨",
+    title: "ESC Fan Fluff Ingestion!",
+    description: "The high-RPM 30mm cooling fan sucked in stray carpet fluff and seized solid with a high-pitched squeal.",
+  },
+  {
+    id: 23,
+    icon: "🛞",
+    title: "Tyre Tape Delamination!",
+    description: "The mounting tape inside the front left drift tyre rolled into a lump. The rim is vibrating like an out-of-balance washing machine!",
+  },
+  {
+    id: 24,
+    icon: "🔋",
+    title: "Bullet Connector Back-Out!",
+    description: "Violent transition inertia backed the 4mm gold battery bullet connector halfway out. Voltage is flickering intermittently!",
+  },
+  {
+    id: 25,
+    icon: "🦷",
+    title: "Spur Gear Shred!",
+    description: "A stray track pebble found the pinion mesh. Half the Delrin teeth just disintegrated into plastic confetti!",
+  },
+  {
+    id: 26,
+    icon: "🕹️",
+    title: "Transmitter Wheel Sponge Slip!",
+    description: "The foam grip on the transmitter steering wheel broke free from the plastic hub and is spinning freely!",
+  },
+  {
+    id: 27,
+    icon: "🔧",
+    title: "Popped Steering Ball Cup!",
+    description: "Aggressive initiation against the clipping box popped the front tie-rod ball cup off the knuckle pivot!",
+  },
+  {
+    id: 28,
+    icon: "⚖️",
+    title: "Asymmetrical Corner Weights!",
+    description: "Pit crew dialed preload unevenly in a hurry. The chassis has 65% cross-weight and crabs sideways down the straight!",
+  },
+  {
+    id: 29,
+    icon: "⚡",
+    title: "High-Voltage BEC Voltage Spike!",
+    description: "A voltage spike fed 8.4V into the steering servo. The steering horn is jittering like it drank three espressos!",
+  },
+  {
+    id: 30,
+    icon: "🧴",
+    title: "Brake Cleaner Tyre Overdose!",
+    description: "Overzealous crew wiped the drift tyres with brake cleaner seconds before rollout. Grip went from zero to negative!",
+  },
+  {
+    id: 31,
+    icon: "🧊",
+    title: "Hall Sensor Thermal Shock!",
+    description: "Paddock AC blasted directly onto the motor endbell. The sensored rotor dropped sync and started cogging like a diesel truck!",
+  },
+  {
+    id: 32,
+    icon: "🏁",
+    title: "Over-Rotated 360 Entry!",
+    description: "Lead car went for a flashy 360 entry and spun like a top, blinding the chase driver in a cloud of static tyre dust!",
+  },
+  {
+    id: 33,
+    icon: "📡",
+    title: "Receiver Antenna Wire Chew!",
+    description: "The micro 2.4GHz antenna escaped its tube and got chewed by the spur gear, creating packet jitter at the apex!",
+  },
+  {
+    id: 34,
+    icon: "🪚",
+    title: "Spool Locker Grub Screw Slip!",
+    description: "The solid rear spool locker screw backed out. The rear axle unexpectedly decided to act like an open diff from 1994!",
+  },
+  {
+    id: 35,
+    icon: "📻",
+    title: "Transmitter Low-Voltage Beep!",
+    description: "The remote controller started screaming high-pitched low-battery warning beeps straight into the driver's ears!",
+  },
+  {
+    id: 36,
+    icon: "🌊",
+    title: "Paddock Drink Spill Crossover!",
+    description: "A spilled energy drink on the crossover ramp turned the surface into sticky sandpaper before the sweeper!",
+  },
+  {
+    id: 37,
+    icon: "🚗",
+    title: "3D-Printed GT Wing Snap!",
+    description: "The scale PLA rear wing snapped its uprights on a barrier brush and is fluttering like a windsock!",
+  },
+  {
+    id: 38,
+    icon: "🪛",
+    title: "Stripped Servo Horn Splines!",
+    description: "The 25T aluminum servo horn stripped its splines. Steering wheel turns 90 degrees but the steering rack barely twitches!",
+  },
+  {
+    id: 39,
+    icon: "🔥",
+    title: "Motor Can Thermal Overheat!",
+    description: "Aggressive ESC turbo boost turned the 10.5T brushless motor can into an electric skillet reaching 95°C!",
+  },
+  {
+    id: 40,
+    icon: "🍕",
+    title: "Greasy Pit Towel Wipe!",
+    description: "Pit chief wiped the hard plastic tyres with a shop rag covered in diff fluid. Instant ice rink physics!",
+  },
+  {
+    id: 41,
+    icon: "📐",
+    title: "Bent Kingpin Knuckle Pin!",
+    description: "A heavy brush against the outer wooden barrier bent the front upright pin. Dynamic kingpin inclination is out the window!",
+  },
+  {
+    id: 42,
+    icon: "👟",
+    title: "Trailing Shoelace Snag!",
+    description: "A spectator's untied shoelace caught the driver's transmitter lanyard just as they initiated the tandem flick!",
+  },
+  {
+    id: 43,
+    icon: "🌀",
+    title: "Excessive Gyro Gain Oscillation!",
+    description: "Gyro gain was accidentally cranked to 98%. The front wheels are violently death-wobbling down the main straight!",
+  },
+  {
+    id: 44,
+    icon: "💨",
+    title: "Damper Diaphragm Blowout!",
+    description: "The rear damper silicone diaphragm ruptured under compression. Mineral oil is coating the rear chassis deck!",
+  },
+  {
+    id: 45,
+    icon: "🧯",
+    title: "Carpet Static Discharge Zap!",
+    description: "Friction on the high-pile carpet built up 10,000V of static and discharged straight into the alloy steering bellcrank!",
+  },
+  {
+    id: 46,
+    icon: "🏎️",
+    title: "Rear Diffuser Ground Scrape!",
+    description: "Ultra-low rear ride height caused the carbon diffuser to dig into a carpet seam, sounding like tearing Velcro!",
+  },
+  {
+    id: 47,
+    icon: "🔩",
+    title: "Loose Motor Mount Shift!",
+    description: "The M3 motor mount screws vibrated loose. The pinion gear slid back and is barely catching the spur teeth!",
+  },
+  {
+    id: 48,
+    icon: "🔋",
+    title: "Unbalanced LiPo Cell Drift!",
+    description: "Cell 1 is at 4.20V while Cell 2 cratered to 3.55V. The ESC throttle curve is stumbling under load!",
+  },
+  {
+    id: 49,
+    icon: "🪞",
+    title: "Tweaked Carbon Chassis Deck!",
+    description: "A heavy impact twisted the lower carbon deck. The front left tyre is floating 2mm in the air off throttle!",
+  },
+  {
+    id: 50,
+    icon: "🥫",
+    title: "Trackside Energy Drink Can Roll!",
+    description: "An empty soda can blew onto the outer clipping line. Both cars had to bunny-hop around aluminum debris!",
+  },
+  {
+    id: 51,
+    icon: "👓",
+    title: "Steaming Eyeglass Lenses!",
+    description: "Adrenaline and breath steamed up the driver's glasses right as the cars reached the high-speed wall ride!",
+  },
+  {
+    id: 52,
+    icon: "🕹️",
+    title: "Accidental Dual-Rate Switch Knock!",
+    description: "Driver's knuckle bumped the dual-rate toggle on the grip, cutting steering travel down to 45% mid-drift!",
+  },
+  {
+    id: 53,
+    icon: "🏎️",
+    title: "Interlocked Wheel Rim Spokes!",
+    description: "Door-to-door proximity was so tight the negative-offset wheel spokes meshed together like gear cogs!",
+  },
+  {
+    id: 54,
+    icon: "🧵",
+    title: "Carpet Fibre Axle Wrap!",
+    description: "A loose nylon carpet thread wrapped 50 times around the front stub axle, creating instant brake dragging!",
+  },
+  {
+    id: 55,
+    icon: "💡",
+    title: "Track Floodlight Glare Blast!",
+    description: "The low-mounted LED floodlight shone straight into the driver's eyes at the exact apex initiation point!",
+  },
+  {
+    id: 56,
+    icon: "⚡",
+    title: "Capacitor Bank Solder Joint Crack!",
+    description: "Vibrations cracked the solder joint on the ESC capacitor pack. Heavy throttle punches are causing micro-brownouts!",
+  },
+  {
+    id: 57,
+    icon: "🛢️",
+    title: "Shock Fluid Viscosity Blunder!",
+    description: "The mechanic filled the front shocks with 2000cSt diff lube by mistake. The front suspension is rigid as a church bench!",
+  },
+  {
+    id: 58,
+    icon: "🧲",
+    title: "Grub Screw Sucked Into Motor!",
+    description: "The neodymium motor rotor sucked a loose 2mm grub screw through the endbell vents with a loud tick!",
+  },
+  {
+    id: 59,
+    icon: "🛞",
+    title: "Square Flat-Spotted Rim!",
+    description: "A curb hit flattened the outer rim edge. The front tyre sounds like an air hammer clattering at 40mph!",
+  },
+  {
+    id: 60,
+    icon: "📻",
+    title: "Wrong Model Profile Loaded!",
+    description: "Driver accidentally loaded their touring car profile with 0% gyro sensitivity and 100% expo! Hold on tight!",
+  },
+  {
+    id: 61,
+    icon: "💥",
+    title: "Front Bumper Foam Dislodge!",
+    description: "The high-density foam bumper dislodged from the mounts and is wedged between the front steering tierods!",
+  },
+  {
+    id: 62,
+    icon: "🐝",
+    title: "Camera Lens Moth Dive!",
+    description: "A moth landed squarely on the track telemetry camera lens, obscuring the judges' view of the outer clipping zone!",
+  },
+  {
+    id: 63,
+    icon: "🚗",
+    title: "Exhaust Backfire LED Short!",
+    description: "Scale exhaust LED backfire module shorted against the alloy exhaust tip and started strobing like a disco ball!",
+  },
+  {
+    id: 64,
+    icon: "🔌",
+    title: "Loose Sensored Motor Harness!",
+    description: "The 6-pin motor sensor harness vibrated loose. The brushless ESC dropped into stuttering sensorless mode!",
+  },
+  {
+    id: 65,
+    icon: "🪚",
+    title: "Stripped Camber Link Thread!",
+    description: "The upper suspension camber screw pulled out of the bulkhead. The left rear wheel has +20 degrees positive camber!",
+  },
+  {
+    id: 66,
+    icon: "🧰",
+    title: "Setup Tool Forgotten On Roof!",
+    description: "Pit crew left an aluminum camber gauge magnetically stuck to the roof. Center of gravity is thoroughly ruined!",
+  },
+  {
+    id: 67,
+    icon: "🏎️",
+    title: "Apex Rumble-Strip Bicycle Stunt!",
+    description: "Hit the raised apex kerb so violently the chassis rode on two wheels like an action movie stunt car!",
+  },
+  {
+    id: 68,
+    icon: "❄️",
+    title: "Sudden Venue Draft Freeze!",
+    description: "The venue loading bay roller door opened, dropping track floor temp by 10°C in thirty seconds. Tyres feel like ice cubes!",
+  },
+  {
+    id: 69,
+    icon: "🕹️",
+    title: "Sub-Trim Rocker Accidental Bump!",
+    description: "Driver's thumb grazed the steering sub-trim switch. The car is tracking down the straight with 8 degrees of crab angle!",
+  },
+  {
+    id: 70,
+    icon: "💨",
+    title: "High-RPM Blower Crosswind!",
+    description: "Pit lane high-velocity cooling blower blew a blast of cold crosswind across the sweeper entry!",
+  },
+  {
+    id: 71,
+    icon: "🛞",
+    title: "Mismatched Rim Offset Stance!",
+    description: "Mechanic grabbed a +6mm offset wheel on the left and +9mm on the right. Track width is completely asymmetrical!",
+  },
+  {
+    id: 72,
+    icon: "⚡",
+    title: "Sheared Wheel Hex Drive Pin!",
+    description: "Full throttle torque sheared the tiny 1.5mm wheel hex pin. The rear left wheel is free-wheeling under power!",
+  },
+  {
+    id: 73,
+    icon: "🔋",
+    title: "Swollen LiPo Battery Pack Squeeze!",
+    description: "A slightly puffed battery pack is jammed tight against the carbon top deck, completely locking chassis flex!",
+  },
+  {
+    id: 74,
+    icon: "🔧",
+    title: "Droop Screw Vibration Loss!",
+    description: "The lower suspension arm droop set-screw vibrated out. Suspension has 15mm of uncontrolled down-travel!",
+  },
+  {
+    id: 75,
+    icon: "🎯",
+    title: "Peeling Track Tape Mirage!",
+    description: "White boundary tape peeled up and flapped in the breeze, tricking both drivers into an early apex flick!",
+  },
+  {
+    id: 76,
+    icon: "☕",
+    title: "Coffee Rings On Setup Board!",
+    description: "Camber and toe were measured on a setup board resting on three wet coffee coasters. Alignment is purely theoretical!",
+  },
+  {
+    id: 77,
+    icon: "🏎️",
+    title: "Side Mirror Caught In Catch Netting!",
+    description: "Scale 3D-printed side mirror hooked into the track boundary mesh and ripped off with a loud snap!",
+  },
+  {
+    id: 78,
+    icon: "🧲",
+    title: "Velcro Battery Strap Failure!",
+    description: "Hard weight-transfer snap released the battery strap. The 2S shorty pack slid 30mm forward onto the steering servo!",
+  },
+  {
+    id: 79,
+    icon: "💨",
+    title: "Damper Spring Collar Thread Jump!",
+    description: "The threaded preload collar jumped three threads on the shock body. Left rear ride height completely collapsed!",
+  },
+  {
+    id: 80,
+    icon: "🏁",
+    title: "Premature Victory Donut!",
+    description: "Driver thought the battle was won and initiated an 8000 RPM victory donut three feet before the final finish line!",
+  },
 ];
 
 const LOANER_CARDS: MemberCard[] = [
@@ -281,11 +640,12 @@ type CornerSubStage = "car_draw" | "choose_crew" | "debuff_and_score";
 type BattleAnimStep =
   | "cards_entrance"
   | "head_to_head"
-  | "prompt_crew"
-  | "crew_overlay"
-  | "battle_shake_1"
+  | "battle_initial"
   | "prompt_debuff"
   | "debuff_overlay"
+  | "battle_shake_1"
+  | "prompt_crew"
+  | "crew_overlay"
   | "battle_shake_2"
   | "knockout_and_winner"
   | "corner_finished";
@@ -971,7 +1331,6 @@ export function DriftClashArena({
     clearTimers();
     setActiveChallenge(null);
     setChallengeWonCelebration(null);
-    triggerDriftWheelIntro();
     setSelectedCarIds(pickTopThreeIds(usableCarCards));
     setSelectedCrewIds(pickTopThreeIds(usableCrewCards));
     setLoadoutSection("cars");
@@ -986,10 +1345,10 @@ export function DriftClashArena({
     setPreviewCarSlot(null);
     setPlayerCarOrder([0, 1, 2]);
     setRivalCarOrder([0, 1, 2]);
-    setPhase("lineup");
+    handleStartTrackRoulette();
   }
 
-  // Launch Step 1 via Challenge Cup
+  // Launch Step 1 via Challenge Cup (Track Selection first)
   async function handleLaunchChallenge(challenge: TandemClashChallenge) {
     if (!hasEarlyAccess) {
       alert("Tandem Clash is currently in private preview. Closed beta access is required.");
@@ -1028,7 +1387,6 @@ export function DriftClashArena({
       setSelectedCarIds(pickTopThreeIds(eligibleCars));
       setSelectedCrewIds(pickTopThreeIds(usableCrewCards));
 
-      triggerDriftWheelIntro();
       setLoadoutSection("cars");
       setPickerModalTarget(null);
       setBattleBanner(null);
@@ -1041,7 +1399,7 @@ export function DriftClashArena({
       setPreviewCarSlot(null);
       setPlayerCarOrder([0, 1, 2]);
       setRivalCarOrder([0, 1, 2]);
-      setPhase("lineup");
+      handleStartTrackRoulette();
     } catch (err) {
       console.error("handleLaunchChallenge error:", err);
       alert("Error entering challenge cup.");
@@ -1058,20 +1416,8 @@ export function DriftClashArena({
     }
   }
 
-  // Launch Step 2: Randomise UK Track Card Roulette + Matchmaking
+  // Launch Step 1: Randomise UK Track Card Roulette + Matchmaking
   function handleStartTrackRoulette() {
-    if (activeChallenge) {
-      const ineligible = selectedCarCards.filter(
-        (c) => !isCarEligibleForChallenge(c, activeChallenge).eligible
-      );
-      if (ineligible.length > 0) {
-        alert(
-          `Cannot start challenge match: ${ineligible.length} of your equipped cars do not meet the challenge restrictions (${activeChallenge.allowedRarity !== "any" ? activeChallenge.allowedRarity.toUpperCase() + " only" : ""}).`
-        );
-        return;
-      }
-    }
-
     clearTimers();
     setPickerModalTarget(null);
     setTrackLockedIn(false);
@@ -1088,6 +1434,10 @@ export function DriftClashArena({
 
     const tracks = trackCatalogDefs.length > 0 ? trackCatalogDefs : UK_TRACK_CARD_SET;
     const chosenTrack = rollUkTrackCard(tracks);
+    const chosenIdx = tracks.findIndex((t) => t.id === chosenTrack.id);
+    const finalTrackIdx = chosenIdx >= 0 ? chosenIdx : 0;
+    const startOffset = Math.floor(Math.random() * tracks.length);
+
     const rolledSectors = rollThreeClashSectors();
     setActiveSectors(rolledSectors);
     const debuffPool =
@@ -1096,19 +1446,32 @@ export function DriftClashArena({
     setRivalMatchDebuffs(rollThreeDebuffCards(debuffPool));
     setRivalCrewOrder([0, 1, 2]);
 
-    // Animate roulette cycling through UK tracks
-    const totalTicks = 12;
-    for (let i = 0; i < totalTicks; i++) {
+    // Animate roulette cycling through UK tracks with realistic slot deceleration
+    // Intervals start fast (60ms) and gradually slow down (up to 380ms) over ~2.3 seconds
+    const tickIntervals = [
+      60, 60, 65, 70, 75, 85, 95, 110, 130, 155, 185, 220, 265, 315, 380
+    ];
+    let cumulativeDelay = 0;
+
+    tickIntervals.forEach((interval, step) => {
+      cumulativeDelay += interval;
+      const isLast = step === tickIntervals.length - 1;
       const t = setTimeout(() => {
-        setRouletteTrackIdx(i % tracks.length);
-      }, i * 130);
+        if (isLast) {
+          setRouletteTrackIdx(finalTrackIdx);
+        } else {
+          setRouletteTrackIdx((startOffset + step) % tracks.length);
+        }
+      }, cumulativeDelay);
       timersRef.current.push(t);
-    }
+    });
+
+    const totalSpinTime = cumulativeDelay + 250;
 
     startTransition(async () => {
       // In challenge cups, the opponent is strictly configured for the cup spec; only casual lobby randomizes rival
       const oppPromise = !activeChallenge ? findNewClashOpponentAction().catch(() => null) : null;
-      await new Promise((r) => setTimeout(r, totalTicks * 130 + 150));
+      await new Promise((r) => setTimeout(r, totalSpinTime));
       if (oppPromise) {
         const oppRes = await oppPromise;
         if (oppRes && oppRes.success) {
@@ -1118,6 +1481,22 @@ export function DriftClashArena({
       setActiveTrackDef(chosenTrack);
       setTrackLockedIn(true);
     });
+  }
+
+  // Step 2 -> Step 3: Validate and start corner battles
+  function handleStartBattleFromLineup() {
+    if (activeChallenge) {
+      const ineligible = selectedCarCards.filter(
+        (c) => !isCarEligibleForChallenge(c, activeChallenge).eligible
+      );
+      if (ineligible.length > 0) {
+        alert(
+          `Cannot start challenge match: ${ineligible.length} of your equipped cars do not meet the challenge restrictions (${activeChallenge.allowedRarity !== "any" ? activeChallenge.allowedRarity.toUpperCase() + " only" : ""}).`
+        );
+        return;
+      }
+    }
+    startCornerBattle(0);
   }
 
   // ── STEP 3: ARCADE GAME VIEW CORNER BATTLE ANIMATION ────────────────────────
@@ -1190,43 +1569,65 @@ export function DriftClashArena({
 
     if (isReplay) {
       setBattleAnimStep("cards_entrance");
-      const t0 = setTimeout(() => setBattleAnimStep("head_to_head"), 1100);
-      const t1 = setTimeout(() => setBattleAnimStep("crew_overlay"), 2200);
-      const t2 = setTimeout(() => setBattleAnimStep("battle_shake_1"), 3600);
-      const t3 = setTimeout(() => setBattleAnimStep("debuff_overlay"), 4800);
-      const t4 = setTimeout(() => setBattleAnimStep("battle_shake_2"), 6400);
-      const t5 = setTimeout(() => setBattleAnimStep("knockout_and_winner"), 7800);
-      const t6 = setTimeout(() => setBattleAnimStep("corner_finished"), 9200);
-      timersRef.current.push(t0, t1, t2, t3, t4, t5, t6);
+      const t0 = setTimeout(() => setBattleAnimStep("head_to_head"), 1000);
+      const t1 = setTimeout(() => setBattleAnimStep("battle_initial"), 2000);
+      const t2 = setTimeout(() => setBattleAnimStep("debuff_overlay"), 4500);
+      const t3 = setTimeout(() => setBattleAnimStep("battle_shake_1"), 5900);
+      const t4 = setTimeout(() => setBattleAnimStep("crew_overlay"), 7500);
+      const t5 = setTimeout(() => setBattleAnimStep("battle_shake_2"), 9000);
+      const t6 = setTimeout(() => setBattleAnimStep("knockout_and_winner"), 10500);
+      const t7 = setTimeout(() => setBattleAnimStep("corner_finished"), 12000);
+      timersRef.current.push(t0, t1, t2, t3, t4, t5, t6, t7);
       return;
     }
 
     // 1. Cards Entrance: 0ms (Card pops in on left, rival on right)
     setBattleAnimStep("cards_entrance");
 
-    // 2. Head-to-Head: 1100ms (Both cards slide in head-to-head)
+    // 2. Head-to-Head: 1000ms (Both cards slide in head-to-head)
     const t0 = setTimeout(() => {
       setBattleAnimStep("head_to_head");
-    }, 1100);
+    }, 1000);
 
-    // 3. Prompt Crew Card: 2200ms (Battle pauses! Crew cards appear spread at bottom)
+    // 3. Initial Tandem Battle: 2000ms (Cars engage, trade door paint, clash shake for a few seconds!)
     const t1 = setTimeout(() => {
+      setBattleAnimStep("battle_initial");
+    }, 2000);
+
+    // 4. Track Incident / Mechanical Debuffs strike after the battle animation has played for a few seconds: 4800ms
+    // Pauses battle on the hazard incident popup so players see the track event before calling crew!
+    const t2 = setTimeout(() => {
+      const scenario = DEBUFF_SCENARIOS[Math.floor(Math.random() * DEBUFF_SCENARIOS.length)];
+      setDebuffScenario(scenario);
+      setBattleAnimStep("prompt_debuff");
+    }, 4800);
+
+    timersRef.current.push(t0, t1, t2);
+  }
+
+  function handleContinueFromDebuff() {
+    clearTimers();
+    // 1. Debuffs hit the cars & display incoming penalties!
+    setBattleAnimStep("debuff_overlay");
+
+    // 2. Hazard impact battle clash shake
+    const t1 = setTimeout(() => {
+      setBattleAnimStep("battle_shake_1");
+    }, 1400);
+
+    // 3. Pit Crew response: Now prompt crew cards so player can strategically counter the hazard!
+    const t2 = setTimeout(() => {
       const alreadyPlayedCrew = playerCrewAssignments
-        .slice(0, cornerIdx)
+        .slice(0, activeCornerIdx)
         .filter((x): x is number => x !== null);
       const available = ([0, 1, 2] as Array<0 | 1 | 2>).filter(
         (idx) => !alreadyPlayedCrew.includes(idx) && !playedCrewIndices.includes(idx)
       );
-      if (available.length === 1) {
-        // Auto-select the last remaining crew card without prompting on Corner 3!
-        handleApplyCrewAndResumeBattle(available[0], cornerIdx);
-      } else {
-        setPreviewCrewIdx(available[0] ?? 0);
-        setBattleAnimStep("prompt_crew");
-      }
-    }, 2200);
+      setPreviewCrewIdx(available[0] ?? 0);
+      setBattleAnimStep("prompt_crew");
+    }, 3200);
 
-    timersRef.current.push(t0, t1);
+    timersRef.current.push(t1, t2);
   }
 
   function handleApplyCrewAndResumeBattle(chosenCrewIdx: number, targetCornerIdx?: 0 | 1 | 2) {
@@ -1276,42 +1677,21 @@ export function DriftClashArena({
       return next;
     });
 
-    // 4. Resume arcade battle animation!
-    // Crew cards overlay & number updates apply
+    // 4. Crew buffs apply and counter the debuffs!
     setBattleAnimStep("crew_overlay");
 
-    // Door-to-door clash shake 1
-    const t1 = setTimeout(() => {
-      setBattleAnimStep("battle_shake_1");
-    }, 1600);
-
-    // Open funny debuff incident popup and PAUSE battle!
-    const t2 = setTimeout(() => {
-      const scenario = DEBUFF_SCENARIOS[Math.floor(Math.random() * DEBUFF_SCENARIOS.length)];
-      setDebuffScenario(scenario);
-      setBattleAnimStep("prompt_debuff");
-    }, 3200);
-
-    timersRef.current.push(t1, t2);
-  }
-
-  function handleContinueFromDebuff() {
-    clearTimers();
-    // That's when debuffs are applied!
-    setBattleAnimStep("debuff_overlay");
-
-    // After 1800ms of seeing the debuffs applied, proceed to apex clash & results
+    // Door-to-door clash shake 2 (Apex Clash!)
     const t1 = setTimeout(() => {
       setBattleAnimStep("battle_shake_2");
-    }, 1800);
+    }, 1600);
 
     const t2 = setTimeout(() => {
       setBattleAnimStep("knockout_and_winner");
-    }, 3400);
+    }, 3200);
 
     const t3 = setTimeout(() => {
       setBattleAnimStep("corner_finished");
-    }, 4800);
+    }, 4600);
 
     timersRef.current.push(t1, t2, t3);
   }
@@ -1737,7 +2117,7 @@ export function DriftClashArena({
                 <span className="text-xl transition-transform group-hover:scale-110">🎮</span>
                 <span>Play Tandem Clash</span>
                 <span className="rounded-full bg-black/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black/80">
-                  {isAdmin ? "Admin" : "Beta"}
+                  {isAdmin ? "Admin" : "Live"}
                 </span>
               </button>
             ) : (
@@ -2551,10 +2931,10 @@ export function DriftClashArena({
                 </span>
                 <div>
                   <span className="block text-[10px] font-black uppercase tracking-widest text-amber-400">
-                    {phase === "lineup"
-                      ? `Step 1 · Select 3 Cars & 3 Crew Advantage Cards`
-                      : phase === "track_roulette"
-                        ? `Step 2 · Randomising UK Drift Track Card`
+                    {phase === "track_roulette"
+                      ? `Step 1 · Randomising UK Drift Track Card`
+                      : phase === "lineup"
+                        ? `Step 2 · Select 3 Cars & 3 Crew Cards (${activeTrackDef.name})`
                         : phase === "car_select"
                           ? `Step 3 · Corner ${activeCornerIdx + 1} of 3 · Deploy Car Card`
                           : phase === "corner_battle"
@@ -2603,8 +2983,8 @@ export function DriftClashArena({
 
             {/* Main Stage Body */}
             <div className="flex-1 overflow-y-auto px-3.5 py-3 sm:px-6 sm:py-5">
-              <div className="mx-auto max-w-3xl">
-                {/* ── STEP 1: SELECT 3 CAR CARDS & 3 CREW CARDS ────────────── */}
+              <div className="mx-auto max-w-3xl pb-24 sm:pb-28">
+                {/* ── STEP 2: SELECT 3 CAR CARDS & 3 CREW CARDS ────────────── */}
                 {phase === "lineup" && (
                   <div className="space-y-4">
                     {/* Active Challenge Header Banner */}
@@ -2646,6 +3026,45 @@ export function DriftClashArena({
                         </div>
                       </div>
                     )}
+
+                    {/* Active Track Banner */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-500/40 bg-zinc-900/90 p-3 shadow-lg">
+                      <div className="flex items-center gap-3">
+                        <span className="text-3xl">{activeTrackDef.icon}</span>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="rounded-full bg-emerald-500/20 border border-emerald-500/40 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-300">
+                              STEP 1 VENUE
+                            </span>
+                            <h4 className="text-sm font-black text-white">{activeTrackDef.name}</h4>
+                            <span className="text-xs text-zinc-400 font-bold">({activeTrackDef.region})</span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px]">
+                            <span className="rounded-lg bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 font-bold text-emerald-300">
+                              ✨ {activeTrackDef.buffLabel}
+                            </span>
+                            <span className="rounded-lg bg-rose-950/60 border border-rose-500/30 px-2 py-0.5 font-bold text-rose-300">
+                              ⚠️ {activeTrackDef.debuffLabel}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 self-center sm:self-auto ml-auto">
+                        <div className="text-right">
+                          <span className="block text-[9px] font-bold uppercase text-zinc-400">Rival</span>
+                          <span className="text-xs font-black text-rose-300 truncate max-w-[120px] block">
+                            {opponent.driverName}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setPhase("track_roulette")}
+                          className="rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-zinc-300 hover:bg-zinc-700 hover:text-white transition-all cursor-pointer"
+                        >
+                          View Track
+                        </button>
+                      </div>
+                    </div>
 
                     {/* Loadout Stepper Switcher */}
                     <div className="grid grid-cols-2 gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/90 p-1.5">
@@ -2707,7 +3126,7 @@ export function DriftClashArena({
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
                             <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-black text-amber-300">
-                              STEP 1A · SELECT YOUR 3 CAR CARDS
+                              STEP 2A · SELECT YOUR 3 CAR CARDS
                             </span>
                             <h3 className="mt-1 text-base font-black text-white sm:text-lg">
                               Your 3-Car Tandem Lineup
@@ -2735,14 +3154,14 @@ export function DriftClashArena({
                                   setSelectedCarIds(pickTopThreeIds(usableCarCards));
                                 }
                               }}
-                              className="rounded-xl border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-xs font-black text-amber-300 hover:bg-amber-500/25"
+                              className="rounded-xl border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-xs font-black text-amber-300 hover:bg-amber-500/25 cursor-pointer"
                             >
                               ⚡ Auto-Pick Best 3
                             </button>
                             <button
                               type="button"
                               onClick={() => setLoadoutSection("crew")}
-                              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-400 via-cyan-500 to-sky-500 px-3.5 py-1.5 text-xs font-black uppercase tracking-wider text-black shadow-md hover:scale-[1.02]"
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-400 via-cyan-500 to-sky-500 px-3.5 py-1.5 text-xs font-black uppercase tracking-wider text-black shadow-md hover:scale-[1.02] cursor-pointer"
                             >
                               <span>Next: Crew Cards →</span>
                             </button>
@@ -2832,7 +3251,7 @@ export function DriftClashArena({
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
                             <span className="inline-flex items-center gap-1 rounded-full bg-cyan-500/20 px-2.5 py-0.5 text-[10px] font-black text-cyan-300">
-                              STEP 1B · SELECT YOUR 3 CREW ADVANTAGE CARDS
+                              STEP 2B · SELECT YOUR 3 CREW ADVANTAGE CARDS
                             </span>
                             <h3 className="mt-1 text-base font-black text-white sm:text-lg">
                               Your 3 Pit Crew Advantage Cards
@@ -2845,18 +3264,18 @@ export function DriftClashArena({
                             <button
                               type="button"
                               onClick={() => setSelectedCrewIds(pickTopThreeIds(usableCrewCards))}
-                              className="rounded-xl border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs font-black text-cyan-300 hover:bg-cyan-500/25"
+                              className="rounded-xl border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs font-black text-cyan-300 hover:bg-cyan-500/25 cursor-pointer"
                             >
                               ⚡ Auto-Pick Best 3
                             </button>
                             <button
                               type="button"
                               disabled={!isLineupEligible}
-                              onClick={handleStartTrackRoulette}
-                              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-3.5 py-1.5 text-xs font-black uppercase tracking-wider text-black shadow-md shadow-amber-500/25 hover:scale-[1.02] disabled:opacity-40 disabled:cursor-not-allowed"
+                              onClick={handleStartBattleFromLineup}
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-3.5 py-1.5 text-xs font-black uppercase tracking-wider text-black shadow-md shadow-amber-500/25 hover:scale-[1.02] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                             >
                               <span>
-                                {!isLineupEligible ? "⚠️ Lineup Invalid" : "Spin UK Track →"}
+                                {!isLineupEligible ? "⚠️ Lineup Invalid" : "Deploy (Corner 1) →"}
                               </span>
                             </button>
                           </div>
@@ -2920,45 +3339,56 @@ export function DriftClashArena({
                       </div>
                     )}
 
-                    {/* Step 1 Footer */}
-                    <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1">
-                      {loadoutSection === "cars" ? (
-                        <button
-                          type="button"
-                          onClick={() => setLoadoutSection("crew")}
-                          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 via-cyan-500 to-sky-500 px-6 text-xs font-black uppercase tracking-wider text-black shadow-[0_0_25px_rgba(6,182,212,0.35)] hover:scale-[1.01] sm:text-sm"
-                        >
-                          <span>⚡ Next: Select Your 3 Crew Advantage Cards →</span>
-                        </button>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => setLoadoutSection("cars")}
-                            className="min-h-12 rounded-2xl border border-zinc-700 bg-zinc-900 px-4 text-xs font-black text-zinc-200 hover:bg-zinc-800"
-                          >
-                            ← Back to 3 Car Cards
-                          </button>
+                    {/* Step 2 Floating Action Dock (Overlays bottom of screen) */}
+                    <div className="fixed inset-x-0 bottom-0 z-50 bg-gradient-to-t from-black via-zinc-950/95 to-transparent px-4 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] backdrop-blur-md shadow-[0_-10px_25px_rgba(0,0,0,0.8)]">
+                      <div className="mx-auto flex max-w-3xl items-center justify-between gap-2.5">
+                        {loadoutSection === "cars" ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setPhase("track_roulette")}
+                              className="min-h-12 rounded-2xl border border-zinc-700 bg-zinc-900/90 px-4 text-xs font-black text-zinc-300 hover:bg-zinc-800 cursor-pointer shadow-lg shrink-0"
+                            >
+                              ← Back to Track
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setLoadoutSection("crew")}
+                              className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 via-cyan-500 to-sky-500 px-6 text-xs font-black uppercase tracking-wider text-black shadow-[0_0_25px_rgba(6,182,212,0.35)] hover:scale-[1.01] active:scale-[0.98] transition-all sm:text-sm cursor-pointer"
+                            >
+                              <span>⚡ Next: Select 3 Crew Advantage Cards →</span>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setLoadoutSection("cars")}
+                              className="min-h-12 rounded-2xl border border-zinc-700 bg-zinc-900/90 px-4 text-xs font-black text-zinc-200 hover:bg-zinc-800 cursor-pointer shadow-lg shrink-0"
+                            >
+                              ← Back to 3 Car Cards
+                            </button>
 
-                          <button
-                            type="button"
-                            disabled={!isLineupEligible}
-                            onClick={handleStartTrackRoulette}
-                            className="inline-flex min-h-12 flex-1 sm:flex-initial items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-6 text-xs font-black uppercase tracking-wider text-black shadow-[0_0_25px_rgba(245,158,11,0.35)] hover:scale-[1.01] sm:text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                          >
-                            <span>
-                              {!isLineupEligible
-                                ? `⚠️ ${challengeIneligibleCount} Ineligible Car(s) in Lineup`
-                                : "🇬🇧 Lock Loadout & Spin UK Track →"}
-                            </span>
-                          </button>
-                        </>
-                      )}
+                            <button
+                              type="button"
+                              disabled={!isLineupEligible}
+                              onClick={handleStartBattleFromLineup}
+                              className="inline-flex min-h-12 flex-1 sm:flex-initial items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-6 text-xs font-black uppercase tracking-wider text-black shadow-[0_0_25px_rgba(245,158,11,0.35)] hover:scale-[1.01] active:scale-[0.98] transition-all sm:text-sm disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                            >
+                              <span>
+                                {!isLineupEligible
+                                  ? `⚠️ ${challengeIneligibleCount} Ineligible Car(s) in Lineup`
+                                  : "🏁 Lock Lineup & Deploy Car (Corner 1) →"}
+                              </span>
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
 
-                {/* ── STEP 2: UK TRACK ROULETTE ANIMATION & RIVAL LOCK ────── */}
+                {/* ── STEP 1: UK TRACK ROULETTE ANIMATION & RIVAL LOCK ────── */}
                 {phase === "track_roulette" && (
                   <div className="flex min-h-[70dvh] flex-col items-center justify-center space-y-5 text-center">
                     {!trackLockedIn ? (
@@ -2984,20 +3414,20 @@ export function DriftClashArena({
                             createdAt: 0,
                           };
                           return (
-                            <div className="mx-auto w-52 sm:w-60 transition-transform duration-150 scale-105">
+                            <div className="mx-auto w-52 sm:w-60 transition-all duration-100 scale-105 filter drop-shadow-[0_0_35px_rgba(16,185,129,0.5)]">
                               <FullArtCard card={spinningCard} className="drop-shadow-2xl" />
                             </div>
                           );
                         })()}
                         <p className="text-xs font-bold text-zinc-400">
-                          Matching your 3 Cars &amp; 3 Crew Cards against a rival UK driver...
+                          Determining track surface, rules &amp; matching a rival UK driver...
                         </p>
                       </>
                     ) : (
                       <div className="w-full space-y-4 animate-in fade-in zoom-in-95 duration-300">
                         <div className="space-y-1">
                           <span className="inline-block rounded-full bg-emerald-500 px-3.5 py-0.5 text-[11px] font-black uppercase tracking-widest text-black">
-                            🇬🇧 UK Track Locked In!
+                            🇬🇧 Step 1 Complete · UK Track Locked In!
                           </span>
                           <h3 className="text-2xl font-black text-white sm:text-3xl">
                             {activeTrackDef.icon} {activeTrackDef.name}
@@ -3053,13 +3483,17 @@ export function DriftClashArena({
                           </div>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => startCornerBattle(0)}
-                          className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-6 text-sm font-black uppercase tracking-wider text-black shadow-[0_0_30px_rgba(245,158,11,0.4)] hover:scale-[1.01] sm:text-base"
-                        >
-                          <span>🏁 Let&apos;s Play: Deploy Car (Corner 1) →</span>
-                        </button>
+                        <div className="fixed inset-x-0 bottom-0 z-50 bg-gradient-to-t from-black via-zinc-950/95 to-transparent px-4 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] backdrop-blur-md shadow-[0_-10px_25px_rgba(0,0,0,0.8)]">
+                          <div className="mx-auto max-w-xl">
+                            <button
+                              type="button"
+                              onClick={() => setPhase("lineup")}
+                              className="inline-flex min-h-13 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-6 text-sm sm:text-base font-black uppercase tracking-wider text-black shadow-[0_0_30px_rgba(245,158,11,0.5)] hover:scale-[1.01] active:scale-[0.98] transition-all cursor-pointer"
+                            >
+                              <span>🚗 Step 2: Choose 3 Cars &amp; Crew for this Track →</span>
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -3240,14 +3674,18 @@ export function DriftClashArena({
                             </div>
                           </div>
 
-                          {/* Deploy Action Button */}
-                          <button
-                            type="button"
-                            onClick={() => handleDeployCar(activeSlot)}
-                            className="mt-2 min-h-12 w-full rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-6 py-3 text-sm sm:text-base font-black uppercase tracking-wider text-black shadow-[0_0_25px_rgba(245,158,11,0.5)] hover:scale-[1.02] active:scale-[0.98] transition-all"
-                          >
-                            🏁 Deploy {activeCar.name.split(" ")[0]} into Corner {sector.number} →
-                          </button>
+                          {/* Floating Deploy Action Dock (Overlays bottom of screen) */}
+                          <div className="fixed inset-x-0 bottom-0 z-50 bg-gradient-to-t from-black via-zinc-950/95 to-transparent px-4 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] backdrop-blur-md shadow-[0_-10px_25px_rgba(0,0,0,0.8)]">
+                            <div className="mx-auto max-w-xl">
+                              <button
+                                type="button"
+                                onClick={() => handleDeployCar(activeSlot)}
+                                className="min-h-12 w-full rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-6 py-3 text-xs sm:text-sm font-black uppercase tracking-wider text-black shadow-[0_0_30px_rgba(245,158,11,0.6)] hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                              >
+                                🏁 Deploy {activeCar.name.split(" ")[0]} into Corner {sector.number} →
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     );
@@ -3347,46 +3785,117 @@ export function DriftClashArena({
                       steer: Math.max(1, rTrackStats.steer - rDebuffBreakdown.effectiveSteerPenalty),
                     };
 
+                    // In the updated flow:
+                    // 1) Debuffs strike first (debuff_overlay, battle_shake_1)
+                    // 2) Then Pit Crew responds (prompt_crew)
+                    // 3) Then Crew buffs apply & final clash (crew_overlay, battle_shake_2, knockout_and_winner, corner_finished)
+                    const isDebuffStage =
+                      battleAnimStep === "debuff_overlay" ||
+                      battleAnimStep === "battle_shake_1";
+                    const isPromptCrew = battleAnimStep === "prompt_crew";
                     const isCrewStage =
                       battleAnimStep === "crew_overlay" ||
-                      battleAnimStep === "battle_shake_1" ||
-                      battleAnimStep === "prompt_debuff";
-                    const isPromptCrew = battleAnimStep === "prompt_crew";
-                    const isDebuffOrLater =
-                      battleAnimStep === "debuff_overlay" ||
                       battleAnimStep === "battle_shake_2" ||
                       battleAnimStep === "knockout_and_winner" ||
                       battleAnimStep === "corner_finished";
+                    const isCrewOrLater = isCrewStage;
+                    const isDebuffOrLater =
+                      isDebuffStage ||
+                      isPromptCrew ||
+                      isCrewStage;
+
+                    // Compute unshielded debuffed stats for the initial debuff phase (before crew is called)
+                    const pInitialDebuff = computeDebuffBreakdown({
+                      card: playerCar,
+                      debuffCard: playerDebuffDef,
+                      trackCard: activeTrackDef,
+                      shield: 0,
+                    });
+                    const rInitialDebuff = computeDebuffBreakdown({
+                      card: rivalCar,
+                      debuffCard: rivalDebuffDef,
+                      trackCard: activeTrackDef,
+                      shield: 0,
+                    });
+
+                    const pBaseTrackStats = {
+                      drift: Math.min(25, pBase.drift + (tRules.driftBuff ?? 0)),
+                      accel: Math.min(25, pBase.accel + (tRules.accelBuff ?? 0)),
+                      grip: Math.min(25, pBase.grip + (tRules.gripBuff ?? 0)),
+                      steer: Math.min(25, pBase.steer + (tRules.steerBuff ?? 0)),
+                    };
+                    const rBaseTrackStats = {
+                      drift: Math.min(25, rBase.drift + (tRules.driftBuff ?? 0)),
+                      accel: Math.min(25, rBase.accel + (tRules.accelBuff ?? 0)),
+                      grip: Math.min(25, rBase.grip + (tRules.gripBuff ?? 0)),
+                      steer: Math.min(25, rBase.steer + (tRules.steerBuff ?? 0)),
+                    };
+
+                    const pDebuffedStats = {
+                      drift: Math.max(1, pBaseTrackStats.drift - pInitialDebuff.effectiveDriftPenalty),
+                      accel: Math.max(1, pBaseTrackStats.accel - pInitialDebuff.effectiveAccelPenalty),
+                      grip: Math.max(1, pBaseTrackStats.grip - pInitialDebuff.effectiveGripPenalty),
+                      steer: Math.max(1, pBaseTrackStats.steer - pInitialDebuff.effectiveSteerPenalty),
+                    };
+                    const rDebuffedStats = {
+                      drift: Math.max(1, rBaseTrackStats.drift - rInitialDebuff.effectiveDriftPenalty),
+                      accel: Math.max(1, rBaseTrackStats.accel - rInitialDebuff.effectiveAccelPenalty),
+                      grip: Math.max(1, rBaseTrackStats.grip - rInitialDebuff.effectiveGripPenalty),
+                      steer: Math.max(1, rBaseTrackStats.steer - rInitialDebuff.effectiveSteerPenalty),
+                    };
 
                     // During prompt_crew, compute live preview diffs directly from previewCrewIdx
                     const activePreviewCrewCard = selectedCrewCards[previewCrewIdx ?? remainingCrewSlotIndices[0] ?? 0];
                     const activePreviewCrewDef = resolveCrewDef(activePreviewCrewCard);
                     const previewMods = activePreviewCrewDef?.modifiers ?? {};
-                    const previewCrewStats = applyCrewModsToStats(pBase, previewMods);
+                    const previewShield = Math.min(1, Math.max(0, previewMods.debuffShield ?? 0));
+                    const pPreviewDebuff = computeDebuffBreakdown({
+                      card: playerCar,
+                      debuffCard: playerDebuffDef,
+                      trackCard: activeTrackDef,
+                      shield: previewShield,
+                    });
+                    const previewCrewBase = applyCrewModsToStats(pBase, previewMods);
+                    const previewTrackStats = {
+                      drift: Math.min(25, previewCrewBase.drift + (tRules.driftBuff ?? 0)),
+                      accel: Math.min(25, previewCrewBase.accel + (tRules.accelBuff ?? 0)),
+                      grip: Math.min(25, previewCrewBase.grip + (tRules.gripBuff ?? 0)),
+                      steer: Math.min(25, previewCrewBase.steer + (tRules.steerBuff ?? 0)),
+                    };
+                    const previewCrewStats = {
+                      drift: Math.max(1, previewTrackStats.drift - pPreviewDebuff.effectiveDriftPenalty),
+                      accel: Math.max(1, previewTrackStats.accel - pPreviewDebuff.effectiveAccelPenalty),
+                      grip: Math.max(1, previewTrackStats.grip - pPreviewDebuff.effectiveGripPenalty),
+                      steer: Math.max(1, previewTrackStats.steer - pPreviewDebuff.effectiveSteerPenalty),
+                    };
 
-                    const pDisplayStats = isDebuffOrLater
+                    const pDisplayStats = isCrewOrLater
                       ? pFinalStats
-                      : isCrewStage
-                        ? pCrewStats
-                        : isPromptCrew
-                          ? previewCrewStats
+                      : isPromptCrew
+                        ? previewCrewStats
+                        : isDebuffStage
+                          ? pDebuffedStats
                           : pBase;
 
-                    const rDisplayStats = isDebuffOrLater
+                    const rDisplayStats = isCrewOrLater
                       ? rFinalStats
-                      : isCrewStage
-                        ? rCrewStats
+                      : isDebuffStage || isPromptCrew
+                        ? rDebuffedStats
                         : rBase;
 
                     // Diffs calculation
-                    const pDiffTarget = isDebuffOrLater
+                    const pDiffTarget = isCrewOrLater
                       ? pFinalStats
-                      : isCrewStage
-                        ? pCrewStats
-                        : isPromptCrew
-                          ? previewCrewStats
+                      : isPromptCrew
+                        ? previewCrewStats
+                        : isDebuffStage
+                          ? pDebuffedStats
                           : pBase;
-                    const pDiffBase = isDebuffOrLater ? pCrewStats : pBase;
+                    const pDiffBase = isCrewOrLater
+                      ? pDebuffedStats
+                      : isPromptCrew
+                        ? pDebuffedStats
+                        : pBase;
 
                     const pDiffs = {
                       drift: (isCrewStage || isPromptCrew || isDebuffOrLater) && pDiffTarget.drift !== pDiffBase.drift
@@ -3403,12 +3912,12 @@ export function DriftClashArena({
                         : null,
                     };
 
-                    const rDiffTarget = isDebuffOrLater
+                    const rDiffTarget = isCrewStage
                       ? rFinalStats
-                      : isCrewStage
-                        ? rCrewStats
+                      : (isDebuffStage || isPromptCrew)
+                        ? rDebuffedStats
                         : rBase;
-                    const rDiffBase = isDebuffOrLater ? rCrewStats : rBase;
+                    const rDiffBase = isCrewStage ? rDebuffedStats : rBase;
 
                     const rDiffs = {
                       drift: (isCrewStage || isDebuffOrLater) && rDiffTarget.drift !== rDiffBase.drift
@@ -3430,6 +3939,32 @@ export function DriftClashArena({
 
                     const pBaseCornerScore = scoreCardForSector(playerCar, sector.id).total;
                     const rBaseCornerScore = scoreCardForSector(rivalCar, sector.id).total;
+
+                    const pDebuffedCornerScore = scoreCardForSector(
+                      {
+                        ...playerCar,
+                        stats: {
+                          drift: String(pDebuffedStats.drift),
+                          accel: String(pDebuffedStats.accel),
+                          grip: String(pDebuffedStats.grip),
+                          steer: String(pDebuffedStats.steer),
+                        },
+                      },
+                      sector.id
+                    ).total;
+
+                    const rDebuffedCornerScore = scoreCardForSector(
+                      {
+                        ...rivalCar,
+                        stats: {
+                          drift: String(rDebuffedStats.drift),
+                          accel: String(rDebuffedStats.accel),
+                          grip: String(rDebuffedStats.grip),
+                          steer: String(rDebuffedStats.steer),
+                        },
+                      },
+                      sector.id
+                    ).total;
 
                     const pPreviewScore =
                       scoreCardForSector(
@@ -3473,18 +4008,18 @@ export function DriftClashArena({
                         sector.id
                       ).total + (rCrewMods.flatBonus ?? 0);
 
-                    const pScore = isDebuffOrLater
+                    const pScore = isCrewStage
                       ? (currentResult?.playerScore ?? pCrewScore)
-                      : isCrewStage
-                        ? pCrewScore
-                        : isPromptCrew
-                          ? pPreviewScore
+                      : isPromptCrew
+                        ? pPreviewScore
+                        : isDebuffStage
+                          ? pDebuffedCornerScore
                           : pBaseCornerScore;
 
-                    const rScore = isDebuffOrLater
+                    const rScore = isCrewStage
                       ? (currentResult?.rivalScore ?? rCrewScore)
-                      : isCrewStage
-                        ? rCrewScore
+                      : (isDebuffStage || isPromptCrew)
+                        ? rDebuffedCornerScore
                         : rBaseCornerScore;
 
                     // Dynamic card class positioning for Player
@@ -3493,6 +4028,8 @@ export function DriftClashArena({
                       pCardClass += "-translate-x-8 opacity-80 rotate-2 duration-700 ease-out";
                     } else if (battleAnimStep === "head_to_head" || battleAnimStep === "prompt_crew" || battleAnimStep === "prompt_debuff") {
                       pCardClass += "translate-x-[12%] sm:translate-x-[16%] scale-100 rotate-1 z-20 duration-500";
+                    } else if (battleAnimStep === "battle_initial") {
+                      pCardClass += "translate-x-[20%] sm:translate-x-[26%] rotate-3 animate-clash-shake z-20";
                     } else if (battleAnimStep === "crew_overlay") {
                       pCardClass += "translate-x-[12%] sm:translate-x-[16%] scale-105 rotate-1 z-20 duration-300";
                     } else if (battleAnimStep === "battle_shake_1") {
@@ -3517,6 +4054,8 @@ export function DriftClashArena({
                       rCardClass += "translate-x-8 opacity-80 -rotate-2 duration-700 ease-out";
                     } else if (battleAnimStep === "head_to_head" || battleAnimStep === "prompt_crew" || battleAnimStep === "prompt_debuff") {
                       rCardClass += "-translate-x-[12%] sm:-translate-x-[16%] scale-100 -rotate-1 z-20 duration-500";
+                    } else if (battleAnimStep === "battle_initial") {
+                      rCardClass += "-translate-x-[20%] sm:-translate-x-[26%] -rotate-3 animate-clash-shake z-20";
                     } else if (battleAnimStep === "crew_overlay") {
                       rCardClass += "-translate-x-[12%] sm:-translate-x-[16%] scale-105 -rotate-1 z-20 duration-300";
                     } else if (battleAnimStep === "battle_shake_1") {
@@ -3578,17 +4117,23 @@ export function DriftClashArena({
                                         ? "Cars Entering..."
                                         : battleAnimStep === "head_to_head"
                                           ? "Head to Head! ⚔️"
-                                          : battleAnimStep === "prompt_crew"
-                                            ? "Pick Crew Card ⚡"
-                                            : battleAnimStep === "crew_overlay"
-                                              ? "Crew Advantage!"
-                                              : battleAnimStep === "battle_shake_1" || battleAnimStep === "battle_shake_2"
-                                                ? "Tandem Clash!"
-                                                : battleAnimStep === "debuff_overlay"
-                                                  ? "Debuffs Applied!"
-                                                  : battleAnimStep === "knockout_and_winner"
-                                                    ? (currentResult?.won ? "You Won!" : currentResult?.tied ? "Dead Heat Tie! ⚖️" : "Rival Won!")
-                                                    : "Corner Done"
+                                          : battleAnimStep === "battle_initial"
+                                            ? "Tandem Entry Clash! ⚔️"
+                                            : battleAnimStep === "prompt_debuff"
+                                              ? "Track Incident! ⚠️"
+                                              : battleAnimStep === "debuff_overlay"
+                                                ? "Debuffs Applied! ⚠️"
+                                                : battleAnimStep === "battle_shake_1"
+                                                  ? "Hazard Battle! ⚠️"
+                                                  : battleAnimStep === "prompt_crew"
+                                                    ? "Pick Crew Card ⚡"
+                                                    : battleAnimStep === "crew_overlay"
+                                                      ? "Crew Advantage! ⚡"
+                                                      : battleAnimStep === "battle_shake_2"
+                                                        ? "Apex Clash! 💥"
+                                                        : battleAnimStep === "knockout_and_winner"
+                                                          ? (currentResult?.won ? "You Won!" : currentResult?.tied ? "Dead Heat Tie! ⚖️" : "Rival Won!")
+                                                          : "Corner Done"
                                       : "Upcoming"}
                                 </span>
                               </button>
@@ -3646,7 +4191,7 @@ export function DriftClashArena({
                         </div>
 
                         {/* ── ARCADE GAME VIEW BATTLE ARENA ── */}
-                        <div className="relative min-h-[500px] sm:min-h-[540px] w-full overflow-hidden rounded-3xl border-2 border-amber-500/30 bg-gradient-to-b from-zinc-950 via-zinc-900 to-black p-3 sm:p-5 shadow-2xl">
+                        <div className="relative min-h-[440px] sm:min-h-[520px] w-full overflow-hidden rounded-3xl border-2 border-amber-500/30 bg-gradient-to-b from-zinc-950 via-zinc-900 to-black p-3 sm:p-5 shadow-2xl">
                           {/* Asphalt track curbs & markings */}
                           <div className="pointer-events-none absolute inset-x-0 top-0 h-2 bg-[repeating-linear-gradient(90deg,#ef4444_0,#ef4444_20px,#ffffff_20px,#ffffff_40px)] opacity-60" />
                           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2 bg-[repeating-linear-gradient(90deg,#ef4444_0,#ef4444_20px,#ffffff_20px,#ffffff_40px)] opacity-60" />
@@ -3891,15 +4436,28 @@ export function DriftClashArena({
                             </div>
                           )}
 
+                          {/* Center Battle Indicator: Initial Tandem Battle */}
+                          {battleAnimStep === "battle_initial" && (
+                            <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 z-30 text-center animate-in zoom-in-75 duration-200">
+                              <div className="inline-block rounded-2xl border-2 border-amber-400 bg-black/90 px-4 py-2.5 shadow-[0_0_35px_rgba(245,158,11,0.6)]">
+                                <span className="text-xl">⚔️</span>
+                                <p className="text-xs sm:text-sm font-black uppercase tracking-wider text-amber-300">
+                                  TANDEM BATTLE INITIATED!
+                                </p>
+                                <p className="text-[10px] font-bold text-zinc-300">Door-to-door through the entry clipping zone!</p>
+                              </div>
+                            </div>
+                          )}
+
                           {/* Center Battle Indicator 1: Battle Shake 1 */}
                           {battleAnimStep === "battle_shake_1" && (
                             <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 z-30 text-center animate-in zoom-in-75 duration-200">
                               <div className="inline-block rounded-2xl border-2 border-amber-400 bg-black/90 px-4 py-2.5 shadow-[0_0_35px_rgba(245,158,11,0.6)]">
-                                <span className="text-xl">⚡</span>
+                                <span className="text-xl">⚠️</span>
                                 <p className="text-xs sm:text-sm font-black uppercase tracking-wider text-amber-300">
-                                  DOOR-TO-DOOR TANDEM CLASH!
+                                  HAZARD IMPACT!
                                 </p>
-                                <p className="text-[10px] font-bold text-zinc-300">Cars rubbing doors in the clipping zone!</p>
+                                <p className="text-[10px] font-bold text-zinc-300">Both cars battling through the track incident!</p>
                               </div>
                             </div>
                           )}
@@ -3934,7 +4492,7 @@ export function DriftClashArena({
                               {/* Micro instruction pill */}
                               <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full bg-zinc-950/95 border border-amber-500/50 px-3 py-0.5 shadow-lg backdrop-blur-md">
                                 <span className="text-[10px] font-black uppercase tracking-wider text-amber-300">
-                                  ⚡ SELECT CREW CARD ({remainingCrewSlotIndices.length} Available)
+                                  ⚡ DEPLOY PIT CREW COUNTER ({remainingCrewSlotIndices.length} Available)
                                 </span>
                               </div>
 
@@ -4052,12 +4610,12 @@ export function DriftClashArena({
                                 onClick={() => handleApplyCrewAndResumeBattle(previewCrewIdx ?? remainingCrewSlotIndices[0] ?? 0, activeCornerIdx)}
                                 className="inline-flex min-h-10 w-full max-w-xs items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-5 py-2 text-xs sm:text-sm font-black uppercase tracking-wider text-black shadow-[0_0_25px_rgba(245,158,11,0.55)] hover:scale-[1.02] active:scale-[0.98] transition-all"
                               >
-                                <span>⚡ Apply Crew &amp; Clash! →</span>
+                                <span>⚡ Apply Crew Counter &amp; Clash! →</span>
                               </button>
                             </div>
                           )}
 
-                          {/* ── INTERACTIVE FUNNY TRACK HAZARD INCIDENT POPUP (1 of 20 SCENARIOS) ── */}
+                          {/* ── INTERACTIVE FUNNY TRACK HAZARD INCIDENT POPUP (1 of 80 SCENARIOS) ── */}
                           {battleAnimStep === "prompt_debuff" && (
                             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
                               <div className="relative w-full max-w-sm sm:max-w-md rounded-3xl border-2 border-amber-500/80 bg-zinc-950 p-5 sm:p-6 shadow-[0_0_60px_rgba(245,158,11,0.5)] text-center">
@@ -4128,9 +4686,24 @@ export function DriftClashArena({
                                   onClick={handleContinueFromDebuff}
                                   className="mt-5 w-full flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-6 py-3.5 text-xs sm:text-sm font-black uppercase tracking-wider text-white shadow-[0_0_30px_rgba(245,158,11,0.6)] hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer"
                                 >
-                                  <span>Continue &amp; Apply Debuffs</span>
+                                  <span>Inspect Hazard &amp; Call Pit Crew</span>
                                   <span className="text-base">→</span>
                                 </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Center Battle Indicator: Crew Buff Applied */}
+                          {battleAnimStep === "crew_overlay" && (
+                            <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 z-30 text-center animate-in zoom-in-75 duration-200 px-3">
+                              <div className="inline-block rounded-2xl border-2 border-cyan-400 bg-zinc-950/95 p-3 sm:px-6 sm:py-3.5 shadow-[0_0_35px_rgba(6,182,212,0.7)] backdrop-blur-md">
+                                <span className="text-2xl animate-pulse">⚡</span>
+                                <p className="text-xs sm:text-sm font-black uppercase tracking-wider text-cyan-300">
+                                  PIT CREW ADVANTAGE LOCKED IN!
+                                </p>
+                                <p className="text-[10px] sm:text-[11px] font-bold text-zinc-200 mt-0.5">
+                                  Deploying crew tuning &amp; counter buffs!
+                                </p>
                               </div>
                             </div>
                           )}
@@ -4141,9 +4714,9 @@ export function DriftClashArena({
                               <div className="inline-block rounded-2xl border-2 border-rose-500 bg-black/90 px-4 py-2.5 shadow-[0_0_35px_rgba(244,63,94,0.6)]">
                                 <span className="text-xl">💥</span>
                                 <p className="text-xs sm:text-sm font-black uppercase tracking-wider text-rose-300">
-                                  FINAL APEX TRANSITION!
+                                  APEX CLASH!
                                 </p>
-                                <p className="text-[10px] font-bold text-zinc-300">Full throttle into the outer clip!</p>
+                                <p className="text-[10px] font-bold text-zinc-300">Full-throttle battle for the corner finish!</p>
                               </div>
                             </div>
                           )}
@@ -4179,28 +4752,30 @@ export function DriftClashArena({
                           )}
                         </div>
 
-                        {/* ── STEP 3 FOOTER / NEXT CORNER ACTION BUTTON ── */}
+                        {/* ── STEP 3 FLOATING ACTION DOCK / NEXT CORNER ACTION BUTTON (OVERLAYS BOTTOM OF SCREEN) ── */}
                         {battleAnimStep === "corner_finished" && (
-                          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 animate-in fade-in slide-in-from-bottom-3 duration-400">
-                            <button
-                              type="button"
-                              onClick={() => startCornerBattle(activeCornerIdx)}
-                              className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-xs font-bold text-zinc-300 hover:bg-zinc-800"
-                            >
-                              🔄 Replay Corner {activeCornerIdx + 1}
-                            </button>
+                          <div className="fixed inset-x-0 bottom-0 z-50 bg-gradient-to-t from-black via-zinc-950/95 to-transparent px-4 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] backdrop-blur-md shadow-[0_-10px_25px_rgba(0,0,0,0.8)] animate-in fade-in slide-in-from-bottom-4 duration-300">
+                            <div className="mx-auto flex max-w-xl items-center justify-between gap-3">
+                              <button
+                                type="button"
+                                onClick={() => startCornerBattle(activeCornerIdx)}
+                                className="rounded-xl border border-zinc-700 bg-zinc-900/90 px-3.5 sm:px-4 py-3 text-xs font-bold text-zinc-300 hover:bg-zinc-800 transition-colors shadow-lg shrink-0 cursor-pointer"
+                              >
+                                🔄 Replay
+                              </button>
 
-                            <button
-                              type="button"
-                              onClick={handleNextCornerOrVerdict}
-                              className="inline-flex min-h-13 flex-1 sm:flex-initial items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-7 py-3 text-sm font-black uppercase tracking-wider text-black shadow-[0_0_30px_rgba(245,158,11,0.5)] hover:scale-[1.02] transition-transform"
-                            >
-                              {activeCornerIdx === 0
-                                ? "🏁 Onto Corner 2 →"
-                                : activeCornerIdx === 1
-                                  ? "🏁 Onto Final Corner 3 →"
-                                  : "🏆 View Final Scores & Verdict →"}
-                            </button>
+                              <button
+                                type="button"
+                                onClick={handleNextCornerOrVerdict}
+                                className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-5 sm:px-7 py-3 text-xs sm:text-sm font-black uppercase tracking-wider text-black shadow-[0_0_30px_rgba(245,158,11,0.6)] hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                              >
+                                {activeCornerIdx === 0
+                                  ? "🏁 Onto Corner 2 →"
+                                  : activeCornerIdx === 1
+                                    ? "🏁 Onto Final Corner 3 →"
+                                    : "🏆 View Final Scores & Verdict →"}
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -4759,7 +5334,7 @@ export function DriftClashArena({
                       </div>
                     )}
 
-                    <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+                    <div className="sticky bottom-0 z-40 -mx-3.5 sm:-mx-6 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)] bg-gradient-to-t from-black via-zinc-950/95 to-transparent backdrop-blur-md shadow-[0_-10px_25px_rgba(0,0,0,0.8)] flex flex-wrap items-center justify-center gap-3">
                       {activeChallenge ? (
                         <>
                           {completedChallengeIds.includes(activeChallenge.id) ||

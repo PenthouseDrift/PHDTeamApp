@@ -178,25 +178,25 @@ export function ClashHowToPlayModal({
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-xs font-black text-black">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-xs font-black text-black">
                       1
                     </span>
-                    <h4 className="font-black text-white">Lineup &amp; Loaner Support</h4>
+                    <h4 className="font-black text-white">UK Track Roulette</h4>
                   </div>
                   <p className="text-xs text-zinc-400 leading-relaxed">
-                    Select 3 of your healthy owned Car Cards and 3 Crew Advantage Cards. If you’re low on cards or your cars are broken, <strong>Academy Loaner Cars &amp; Crew</strong> automatically backfill slots so you can always race.
+                    First, a cinematic wheel spins to roll an authentic <strong>UK RC Drift Track Card</strong> (Penthouse Drift P-Tile, ASBO RC, Slide House, Outlaw RC, etc.). Every venue brings unique track surface rules, buffs, and hazards alongside matching your rival.
                   </p>
                 </div>
 
                 <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-xs font-black text-black">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-xs font-black text-black">
                       2
                     </span>
-                    <h4 className="font-black text-white">UK Track Roulette</h4>
+                    <h4 className="font-black text-white">Lineup &amp; Loaner Support</h4>
                   </div>
                   <p className="text-xs text-zinc-400 leading-relaxed">
-                    A cinematic wheel spins to roll an authentic <strong>UK RC Drift Track Card</strong> (Penthouse Drift P-Tile, ASBO RC, Slide House, Outlaw RC, etc.). Every venue brings unique track rules that buff or penalize certain setups.
+                    Knowing the venue conditions, select 3 Car Cards and 3 Crew Cards tailored for this track. If you’re low on cards or your cars are broken, <strong>Academy Loaner Cars &amp; Crew</strong> automatically backfill slots so you can always race.
                   </p>
                 </div>
 

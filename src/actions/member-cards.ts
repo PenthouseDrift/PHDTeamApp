@@ -161,7 +161,7 @@ const POOL_LOAD_ALL_UNDER = 100;
  * Another member's driver and car is preferred; if the pool holds only the opener's own, one of
  * those is used instead. Cards without a usable car photo are skipped.
  */
-async function pickBonusSource(userId: string): Promise<StoredMemberCard | null> {
+async function pickBonusSource(userId: string, excludeIds: string[] = []): Promise<StoredMemberCard | null> {
   try {
     await ensureCommunityPool();
     const total = await redis.zcard(COMMUNITY_POOL_INDEX);
@@ -183,9 +183,15 @@ async function pickBonusSource(userId: string): Promise<StoredMemberCard | null>
     ids = ids.map(String).filter((id) => MEMBER_CARD_ID_PATTERN.test(id));
     if (ids.length === 0) return null;
 
-    const cards = (await redis.mget(...ids.map((id) => cardKey(id))))
+    const allCards = (await redis.mget(...ids.map((id) => cardKey(id))))
       .map(parseCard)
       .filter((c): c is StoredMemberCard => isCommunityCard(c) && isBlobUrl(c.referenceUrl));
+    if (allCards.length === 0) return null;
+
+    let cards = allCards.filter((c) => !excludeIds.includes(c.id));
+    if (cards.length === 0) {
+      cards = allCards;
+    }
     const others = cards.filter((c) => c.userId !== userId);
     const candidates = others.length > 0 ? others : cards;
     return candidates.length > 0 ? candidates[Math.floor(rng() * candidates.length)] : null;
@@ -240,6 +246,8 @@ export interface NewCardInput {
   parts?: Partial<PartValues>;
   /** Photo of the car the art is drawn from. */
   referenceUrl: string;
+  /** If true, the user has no car and selects to pull 2 community car cards instead of generating their own car. */
+  skipPersonalCar?: boolean;
 }
 
 /** Spend a credit, roll a pack, draw the card and add it to the collection. */
@@ -258,13 +266,14 @@ export async function openCardPack(
   const user = await currentUser();
   if (!user) return { success: false, error: "Please sign in to open a card pack." };
 
+  const skipPersonalCar = Boolean(input?.skipPersonalCar);
   const driver = clamp(input?.driver, 30);
   const team = clamp(input?.team, 30);
   const chassis = clamp(input?.chassis, 48);
   const description = clamp(input?.description, 160);
   const carName = clamp(input?.carName, 40);
-  if (!driver) return { success: false, error: "Add your name for the card.", field: "driver" };
-  if (!isBlobUrl(input?.referenceUrl)) {
+  if (!skipPersonalCar && !driver) return { success: false, error: "Add your name for the card.", field: "driver" };
+  if (!skipPersonalCar && !isBlobUrl(input?.referenceUrl)) {
     return { success: false, error: "Choose or upload a photo of your car first.", field: "referenceUrl" };
   }
 
@@ -279,118 +288,200 @@ export async function openCardPack(
       return { success: false, error: "You don't have a card credit. Check in at the track to earn one." };
     }
 
-    // Sometimes the pack also holds a bonus card built from another member's card. It is drawn at the
-    // same time as the member's own card, so the pack takes no longer to open, and if it fails it is
-    // simply skipped: it never fails the pack or costs the member anything.
-    const bonusSource = rng() < BONUS_CARD_CHANCE ? await pickBonusSource(user.id) : null;
-    const bonusDrawing = bonusSource
-      ? rollAndDraw(bonusSource.referenceUrl).catch((error) => {
-          console.error("[member-cards] bonus card failed, skipping it:", error);
-          return null;
-        })
-      : null;
+    let stored: StoredMemberCard;
+    let bonus: StoredMemberCard | null = null;
 
-    const drawn = await rollAndDraw(input.referenceUrl);
-    const now = Date.now();
-    const title = cardTitle({ carName, chassis, driver });
-    const initialDurability = rollCarInitialDurability(rng);
-    const stored: StoredMemberCard = {
-      id: randomUUID(),
-      userId: user.id,
-      createdAt: now,
-      name: title,
-      // Always store the chassis so it pulls through to card art, details, and clash arena
-      ability: chassis.trim() || carName.trim() || title,
-      effect: description,
-      tier: drawn.tier,
-      stats: drawn.stats,
-      imageUrl: drawn.imageUrl,
-      imageZoom: MEMBER_ART_ZOOM,
-      imageX: 50,
-      imageY: 50,
-      driver,
-      team,
-      styleIds: drawn.styleIds,
-      // With re-rolling switched off there is nothing left to decide, so the card is kept straight away.
-      kept: !REROLL_ENABLED,
-      rerolled: false,
-      ownerName: user.name,
-      referenceUrl: input.referenceUrl,
-      maxBattles: initialDurability,
-      battlesRemaining: initialDurability,
-      fault: null,
-    };
-    await redis.set(cardKey(stored.id), JSON.stringify(stored));
-    await redis.zadd(indexKey(user.id), { score: now, member: stored.id });
-    // Every card is also listed for admins, who can see all stored cards.
-    await redis.zadd(ALL_MEMBER_CARDS_INDEX, { score: now, member: stored.id });
-    await redis.hincrby(`member:${user.id}`, "packsOpened", 1).catch(() => {});
-    // This driver and car now stands in the community pool with this card (replacing their older one).
-    await addToCommunityPool(stored).catch((error) => console.error("[member-cards] could not update the pool:", error));
-    const resolvedParts = input.parts ?? parsePartsFromDescription(description);
+    if (skipPersonalCar) {
+      // User has no car / selected not to generate their own car: pull two community car cards instead
+      const source1 = await pickBonusSource(user.id);
+      if (!source1) {
+        return { success: false, error: "The community card pool is currently empty. Please add a car or check back soon." };
+      }
+      let source2 = await pickBonusSource(user.id, [source1.id]);
+      if (!source2) source2 = source1;
 
-    if (input.carId) {
-      await updateCarParts(input.carId, user.id, resolvedParts, chassis).catch(() => {});
-    }
+      const [drawn1, drawn2] = await Promise.all([
+        rollAndDraw(source1.referenceUrl),
+        rollAndDraw(source2.referenceUrl),
+      ]);
 
-    // Also save/update this setup in the member's spec sheets so they can select it anytime later.
-    await saveSpecSheet(
-      {
-        name: carName || chassis || title,
+      const now = Date.now();
+      const durability1 = rollCarInitialDurability(rng);
+      stored = {
+        id: randomUUID(),
+        userId: user.id,
+        createdAt: now,
+        name: source1.name,
+        ability: source1.ability || source1.name,
+        effect: source1.effect,
+        tier: drawn1.tier,
+        stats: drawn1.stats,
+        imageUrl: drawn1.imageUrl,
+        imageZoom: MEMBER_ART_ZOOM,
+        imageX: 50,
+        imageY: 50,
+        driver: source1.driver,
+        team: source1.team,
+        styleIds: drawn1.styleIds,
+        kept: true,
+        rerolled: false,
+        ownerName: user.name,
+        referenceUrl: source1.referenceUrl,
+        bonus: true,
+        bonusFromCardId: source1.id,
+        maxBattles: durability1,
+        battlesRemaining: durability1,
+        fault: null,
+      };
+      await redis.set(cardKey(stored.id), JSON.stringify(stored));
+      await redis.zadd(indexKey(user.id), { score: now, member: stored.id });
+      await redis.zadd(ALL_MEMBER_CARDS_INDEX, { score: now, member: stored.id });
+      await redis.hincrby(`member:${user.id}`, "packsOpened", 1).catch(() => {});
+
+      const bonusNow = Date.now() + 1;
+      const durability2 = rollCarInitialDurability(rng);
+      bonus = {
+        id: randomUUID(),
+        userId: user.id,
+        createdAt: bonusNow,
+        name: source2.name,
+        ability: source2.ability || source2.name,
+        effect: source2.effect,
+        tier: drawn2.tier,
+        stats: drawn2.stats,
+        imageUrl: drawn2.imageUrl,
+        imageZoom: MEMBER_ART_ZOOM,
+        imageX: 50,
+        imageY: 50,
+        driver: source2.driver,
+        team: source2.team,
+        styleIds: drawn2.styleIds,
+        kept: true,
+        rerolled: false,
+        ownerName: user.name,
+        referenceUrl: source2.referenceUrl,
+        bonus: true,
+        bonusFromCardId: source2.id,
+        maxBattles: durability2,
+        battlesRemaining: durability2,
+        fault: null,
+      };
+      await redis.set(cardKey(bonus.id), JSON.stringify(bonus));
+      await redis.zadd(indexKey(user.id), { score: bonusNow, member: bonus.id });
+      await redis.zadd(ALL_MEMBER_CARDS_INDEX, { score: bonusNow, member: bonus.id });
+    } else {
+      // Sometimes the pack also holds a bonus card built from another member's card. It is drawn at the
+      // same time as the member's own card, so the pack takes no longer to open, and if it fails it is
+      // simply skipped: it never fails the pack or costs the member anything.
+      const bonusSource = rng() < BONUS_CARD_CHANCE ? await pickBonusSource(user.id) : null;
+      const bonusDrawing = bonusSource
+        ? rollAndDraw(bonusSource.referenceUrl).catch((error) => {
+            console.error("[member-cards] bonus card failed, skipping it:", error);
+            return null;
+          })
+        : null;
+
+      const drawn = await rollAndDraw(input.referenceUrl);
+      const now = Date.now();
+      const title = cardTitle({ carName, chassis, driver });
+      const initialDurability = rollCarInitialDurability(rng);
+      stored = {
+        id: randomUUID(),
+        userId: user.id,
+        createdAt: now,
+        name: title,
+        // Always store the chassis so it pulls through to card art, details, and clash arena
+        ability: chassis.trim() || carName.trim() || title,
+        effect: description,
+        tier: drawn.tier,
+        stats: drawn.stats,
+        imageUrl: drawn.imageUrl,
+        imageZoom: MEMBER_ART_ZOOM,
+        imageX: 50,
+        imageY: 50,
         driver,
         team,
-        carId: input.carId ?? null,
-        carName: carName || title,
-        chassis,
-        photoUrl: input.referenceUrl,
-        parts: resolvedParts,
-      },
-      user.id
-    ).catch(() => {});
+        styleIds: drawn.styleIds,
+        // With re-rolling switched off there is nothing left to decide, so the card is kept straight away.
+        kept: !REROLL_ENABLED,
+        rerolled: false,
+        ownerName: user.name,
+        referenceUrl: input.referenceUrl,
+        maxBattles: initialDurability,
+        battlesRemaining: initialDurability,
+        fault: null,
+      };
+      await redis.set(cardKey(stored.id), JSON.stringify(stored));
+      await redis.zadd(indexKey(user.id), { score: now, member: stored.id });
+      // Every card is also listed for admins, who can see all stored cards.
+      await redis.zadd(ALL_MEMBER_CARDS_INDEX, { score: now, member: stored.id });
+      await redis.hincrby(`member:${user.id}`, "packsOpened", 1).catch(() => {});
+      // This driver and car now stands in the community pool with this card (replacing their older one).
+      await addToCommunityPool(stored).catch((error) => console.error("[member-cards] could not update the pool:", error));
+      const resolvedParts = input.parts ?? parsePartsFromDescription(description);
 
-    await recordCommunityParts(resolvedParts).catch(() => {});
+      if (input.carId) {
+        await updateCarParts(input.carId, user.id, resolvedParts, chassis).catch(() => {});
+      }
 
-    // The bonus card: the other member's card details, drawn again as a whole new card (its own
-    // rarity, stats, art styles and picture). It goes straight into this member's collection and
-    // can't be re-rolled. Anything going wrong here leaves the member's own card untouched.
-    let bonus: StoredMemberCard | null = null;
-    const bonusDrawn = bonusDrawing ? await bonusDrawing : null;
-    if (bonusSource && bonusDrawn) {
-      try {
-        const bonusNow = Date.now();
-        const bonusDurability = rollCarInitialDurability(rng);
-        bonus = {
-          id: randomUUID(),
-          userId: user.id,
-          createdAt: bonusNow,
-          name: bonusSource.name,
-          ability: bonusSource.ability || bonusSource.name,
-          effect: bonusSource.effect,
-          tier: bonusDrawn.tier,
-          stats: bonusDrawn.stats,
-          imageUrl: bonusDrawn.imageUrl,
-          imageZoom: MEMBER_ART_ZOOM,
-          imageX: 50,
-          imageY: 50,
-          driver: bonusSource.driver,
-          team: bonusSource.team,
-          styleIds: bonusDrawn.styleIds,
-          kept: true,
-          rerolled: false,
-          ownerName: user.name,
-          referenceUrl: bonusSource.referenceUrl,
-          bonus: true,
-          bonusFromCardId: bonusSource.id,
-          maxBattles: bonusDurability,
-          battlesRemaining: bonusDurability,
-          fault: null,
-        };
-        await redis.set(cardKey(bonus.id), JSON.stringify(bonus));
-        await redis.zadd(indexKey(user.id), { score: bonusNow, member: bonus.id });
-        await redis.zadd(ALL_MEMBER_CARDS_INDEX, { score: bonusNow, member: bonus.id });
-      } catch (error) {
-        console.error("[member-cards] could not save the bonus card:", error);
-        bonus = null;
+      // Also save/update this setup in the member's spec sheets so they can select it anytime later.
+      await saveSpecSheet(
+        {
+          name: carName || chassis || title,
+          driver,
+          team,
+          carId: input.carId ?? null,
+          carName: carName || title,
+          chassis,
+          photoUrl: input.referenceUrl,
+          parts: resolvedParts,
+        },
+        user.id
+      ).catch(() => {});
+
+      await recordCommunityParts(resolvedParts).catch(() => {});
+
+      // The bonus card: the other member's card details, drawn again as a whole new card (its own
+      // rarity, stats, art styles and picture). It goes straight into this member's collection and
+      // can't be re-rolled. Anything going wrong here leaves the member's own card untouched.
+      const bonusDrawn = bonusDrawing ? await bonusDrawing : null;
+      if (bonusSource && bonusDrawn) {
+        try {
+          const bonusNow = Date.now();
+          const bonusDurability = rollCarInitialDurability(rng);
+          bonus = {
+            id: randomUUID(),
+            userId: user.id,
+            createdAt: bonusNow,
+            name: bonusSource.name,
+            ability: bonusSource.ability || bonusSource.name,
+            effect: bonusSource.effect,
+            tier: bonusDrawn.tier,
+            stats: bonusDrawn.stats,
+            imageUrl: bonusDrawn.imageUrl,
+            imageZoom: MEMBER_ART_ZOOM,
+            imageX: 50,
+            imageY: 50,
+            driver: bonusSource.driver,
+            team: bonusSource.team,
+            styleIds: bonusDrawn.styleIds,
+            kept: true,
+            rerolled: false,
+            ownerName: user.name,
+            referenceUrl: bonusSource.referenceUrl,
+            bonus: true,
+            bonusFromCardId: bonusSource.id,
+            maxBattles: bonusDurability,
+            battlesRemaining: bonusDurability,
+            fault: null,
+          };
+          await redis.set(cardKey(bonus.id), JSON.stringify(bonus));
+          await redis.zadd(indexKey(user.id), { score: bonusNow, member: bonus.id });
+          await redis.zadd(ALL_MEMBER_CARDS_INDEX, { score: bonusNow, member: bonus.id });
+        } catch (error) {
+          console.error("[member-cards] could not save the bonus card:", error);
+          bonus = null;
+        }
       }
     }
 

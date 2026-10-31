@@ -213,8 +213,14 @@ export function PackOpening({
       {anim === "revealed" && card && (
         <>
           <span className="sr-only" role="status">
-            {`You got a ${info?.label} card: ${card.name}.`}
-            {bonus ? ` Your pack also had a ${tierInfo(bonus.tier).label} community card: ${bonus.name}.` : ""}
+            {card.bonus
+              ? `You got a ${info?.label} community card: ${card.name}.`
+              : `You got a ${info?.label} card: ${card.name}.`}
+            {bonus
+              ? card.bonus
+                ? ` Your pack also had a second ${tierInfo(bonus.tier).label} community card: ${bonus.name}.`
+                : ` Your pack also had a ${tierInfo(bonus.tier).label} community card: ${bonus.name}.`
+              : ""}
             {crew ? ` Plus a ${tierInfo(crew.tier).label} Crew Modifier card: ${crew.name}.` : ""}
             {featured ? ` A rare ${tierInfo(featured.tier).label} bonus card also dropped: ${featured.name}.` : ""}
             {maintenance ? ` Plus a ${tierInfo(maintenance.tier).label} Maintenance Consumable: ${maintenance.name}.` : ""}

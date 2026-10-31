@@ -233,6 +233,7 @@ function CardPackWizardForm({
   const [photoUrl, setPhotoUrl] = useState(start.photoUrl);
   const [uploadKey, setUploadKey] = useState(0);
   const [parts, setParts] = useState(start.parts);
+  const [skipPersonalCar, setSkipPersonalCar] = useState(false);
   // The parts become the card's one line of text, e.g. "Hobbywing XeRun V10 G4 · Acuvance Xarvis XX".
   const description = composeParts(parts);
   const partsTooLong = description.length > PARTS_LINE_MAX;
@@ -341,7 +342,14 @@ function CardPackWizardForm({
     });
   }
 
-  const canNext = step === 1 ? driver.trim().length > 0 : step === 3 ? Boolean(photoUrl) : step === 4 ? !partsTooLong : true;
+  const canNext =
+    step === 1
+      ? skipPersonalCar || driver.trim().length > 0
+      : step === 3
+        ? skipPersonalCar || Boolean(photoUrl)
+        : step === 4
+          ? !partsTooLong
+          : true;
 
   const resultRef = useRef<HTMLDivElement>(null);
   // On small screens the card fills the view, so bring the result text and buttons into sight once revealed.
@@ -368,18 +376,21 @@ function CardPackWizardForm({
     setMode("pack");
     startTransition(async () => {
       const res = await openCardPack({
-        driver,
-        team,
-        chassis,
-        description,
-        carName: car?.name,
-        carId,
-        parts,
-        referenceUrl: photoUrl,
+        driver: skipPersonalCar ? (driver.trim() || defaultName || "Driver") : driver,
+        team: skipPersonalCar ? "" : team,
+        chassis: skipPersonalCar ? "" : chassis,
+        description: skipPersonalCar ? "" : description,
+        carName: skipPersonalCar ? undefined : car?.name,
+        carId: skipPersonalCar ? null : carId,
+        parts: skipPersonalCar ? undefined : parts,
+        referenceUrl: skipPersonalCar ? "" : photoUrl,
+        skipPersonalCar,
       });
       if (res.success) {
-        // Remember these answers so the next pack starts filled in.
-        saveRememberedPack(userId, { driver: driver.trim(), team: team.trim(), carId, chassis: chassis.trim(), photoUrl, parts });
+        // Remember these answers so the next pack starts filled in if car was configured.
+        if (!skipPersonalCar) {
+          saveRememberedPack(userId, { driver: driver.trim(), team: team.trim(), carId, chassis: chassis.trim(), photoUrl, parts });
+        }
         getMemberSpecSheets(userId).then(setSpecSheets).catch(() => {});
         setCard(res.data.card);
         setBonus(res.data.bonus);
@@ -481,12 +492,14 @@ function CardPackWizardForm({
         {revealed && card && (
           <div ref={resultRef} className={`${panel} scroll-mt-20 space-y-4`}>
             <div className="text-center">
-              <p className="text-xs font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">You pulled a</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
+                {card.bonus ? "Community Car Card #1" : "You pulled a"}
+              </p>
               <p className="text-2xl font-black text-zinc-900 dark:text-zinc-100">{rarityLabel(card.tier)} card</p>
               <p className="text-sm text-zinc-600 dark:text-zinc-400">{card.name}</p>
               {bonus && (
                 <p className="mt-2 text-sm font-bold text-amber-600 dark:text-amber-400">
-                  + Community Card: {rarityLabel(bonus.tier)} {bonus.name}
+                  + Community Car Card {card.bonus ? "#2" : ""}: {rarityLabel(bonus.tier)} {bonus.name}
                 </p>
               )}
               {crew && (
@@ -497,6 +510,11 @@ function CardPackWizardForm({
               {featured && (
                 <p className="mt-2 text-sm font-black text-rose-600 dark:text-rose-400">
                   🔥 Rare Bonus Drop! A {rarityLabel(featured.tier)} card, {featured.name}, was also in your pack!
+                </p>
+              )}
+              {maintenance && (
+                <p className="mt-1.5 text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                  + Maintenance Consumable: 🔧 {maintenance.name}
                 </p>
               )}
               <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
@@ -687,15 +705,66 @@ function CardPackWizardForm({
       <div className={`${panel} space-y-4`}>
         {step === 1 && (
           <>
-            <div>
-              <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">What name goes on the card?</h2>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">This is printed as the driver. We filled in your account name.</p>
+            <div
+              className={`rounded-xl border-2 p-4 transition-colors cursor-pointer ${
+                skipPersonalCar ? "border-amber-500 bg-amber-500/10" : "border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/40"
+              }`}
+              onClick={() => setSkipPersonalCar(!skipPersonalCar)}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl mt-0.5">👥</span>
+                  <div>
+                    <span className="block text-sm font-black text-zinc-900 dark:text-zinc-100">
+                      Don&apos;t generate my car (Pull 2 Community Cards)
+                    </span>
+                    <span className="block text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
+                      Don&apos;t have an RC car yet? Select this to pull two community car cards from other racers — no driver name, team, chassis or car photos needed!
+                    </span>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={skipPersonalCar}
+                  onChange={(e) => setSkipPersonalCar(e.target.checked)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="mt-1 h-5 w-5 rounded border-zinc-300 text-amber-500 focus:ring-amber-500"
+                />
+              </div>
+
+              {skipPersonalCar && (
+                <div className="mt-3 flex items-center justify-between border-t border-amber-500/30 pt-3">
+                  <span className="text-xs font-bold text-amber-700 dark:text-amber-400">
+                    ✓ No details needed. You can open your pack now!
+                  </span>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      open();
+                    }}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 text-xs font-black text-black transition-colors hover:bg-amber-400 disabled:opacity-50"
+                  >
+                    {pending ? "Opening pack…" : "Open pack now →"}
+                  </button>
+                </div>
+              )}
             </div>
-            <div>
-              <label htmlFor="cp-name" className={label}>Your name</label>
-              <input id="cp-name" className={input} value={driver} maxLength={30} autoComplete="name" onChange={(e) => setDriver(e.target.value)} />
-            </div>
-            <QuickPicks title="Or tap one" options={nameOptions} value={driver} onPick={setDriver} />
+
+            {!skipPersonalCar && (
+              <>
+                <div className="pt-2">
+                  <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">What name goes on the card?</h2>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400">This is printed as the driver. We filled in your account name.</p>
+                </div>
+                <div>
+                  <label htmlFor="cp-name" className={label}>Your name</label>
+                  <input id="cp-name" className={input} value={driver} maxLength={30} autoComplete="name" onChange={(e) => setDriver(e.target.value)} />
+                </div>
+                <QuickPicks title="Or tap one" options={nameOptions} value={driver} onPick={setDriver} />
+              </>
+            )}
           </>
         )}
 
@@ -723,99 +792,151 @@ function CardPackWizardForm({
             <div>
               <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Which car is the card of?</h2>
               <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                The art is drawn from a photo of your car, so pick one from your garage or upload a photo.
+                The art is drawn from a photo of your car, so pick one from your garage, upload a photo, or choose to pull 2 community cards instead.
               </p>
             </div>
 
-            {cars.length > 0 && (
-              <fieldset className="space-y-2">
-                <legend className={label}>Your garage</legend>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {cars.map((c) => {
-                    const active = c.carId === carId;
-                    return (
-                      <button
-                        key={c.carId}
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() => chooseCar(c)}
-                        className={`overflow-hidden rounded-xl border-2 text-left ${active ? "border-amber-500" : "border-zinc-200 hover:border-zinc-400 dark:border-zinc-700"}`}
-                      >
-                        <span className="block aspect-video bg-zinc-100 dark:bg-zinc-800">
-                          {c.images[0] ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={c.images[0]} alt="" className="h-full w-full object-cover" />
-                          ) : (
-                            <span className="flex h-full items-center justify-center text-xs text-zinc-400">No photo</span>
-                          )}
-                        </span>
-                        <span className="block truncate px-2.5 py-2 text-xs font-bold text-zinc-800 dark:text-zinc-100">{c.name}</span>
-                      </button>
-                    );
-                  })}
+            {/* Option to skip personal car */}
+            <div
+              className={`rounded-xl border-2 p-4 transition-colors cursor-pointer ${
+                skipPersonalCar
+                  ? "border-amber-500 bg-amber-500/10"
+                  : "border-zinc-200 bg-zinc-50/50 hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-800/30"
+              }`}
+              onClick={() => setSkipPersonalCar(!skipPersonalCar)}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl mt-0.5">👥</span>
+                  <div>
+                    <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">
+                      Don&apos;t generate my car (Pull 2 Community Cards)
+                    </p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                      Don&apos;t have an RC car yet? We&apos;ll pull two community car cards from other racers instead of custom car art.
+                    </p>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={skipPersonalCar}
+                  onChange={(e) => setSkipPersonalCar(e.target.checked)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-5 w-5 rounded border-zinc-300 text-amber-500 focus:ring-amber-500"
+                />
+              </div>
+              {skipPersonalCar && (
+                <div className="mt-3 flex items-center justify-between border-t border-amber-500/30 pt-3">
+                  <span className="text-xs font-bold text-amber-700 dark:text-amber-400">
+                    ✓ 2 Community Cards will be pulled for this pack.
+                  </span>
                   <button
                     type="button"
-                    aria-pressed={carId === null}
-                    onClick={() => chooseCar(null)}
-                    className={`flex min-h-24 items-center justify-center rounded-xl border-2 border-dashed px-2 text-center text-xs font-bold text-zinc-700 dark:text-zinc-200 ${carId === null ? "border-amber-500 bg-amber-500/10" : "border-zinc-300 hover:border-zinc-400 dark:border-zinc-700"}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setStep(5);
+                    }}
+                    className="rounded-lg bg-amber-500 px-3 py-1 text-xs font-black text-black hover:bg-amber-400"
                   >
-                    A different car
+                    Jump to Review &amp; Open →
                   </button>
                 </div>
-              </fieldset>
-            )}
-
-            <div className="space-y-2">
-              <p className={label}>Chassis (optional)</p>
-              <ChassisSelector value={chassis} onChange={setChassis} />
-              {car &&
-                (car.chassis.trim() ? (
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Filled in from your garage. You can change it for the card.</p>
-                ) : (
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                    {car.name} has no chassis saved in your garage, so we used its name. Pick a chassis above, or{" "}
-                    <Link href={`/cars/${car.carId}/edit`} className="font-bold text-amber-600 underline dark:text-amber-400">
-                      set the chassis in your garage
-                    </Link>{" "}
-                    so it fills in every time.
-                  </p>
-                ))}
-            </div>
-
-            <div className="space-y-2">
-              <p className={label}>Photo of the car</p>
-              {car && car.images.length > 0 && (
-                <div className="flex flex-wrap gap-2" role="group" aria-label="Choose a photo">
-                  {car.images.map((url, i) => (
-                    <button
-                      key={url}
-                      type="button"
-                      aria-pressed={photoUrl === url}
-                      aria-label={`Use photo ${i + 1}`}
-                      onClick={() => {
-                        setPhotoUrl(url);
-                        setUploadKey((k) => k + 1);
-                      }}
-                      className={`h-16 w-24 overflow-hidden rounded-lg border-2 ${photoUrl === url ? "border-amber-500" : "border-transparent"}`}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={url} alt="" className="h-full w-full object-cover" />
-                    </button>
-                  ))}
-                </div>
               )}
-              {/* Always available: take or upload a different photo instead of the garage ones. */}
-              <ImageUploader
-                key={uploadKey}
-                maxFiles={1}
-                label={car && car.images.length > 0 ? "Or take / upload a different photo" : "Take or upload a photo of your car"}
-                initialUrls={photoUrl && !(car?.images ?? []).includes(photoUrl) ? [photoUrl] : []}
-                onUploadComplete={(urls) => {
-                  if (urls[0]) setPhotoUrl(urls[0]);
-                  else setPhotoUrl(car?.images[0] ?? "");
-                }}
-              />
             </div>
+
+            {!skipPersonalCar && (
+              <>
+                {cars.length > 0 && (
+                  <fieldset className="space-y-2">
+                    <legend className={label}>Your garage</legend>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {cars.map((c) => {
+                        const active = c.carId === carId;
+                        return (
+                          <button
+                            key={c.carId}
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => chooseCar(c)}
+                            className={`overflow-hidden rounded-xl border-2 text-left ${active ? "border-amber-500" : "border-zinc-200 hover:border-zinc-400 dark:border-zinc-700"}`}
+                          >
+                            <span className="block aspect-video bg-zinc-100 dark:bg-zinc-800">
+                              {c.images[0] ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={c.images[0]} alt="" className="h-full w-full object-cover" />
+                              ) : (
+                                <span className="flex h-full items-center justify-center text-xs text-zinc-400">No photo</span>
+                              )}
+                            </span>
+                            <span className="block truncate px-2.5 py-2 text-xs font-bold text-zinc-800 dark:text-zinc-100">{c.name}</span>
+                          </button>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        aria-pressed={carId === null}
+                        onClick={() => chooseCar(null)}
+                        className={`flex min-h-24 items-center justify-center rounded-xl border-2 border-dashed px-2 text-center text-xs font-bold text-zinc-700 dark:text-zinc-200 ${carId === null ? "border-amber-500 bg-amber-500/10" : "border-zinc-300 hover:border-zinc-400 dark:border-zinc-700"}`}
+                      >
+                        A different car
+                      </button>
+                    </div>
+                  </fieldset>
+                )}
+
+                <div className="space-y-2">
+                  <p className={label}>Chassis (optional)</p>
+                  <ChassisSelector value={chassis} onChange={setChassis} />
+                  {car &&
+                    (car.chassis.trim() ? (
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">Filled in from your garage. You can change it for the card.</p>
+                    ) : (
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                        {car.name} has no chassis saved in your garage, so we used its name. Pick a chassis above, or{" "}
+                        <Link href={`/cars/${car.carId}/edit`} className="font-bold text-amber-600 underline dark:text-amber-400">
+                          set the chassis in your garage
+                        </Link>{" "}
+                        so it fills in every time.
+                      </p>
+                    ))}
+                </div>
+
+                <div className="space-y-2">
+                  <p className={label}>Photo of the car</p>
+                  {car && car.images.length > 0 && (
+                    <div className="flex flex-wrap gap-2" role="group" aria-label="Choose a photo">
+                      {car.images.map((url, i) => (
+                        <button
+                          key={url}
+                          type="button"
+                          aria-pressed={photoUrl === url}
+                          aria-label={`Use photo ${i + 1}`}
+                          onClick={() => {
+                            setPhotoUrl(url);
+                            setUploadKey((k) => k + 1);
+                          }}
+                          className={`h-16 w-24 overflow-hidden rounded-lg border-2 ${photoUrl === url ? "border-amber-500" : "border-transparent"}`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={url} alt="" className="h-full w-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {/* Always available: take or upload a different photo instead of the garage ones. */}
+                  <ImageUploader
+                    key={uploadKey}
+                    maxFiles={1}
+                    label={car && car.images.length > 0 ? "Or take / upload a different photo" : "Take or upload a photo of your car"}
+                    initialUrls={photoUrl && !(car?.images ?? []).includes(photoUrl) ? [photoUrl] : []}
+                    onUploadComplete={(urls) => {
+                      if (urls[0]) setPhotoUrl(urls[0]);
+                      else setPhotoUrl(car?.images[0] ?? "");
+                    }}
+                  />
+                </div>
+              </>
+            )}
           </>
         )}
 
@@ -824,33 +945,42 @@ function CardPackWizardForm({
             <div>
               <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Tell us about the car</h2>
               <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                Pick the parts in your car and they are printed on the card. Every part is optional, and you can type your own if it
-                isn&apos;t listed.
+                {skipPersonalCar
+                  ? "Since you selected to pull 2 community car cards, parts are optional and will not be applied to this pack."
+                  : "Pick the parts in your car and they are printed on the card. Every part is optional, and you can type your own if it isn't listed."}
               </p>
             </div>
 
-            <div className="space-y-3">
-              {categories.map((c) => (
-                <PartSelector key={c.key} category={c} value={parts[c.key]} onChange={(v) => setParts((p) => ({ ...p, [c.key as PartKey]: v }))} />
-              ))}
-            </div>
+            {!skipPersonalCar ? (
+              <>
+                <div className="space-y-3">
+                  {categories.map((c) => (
+                    <PartSelector key={c.key} category={c} value={parts[c.key]} onChange={(v) => setParts((p) => ({ ...p, [c.key as PartKey]: v }))} />
+                  ))}
+                </div>
 
-            <div aria-live="polite" className="space-y-1">
-              <p className="flex justify-between text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
-                <span>On the card</span>
-                <span className={`font-semibold normal-case tracking-normal ${partsTooLong ? "text-red-600 dark:text-red-400" : ""}`}>
-                  {description.length}/{PARTS_LINE_MAX}
-                </span>
-              </p>
-              <p className="rounded-xl bg-zinc-100 px-3.5 py-3 text-sm text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100">
-                {description || "Nothing picked yet"}
-              </p>
-              {partsTooLong && (
-                <p role="alert" className="text-xs font-semibold text-red-600 dark:text-red-400">
-                  That is too long for the card. Shorten a typed part or clear one.
-                </p>
-              )}
-            </div>
+                <div aria-live="polite" className="space-y-1">
+                  <p className="flex justify-between text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                    <span>On the card</span>
+                    <span className={`font-semibold normal-case tracking-normal ${partsTooLong ? "text-red-600 dark:text-red-400" : ""}`}>
+                      {description.length}/{PARTS_LINE_MAX}
+                    </span>
+                  </p>
+                  <p className="rounded-xl bg-zinc-100 px-3.5 py-3 text-sm text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100">
+                    {description || "Nothing picked yet"}
+                  </p>
+                  {partsTooLong && (
+                    <p role="alert" className="text-xs font-semibold text-red-600 dark:text-red-400">
+                      That is too long for the card. Shorten a typed part or clear one.
+                    </p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/10 p-4 text-xs font-medium text-amber-800 dark:text-amber-300">
+                You chose <strong>Don&apos;t generate my car</strong>. Both cars in your pack will be drawn from the community pool with their owners&apos; specs.
+              </div>
+            )}
           </>
         )}
 
@@ -859,24 +989,40 @@ function CardPackWizardForm({
             <div>
               <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Ready to open your pack?</h2>
               <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                It costs 1 card credit (you have {credits}). Every Standard Pack contains <strong>1 of your car</strong>, <strong>1 Community card</strong>, and <strong>1 Tactical Crew card</strong> (for Clash Arena), plus a chance to pull a rare <strong>Bonus Set card</strong>!
+                It costs 1 card credit (you have {credits}). Every Standard Pack contains{" "}
+                {skipPersonalCar ? (
+                  <>
+                    <strong>2 Community Car cards</strong>
+                  </>
+                ) : (
+                  <>
+                    <strong>1 of your car</strong> and <strong>1 Community card</strong>
+                  </>
+                )}
+                , <strong>1 Tactical Crew card</strong> (for Clash Arena), and <strong>1 Maintenance Repair Kit</strong>, plus a chance to pull a rare <strong>Bonus Set card</strong>!
               </p>
             </div>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
               <dt className="font-bold text-zinc-500 dark:text-zinc-400">Driver</dt>
-              <dd className="text-zinc-900 dark:text-zinc-100">{driver.trim()}</dd>
+              <dd className="text-zinc-900 dark:text-zinc-100">{skipPersonalCar ? "Community Drivers (2 cards)" : (driver.trim() || "None")}</dd>
               <dt className="font-bold text-zinc-500 dark:text-zinc-400">Team</dt>
-              <dd className="text-zinc-900 dark:text-zinc-100">{team.trim() || "None"}</dd>
-              <dt className="font-bold text-zinc-500 dark:text-zinc-400">Car</dt>
-              <dd className="text-zinc-900 dark:text-zinc-100">{car?.name ?? "Another car"}</dd>
-              <dt className="font-bold text-zinc-500 dark:text-zinc-400">Chassis</dt>
-              <dd className="text-zinc-900 dark:text-zinc-100">{chassis.trim() || "Not set"}</dd>
-              {categories.map((c) => (
-                <Fragment key={c.key}>
-                  <dt className="font-bold text-zinc-500 dark:text-zinc-400">{c.label}</dt>
-                  <dd className="text-zinc-900 dark:text-zinc-100">{parts[c.key].trim() || "Not set"}</dd>
-                </Fragment>
-              ))}
+              <dd className="text-zinc-900 dark:text-zinc-100">{skipPersonalCar ? "Community Teams" : (team.trim() || "None")}</dd>
+              <dt className="font-bold text-zinc-500 dark:text-zinc-400">Cars in Pack</dt>
+              <dd className="text-zinc-900 dark:text-zinc-100 font-semibold text-amber-600 dark:text-amber-400">
+                {skipPersonalCar ? "2 Community Car cards (Don't generate my car)" : (car?.name ?? "Custom card from photo")}
+              </dd>
+              {!skipPersonalCar && (
+                <>
+                  <dt className="font-bold text-zinc-500 dark:text-zinc-400">Chassis</dt>
+                  <dd className="text-zinc-900 dark:text-zinc-100">{chassis.trim() || "Not set"}</dd>
+                  {categories.map((c) => (
+                    <Fragment key={c.key}>
+                      <dt className="font-bold text-zinc-500 dark:text-zinc-400">{c.label}</dt>
+                      <dd className="text-zinc-900 dark:text-zinc-100">{parts[c.key].trim() || "Not set"}</dd>
+                    </Fragment>
+                  ))}
+                </>
+              )}
             </dl>
             {REROLL_ENABLED && (
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
@@ -895,13 +1041,17 @@ function CardPackWizardForm({
         ) : (
           <span />
         )}
-        {step < 5 ? (
+        {skipPersonalCar ? (
+          <button type="button" className={primary} disabled={pending} onClick={open}>
+            {pending ? "Opening pack…" : "Open pack now (2 Community Cards)"}
+          </button>
+        ) : step < 5 ? (
           <button type="button" className={primary} disabled={!canNext} onClick={() => setStep((s) => (s + 1) as Step)}>
             {(step === 2 && !team.trim()) || (step === 4 && !description.trim()) ? "Skip" : "Next"}
           </button>
         ) : (
           <button type="button" className={primary} disabled={pending || !driver.trim() || !photoUrl} onClick={open}>
-            Open my pack
+            {pending ? "Opening pack…" : "Open my pack"}
           </button>
         )}
       </div>

@@ -49,12 +49,10 @@ const TABS: Array<{
     label: "Clash Arena",
     shortLabel: "Clash",
     icon: "⚡",
-    badge: ({ dailyWinAvailable, hasEarlyAccess }) =>
-      !hasEarlyAccess
-        ? "🔒 Beta"
-        : dailyWinAvailable
-          ? `+${DAILY_CLASH_WIN_REWARD_PCREDITS}P`
-          : null,
+    badge: ({ dailyWinAvailable }) =>
+      dailyWinAvailable
+        ? `+${DAILY_CLASH_WIN_REWARD_PCREDITS}P`
+        : null,
   },
   {
     id: "store",

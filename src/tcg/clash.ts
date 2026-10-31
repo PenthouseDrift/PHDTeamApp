@@ -41,22 +41,15 @@ const clashStreakBonusKey = (userId: string, utcDate: string) =>
 const CLASH_EARLY_ACCESS_SET = "tcg:clash_early_access_users";
 
 /**
- * Check whether a user has permission to play the Tandem Clash early access beta.
- * Track Admins automatically have permanent access.
+ * Check whether a user has permission to play the Tandem Clash arena.
+ * Tandem Clash is open to all registered drivers and members.
  */
 export async function hasClashEarlyAccess(
   userId?: string | null,
   role?: string | null
 ): Promise<boolean> {
   if (!userId) return false;
-  if (role === "admin") return true;
-  try {
-    const isMember = await redis.sismember(CLASH_EARLY_ACCESS_SET, userId);
-    return Boolean(isMember);
-  } catch (error) {
-    console.error("[clash] error checking early access:", error);
-    return false;
-  }
+  return true;
 }
 
 export async function grantClashEarlyAccess(userId: string): Promise<boolean> {

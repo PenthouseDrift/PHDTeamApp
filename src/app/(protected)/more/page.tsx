@@ -21,11 +21,19 @@ export default async function MorePage() {
 
   const featureLinks = [
     {
-      title: "My Cards",
-      description: "Earn a credit each time you check in, then open card packs of your own car",
+      title: "Tandem Clash Arena",
+      description: "Play 3v3 RC drift card battles, roll real UK tracks, defeat rivals and win P-Credits",
+      href: "/cards?tab=clash",
+      icon: CardsIcon,
+      badge: "Game",
+      iconColor: "text-amber-500 bg-amber-500/10 border-amber-500/20",
+    },
+    {
+      title: "My Cards & Packs",
+      description: "Earn a credit each time you check in, then open card packs of your own car or community cars",
       href: "/cards",
       icon: CardsIcon,
-      badge: "New",
+      badge: "TCG",
       iconColor: "text-amber-500 bg-amber-500/10 border-amber-500/20",
     },
     {
