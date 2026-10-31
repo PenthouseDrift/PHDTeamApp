@@ -483,6 +483,34 @@ export function FullArtCard({
   const isLegend = card.tier === "legend";
   const pale = lighten(accent, 0.72);
 
+  const borderCustom = card.customBorderColor?.trim();
+  const statLabelCustom = card.customStatLabelColor?.trim();
+  const statValueCustom = card.customStatValueColor?.trim();
+  const bottomBgCustom = card.customBottomBarBgColor?.trim();
+  const bottomBorderCustom = card.customBottomBarBorderColor?.trim();
+
+  const safeLighten = (hex?: string, t = 0.45, fallback = "#ffffff") => {
+    if (!hex) return fallback;
+    try {
+      if (/^#[0-9a-fA-F]{6}$/i.test(hex)) return lighten(hex, t);
+      return hex;
+    } catch {
+      return hex;
+    }
+  };
+  const safeDarken = (hex?: string, t = 0.35, fallback = "#000000") => {
+    if (!hex) return fallback;
+    try {
+      if (/^#[0-9a-fA-F]{6}$/i.test(hex)) return darken(hex, t);
+      return hex;
+    } catch {
+      return hex;
+    }
+  };
+
+  const customBorderPale = safeLighten(borderCustom, 0.45, "#ffffff");
+  const customBorderDark = safeDarken(borderCustom, 0.35, "#000000");
+
   // Every Legend and Mythic card shines differently: its own timing, angle and sparkle spots, seeded from the card.
   const rand = seededRandom(`${card.id ?? ""}|${card.name}|${card.driver}|${card.imageUrl.slice(-24)}`);
   const shine = {
@@ -503,7 +531,16 @@ export function FullArtCard({
   }));
 
   // The legend frame is a prismatic gradient; the others are brushed metal in the tier colour.
-  const frameStops = isMythic
+  // If customBorderColor is provided, use custom brushed metal stops.
+  const frameStops = borderCustom
+    ? [
+        ["0", customBorderPale],
+        ["0.28", borderCustom],
+        ["0.52", customBorderDark],
+        ["0.74", borderCustom],
+        ["1", customBorderPale],
+      ]
+    : isMythic
     ? [
         ["0", "#fff1b8"],
         ["0.25", "#ff2d55"],
@@ -526,7 +563,9 @@ export function FullArtCard({
         ["0.74", accent],
         ["1", light],
       ];
-  const tagBackground = isMythic
+  const tagBackground = borderCustom
+    ? `linear-gradient(135deg, ${customBorderPale} 0%, ${borderCustom} 45%, ${customBorderDark} 100%)`
+    : isMythic
     ? "linear-gradient(120deg, #fff1b8, #ff2d55 40%, #ffb020 70%, #fff1b8)"
     : isLegend
     ? "linear-gradient(120deg, #7df9ff, #a78bfa 35%, #ff7ad9 65%, #ffd75e)"
@@ -545,10 +584,10 @@ export function FullArtCard({
   const team = card.team.trim() || (placeholders ? "[Name]" : "");
 
   // User requested:
-  // 1) Mythic cards have stats 25 25 25 25 (total 100/100).
+  // 1) Mythic cards have stats 25 25 25 25 (total 100/100) by default, or admin custom stats.
   // 2) Existing legacy cards (stats <= 10) get auto-scaled by 2.5x to the 25-point scale.
   const rawStats = isMythic
-    ? { drift: "25", accel: "25", grip: "25", steer: "25" }
+    ? (card.stats?.drift || card.stats?.accel ? card.stats : { drift: "25", accel: "25", grip: "25", steer: "25" })
     : card.stats;
 
   const rawVals = [
@@ -560,7 +599,6 @@ export function FullArtCard({
 
   const isLegacyCard = !isMythic && rawVals.length > 0 && Math.max(...rawVals) <= 10;
   const scaleStatVal = (val: string) => {
-    if (isMythic) return "25";
     const n = Number.parseInt(val, 10);
     if (!Number.isFinite(n)) return val;
     if (isLegacyCard) {
@@ -610,7 +648,7 @@ export function FullArtCard({
       }}
     >
       {/* Legend: spinning rainbow glow behind the card edge. */}
-      {isLegend && (
+      {isLegend && !borderCustom && (
         <BorderEffects variant="legend" seed={`${card.id ?? ""}|${card.name}|${card.imageUrl.slice(-24)}`} animated={!flat} />
       )}
       <div
@@ -752,7 +790,7 @@ export function FullArtCard({
         <div style={{ ...abs({ left: 0, right: 0, top: 0, height: "26cqw" }), background: "linear-gradient(180deg, rgba(0,0,0,0.5), rgba(0,0,0,0))", pointerEvents: "none" }} />
 
         {/* Frame: a tier-coloured metal edge with a glow */}
-        <div style={{ ...abs({ inset: 0 }), borderRadius: "5cqw", boxShadow: `inset 0 0 5cqw ${glow}66`, pointerEvents: "none" }} />
+        <div style={{ ...abs({ inset: 0 }), borderRadius: "5cqw", boxShadow: `inset 0 0 5cqw ${borderCustom ? `${borderCustom}66` : `${glow}66`}`, pointerEvents: "none" }} />
         <svg viewBox={`0 0 100 ${H}`} style={abs({ inset: 0, width: "100%", height: "100%" })} aria-hidden>
           <defs>
             <linearGradient id={`frame-${uid}`} gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="100" y2={H}>
@@ -762,7 +800,7 @@ export function FullArtCard({
             </linearGradient>
           </defs>
           <rect x="1.3" y="1.3" width="97.4" height={H - 2.6} rx="4.2" fill="none" stroke={`url(#frame-${uid})`} strokeWidth="2.6" />
-          <rect x="3.1" y="3.1" width="93.8" height={H - 6.2} rx="3" fill="none" stroke={pale} strokeWidth="0.35" opacity="0.8" />
+          <rect x="3.1" y="3.1" width="93.8" height={H - 6.2} rx="3" fill="none" stroke={borderCustom ? customBorderPale : pale} strokeWidth="0.35" opacity="0.8" />
         </svg>
 
         {/* Top row: the P mark and the tier tag */}
@@ -786,9 +824,10 @@ export function FullArtCard({
               position: "static",
               width: "100%",
               background: tagBackground,
-              color: isMythic ? "#2a0310" : isLegend ? "#12082e" : darken(accent, 0.72),
-              borderColor: pale,
-              boxShadow: `0 0 3cqw ${glow}aa, 0 0.6cqw 1cqw rgba(0,0,0,0.5)`,
+              color: borderCustom ? "#ffffff" : isMythic ? "#2a0310" : isLegend ? "#12082e" : darken(accent, 0.72),
+              borderColor: borderCustom ? customBorderPale : pale,
+              boxShadow: `0 0 3cqw ${borderCustom ? `${borderCustom}aa` : `${glow}aa`}, 0 0.6cqw 1cqw rgba(0,0,0,0.5)`,
+              textShadow: borderCustom ? "0 0.2cqw 0.6cqw rgba(0,0,0,0.9)" : undefined,
             }}
           >
             {tier.label}
@@ -809,9 +848,9 @@ export function FullArtCard({
                 style={{
                   padding: "0.9cqw 2.6cqw",
                   borderRadius: "1.2cqw",
-                  background: "rgba(0,0,0,0.65)",
-                  border: `0.3cqw solid ${accent}`,
-                  color: pale,
+                  background: bottomBgCustom || "rgba(0,0,0,0.65)",
+                  border: `0.3cqw solid ${bottomBorderCustom || borderCustom || accent}`,
+                  color: statValueCustom || (borderCustom ? customBorderPale : pale),
                   fontSize: "3.7cqw",
                   fontWeight: 800,
                   letterSpacing: "0.06em",
@@ -830,9 +869,9 @@ export function FullArtCard({
                   style={{
                     padding: "0.9cqw 2.4cqw",
                     borderRadius: "1.2cqw",
-                    background: "rgba(0,0,0,0.5)",
-                    border: `0.3cqw solid ${accent}`,
-                    color: pale,
+                    background: bottomBgCustom || "rgba(0,0,0,0.5)",
+                    border: `0.3cqw solid ${bottomBorderCustom || borderCustom || accent}`,
+                    color: statValueCustom || (borderCustom ? customBorderPale : pale),
                     fontSize: "4cqw",
                     fontWeight: 800,
                     letterSpacing: "0.04em",
@@ -985,9 +1024,21 @@ export function FullArtCard({
               {name}
             </div>
           )}
-          <div style={{ height: "0.7cqw", margin: "1.6cqw 0", background: isMythic ? "linear-gradient(90deg, #fff1b8, #ff2d55, #ffb020, #fff1b8)" : isLegend ? "linear-gradient(90deg, #7df9ff, #a78bfa, #ff7ad9, #ffd75e)" : `linear-gradient(90deg, ${light}, ${accent} 55%, transparent)`, borderRadius: "1cqw", boxShadow: `0 0 2cqw ${glow}aa` }} />
+          <div style={{
+            height: "0.7cqw",
+            margin: "1.6cqw 0",
+            background: borderCustom
+              ? `linear-gradient(90deg, ${customBorderPale}, ${borderCustom} 55%, transparent)`
+              : isMythic
+                ? "linear-gradient(90deg, #fff1b8, #ff2d55, #ffb020, #fff1b8)"
+                : isLegend
+                  ? "linear-gradient(90deg, #7df9ff, #a78bfa, #ff7ad9, #ffd75e)"
+                  : `linear-gradient(90deg, ${light}, ${accent} 55%, transparent)`,
+            borderRadius: "1cqw",
+            boxShadow: `0 0 2cqw ${borderCustom ? `${borderCustom}aa` : `${glow}aa`}`,
+          }} />
           {ability && (
-            <div style={{ fontSize: "3.9cqw", fontWeight: 700, color: light, lineHeight: 1.1, opacity: card.ability.trim() ? 1 : 0.7, overflowWrap: "anywhere" }}>{ability}</div>
+            <div style={{ fontSize: "3.9cqw", fontWeight: 700, color: borderCustom ? customBorderPale : light, lineHeight: 1.1, opacity: card.ability.trim() ? 1 : 0.7, overflowWrap: "anywhere" }}>{ability}</div>
           )}
           {effect && (
             <div style={{ fontSize: "3.3cqw", fontWeight: 600, lineHeight: 1.15, marginTop: "0.8cqw", opacity: card.effect.trim() ? 0.92 : 0.55, overflowWrap: "anywhere" }}>{effect}</div>
@@ -1002,9 +1053,9 @@ export function FullArtCard({
               alignItems: "center",
               padding: "1.6cqw 1cqw",
               borderRadius: "1.4cqw",
-              background: "rgba(0,0,0,0.55)",
-              border: `0.4cqw solid ${accent}`,
-              boxShadow: `0 0 2.4cqw ${glow}66`,
+              background: bottomBgCustom || "rgba(0,0,0,0.55)",
+              border: `0.4cqw solid ${bottomBorderCustom || borderCustom || accent}`,
+              boxShadow: `0 0 2.4cqw ${borderCustom ? `${borderCustom}66` : `${glow}66`}`,
             }}
           >
             {isSpecialClashCard ? (
@@ -1014,7 +1065,7 @@ export function FullArtCard({
                   fontWeight: 800,
                   textTransform: "uppercase",
                   letterSpacing: "0.06em",
-                  color: pale,
+                  color: statValueCustom || (borderCustom ? customBorderPale : pale),
                   whiteSpace: "nowrap",
                   textShadow: "none",
                 }}
@@ -1035,8 +1086,19 @@ export function FullArtCard({
               </span>
             ) : (
               stats.map(([statLabel, value]) => (
-                <span key={statLabel} style={{ fontSize: "4.8cqw", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.02em", color: accent, whiteSpace: "nowrap", textShadow: "none" }}>
-                  {statLabel}: <span style={{ color: pale }}>{value.trim() || "__"}</span>
+                <span
+                  key={statLabel}
+                  style={{
+                    fontSize: "4.8cqw",
+                    fontWeight: 800,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.02em",
+                    color: statLabelCustom || accent,
+                    whiteSpace: "nowrap",
+                    textShadow: "none",
+                  }}
+                >
+                  {statLabel}: <span style={{ color: statValueCustom || (borderCustom ? customBorderPale : pale) }}>{value.trim() || "__"}</span>
                 </span>
               ))
             )}
@@ -1044,7 +1106,7 @@ export function FullArtCard({
         </div>
       </div>
       {/* Mythic: molten lava border rendered in front of the card so the rim, drips and sparks sit on top of the frame. */}
-      {isMythic && (
+      {isMythic && !borderCustom && (
         <BorderEffects variant="mythic" seed={`${card.id ?? ""}|${card.name}|${card.imageUrl.slice(-24)}`} animated={!flat} />
       )}
     </div>

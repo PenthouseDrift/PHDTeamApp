@@ -146,6 +146,12 @@ export interface FullArtCardData {
   /** Active mechanical fault when durability reaches 0 */
   fault?: MechanicalFault | null;
   updatedAt?: number;
+  /** Custom styling overrides (optional, admin card maker only) */
+  customBorderColor?: string;
+  customStatLabelColor?: string;
+  customStatValueColor?: string;
+  customBottomBarBgColor?: string;
+  customBottomBarBorderColor?: string;
 }
 
 export function emptyFullArtCard(): FullArtCardData {
@@ -161,6 +167,11 @@ export function emptyFullArtCard(): FullArtCardData {
     imageY: 50,
     driver: "",
     team: "",
+    customBorderColor: undefined,
+    customStatLabelColor: undefined,
+    customStatValueColor: undefined,
+    customBottomBarBgColor: undefined,
+    customBottomBarBorderColor: undefined,
   };
 }
 
@@ -189,6 +200,14 @@ const clampNum = (v: unknown, min: number, max: number, fallback: number) => {
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 };
 
+const clampColor = (v: unknown): string | undefined => {
+  if (typeof v !== "string") return undefined;
+  const s = v.trim();
+  if (!s) return undefined;
+  if (/^[#a-zA-Z0-9(),.%\s-]{3,40}$/.test(s)) return s;
+  return undefined;
+};
+
 /** Coerce anything the client sends into a safe, well-formed full art card. */
 export function sanitizeFullArtCard(input: Partial<FullArtCardData> | null | undefined): FullArtCardData {
   const i = input ?? {};
@@ -207,15 +226,12 @@ export function sanitizeFullArtCard(input: Partial<FullArtCardData> | null | und
     effect: clampStr(i.effect, 160),
     // Cards saved when the top tier was called "god" are now legend cards.
     tier: resolvedTier,
-    stats:
-      resolvedTier === "mythic"
-        ? { drift: "25", accel: "25", grip: "25", steer: "25" }
-        : {
-            drift: clampStr(stats.drift, 3),
-            accel: clampStr(stats.accel, 3),
-            grip: clampStr(stats.grip, 3),
-            steer: clampStr(stats.steer, 3),
-          },
+    stats: {
+      drift: clampStr(stats.drift, 3) || (resolvedTier === "mythic" ? "25" : ""),
+      accel: clampStr(stats.accel, 3) || (resolvedTier === "mythic" ? "25" : ""),
+      grip: clampStr(stats.grip, 3) || (resolvedTier === "mythic" ? "25" : ""),
+      steer: clampStr(stats.steer, 3) || (resolvedTier === "mythic" ? "25" : ""),
+    },
     imageUrl:
       (/^https:\/\/\S+$/i.test(url) && url.length <= 600) || url.startsWith("data:image/svg+xml;utf8,")
         ? url
@@ -233,5 +249,10 @@ export function sanitizeFullArtCard(input: Partial<FullArtCardData> | null | und
     ...(typeof i.maxBattles === "number" ? { maxBattles: clampNum(i.maxBattles, 1, 99, 6) } : {}),
     ...(typeof i.battlesRemaining === "number" ? { battlesRemaining: clampNum(i.battlesRemaining, 0, 99, 6) } : {}),
     ...(i.fault ? { fault: i.fault } : {}),
+    ...(clampColor(i.customBorderColor) ? { customBorderColor: clampColor(i.customBorderColor) } : {}),
+    ...(clampColor(i.customStatLabelColor) ? { customStatLabelColor: clampColor(i.customStatLabelColor) } : {}),
+    ...(clampColor(i.customStatValueColor) ? { customStatValueColor: clampColor(i.customStatValueColor) } : {}),
+    ...(clampColor(i.customBottomBarBgColor) ? { customBottomBarBgColor: clampColor(i.customBottomBarBgColor) } : {}),
+    ...(clampColor(i.customBottomBarBorderColor) ? { customBottomBarBorderColor: clampColor(i.customBottomBarBorderColor) } : {}),
   };
 }

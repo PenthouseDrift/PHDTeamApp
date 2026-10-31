@@ -3,6 +3,12 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import ImageUploader from "@/components/ui/ImageUploader";
 import { generateCardArt } from "@/actions/admin/card-art";
+import {
+  listAdminCustomPrompts,
+  saveAdminCustomPrompt,
+  deleteAdminCustomPrompt,
+  type AdminCustomPrompt,
+} from "@/actions/admin/custom-prompts";
 import { MAX_ART_STYLES } from "@/lib/full-art-card";
 import {
   ART_PROMPT_MAX,
@@ -53,6 +59,105 @@ export interface AiArtPanelProps {
   footnote: string;
 }
 
+function SavedPromptsBar({
+  savedPrompts,
+  activeSavedPromptId,
+  onSelectPrompt,
+  onDeletePrompt,
+  onOpenSaveModal,
+  onClearActive,
+  isAuto,
+}: {
+  savedPrompts: AdminCustomPrompt[];
+  activeSavedPromptId: string | null;
+  onSelectPrompt: (p: AdminCustomPrompt) => void;
+  onDeletePrompt: (id: string, title: string) => void;
+  onOpenSaveModal: () => void;
+  onClearActive: () => void;
+  isAuto: boolean;
+}) {
+  const activePrompt = savedPrompts.find((p) => p.id === activeSavedPromptId);
+
+  return (
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm">💾</span>
+          <span className="text-xs font-black uppercase tracking-wider text-amber-900 dark:text-amber-200">
+            Admin Saved Prompts ({savedPrompts.length})
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={onOpenSaveModal}
+          className="text-xs font-bold text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
+        >
+          + Save Current Prompt
+        </button>
+      </div>
+
+      {savedPrompts.length === 0 ? (
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          No custom prompts saved yet. Edit any prompt and click &ldquo;Save Current Prompt&rdquo; to store it for future cards.
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {savedPrompts.map((p) => {
+            const isSelected = activeSavedPromptId === p.id;
+            return (
+              <div
+                key={p.id}
+                className={`group inline-flex items-center rounded-lg border text-xs transition-all ${
+                  isSelected
+                    ? "border-amber-500 bg-amber-500 text-black font-black shadow-sm"
+                    : "border-zinc-300 bg-white text-zinc-800 hover:border-amber-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => onSelectPrompt(p)}
+                  className="px-2.5 py-1 text-left font-bold"
+                  title={`Click to load:\n${p.prompt.slice(0, 140)}...`}
+                >
+                  {p.title}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeletePrompt(p.id, p.title);
+                  }}
+                  title={`Delete "${p.title}"`}
+                  className={`px-1.5 py-1 text-[11px] opacity-60 hover:opacity-100 hover:text-red-600 ${
+                    isSelected ? "text-black" : "text-zinc-400"
+                  }`}
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {activePrompt && (
+        <div className="flex items-center justify-between pt-1 border-t border-amber-500/20 text-xs">
+          <span className="font-semibold text-amber-800 dark:text-amber-300">
+            Active custom preset: <strong>{activePrompt.title}</strong>
+          </span>
+          <button
+            type="button"
+            onClick={onClearActive}
+            className="font-bold text-red-600 hover:underline dark:text-red-400"
+          >
+            {isAuto ? "Revert to Tier Prompt" : "Clear Preset"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AiArtPanel({
   presets = [],
   auto,
@@ -90,6 +195,133 @@ export function AiArtPanel({
   const activePrompt = auto ? (edited ?? auto.buildPrompt(autoStyles)) : prompt;
   const [generating, startGenerating] = useTransition();
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
+
+  const [savedPrompts, setSavedPrompts] = useState<AdminCustomPrompt[]>([]);
+  const [activeSavedPromptId, setActiveSavedPromptId] = useState<string | null>(null);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [savingTitle, setSavingTitle] = useState("");
+  const [updateExisting, setUpdateExisting] = useState(false);
+  const [savingPrompt, setSavingPrompt] = useState(false);
+  const [promptFeedback, setPromptFeedback] = useState<{ text: string; error?: boolean } | null>(null);
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem("admin-custom-prompts");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setSavedPrompts(parsed);
+        }
+      }
+    } catch {}
+
+    listAdminCustomPrompts()
+      .then((prompts) => {
+        if (Array.isArray(prompts)) {
+          setSavedPrompts(prompts);
+          try {
+            localStorage.setItem("admin-custom-prompts", JSON.stringify(prompts));
+          } catch {}
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to fetch admin custom prompts:", err);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!promptFeedback) return;
+    const timer = setTimeout(() => setPromptFeedback(null), 4000);
+    return () => clearTimeout(timer);
+  }, [promptFeedback]);
+
+  function applySavedPrompt(p: AdminCustomPrompt) {
+    setActiveSavedPromptId(p.id);
+    if (auto) {
+      setEdited(p.prompt);
+      if (detailsRef.current) {
+        detailsRef.current.open = true;
+      }
+    } else {
+      setPrompt(p.prompt);
+      setPresetId(null);
+    }
+    setPromptFeedback({ text: `Loaded prompt preset: “${p.title}”` });
+  }
+
+  function clearActiveSavedPrompt() {
+    setActiveSavedPromptId(null);
+    if (auto) {
+      setEdited(null);
+    } else {
+      setPrompt("");
+      setPresetId(null);
+    }
+    setPromptFeedback(null);
+  }
+
+  async function handleSavePrompt(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (!savingTitle.trim()) return;
+    const promptToSave = activePrompt.trim();
+    if (!promptToSave) {
+      setPromptFeedback({ text: "Write or edit a prompt first before saving", error: true });
+      return;
+    }
+    setSavingPrompt(true);
+    setPromptFeedback(null);
+    try {
+      const res = await saveAdminCustomPrompt({
+        id: updateExisting && activeSavedPromptId ? activeSavedPromptId : undefined,
+        title: savingTitle.trim(),
+        prompt: promptToSave,
+      });
+      if (res.success) {
+        setSavedPrompts((prev) => {
+          const next = [res.data, ...prev.filter((p) => p.id !== res.data.id)];
+          try {
+            localStorage.setItem("admin-custom-prompts", JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+        setActiveSavedPromptId(res.data.id);
+        setIsSaveModalOpen(false);
+        setSavingTitle("");
+        setPromptFeedback({ text: `Saved custom prompt “${res.data.title}” successfully!` });
+      } else {
+        setPromptFeedback({ text: res.error, error: true });
+      }
+    } catch {
+      setPromptFeedback({ text: "Failed to save prompt", error: true });
+    } finally {
+      setSavingPrompt(false);
+    }
+  }
+
+  async function handleDeletePrompt(id: string, title: string) {
+    if (!window.confirm(`Delete saved prompt “${title}”?`)) return;
+    try {
+      const res = await deleteAdminCustomPrompt(id);
+      if (res.success) {
+        setSavedPrompts((prev) => {
+          const next = prev.filter((p) => p.id !== id);
+          try {
+            localStorage.setItem("admin-custom-prompts", JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+        if (activeSavedPromptId === id) {
+          setActiveSavedPromptId(null);
+        }
+        setPromptFeedback({ text: `Deleted prompt “${title}”` });
+      } else {
+        setPromptFeedback({ text: res.error, error: true });
+      }
+    } catch {
+      setPromptFeedback({ text: "Failed to delete prompt", error: true });
+    }
+  }
 
   // Restore this session's art, then keep storage in step with the list.
   useEffect(() => {
@@ -217,9 +449,25 @@ export function AiArtPanel({
               Pick up to {MAX_ART_STYLES}. They are blended into one look. Click a chosen style again to remove it.
             </p>
           </div>
-          <details className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+          {/* Saved Custom Prompts Bar */}
+          <SavedPromptsBar
+            savedPrompts={savedPrompts}
+            activeSavedPromptId={activeSavedPromptId}
+            onSelectPrompt={applySavedPrompt}
+            onDeletePrompt={handleDeletePrompt}
+            onOpenSaveModal={() => {
+              const active = savedPrompts.find((p) => p.id === activeSavedPromptId);
+              setSavingTitle(active ? active.title : "");
+              setUpdateExisting(Boolean(active));
+              setIsSaveModalOpen(true);
+            }}
+            onClearActive={clearActiveSavedPrompt}
+            isAuto={true}
+          />
+
+          <details ref={detailsRef} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
             <summary className="min-h-8 cursor-pointer text-sm font-bold text-zinc-700 dark:text-zinc-200">
-              Edit the prompt (optional){edited !== null ? " · edited" : ""}
+              Edit the prompt (optional){edited !== null ? (activeSavedPromptId ? ` · using preset: ${savedPrompts.find((p) => p.id === activeSavedPromptId)?.title ?? "custom"}` : " · edited") : ""}
             </summary>
             <div className="mt-2 space-y-2">
               <label htmlFor={`${idPrefix}-art-prompt`} className={`${label} flex justify-between`}>
@@ -236,15 +484,36 @@ export function AiArtPanel({
                 maxLength={ART_PROMPT_MAX}
                 onChange={(e) => setEdited(e.target.value)}
               />
-              {edited !== null && (
-                <button
-                  type="button"
-                  onClick={() => setEdited(null)}
-                  className="min-h-10 text-sm font-bold text-amber-600 hover:underline dark:text-amber-400"
-                >
-                  Back to the {auto.label} prompt
-                </button>
-              )}
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const active = savedPrompts.find((p) => p.id === activeSavedPromptId);
+                      setSavingTitle(active ? active.title : "");
+                      setUpdateExisting(Boolean(active));
+                      setIsSaveModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 hover:underline dark:text-amber-400"
+                  >
+                    💾 Save this prompt as preset...
+                  </button>
+                  {activeSavedPromptId && (
+                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      (Active: {savedPrompts.find((p) => p.id === activeSavedPromptId)?.title})
+                    </span>
+                  )}
+                </div>
+                {edited !== null && (
+                  <button
+                    type="button"
+                    onClick={clearActiveSavedPrompt}
+                    className="min-h-8 text-xs font-bold text-zinc-500 hover:text-red-500 dark:text-zinc-400 dark:hover:text-red-400"
+                  >
+                    Back to {auto.label} prompt
+                  </button>
+                )}
+              </div>
             </div>
           </details>
         </div>
@@ -261,6 +530,7 @@ export function AiArtPanel({
               onClick={() => {
                 setPrompt(applyArtOptions(p.prompt, time, style));
                 setPresetId(p.id);
+                setActiveSavedPromptId(null);
               }}
               className={`min-h-12 rounded-xl border-2 px-3 py-2 text-left text-sm font-bold text-zinc-800 dark:text-zinc-100 ${chip(presetId === p.id)}`}
             >
@@ -272,18 +542,35 @@ export function AiArtPanel({
           ))}
           <button
             type="button"
-            aria-pressed={presetId === null}
+            aria-pressed={presetId === null && !activeSavedPromptId}
             onClick={() => {
               setPrompt(applyArtOptions("", time, style));
               setPresetId(null);
+              setActiveSavedPromptId(null);
             }}
-            className={`min-h-12 rounded-xl border-2 px-3 py-2 text-left text-sm font-bold text-zinc-800 dark:text-zinc-100 ${chip(presetId === null)}`}
+            className={`min-h-12 rounded-xl border-2 px-3 py-2 text-left text-sm font-bold text-zinc-800 dark:text-zinc-100 ${chip(presetId === null && !activeSavedPromptId)}`}
           >
             Custom
             <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-400">Write your own</span>
           </button>
         </div>
       </div>
+
+      {/* Saved Custom Prompts Bar in Original Mode */}
+      <SavedPromptsBar
+        savedPrompts={savedPrompts}
+        activeSavedPromptId={activeSavedPromptId}
+        onSelectPrompt={applySavedPrompt}
+        onDeletePrompt={handleDeletePrompt}
+        onOpenSaveModal={() => {
+          const active = savedPrompts.find((p) => p.id === activeSavedPromptId);
+          setSavingTitle(active ? active.title : "");
+          setUpdateExisting(Boolean(active));
+          setIsSaveModalOpen(true);
+        }}
+        onClearActive={clearActiveSavedPrompt}
+        isAuto={false}
+      />
 
       <div className="space-y-3">
         <p className={label}>Options (added to the end of the prompt)</p>
@@ -343,9 +630,52 @@ export function AiArtPanel({
             if (p && p.prompt !== stripArtOptions(e.target.value)) setPresetId(null);
           }}
         />
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const active = savedPrompts.find((p) => p.id === activeSavedPromptId);
+                setSavingTitle(active ? active.title : "");
+                setUpdateExisting(Boolean(active));
+                setIsSaveModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1 text-xs font-bold text-amber-600 hover:underline dark:text-amber-400"
+            >
+              💾 Save this prompt as preset...
+            </button>
+            {activeSavedPromptId && (
+              <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                (Active: {savedPrompts.find((p) => p.id === activeSavedPromptId)?.title})
+              </span>
+            )}
+          </div>
+          {prompt.trim() && (
+            <button
+              type="button"
+              onClick={clearActiveSavedPrompt}
+              className="text-xs font-bold text-zinc-500 hover:text-red-500 dark:text-zinc-400 dark:hover:text-red-400"
+            >
+              Clear prompt
+            </button>
+          )}
+        </div>
       </div>
 
         </>
+      )}
+
+      {promptFeedback && (
+        <p
+          role={promptFeedback.error ? "alert" : "status"}
+          className={`rounded-lg border p-2.5 text-sm font-bold ${
+            promptFeedback.error
+              ? "border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"
+              : "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+          }`}
+        >
+          {promptFeedback.text}
+        </p>
       )}
 
       {message && (
@@ -421,6 +751,100 @@ export function AiArtPanel({
         </div>
       )}
       <p className="text-xs text-zinc-500 dark:text-zinc-400">{footnote}</p>
+
+      {/* Save Custom Prompt Modal */}
+      {isSaveModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsSaveModalOpen(false);
+          }}
+        >
+          <div className="w-full max-w-md space-y-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-black text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                <span>💾</span>
+                <span>Save Admin Custom Prompt</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsSaveModalOpen(false)}
+                className="text-sm font-bold text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePrompt} className="space-y-3">
+              <div>
+                <label className={label}>Prompt Name / Title</label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  maxLength={60}
+                  placeholder="e.g. Tokyo Midnight Rain, Anime Cel Shaded"
+                  value={savingTitle}
+                  onChange={(e) => setSavingTitle(e.target.value)}
+                  className={input}
+                />
+              </div>
+
+              <div>
+                <label className={label}>Prompt Text Preview</label>
+                <div className="max-h-36 overflow-y-auto rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 text-xs text-zinc-700 dark:border-zinc-800 dark:bg-zinc-800/50 dark:text-zinc-300 font-mono whitespace-pre-wrap">
+                  {activePrompt}
+                </div>
+              </div>
+
+              {activeSavedPromptId && (
+                <div className="space-y-1.5 rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 text-xs dark:border-zinc-800 dark:bg-zinc-800/40">
+                  <p className="font-bold text-zinc-700 dark:text-zinc-200">Save Mode</p>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-zinc-700 dark:text-zinc-300">
+                      <input
+                        type="radio"
+                        name="saveMode"
+                        checked={updateExisting}
+                        onChange={() => setUpdateExisting(true)}
+                      />
+                      <span>Update existing</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-zinc-700 dark:text-zinc-300">
+                      <input
+                        type="radio"
+                        name="saveMode"
+                        checked={!updateExisting}
+                        onChange={() => setUpdateExisting(false)}
+                      />
+                      <span>Save as new preset</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSaveModalOpen(false)}
+                  className="rounded-xl border border-zinc-300 px-4 py-2 text-xs font-bold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingPrompt || !savingTitle.trim()}
+                  className="rounded-xl bg-amber-500 px-4 py-2 text-xs font-black text-black hover:bg-amber-400 disabled:opacity-50"
+                >
+                  {savingPrompt ? "Saving..." : updateExisting ? "Update Preset" : "Save Preset"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

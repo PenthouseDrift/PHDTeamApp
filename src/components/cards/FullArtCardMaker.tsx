@@ -40,6 +40,132 @@ const panel = "space-y-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-
 const outlineButton =
   "min-h-12 rounded-xl border border-zinc-300 text-sm font-bold text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800";
 
+const BORDER_PRESETS = [
+  { name: "Gold", color: "#e8b923" },
+  { name: "Silver", color: "#b8c0cc" },
+  { name: "Bronze", color: "#cd7f32" },
+  { name: "Molten Red", color: "#ff2d55" },
+  { name: "Purple", color: "#a855f7" },
+  { name: "Neon Cyan", color: "#00f0ff" },
+  { name: "Toxic Lime", color: "#39ff14" },
+  { name: "Hot Pink", color: "#ff007f" },
+  { name: "Chrome", color: "#f1f5f9" },
+  { name: "Obsidian", color: "#18181b" },
+];
+
+const STAT_LABEL_PRESETS = [
+  { name: "Gold", color: "#e8b923" },
+  { name: "Neon Cyan", color: "#00f0ff" },
+  { name: "Toxic Lime", color: "#39ff14" },
+  { name: "Hot Pink", color: "#ff007f" },
+  { name: "Molten Red", color: "#ff2d55" },
+  { name: "Silver", color: "#b8c0cc" },
+  { name: "White", color: "#ffffff" },
+];
+
+const STAT_VALUE_PRESETS = [
+  { name: "Pure White", color: "#ffffff" },
+  { name: "Gold", color: "#fff2a8" },
+  { name: "Pale Cyan", color: "#e0f7ff" },
+  { name: "Lime Glow", color: "#fef08a" },
+  { name: "Pink Glow", color: "#fce7f3" },
+  { name: "Bright Coral", color: "#ff8080" },
+];
+
+const BOTTOM_BG_PRESETS = [
+  { name: "Dark Glass", color: "rgba(0,0,0,0.55)" },
+  { name: "Deep Glass", color: "rgba(0,0,0,0.85)" },
+  { name: "Pitch Black", color: "#09090b" },
+  { name: "Midnight Navy", color: "#0f172a" },
+  { name: "Molten Wine", color: "#450a0a" },
+  { name: "Royal Purple", color: "#2e1065" },
+];
+
+const BOTTOM_BORDER_PRESETS = [
+  { name: "Gold", color: "#e8b923" },
+  { name: "Neon Cyan", color: "#00f0ff" },
+  { name: "Toxic Lime", color: "#39ff14" },
+  { name: "Hot Pink", color: "#ff007f" },
+  { name: "Molten Red", color: "#ff2d55" },
+  { name: "Silver", color: "#b8c0cc" },
+  { name: "Obsidian", color: "#27272a" },
+];
+
+function ColorSettingRow({
+  label,
+  value,
+  placeholder,
+  fallbackColor = "#cd7f32",
+  onChange,
+  presets = [],
+}: {
+  label: string;
+  value?: string;
+  placeholder: string;
+  fallbackColor?: string;
+  onChange: (val: string | undefined) => void;
+  presets?: { name: string; color: string }[];
+}) {
+  const isHex = Boolean(value && /^#[0-9a-fA-F]{6}$/i.test(value));
+  const pickerColor = isHex ? value! : fallbackColor;
+
+  return (
+    <div className="space-y-1.5 rounded-lg border border-zinc-200 bg-zinc-50/50 p-2.5 dark:border-zinc-800 dark:bg-zinc-900/40">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-bold text-zinc-700 dark:text-zinc-200">{label}</label>
+        {value && (
+          <button
+            type="button"
+            onClick={() => onChange(undefined)}
+            className="text-[11px] font-semibold text-zinc-500 hover:text-red-500 dark:text-zinc-400 dark:hover:text-red-400"
+          >
+            Reset
+          </button>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="relative h-8 w-9 shrink-0 overflow-hidden rounded border border-zinc-300 dark:border-zinc-700">
+          <input
+            type="color"
+            value={pickerColor}
+            onChange={(e) => onChange(e.target.value)}
+            className="absolute -inset-2 h-12 w-14 cursor-pointer"
+            title={`Pick ${label}`}
+          />
+        </div>
+        <input
+          type="text"
+          value={value ?? ""}
+          placeholder={placeholder}
+          maxLength={30}
+          onChange={(e) => onChange(e.target.value.trim() ? e.target.value : undefined)}
+          className="min-h-8 flex-1 rounded border border-zinc-300 bg-white px-2 text-xs font-mono text-zinc-800 placeholder-zinc-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+        />
+      </div>
+      {presets.length > 0 && (
+        <div className="flex flex-wrap gap-1 pt-1">
+          {presets.map((p) => (
+            <button
+              key={p.name}
+              type="button"
+              onClick={() => onChange(p.color)}
+              title={`${p.name} (${p.color})`}
+              className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold transition-all ${
+                value === p.color
+                  ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                  : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-300"
+              }`}
+            >
+              <span className="h-2 w-2 rounded-full border border-black/20" style={{ background: p.color }} />
+              {p.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function FullArtCardMaker({
   initialSaved,
   initialFeatured = {},
@@ -384,7 +510,7 @@ export function FullArtCardMaker({
                       setCard((c) => ({
                         ...c,
                         tier: "mythic",
-                        stats: { drift: "25", accel: "25", grip: "25", steer: "25" },
+                        stats: c.stats.drift || c.stats.accel ? c.stats : { drift: "25", accel: "25", grip: "25", steer: "25" },
                       }));
                     } else {
                       set("tier", t.id);
@@ -542,6 +668,87 @@ export function FullArtCardMaker({
                 />
               </div>
             ))}
+          </div>
+        </section>
+
+        {/* Custom Card Styling (Admin Override) */}
+        <section className={panel} aria-label="Custom Card Styling">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-black text-zinc-900 dark:text-zinc-100">Custom Card Styling (Admin Only)</h2>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Customize border color, stat labels/values, and bottom stats bar. Standard auto-generated cards keep standard tier styling.
+              </p>
+            </div>
+            {(card.customBorderColor ||
+              card.customStatLabelColor ||
+              card.customStatValueColor ||
+              card.customBottomBarBgColor ||
+              card.customBottomBarBorderColor) && (
+              <button
+                type="button"
+                onClick={() =>
+                  setCard((c) => ({
+                    ...c,
+                    customBorderColor: undefined,
+                    customStatLabelColor: undefined,
+                    customStatValueColor: undefined,
+                    customBottomBarBgColor: undefined,
+                    customBottomBarBorderColor: undefined,
+                  }))
+                }
+                className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400 dark:hover:bg-red-900/60"
+              >
+                Clear All Custom
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-3 pt-1">
+            <ColorSettingRow
+              label="Card Border Color"
+              value={card.customBorderColor}
+              placeholder="e.g. #00f0ff or #ff007f (default: tier palette)"
+              fallbackColor={tier.palette.accent}
+              presets={BORDER_PRESETS}
+              onChange={(val) => set("customBorderColor", val)}
+            />
+
+            <ColorSettingRow
+              label="Stats Label Color (DRIFT, ACCEL, GRIP, STEER)"
+              value={card.customStatLabelColor}
+              placeholder="e.g. #39ff14 (default: tier accent)"
+              fallbackColor={tier.palette.accent}
+              presets={STAT_LABEL_PRESETS}
+              onChange={(val) => set("customStatLabelColor", val)}
+            />
+
+            <ColorSettingRow
+              label="Stats Value Color (Numbers & Score)"
+              value={card.customStatValueColor}
+              placeholder="e.g. #ffffff (default: pale tier metal)"
+              fallbackColor="#ffffff"
+              presets={STAT_VALUE_PRESETS}
+              onChange={(val) => set("customStatValueColor", val)}
+            />
+
+            <ColorSettingRow
+              label="Bottom Box Background"
+              value={card.customBottomBarBgColor}
+              placeholder="e.g. rgba(0,0,0,0.55) or #09090b"
+              fallbackColor="#09090b"
+              presets={BOTTOM_BG_PRESETS}
+              onChange={(val) => set("customBottomBarBgColor", val)}
+            />
+
+            <ColorSettingRow
+              label="Bottom Box Border"
+              value={card.customBottomBarBorderColor}
+              placeholder="e.g. #00f0ff (default: matches card border)"
+              fallbackColor={card.customBorderColor || tier.palette.accent}
+              presets={BOTTOM_BORDER_PRESETS}
+              onChange={(val) => set("customBottomBarBorderColor", val)}
+            />
           </div>
         </section>
 
