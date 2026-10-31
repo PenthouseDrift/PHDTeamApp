@@ -957,4 +957,101 @@ export async function listClashEarlyAccessRosterAction(): Promise<
   }
 }
 
+/**
+ * Apply a Maintenance Consumable Card to repair a mechanical fault on a car card.
+ * Reduces the car's cooldown battles by the card's repair power.
+ * If cooldown reaches 0, the car is fully repaired and gets a fresh 2-10 battle counter.
+ * The maintenance consumable card is consumed (deleted) from inventory.
+ */
+export async function applyMaintenanceRepairAction(input: {
+  carCardId: string;
+  maintenanceCardId: string;
+}): Promise<
+  ActionResult<{
+    car: MemberCard;
+    fullyRepaired: boolean;
+    battlesRemaining: number;
+    faultCleared: boolean;
+  }>
+> {
+  try {
+    const user = await currentUser();
+    if (!user) return { success: false, error: "Please sign in to repair cars." };
+
+    const {
+      memberCardKey,
+      memberCardsIndexKey,
+      ALL_MEMBER_CARDS_INDEX,
+      parseStoredCard,
+    } = await import("@/lib/member-card-store");
+    const { rollCarInitialDurability } = await import("@/lib/mechanical-faults");
+
+    const [carRaw, maintRaw] = await Promise.all([
+      redis.get(memberCardKey(input.carCardId)),
+      redis.get(memberCardKey(input.maintenanceCardId)),
+    ]);
+
+    const car = parseStoredCard(carRaw);
+    const maint = parseStoredCard(maintRaw);
+
+    if (!car || car.userId !== user.id) {
+      return { success: false, error: "Car card not found in your collection." };
+    }
+    if (!maint || maint.userId !== user.id) {
+      return { success: false, error: "Maintenance card not found in your collection." };
+    }
+    if (maint.cardType !== "maintenance") {
+      return { success: false, error: "The chosen card is not a Maintenance Consumable." };
+    }
+    if (!car.fault || car.fault.battlesRemaining <= 0) {
+      return { success: false, error: "This car does not have an active mechanical fault." };
+    }
+    if (car.fault.type !== maint.targetFault) {
+      return {
+        success: false,
+        error: `This card repairs ${maint.team || maint.name}, but this car has an ${car.fault.name}.`,
+      };
+    }
+
+    const repairPower = maint.repairBattles ?? 1;
+    const remaining = Math.max(0, car.fault.battlesRemaining - repairPower);
+    const fullyRepaired = remaining <= 0;
+
+    if (fullyRepaired) {
+      car.fault = null;
+      const freshDurability = rollCarInitialDurability();
+      car.maxBattles = freshDurability;
+      car.battlesRemaining = freshDurability;
+    } else {
+      car.fault.battlesRemaining = remaining;
+    }
+
+    // Save updated car
+    await redis.set(memberCardKey(car.id), JSON.stringify(car));
+
+    // Consume the maintenance card (delete it completely from user cards)
+    await Promise.all([
+      redis.del(memberCardKey(maint.id)),
+      redis.zrem(memberCardsIndexKey(user.id), maint.id),
+      redis.zrem(ALL_MEMBER_CARDS_INDEX, maint.id),
+    ]);
+
+    revalidatePath("/cards");
+
+    return {
+      success: true,
+      data: {
+        car,
+        fullyRepaired,
+        battlesRemaining: car.battlesRemaining ?? 0,
+        faultCleared: fullyRepaired,
+      },
+    };
+  } catch (error) {
+    console.error("[tcg] applyMaintenanceRepairAction error:", error);
+    return { success: false, error: "Failed to apply maintenance repair." };
+  }
+}
+
+
 

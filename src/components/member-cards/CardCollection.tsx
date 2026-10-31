@@ -18,7 +18,13 @@ import {
 import { ART_STYLES } from "@/lib/card-maker";
 import { FULL_ART_TIERS } from "@/lib/full-art-card";
 import { QUICK_SELL_PRICES, getQuickSellPrice } from "@/tcg/config";
-import { listCardOnMarket, quickSellCard, unlistCardFromMarket } from "@/tcg/actions";
+import {
+  listCardOnMarket,
+  quickSellCard,
+  unlistCardFromMarket,
+  applyMaintenanceRepairAction,
+} from "@/tcg/actions";
+import { isCarBroken, canRepairCarWithMaintenanceCard } from "@/lib/mechanical-faults";
 import type { TcgMarketListing } from "@/tcg/types";
 
 /**
@@ -99,7 +105,9 @@ export function CardCollection({
         ? cards
         : tierFilter === "crew"
           ? cards.filter((c) => c.cardType === "crew" || Boolean(c.crewCardId))
-          : cards.filter((c) => c.tier === tierFilter),
+          : tierFilter === "maintenance"
+            ? cards.filter((c) => c.cardType === "maintenance")
+            : cards.filter((c) => c.tier === tierFilter),
     [cards, tierFilter]
   );
   const sorted = useMemo(
@@ -107,10 +115,19 @@ export function CardCollection({
     [filteredCards, sortKey, direction]
   );
   const tally = useMemo(() => {
-    const counts: Record<string, number> = { bronze: 0, silver: 0, gold: 0, legend: 0, mythic: 0, crew: 0 };
+    const counts: Record<string, number> = {
+      bronze: 0,
+      silver: 0,
+      gold: 0,
+      legend: 0,
+      mythic: 0,
+      crew: 0,
+      maintenance: 0,
+    };
     for (const c of cards) {
       counts[c.tier] = (counts[c.tier] ?? 0) + 1;
       if (c.cardType === "crew" || c.crewCardId) counts.crew += 1;
+      if (c.cardType === "maintenance") counts.maintenance += 1;
     }
     return counts;
   }, [cards]);
@@ -218,6 +235,20 @@ export function CardCollection({
               >
                 <span>⚡ Crew</span>
                 <span className="opacity-75">({tally.crew ?? 0})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setTierFilter(tierFilter === "maintenance" ? "all" : "maintenance")
+                }
+                className={`inline-flex shrink-0 items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] font-black transition-colors ${
+                  tierFilter === "maintenance"
+                    ? "bg-purple-500 text-white shadow-sm"
+                    : "bg-purple-500/10 text-purple-700 hover:bg-purple-500/20 dark:bg-purple-500/15 dark:text-purple-300"
+                }`}
+              >
+                <span>🛠️ Repairs</span>
+                <span className="opacity-75">({tally.maintenance ?? 0})</span>
               </button>
               {[...FULL_ART_TIERS].reverse().map((t) => {
                 const count = tally[t.id] ?? 0;
@@ -424,6 +455,7 @@ export function CardCollection({
 
       <CardViewer
         card={openCard}
+        allCards={cards}
         index={openIndex}
         total={sorted.length}
         now={now}
@@ -436,6 +468,15 @@ export function CardCollection({
         onChange={replaceCard}
         canDelete={canDelete}
         onDeleted={removeCard}
+        onRepairApplied={(repairedCar, usedKitId) => {
+          setCards((list) => {
+            const updated = list
+              .filter((c) => c.id !== usedKitId)
+              .map((c) => (c.id === repairedCar.id ? repairedCar : c));
+            onCardsChange?.(updated);
+            return updated;
+          });
+        }}
         onPCreditsChange={onPCreditsChange}
         onListingCreated={onListingCreated}
         onListingRemoved={onListingRemoved}
@@ -447,6 +488,7 @@ export function CardCollection({
 /** The large view of one card, in a native dialog (focus is kept inside it and Escape closes it). */
 function CardViewer({
   card,
+  allCards = [],
   index,
   total,
   now,
@@ -455,11 +497,13 @@ function CardViewer({
   onChange,
   canDelete,
   onDeleted,
+  onRepairApplied,
   onPCreditsChange,
   onListingCreated,
   onListingRemoved,
 }: {
   card: MemberCard | null;
+  allCards?: MemberCard[];
   index: number;
   total: number;
   now: number;
@@ -469,6 +513,7 @@ function CardViewer({
   onChange: (card: MemberCard) => void;
   canDelete: boolean;
   onDeleted: (id: string) => void;
+  onRepairApplied?: (car: MemberCard, usedKitId: string) => void;
   onPCreditsChange?: (nextPCredits: number) => void;
   onListingCreated?: (listing: TcgMarketListing) => void;
   onListingRemoved?: (cardId: string) => void;
@@ -479,8 +524,50 @@ function CardViewer({
   const [listPriceText, setListPriceText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [repairPending, setRepairPending] = useState(false);
   const [pending, startTransition] = useTransition();
   const [shownId, setShownId] = useState<string | null>(null);
+
+  const matchingConsumables = useMemo(() => {
+    if (!card || !isCarBroken(card)) return [];
+    return allCards.filter((m) => canRepairCarWithMaintenanceCard(card, m));
+  }, [card, allCards]);
+
+  const faultedCarsMatchingThisKit = useMemo(() => {
+    if (!card || card.cardType !== "maintenance") return [];
+    return allCards.filter((c) => canRepairCarWithMaintenanceCard(c, card));
+  }, [card, allCards]);
+
+  async function handleApplyRepair(carId: string, kitId: string) {
+    setRepairPending(true);
+    setError(null);
+    setStatusMessage(null);
+    try {
+      const res = await applyMaintenanceRepairAction({
+        carCardId: carId,
+        maintenanceCardId: kitId,
+      });
+      if (res.success) {
+        setStatusMessage(
+          res.data.fullyRepaired
+            ? `✅ Car fully repaired! Restored to full battle-ready status.`
+            : `✅ Maintenance applied! Cooldown reduced to ${res.data.car.fault?.battlesRemaining} battle(s).`
+        );
+        onRepairApplied?.(res.data.car, kitId);
+        if (card?.id === carId) {
+          onChange(res.data.car);
+        } else if (card?.id === kitId) {
+          onDeleted(kitId);
+        }
+      } else {
+        setError(res.error || "Repair failed");
+      }
+    } catch {
+      setError("Failed to apply repair");
+    } finally {
+      setRepairPending(false);
+    }
+  }
 
   // A different card starts without a half-finished re-roll prompt or an old error.
   if ((card?.id ?? null) !== shownId) {
@@ -615,7 +702,24 @@ function CardViewer({
               </button>
             </div>
 
-            {card.cardType === "crew" || card.crewCardId ? (
+            {card.cardType === "maintenance" ? (
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                <dt className="font-bold text-zinc-400">Card Type</dt>
+                <dd className="font-bold text-purple-400">🛠️ Pit Garage Maintenance Consumable</dd>
+                <dt className="font-bold text-zinc-400">Target Fault</dt>
+                <dd className="font-bold text-amber-300">{card.team || "Mechanical Fault"}</dd>
+                <dt className="font-bold text-zinc-400">Repair Power</dt>
+                <dd className="font-bold text-emerald-400">
+                  {(card.repairBattles ?? 0) >= 5
+                    ? "Instant Full Repair (Clears Fault)"
+                    : `-${card.repairBattles ?? 1} Battles from Cooldown`}
+                </dd>
+                <dt className="font-bold text-zinc-400">Effect</dt>
+                <dd className="leading-relaxed text-zinc-200">{card.effect || "—"}</dd>
+                <dt className="font-bold text-zinc-400">Opened</dt>
+                <dd>{formatDate(card.createdAt)}</dd>
+              </dl>
+            ) : card.cardType === "crew" || card.crewCardId ? (
               <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
                 <dt className="font-bold text-zinc-400">Card Type</dt>
                 <dd className="font-bold text-cyan-300">⚡ Tactical Crew Modifier (Clash Slot 4)</dd>
@@ -644,6 +748,18 @@ function CardViewer({
                 <dd>{card.team || "—"}</dd>
                 <dt className="font-bold text-zinc-400">Chassis</dt>
                 <dd>{card.ability?.trim() || (card as { chassis?: string }).chassis?.trim() || card.name || "—"}</dd>
+                <dt className="font-bold text-zinc-400">Durability</dt>
+                <dd>
+                  {card.fault && card.fault.battlesRemaining > 0 ? (
+                    <span className="font-bold text-rose-400">
+                      ⚠️ {card.fault.name} · Sits out {card.fault.battlesRemaining} battle(s)
+                    </span>
+                  ) : (
+                    <span className="font-bold text-emerald-400">
+                      🔋 {card.battlesRemaining ?? card.maxBattles ?? 6} / {card.maxBattles ?? 6} Battles Ready
+                    </span>
+                  )}
+                </dd>
                 <dt className="font-bold text-zinc-400">About</dt>
                 <dd>{card.effect || "—"}</dd>
                 <dt className="font-bold text-zinc-400">Art style</dt>
@@ -657,6 +773,101 @@ function CardViewer({
                   </>
                 ) : null}
               </dl>
+            )}
+
+            {/* Repair Controls for a Broken Car */}
+            {isCarBroken(card) && (
+              <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 space-y-3">
+                <div className="flex items-center gap-2.5 text-rose-300">
+                  <span className="text-2xl">⚠️</span>
+                  <div>
+                    <h4 className="font-black text-sm text-white">Active Mechanical Breakdown</h4>
+                    <p className="text-xs text-rose-200/90 leading-relaxed">
+                      {card.fault?.name} — Must sit out {card.fault?.battlesRemaining} battle(s) in maintenance, or use a matching repair kit below.
+                    </p>
+                  </div>
+                </div>
+                {matchingConsumables.length > 0 ? (
+                  <div className="space-y-2 pt-1 border-t border-rose-500/20">
+                    <p className="text-xs font-bold text-zinc-300">
+                      Available Repair Kits in your Pit Garage:
+                    </p>
+                    <div className="space-y-1.5">
+                      {matchingConsumables.map((kit) => (
+                        <div
+                          key={kit.id}
+                          className="flex items-center justify-between gap-3 rounded-xl bg-zinc-900 border border-zinc-700 p-2.5"
+                        >
+                          <div>
+                            <span className="font-black text-xs text-white block">{kit.name}</span>
+                            <span className="text-[11px] font-bold text-emerald-400">
+                              {(kit.repairBattles ?? 0) >= 5
+                                ? "Instant Full Repair"
+                                : `Reduces cooldown by ${kit.repairBattles} battle(s)`}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={repairPending}
+                            onClick={() => handleApplyRepair(card.id, kit.id)}
+                            className="rounded-xl bg-emerald-500 px-3 py-1.5 text-xs font-black uppercase text-black hover:bg-emerald-400 disabled:opacity-50"
+                          >
+                            {repairPending ? "..." : "Use Kit"}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-zinc-400 italic pt-1 border-t border-rose-500/20">
+                    You don&apos;t have an {card.fault?.type} repair kit in your collection yet. Open standard packs to pull one, or play {card.fault?.battlesRemaining} battles with your other cars!
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Repair Controls for a Maintenance Consumable Card */}
+            {card.cardType === "maintenance" && (
+              <div className="rounded-2xl border border-purple-500/40 bg-purple-500/10 p-4 space-y-3">
+                <div className="flex items-center gap-2.5 text-purple-300">
+                  <span className="text-2xl">🛠️</span>
+                  <div>
+                    <h4 className="font-black text-sm text-white">Apply to Broken RC Drift Car</h4>
+                    <p className="text-xs text-purple-200/90 leading-relaxed">
+                      Use this consumable to repair a car with an active {card.team || "matching"} fault.
+                    </p>
+                  </div>
+                </div>
+                {faultedCarsMatchingThisKit.length > 0 ? (
+                  <div className="space-y-1.5 pt-1 border-t border-purple-500/20">
+                    {faultedCarsMatchingThisKit.map((car) => (
+                      <div
+                        key={car.id}
+                        className="flex items-center justify-between gap-3 rounded-xl bg-zinc-900 border border-zinc-700 p-2.5"
+                      >
+                        <div>
+                          <span className="font-black text-xs text-white block">{car.name}</span>
+                          <span className="text-[11px] text-rose-400">
+                            {car.fault?.name} · Sits out {car.fault?.battlesRemaining} battle(s)
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={repairPending}
+                          onClick={() => handleApplyRepair(car.id, card.id)}
+                          className="rounded-xl bg-emerald-500 px-3 py-1.5 text-xs font-black uppercase text-black hover:bg-emerald-400 disabled:opacity-50"
+                        >
+                          {repairPending ? "..." : "Repair This Car"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-zinc-400 italic pt-1 border-t border-purple-500/20">
+                    None of your cars currently have an active {card.team || "matching"} fault. Keep this kit in your pit inventory until needed!
+                  </p>
+                )}
+              </div>
             )}
 
             {error && (

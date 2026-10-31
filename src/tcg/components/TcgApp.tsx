@@ -381,8 +381,10 @@ export function TcgApp({
           hasEarlyAccess={hasEarlyAccess}
           isAdmin={isAdmin}
           userId={userId}
+          pCredits={pCredits}
           onPCreditsChange={setPCredits}
           onStatsChange={setClashStats}
+          onCardsChange={setCards}
           onOpenStoreTab={() => setTab("store")}
         />
       )}

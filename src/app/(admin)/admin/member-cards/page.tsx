@@ -27,16 +27,22 @@ export default async function MemberCardsPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link
+            href="/admin/challenges"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 px-4 text-xs font-black uppercase text-white shadow-sm hover:opacity-90"
+          >
+            🏆 Manage Challenges &amp; Cups
+          </Link>
+          <Link
             href="/admin/card-maker?tab=clash-cards"
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/15 px-4 text-xs font-black text-amber-700 shadow-sm transition-colors hover:bg-amber-500/25 dark:text-amber-300"
           >
-            ⚡ Manage Crew, Debuff &amp; UK Track Cards
+            ⚡ Crew, Debuff &amp; Track Cards
           </Link>
           <Link
             href="/admin/card-maker?tab=packs"
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 text-xs font-black text-black shadow-sm transition-colors hover:bg-amber-400"
           >
-            ⚙️ Edit Packs, P-Credits &amp; Sale Prices
+            ⚙️ Edit Packs &amp; P-Credits
           </Link>
         </div>
       </div>

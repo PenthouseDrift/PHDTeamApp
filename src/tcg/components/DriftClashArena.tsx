@@ -24,10 +24,16 @@ import {
   type TrackCardDefinition,
 } from "@/lib/crew-cards";
 import {
+  isCarBroken,
+  canRepairCarWithMaintenanceCard,
+  MECHANICAL_FAULTS,
+} from "@/lib/mechanical-faults";
+import {
   getClashGameCardsConfigAction,
   listClashEarlyAccessRosterAction,
   grantClashEarlyAccessAction,
   revokeClashEarlyAccessAction,
+  applyMaintenanceRepairAction,
   type EarlyAccessMemberItem,
 } from "@/tcg/actions";
 import {
@@ -39,17 +45,162 @@ import {
   DAILY_CLASH_WIN_REWARD_PCREDITS,
   STARTER_LOANER_CREW_CARDS,
   STREAK_MILESTONE_REWARD_PCREDITS,
+  computeDebuffBreakdown,
   evaluateCornerMatchup,
   getCardPower,
+  normalizeStatValue,
   rollThreeClashSectors,
   rollThreeDebuffCards,
   rollUkTrackCard,
   scoreCardForSector,
   type ClashSectorSpec,
+  type DebuffBreakdown,
   type EvaluatedCornerResult,
 } from "@/tcg/progression";
 import type { ClashGameCardsConfig } from "@/tcg/storage";
 import type { ClashOpponent, ClashPlayerStats } from "@/tcg/types";
+import { ClashHowToPlayModal, type HowToPlayTab } from "./ClashHowToPlayModal";
+import { ClashChallengesView } from "./ClashChallengesView";
+import {
+  CHALLENGE_THEME_CONFIGS,
+  isCarEligibleForChallenge,
+  getCarNormalizedTotalScore,
+  type TandemClashChallenge,
+} from "../challenges-types";
+import {
+  startChallengeBattleAction,
+  completeChallengeBattleAction,
+} from "../challenges-actions";
+
+export interface DebuffScenario {
+  id: number;
+  icon: string;
+  title: string;
+  description: string;
+}
+
+export const DEBUFF_SCENARIOS: DebuffScenario[] = [
+  {
+    id: 1,
+    icon: "🐈",
+    title: "Cat On The Track!",
+    description: "A giant stray tabby strolled straight across the apex clipping zone! Both drivers counter-steer wildly around giant furry paws.",
+  },
+  {
+    id: 2,
+    icon: "☕",
+    title: "Iced Latte Spill!",
+    description: "The pit mechanic knocked an iced latte right into the transmitter rack. Radio gyro sensitivity went completely berserk!",
+  },
+  {
+    id: 3,
+    icon: "⚙️",
+    title: "Stripped Pinion Teeth!",
+    description: "A violent high-RPM transition chewed two teeth clean off the pinion gear. The motor sounds like an angry blender!",
+  },
+  {
+    id: 4,
+    icon: "🧲",
+    title: "Rogue Body Clip!",
+    description: "A loose metal body clip dropped onto the track and magnetized to the chassis underpan, messing up corner weight balance.",
+  },
+  {
+    id: 5,
+    icon: "🍌",
+    title: "Over-Polished Linoleum!",
+    description: "Track marshals buffed the surface with high-gloss floor wax right before the heat. Zero rear lateral bite!",
+  },
+  {
+    id: 6,
+    icon: "📡",
+    title: "2.4GHz Microwave Glitch!",
+    description: "Someone in the lounge heated up a burrito, causing momentary radio frequency packet loss at the worst possible second.",
+  },
+  {
+    id: 7,
+    icon: "🪛",
+    title: "Loose Wheel Nut Wobble!",
+    description: "The rear left wheel nut is hanging on by two threads. The tyre is dancing the cha-cha at 40 degrees slip angle!",
+  },
+  {
+    id: 8,
+    icon: "⚡",
+    title: "Overcooked Speed Control!",
+    description: "Too many full-lock clutch-kicks triggered thermal safety limits on the ESC. Throttle power is begging for mercy!",
+  },
+  {
+    id: 9,
+    icon: "💨",
+    title: "Industrial Fan Gust!",
+    description: "The venue cooling fan pivoted and blast a sudden 30mph headwind directly into the initiation zone.",
+  },
+  {
+    id: 10,
+    icon: "🛞",
+    title: "Glazed Hard Compounds!",
+    description: "The plastic drift tyres overheated and turned into slick hockey pucks. Plenty of screech, zero forward drive.",
+  },
+  {
+    id: 11,
+    icon: "🕶️",
+    title: "Fogged-Up Lenses!",
+    description: "Intense tandem concentration caused the driver's glasses to mist over right as the cars reached the clipping cone.",
+  },
+  {
+    id: 12,
+    icon: "📻",
+    title: "Reverse Gyro Twitch!",
+    description: "A harsh kerb strike inverted the steering gyro logic for half a second. Instant tank-slapper down the straight!",
+  },
+  {
+    id: 13,
+    icon: "🧼",
+    title: "Lifting Carpet Seam!",
+    description: "The outer sweeper carpet seam lifted up and snagged the carbon front splitter.",
+  },
+  {
+    id: 14,
+    icon: "🔋",
+    title: "LiPo Voltage Sag!",
+    description: "Low-voltage buzzer is shrieking like a fire alarm as the cell drops under maximum full-throttle boost.",
+  },
+  {
+    id: 15,
+    icon: "🧯",
+    title: "Ridiculous Camber Angle!",
+    description: "Mechanic dialed in -12 degrees front camber. The car is literally sliding on the rim bevel!",
+  },
+  {
+    id: 16,
+    icon: "🐝",
+    title: "Rogue Bumblebee Dive!",
+    description: "An aggressive bumblebee landed directly on the transmitter steering wheel mid-tandem.",
+  },
+  {
+    id: 17,
+    icon: "🔌",
+    title: "Pinched Servo Lead!",
+    description: "The steering bellcrank pinched the servo wire at full lock, causing a violent front rack twitch.",
+  },
+  {
+    id: 18,
+    icon: "🍕",
+    title: "Pepperoni Grease Slip!",
+    description: "Pit chief handed over the transmitter after finishing a slice. The steering wheel slipped right through thumb grip!",
+  },
+  {
+    id: 19,
+    icon: "👟",
+    title: "Spectator Sneaker Intrusion!",
+    description: "An over-excited spectator stepped two inches across the white line into the outer clipping zone.",
+  },
+  {
+    id: 20,
+    icon: "💥",
+    title: "Extreme Backward Entry!",
+    description: "Driver attempted an absurd 85-degree backward entry and gave the outer tyre wall a solid high-five.",
+  },
+];
 
 const LOANER_CARDS: MemberCard[] = [
   {
@@ -62,7 +213,7 @@ const LOANER_CARDS: MemberCard[] = [
     team: "PHD Academy",
     tier: "bronze",
     styleIds: ["touge"],
-    stats: { drift: "6", accel: "5", grip: "6", steer: "6" },
+    stats: { drift: "15", accel: "13", grip: "15", steer: "15" },
     imageUrl: "/icons/icon-512.png",
     imageZoom: 106,
     imageX: 50,
@@ -81,7 +232,7 @@ const LOANER_CARDS: MemberCard[] = [
     team: "PHD Academy",
     tier: "bronze",
     styleIds: ["touge"],
-    stats: { drift: "5", accel: "6", grip: "6", steer: "6" },
+    stats: { drift: "14", accel: "15", grip: "15", steer: "14" },
     imageUrl: "/icons/icon-512.png",
     imageZoom: 106,
     imageX: 50,
@@ -100,7 +251,7 @@ const LOANER_CARDS: MemberCard[] = [
     team: "PHD Academy",
     tier: "bronze",
     styleIds: ["touge"],
-    stats: { drift: "6", accel: "6", grip: "5", steer: "6" },
+    stats: { drift: "15", accel: "15", grip: "13", steer: "15" },
     imageUrl: "/icons/icon-512.png",
     imageZoom: 106,
     imageX: 50,
@@ -129,6 +280,7 @@ type BattleAnimStep =
   | "prompt_crew"
   | "crew_overlay"
   | "battle_shake_1"
+  | "prompt_debuff"
   | "debuff_overlay"
   | "battle_shake_2"
   | "knockout_and_winner"
@@ -170,7 +322,7 @@ function applyCrewModsToStats(
   if (!mods) return { ...base };
   let { drift, accel, grip, steer } = base;
 
-  // 1. Min Stat Floor
+  // 1. Min Stat Floor (only lifts stats up, never lowers them)
   if (mods.minStatFloor && mods.minStatFloor > 0) {
     drift = Math.max(drift, mods.minStatFloor);
     accel = Math.max(accel, mods.minStatFloor);
@@ -178,20 +330,28 @@ function applyCrewModsToStats(
     steer = Math.max(steer, mods.minStatFloor);
   }
 
-  // 2. Boost Lowest / Weakest Stat (e.g. Zip-Tie Pit Engineering)
+  // 2. Boost Lowest / Weakest Stat (e.g. Zip-Tie Pit Engineering, max 25)
   if (mods.boostWeakestStat && mods.boostWeakestStat > 0) {
     const minVal = Math.min(drift, accel, grip, steer);
-    if (drift === minVal) drift = Math.min(10, drift + mods.boostWeakestStat);
-    else if (accel === minVal) accel = Math.min(10, accel + mods.boostWeakestStat);
-    else if (grip === minVal) grip = Math.min(10, grip + mods.boostWeakestStat);
-    else steer = Math.min(10, steer + mods.boostWeakestStat);
+    if (drift === minVal) drift = Math.max(drift, Math.min(25, drift + mods.boostWeakestStat));
+    else if (accel === minVal) accel = Math.max(accel, Math.min(25, accel + mods.boostWeakestStat));
+    else if (grip === minVal) grip = Math.max(grip, Math.min(25, grip + mods.boostWeakestStat));
+    else steer = Math.max(steer, Math.min(25, steer + mods.boostWeakestStat));
   }
 
-  // 3. Stat Bonuses
-  if (mods.driftBonus) drift = Math.min(10, drift + mods.driftBonus);
-  if (mods.accelBonus) accel = Math.min(10, accel + mods.accelBonus);
-  if (mods.gripBonus) grip = Math.min(10, grip + mods.gripBonus);
-  if (mods.steerBonus) steer = Math.min(10, steer + mods.steerBonus);
+  // 3. Stat Bonuses (strictly positive advantages, capped at max 25)
+  if (mods.driftBonus && mods.driftBonus > 0) {
+    drift = Math.max(drift, Math.min(25, drift + mods.driftBonus));
+  }
+  if (mods.accelBonus && mods.accelBonus > 0) {
+    accel = Math.max(accel, Math.min(25, accel + mods.accelBonus));
+  }
+  if (mods.gripBonus && mods.gripBonus > 0) {
+    grip = Math.max(grip, Math.min(25, grip + mods.gripBonus));
+  }
+  if (mods.steerBonus && mods.steerBonus > 0) {
+    steer = Math.max(steer, Math.min(25, steer + mods.steerBonus));
+  }
 
   return { drift, accel, grip, steer };
 }
@@ -270,9 +430,11 @@ export function DriftClashArena({
   hasEarlyAccess = true,
   isAdmin = false,
   userId,
+  pCredits,
   onPCreditsChange,
   onStatsChange,
   onRewardEarned,
+  onCardsChange,
   onOpenStoreTab,
 }: {
   cards: MemberCard[];
@@ -282,9 +444,11 @@ export function DriftClashArena({
   hasEarlyAccess?: boolean;
   isAdmin?: boolean;
   userId?: string;
+  pCredits?: number;
   onPCreditsChange?: (newPCredits: number) => void;
   onStatsChange?: (nextClashStats: ClashPlayerStats) => void;
   onRewardEarned?: (newPCredits: number, nextClashStats: ClashPlayerStats) => void;
+  onCardsChange?: (updatedCards: MemberCard[]) => void;
   onOpenStoreTab: () => void;
 }) {
   const startingStats = initialStats ?? initialClashStats ?? {
@@ -294,6 +458,21 @@ export function DriftClashArena({
     bestStreak: 0,
     dailyWinClaimed: false,
   };
+
+  // Mode switcher: "quick" for standard match, "challenges" for cups & tournaments
+  const [arenaLobbyTab, setArenaLobbyTab] = useState<"quick" | "challenges">("quick");
+  const [activeChallenge, setActiveChallenge] = useState<TandemClashChallenge | null>(null);
+  const [completedChallengeIds, setCompletedChallengeIds] = useState<string[]>([]);
+  const [challengeLoading, setChallengeLoading] = useState(false);
+  const [challengeWonCelebration, setChallengeWonCelebration] = useState<{
+    challengeTitle: string;
+    rewardGranted: number;
+    challengeCompleted: boolean;
+  } | null>(null);
+  const [internalPCredits, setInternalPCredits] = useState(pCredits ?? 0);
+  useEffect(() => {
+    if (typeof pCredits === "number") setInternalPCredits(pCredits);
+  }, [pCredits]);
 
   // Early Access Beta Admin modal state
   const [showEarlyAccessModal, setShowEarlyAccessModal] = useState(false);
@@ -362,16 +541,63 @@ export function DriftClashArena({
     };
   }, []);
 
+  const [localCards, setLocalCards] = useState<MemberCard[]>(cards);
+  useEffect(() => {
+    setLocalCards(cards);
+  }, [cards]);
+
+  const [pitReport, setPitReport] = useState<
+    Array<{
+      type: "fault" | "repaired";
+      cardId: string;
+      cardName: string;
+      faultName?: string;
+      faultIcon?: string;
+      battlesNeeded?: number;
+      freshBattles?: number;
+    }>
+  >([]);
+  const [repairingCarId, setRepairingCarId] = useState<string | null>(null);
+
+  async function handleQuickRepair(car: MemberCard, consumable: MemberCard) {
+    setRepairingCarId(car.id);
+    try {
+      const res = await applyMaintenanceRepairAction({
+        carCardId: car.id,
+        maintenanceCardId: consumable.id,
+      });
+      if (res.success) {
+        setLocalCards((prev) =>
+          prev
+            .filter((c) => c.id !== consumable.id)
+            .map((c) => (c.id === car.id ? res.data.car : c))
+        );
+      }
+    } catch (err) {
+      console.error("Failed to apply quick repair:", err);
+    } finally {
+      setRepairingCarId(null);
+    }
+  }
+
   const crewCatalogDefs: CrewCardDefinition[] = gameCardsConfig.crewCards;
   const debuffCatalogDefs: DebuffCardDefinition[] = gameCardsConfig.debuffCards;
   const trackCatalogDefs: TrackCardDefinition[] = gameCardsConfig.trackCards;
 
-  // Split player's collection into Car Cards vs Crew Advantage Cards
-  const carCards = useMemo(() => cards.filter((c) => !isCrewCard(c)), [cards]);
+  // Split player's collection into Car Cards, Maintenance Consumables, and Crew Advantage Cards
+  const carCards = useMemo(
+    () => localCards.filter((c) => !isCrewCard(c) && c.cardType !== "maintenance"),
+    [localCards]
+  );
+
+  const maintenanceCards = useMemo(
+    () => localCards.filter((c) => c.cardType === "maintenance"),
+    [localCards]
+  );
 
   // Refresh owned Crew Cards with latest Advantage definitions from gameCardsConfig, scaled to the card's pulled tier
   const ownedCrewCards = useMemo(() => {
-    return cards
+    return localCards
       .filter((c) => isCrewCard(c))
       .map((c) => {
         const def =
@@ -398,7 +624,7 @@ export function DriftClashArena({
           crewIcon: freshData.crewIcon,
         };
       });
-  }, [cards, crewCatalogDefs]);
+  }, [localCards, crewCatalogDefs]);
 
   // Robust resolver for Crew Card definitions, preserving and scaling to the card's pulled rarity tier
   function resolveCrewDef(card?: MemberCard | null): CrewCardDefinition {
@@ -415,18 +641,24 @@ export function DriftClashArena({
     return scaleCrewCardDefinition(baseDef, targetTier);
   }
 
-  // Ensure at least 3 Car Cards (pad with Academy Loaner Cars if player owns < 3)
-  const usableCarCards = useMemo(
-    () =>
-      carCards.length >= 3
-        ? carCards
-        : [
-            ...carCards,
-            ...LOANER_CARDS.slice(0, Math.max(0, 3 - carCards.length)),
-          ],
+  // Filter for healthy car cards without active mechanical faults
+  const healthyCarCards = useMemo(
+    () => carCards.filter((c) => !isCarBroken(c)),
     [carCards]
   );
-  const usingLoanerCars = carCards.length < 3;
+
+  // Ensure at least 3 Car Cards (pad with Academy Loaner Cars if healthy cars < 3)
+  const usableCarCards = useMemo(
+    () =>
+      healthyCarCards.length >= 3
+        ? healthyCarCards
+        : [
+            ...healthyCarCards,
+            ...LOANER_CARDS.slice(0, Math.max(0, 3 - healthyCarCards.length)),
+          ],
+    [healthyCarCards]
+  );
+  const usingLoanerCars = healthyCarCards.length < 3;
 
   // Ensure at least 3 Crew Advantage Cards (pad with Starter Loaner Crew Cards if player owns < 3)
   const usableCrewCards = useMemo(() => {
@@ -439,8 +671,9 @@ export function DriftClashArena({
   const [clashStats, setClashStats] = useState<ClashPlayerStats>(startingStats);
   const [opponent, setOpponent] = useState<ClashOpponent>(initialOpponent);
 
-  // Guard against playing against oneself (e.g. if initialOpponent was cached with player's own cards)
+  // Guard against playing against oneself in casual lobby (never override challenge cups)
   useEffect(() => {
+    if (activeChallenge) return;
     if (!cards || cards.length === 0) return;
     const playerCardIdSet = new Set(cards.map((c) => c.id));
     const playerUserId = cards.find((c) => Boolean(c.userId))?.userId;
@@ -456,7 +689,7 @@ export function DriftClashArena({
         })
         .catch(() => null);
     }
-  }, [cards, opponent.cards]);
+  }, [cards, opponent.cards, activeChallenge]);
 
   // Step 1 Loadout state: 3 Car IDs + 3 Crew IDs
   const [selectedCarIds, setSelectedCarIds] = useState<[string, string, string]>(() =>
@@ -491,6 +724,7 @@ export function DriftClashArena({
 
   const [activeCornerIdx, setActiveCornerIdx] = useState<0 | 1 | 2>(0);
   const [battleAnimStep, setBattleAnimStep] = useState<BattleAnimStep>("cards_entrance");
+  const [debuffScenario, setDebuffScenario] = useState<DebuffScenario | null>(null);
   const [cornerSubStage, setCornerSubStage] = useState<CornerSubStage>("car_draw");
   const [carDrawShuffleTick, setCarDrawShuffleTick] = useState(0);
   const [carDrawLocked, setCarDrawLocked] = useState(false);
@@ -528,6 +762,14 @@ export function DriftClashArena({
   const [showCatalogModal, setShowCatalogModal] = useState<
     "crew" | "debuff" | "track" | null
   >(null);
+  const [showHowToPlayModal, setShowHowToPlayModal] = useState<boolean>(false);
+  const [howToPlayTab, setHowToPlayTab] = useState<HowToPlayTab>("quickstart");
+  const [challengeReplayConfirm, setChallengeReplayConfirm] = useState<TandemClashChallenge | null>(null);
+
+  function openHowToPlay(tab: HowToPlayTab = "quickstart") {
+    setHowToPlayTab(tab);
+    setShowHowToPlayModal(true);
+  }
   const [viewerState, setViewerState] = useState<{
     list: MemberCard[];
     index: number;
@@ -647,6 +889,16 @@ export function DriftClashArena({
     return [resolved[0], resolved[1], resolved[2]];
   }, [selectedCarIds, usableCarCards]);
 
+  // Check how many currently equipped cars violate the active challenge restrictions
+  const challengeIneligibleCount = useMemo(() => {
+    if (!activeChallenge) return 0;
+    return selectedCarCards.filter(
+      (c) => !isCarEligibleForChallenge(c, activeChallenge).eligible
+    ).length;
+  }, [selectedCarCards, activeChallenge]);
+
+  const isLineupEligible = challengeIneligibleCount === 0;
+
   // Resolve Player's 3 Selected Crew Advantage Cards
   const selectedCrewCards = useMemo<[MemberCard, MemberCard, MemberCard]>(() => {
     const resolved = selectedCrewIds.map(
@@ -706,12 +958,14 @@ export function DriftClashArena({
     setPickerModalTarget(null);
   }
 
-  // Launch Step 1: Select 3 Car Cards & 3 Crew Cards
+  // Launch Step 1: Select 3 Car Cards & 3 Crew Cards (Quick Standard Match)
   function handleLaunchGame() {
     if (!hasEarlyAccess) {
       return;
     }
     clearTimers();
+    setActiveChallenge(null);
+    setChallengeWonCelebration(null);
     triggerDriftWheelIntro();
     setSelectedCarIds(pickTopThreeIds(usableCarCards));
     setSelectedCrewIds(pickTopThreeIds(usableCrewCards));
@@ -730,8 +984,89 @@ export function DriftClashArena({
     setPhase("lineup");
   }
 
+  // Launch Step 1 via Challenge Cup
+  async function handleLaunchChallenge(challenge: TandemClashChallenge) {
+    if (!hasEarlyAccess) {
+      alert("Tandem Clash is currently in private preview. Closed beta access is required.");
+      return;
+    }
+    clearTimers();
+    setChallengeLoading(true);
+    try {
+      const res = await startChallengeBattleAction(challenge.id);
+      if (!res.success || !res.data) {
+        alert((!res.success && res.error) || "Could not enter challenge.");
+        setChallengeLoading(false);
+        return;
+      }
+
+      if (typeof res.data.pCredits === "number") {
+        setInternalPCredits(res.data.pCredits);
+        onPCreditsChange?.(res.data.pCredits);
+      }
+
+      setActiveChallenge(res.data.challenge);
+      setOpponent(res.data.opponent);
+      setChallengeWonCelebration(null);
+
+      // Auto-pick strictly from eligible cars for this challenge
+      const eligibleCars = usableCarCards.filter(
+        (c) => isCarEligibleForChallenge(c, challenge).eligible
+      );
+      if (eligibleCars.length < 3) {
+        alert(
+          `You need at least 3 qualifying ${challenge.allowedRarity !== "any" ? challenge.allowedRarity.toUpperCase() : ""} cars in your garage to enter this challenge. (${eligibleCars.length}/3 available)`
+        );
+        setChallengeLoading(false);
+        return;
+      }
+      setSelectedCarIds(pickTopThreeIds(eligibleCars));
+      setSelectedCrewIds(pickTopThreeIds(usableCrewCards));
+
+      triggerDriftWheelIntro();
+      setLoadoutSection("cars");
+      setPickerModalTarget(null);
+      setBattleBanner(null);
+      setCornerResults([]);
+      setPlayedCrewIndices([]);
+      setPlayerCrewAssignments([null, null, null]);
+      setRivalCrewAssignments([null, null, null]);
+      setPlayerCarAssignments([null, null, null]);
+      setRivalCarAssignments([null, null, null]);
+      setPreviewCarSlot(null);
+      setPlayerCarOrder([0, 1, 2]);
+      setRivalCarOrder([0, 1, 2]);
+      setPhase("lineup");
+    } catch (err) {
+      console.error("handleLaunchChallenge error:", err);
+      alert("Error entering challenge cup.");
+    } finally {
+      setChallengeLoading(false);
+    }
+  }
+
+  function handleRequestReplayChallenge(challenge: TandemClashChallenge) {
+    if (challenge.entryCostPCredits > 0) {
+      setChallengeReplayConfirm(challenge);
+    } else {
+      handleLaunchChallenge(challenge);
+    }
+  }
+
   // Launch Step 2: Randomise UK Track Card Roulette + Matchmaking
   function handleStartTrackRoulette() {
+    if (activeChallenge) {
+      const ineligible = selectedCarCards.filter(
+        (c) => !isCarEligibleForChallenge(c, activeChallenge).eligible
+      );
+      if (ineligible.length > 0) {
+        alert(
+          `Cannot start challenge match: ${ineligible.length} of your equipped cars do not meet the challenge restrictions (${activeChallenge.allowedRarity !== "any" ? activeChallenge.allowedRarity.toUpperCase() + " only" : ""}).`
+        );
+        return;
+      }
+    }
+
     clearTimers();
     setPickerModalTarget(null);
     setTrackLockedIn(false);
@@ -766,11 +1101,14 @@ export function DriftClashArena({
     }
 
     startTransition(async () => {
-      const oppPromise = findNewClashOpponentAction().catch(() => null);
+      // In challenge cups, the opponent is strictly configured for the cup spec; only casual lobby randomizes rival
+      const oppPromise = !activeChallenge ? findNewClashOpponentAction().catch(() => null) : null;
       await new Promise((r) => setTimeout(r, totalTicks * 130 + 150));
-      const oppRes = await oppPromise;
-      if (oppRes && oppRes.success) {
-        setOpponent(oppRes.data);
+      if (oppPromise) {
+        const oppRes = await oppPromise;
+        if (oppRes && oppRes.success) {
+          setOpponent(oppRes.data);
+        }
       }
       setActiveTrackDef(chosenTrack);
       setTrackLockedIn(true);
@@ -849,11 +1187,11 @@ export function DriftClashArena({
       setBattleAnimStep("cards_entrance");
       const t0 = setTimeout(() => setBattleAnimStep("head_to_head"), 1100);
       const t1 = setTimeout(() => setBattleAnimStep("crew_overlay"), 2200);
-      const t2 = setTimeout(() => setBattleAnimStep("battle_shake_1"), 3800);
-      const t3 = setTimeout(() => setBattleAnimStep("debuff_overlay"), 5400);
-      const t4 = setTimeout(() => setBattleAnimStep("battle_shake_2"), 7000);
-      const t5 = setTimeout(() => setBattleAnimStep("knockout_and_winner"), 8600);
-      const t6 = setTimeout(() => setBattleAnimStep("corner_finished"), 10100);
+      const t2 = setTimeout(() => setBattleAnimStep("battle_shake_1"), 3600);
+      const t3 = setTimeout(() => setBattleAnimStep("debuff_overlay"), 4800);
+      const t4 = setTimeout(() => setBattleAnimStep("battle_shake_2"), 6400);
+      const t5 = setTimeout(() => setBattleAnimStep("knockout_and_winner"), 7800);
+      const t6 = setTimeout(() => setBattleAnimStep("corner_finished"), 9200);
       timersRef.current.push(t0, t1, t2, t3, t4, t5, t6);
       return;
     }
@@ -942,27 +1280,35 @@ export function DriftClashArena({
       setBattleAnimStep("battle_shake_1");
     }, 1600);
 
-    // Debuff cards overlay (red penalties)
+    // Open funny debuff incident popup and PAUSE battle!
     const t2 = setTimeout(() => {
-      setBattleAnimStep("debuff_overlay");
+      const scenario = DEBUFF_SCENARIOS[Math.floor(Math.random() * DEBUFF_SCENARIOS.length)];
+      setDebuffScenario(scenario);
+      setBattleAnimStep("prompt_debuff");
     }, 3200);
 
-    // Final violent apex finish shake 2
-    const t3 = setTimeout(() => {
+    timersRef.current.push(t1, t2);
+  }
+
+  function handleContinueFromDebuff() {
+    clearTimers();
+    // That's when debuffs are applied!
+    setBattleAnimStep("debuff_overlay");
+
+    // After 1800ms of seeing the debuffs applied, proceed to apex clash & results
+    const t1 = setTimeout(() => {
       setBattleAnimStep("battle_shake_2");
+    }, 1800);
+
+    const t2 = setTimeout(() => {
+      setBattleAnimStep("knockout_and_winner");
+    }, 3400);
+
+    const t3 = setTimeout(() => {
+      setBattleAnimStep("corner_finished");
     }, 4800);
 
-    // Knockout & Winner celebration
-    const t4 = setTimeout(() => {
-      setBattleAnimStep("knockout_and_winner");
-    }, 6400);
-
-    // Corner Finished
-    const t5 = setTimeout(() => {
-      setBattleAnimStep("corner_finished");
-    }, 7900);
-
-    timersRef.current.push(t1, t2, t3, t4, t5);
+    timersRef.current.push(t1, t2, t3);
   }
 
   function handleSkipBattleAnimation() {
@@ -1056,20 +1402,101 @@ export function DriftClashArena({
     setPhase("verdict");
 
     startTransition(async () => {
-      const res = await completeClashBattleAction({ won });
-      if (res.success) {
-        setClashStats(res.data.stats);
-        setBattleBanner({
+      if (activeChallenge) {
+        const res = await completeChallengeBattleAction({
+          challengeId: activeChallenge.id,
           won,
-          playerCorners,
-          opponentCorners,
-          tiedCorners,
-          rewardGranted: res.data.rewardGranted,
-          streakBonusGranted: res.data.streakBonusGranted,
+          playedCarCardIds: selectedCarIds,
         });
-        onPCreditsChange?.(res.data.pCredits);
-        onStatsChange?.(res.data.stats);
-        onRewardEarned?.(res.data.pCredits, res.data.stats);
+        if (res.success) {
+          setClashStats(res.data.stats);
+          setBattleBanner({
+            won,
+            playerCorners,
+            opponentCorners,
+            tiedCorners,
+            rewardGranted: res.data.rewardGranted,
+            streakBonusGranted: 0,
+          });
+          setChallengeWonCelebration({
+            challengeTitle: activeChallenge.title,
+            rewardGranted: res.data.rewardGranted,
+            challengeCompleted: res.data.challengeCompleted,
+          });
+          if (res.data.challengeCompleted) {
+            setCompletedChallengeIds((prev) =>
+              prev.includes(activeChallenge.id) ? prev : [...prev, activeChallenge.id]
+            );
+          }
+          setPitReport(res.data.faultEvents ?? []);
+          setInternalPCredits(res.data.pCredits);
+          onPCreditsChange?.(res.data.pCredits);
+          onStatsChange?.(res.data.stats);
+          onRewardEarned?.(res.data.pCredits, res.data.stats);
+
+          // Update car durability immediately in state
+          if (res.data.updatedCars && res.data.updatedCars.length > 0) {
+            const updateMap = new Map(res.data.updatedCars.map((c) => [c.id, c]));
+            setLocalCards((prev) => {
+              const next = prev.map((c) => updateMap.get(c.id) ?? c);
+              onCardsChange?.(next);
+              return next;
+            });
+          } else if (selectedCarIds && selectedCarIds.length > 0) {
+            const playedSet = new Set(selectedCarIds.filter((id) => !id.startsWith("loaner-")));
+            setLocalCards((prev) => {
+              const next = prev.map((c) => {
+                if (!playedSet.has(c.id)) return c;
+                const cur = c.battlesRemaining ?? c.maxBattles ?? 6;
+                return { ...c, battlesRemaining: Math.max(0, cur - 1) };
+              });
+              onCardsChange?.(next);
+              return next;
+            });
+          }
+        }
+      } else {
+        const res = await completeClashBattleAction({
+          won,
+          playedCarCardIds: selectedCarIds,
+        });
+        if (res.success) {
+          setClashStats(res.data.stats);
+          setBattleBanner({
+            won,
+            playerCorners,
+            opponentCorners,
+            tiedCorners,
+            rewardGranted: res.data.rewardGranted,
+            streakBonusGranted: res.data.streakBonusGranted,
+          });
+          setPitReport(res.data.faultEvents ?? []);
+          setInternalPCredits(res.data.pCredits);
+          onPCreditsChange?.(res.data.pCredits);
+          onStatsChange?.(res.data.stats);
+          onRewardEarned?.(res.data.pCredits, res.data.stats);
+
+          // Update car durability immediately in state
+          if (res.data.updatedCars && res.data.updatedCars.length > 0) {
+            const updateMap = new Map(res.data.updatedCars.map((c) => [c.id, c]));
+            setLocalCards((prev) => {
+              const next = prev.map((c) => updateMap.get(c.id) ?? c);
+              onCardsChange?.(next);
+              return next;
+            });
+          } else if (selectedCarIds && selectedCarIds.length > 0) {
+            const playedSet = new Set(selectedCarIds.filter((id) => !id.startsWith("loaner-")));
+            setLocalCards((prev) => {
+              const next = prev.map((c) => {
+                if (!playedSet.has(c.id)) return c;
+                const cur = c.battlesRemaining ?? c.maxBattles ?? 6;
+                return { ...c, battlesRemaining: Math.max(0, cur - 1) };
+              });
+              onCardsChange?.(next);
+              return next;
+            });
+          }
+        }
       }
     });
   }
@@ -1111,7 +1538,141 @@ export function DriftClashArena({
   // ── LOBBY VIEW ─────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4">
-      <section className="relative overflow-hidden rounded-3xl border border-amber-500/40 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-5 text-white shadow-xl sm:p-7">
+      {/* Mode Switcher Tabs */}
+      <div className="grid grid-cols-2 gap-2 rounded-3xl border border-zinc-800 bg-zinc-950 p-1.5 shadow-xl">
+        <button
+          type="button"
+          onClick={() => setArenaLobbyTab("quick")}
+          className={`flex items-center justify-center gap-2 rounded-2xl py-3 px-4 text-xs sm:text-sm font-black uppercase tracking-wider transition-all ${
+            arenaLobbyTab === "quick"
+              ? "bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 text-black shadow-lg"
+              : "text-zinc-400 hover:text-white hover:bg-zinc-900"
+          }`}
+        >
+          <span>⚡</span> Quick Match Arena
+        </button>
+        <button
+          type="button"
+          onClick={() => setArenaLobbyTab("challenges")}
+          className={`flex items-center justify-center gap-2 rounded-2xl py-3 px-4 text-xs sm:text-sm font-black uppercase tracking-wider transition-all ${
+            arenaLobbyTab === "challenges"
+              ? "bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500 text-white shadow-lg"
+              : "text-zinc-400 hover:text-white hover:bg-zinc-900"
+          }`}
+        >
+          <span>🏆</span> Challenges &amp; Tournaments
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
+              arenaLobbyTab === "challenges"
+                ? "bg-white/20 text-white"
+                : "bg-purple-500/20 text-purple-300"
+            }`}
+          >
+            NEW
+          </span>
+        </button>
+      </div>
+
+      {arenaLobbyTab === "challenges" ? (
+        <ClashChallengesView
+          userCards={localCards}
+          pCredits={internalPCredits}
+          userId={userId}
+          isAdmin={isAdmin}
+          completedChallengeIds={completedChallengeIds}
+          onSelectChallenge={handleLaunchChallenge}
+          onPCreditsChange={(bal) => {
+            setInternalPCredits(bal);
+            onPCreditsChange?.(bal);
+          }}
+        />
+      ) : (
+        <>
+          {/* Challenger Tournament Feature Banner */}
+          <button
+            type="button"
+            onClick={() => setArenaLobbyTab("challenges")}
+            className="group relative w-full overflow-hidden rounded-3xl border border-purple-500/40 bg-gradient-to-br from-zinc-900 via-purple-950/30 to-zinc-950 p-5 sm:p-6 text-left shadow-2xl transition-all duration-300 hover:border-purple-400 hover:shadow-purple-500/20 hover:scale-[1.008]"
+          >
+            {/* Ambient Background Glows */}
+            <div
+              className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-gradient-to-br from-purple-600/20 to-pink-600/20 blur-3xl transition-opacity group-hover:opacity-100 opacity-60"
+              aria-hidden
+            />
+            <div
+              className="pointer-events-none absolute -left-20 -bottom-20 h-48 w-48 rounded-full bg-purple-900/20 blur-2xl"
+              aria-hidden
+            />
+
+            <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-4 sm:gap-5">
+                {/* Glowing Trophy Medallion */}
+                <div className="relative flex h-14 w-14 sm:h-16 sm:w-16 shrink-0 items-center justify-center rounded-2xl border border-purple-400/40 bg-gradient-to-br from-purple-500/25 via-fuchsia-600/20 to-black shadow-inner shadow-purple-500/30 transition-transform duration-300 group-hover:scale-105 group-hover:rotate-3">
+                  <span className="text-2xl sm:text-3xl drop-shadow-[0_2px_8px_rgba(236,72,153,0.5)]">
+                    🏆
+                  </span>
+                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-fuchsia-400 opacity-75" />
+                    <span className="relative inline-flex h-3 w-3 rounded-full bg-fuchsia-500" />
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 max-w-xl">
+                  {/* Eyebrow & Badges */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-gradient-to-r from-purple-500 to-pink-500 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-white shadow-sm">
+                      Challenger Series
+                    </span>
+                    <span className="rounded-full border border-purple-400/40 bg-purple-500/15 px-2.5 py-0.5 text-[10px] font-black text-purple-200">
+                      ⚡ Daily P-Credit Cups
+                    </span>
+                    <span className="rounded-full border border-zinc-700 bg-zinc-800/80 px-2 py-0.5 text-[10px] font-bold text-zinc-400">
+                      Rarity &amp; Custom Bosses
+                    </span>
+                  </div>
+
+                  {/* Title */}
+                  <h3 className="text-lg sm:text-xl font-black tracking-tight text-white group-hover:text-purple-200 transition-colors">
+                    Tandem Clash Challenges &amp; Tournaments
+                  </h3>
+
+                  {/* Description */}
+                  <p className="text-xs sm:text-sm leading-relaxed text-zinc-300">
+                    Test your garage in Bronze, Silver, Gold, and Legend spec cups or take on custom rival crews to win daily P-Credit purses!
+                  </p>
+
+                  {/* Quick Cup Tiers Strip */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="inline-flex items-center gap-1 rounded-lg border border-amber-800/50 bg-amber-950/40 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                      🥉 Bronze Cup
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-lg border border-slate-600/50 bg-slate-900/60 px-2 py-0.5 text-[10px] font-bold text-slate-200">
+                      🥈 Silver Cup
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-lg border border-yellow-600/50 bg-yellow-950/40 px-2 py-0.5 text-[10px] font-bold text-yellow-300">
+                      🥇 Gold Cup
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-lg border border-purple-600/50 bg-purple-950/40 px-2 py-0.5 text-[10px] font-bold text-purple-200">
+                      👑 Legend Cup
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Button */}
+              <div className="flex sm:flex-col sm:items-end justify-between items-center gap-2 pt-2 sm:pt-0 shrink-0">
+                <span className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500 px-5 py-2.5 text-xs sm:text-sm font-black uppercase tracking-wider text-white shadow-lg shadow-purple-500/25 transition-all duration-300 group-hover:shadow-purple-500/50 group-hover:scale-105">
+                  Enter Arena
+                  <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300/80">
+                  Resets 00:00 UTC
+                </span>
+              </div>
+            </div>
+          </button>
+
+          <section className="relative overflow-hidden rounded-3xl border border-amber-500/40 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-5 text-white shadow-xl sm:p-7">
         <div
           className="pointer-events-none absolute -right-12 -top-12 h-56 w-56 rounded-full bg-amber-500/15 blur-3xl"
           aria-hidden
@@ -1205,6 +1766,13 @@ export function DriftClashArena({
                 </button>
               </div>
             )}
+            <button
+              type="button"
+              onClick={() => openHowToPlay("quickstart")}
+              className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-2xl border border-amber-500/50 bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-amber-500/15 px-3 py-2 text-xs font-black uppercase tracking-wider text-amber-300 shadow-sm transition-all hover:border-amber-400 hover:bg-amber-500/25 active:scale-[0.99]"
+            >
+              <span>📖</span> How to Play &amp; Driver Manual
+            </button>
             <div className="grid grid-cols-3 gap-1.5">
               <button
                 type="button"
@@ -1246,73 +1814,177 @@ export function DriftClashArena({
 
       {/* How It Works Structure */}
       <section className="rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-zinc-100 sm:text-sm">
-            🏁 How Tandem Clash Works
-          </h3>
-          <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-black text-amber-600 dark:text-amber-400">
-            3 Corners · UK Tracks · Random Debuffs
-          </span>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-zinc-100 sm:text-sm">
+                🏁 How Tandem Clash Works
+              </h3>
+              <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-black text-amber-600 dark:text-amber-400">
+                New Engine &amp; Pit Rules
+              </span>
+            </div>
+            <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+              Tap any card to open the interactive rules overlay with full diagrams and details.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => openHowToPlay("quickstart")}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-black text-amber-600 transition-colors hover:bg-amber-500/20 dark:text-amber-300"
+          >
+            <span>📖</span> Open Driver Manual
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-          <div className="rounded-2xl border border-zinc-200/80 bg-zinc-50/70 p-3.5 dark:border-zinc-800 dark:bg-zinc-950/60">
-            <div className="mb-1.5 flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-xs font-black text-black">
-                1
-              </span>
-              <span className="text-xs font-black text-zinc-900 dark:text-zinc-100">
-                3 Cars &amp; 3 Crew Cards
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {/* 1. 3 Cars & 3 Corners */}
+          <button
+            type="button"
+            onClick={() => openHowToPlay("quickstart")}
+            className="group rounded-2xl border border-zinc-200/80 bg-zinc-50/70 p-3.5 text-left transition-all hover:border-amber-500/50 hover:bg-zinc-100/90 dark:border-zinc-800 dark:bg-zinc-950/60 dark:hover:bg-zinc-900"
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-xs font-black text-black">
+                  1
+                </span>
+                <span className="text-xs font-black text-zinc-900 dark:text-zinc-100">
+                  3 Cars &amp; 3 Corners
+                </span>
+              </div>
+              <span className="text-[10px] font-bold text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                Read Guide →
               </span>
             </div>
             <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
-              Select your <strong>3 Car Cards</strong> and <strong>3 Crew Advantage Cards</strong>. Academy Loaner Cards automatically fill any missing slots!
+              Choose 3 Cars &amp; 3 Crew Cards (Loaner cards backfill if needed). You decide which car to send each corner. Win <strong>2 of 3 corners</strong> to win!
             </p>
-          </div>
+          </button>
 
-          <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-3.5 dark:border-emerald-500/20 dark:bg-emerald-950/20">
-            <div className="mb-1.5 flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-xs font-black text-black">
-                2
-              </span>
-              <span className="text-xs font-black text-zinc-900 dark:text-zinc-100">
-                Random UK Track Card
+          {/* 2. Durability & Faults */}
+          <button
+            type="button"
+            onClick={() => openHowToPlay("durability")}
+            className="group rounded-2xl border border-amber-500/30 bg-amber-500/5 p-3.5 text-left transition-all hover:border-amber-500/60 hover:bg-amber-500/10 dark:border-amber-500/20 dark:bg-amber-950/20 dark:hover:bg-amber-950/40"
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-xs font-black text-black">
+                  2
+                </span>
+                <span className="text-xs font-black text-zinc-900 dark:text-zinc-100">
+                  Durability &amp; Breakdowns
+                </span>
+              </div>
+              <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-black text-amber-400">
+                NEW
               </span>
             </div>
             <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
-              The game spins for an iconic <strong>UK Drift Track Card</strong> (Penthouse, ASBO RC, Slide House, Outlaw RC &amp; more) with a Track Buff &amp; Debuff.
+              Cars have <strong>2–10 battles</strong> of durability. At 0, they suffer 1 of 4 faults (⚙️ Engine, 🕹️ Gearbox, 🔧 Steer, ⚡ ESC) and sit out 2–5 battles.
             </p>
-          </div>
+          </button>
 
-          <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-3.5 dark:border-cyan-500/20 dark:bg-cyan-950/20">
-            <div className="mb-1.5 flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500 text-xs font-black text-black">
-                3
-              </span>
-              <span className="text-xs font-black text-zinc-900 dark:text-zinc-100">
-                Corner Draw &amp; Crew Play
+          {/* 3. Maintenance Kits */}
+          <button
+            type="button"
+            onClick={() => openHowToPlay("maintenance")}
+            className="group rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-3.5 text-left transition-all hover:border-cyan-500/60 hover:bg-cyan-500/10 dark:border-cyan-500/20 dark:bg-cyan-950/20 dark:hover:bg-cyan-950/40"
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500 text-xs font-black text-black">
+                  3
+                </span>
+                <span className="text-xs font-black text-zinc-900 dark:text-zinc-100">
+                  Pit Repairs Consumables
+                </span>
+              </div>
+              <span className="rounded-full bg-cyan-500/20 px-1.5 py-0.5 text-[9px] font-black text-cyan-400">
+                NEW
               </span>
             </div>
             <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
-              Each corner randomly draws from your remaining Car Cards (3 → 2 → 1). You then choose which remaining <strong>Crew Advantage Card</strong> to play!
+              Standard packs drop repair kits (Bronze -1 to Legend -5 full fix). Use <strong>🛠️ Quick Fix</strong> in the car picker to repair instantly!
             </p>
-          </div>
+          </button>
 
-          <div className="rounded-2xl border border-rose-500/30 bg-rose-500/5 p-3.5 dark:border-rose-500/20 dark:bg-rose-950/20">
-            <div className="mb-1.5 flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-rose-500 text-xs font-black text-white">
-                4
-              </span>
-              <span className="text-xs font-black text-zinc-900 dark:text-zinc-100">
-                Shared Debuff &amp; Verdict
+          {/* 4. Crew Advantages */}
+          <button
+            type="button"
+            onClick={() => openHowToPlay("crew")}
+            className="group rounded-2xl border border-purple-500/30 bg-purple-500/5 p-3.5 text-left transition-all hover:border-purple-500/60 hover:bg-purple-500/10 dark:border-purple-500/20 dark:bg-purple-950/20 dark:hover:bg-purple-950/40"
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-500 text-xs font-black text-white">
+                  4
+                </span>
+                <span className="text-xs font-black text-zinc-900 dark:text-zinc-100">
+                  Crew Cards &amp; Rarity
+                </span>
+              </div>
+              <span className="rounded-full bg-purple-500/20 px-1.5 py-0.5 text-[9px] font-black text-purple-400">
+                SCALED
               </span>
             </div>
             <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
-              A random <strong>Debuff Card</strong> hits <em>both</em> drivers on each corner before scores are tallied. Win 2 of 3 corners to take the win!
+              100% positive buffs scaling from Bronze to Legend. Higher tiers deliver massive stat boosts, flat point spikes, and <strong>Debuff Shields</strong>!
             </p>
-          </div>
+          </button>
+
+          {/* 5. UK Tracks & Hazards */}
+          <button
+            type="button"
+            onClick={() => openHowToPlay("tracks")}
+            className="group rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-3.5 text-left transition-all hover:border-emerald-500/60 hover:bg-emerald-500/10 dark:border-emerald-500/20 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/40"
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-xs font-black text-black">
+                  5
+                </span>
+                <span className="text-xs font-black text-zinc-900 dark:text-zinc-100">
+                  UK Tracks &amp; Hazards
+                </span>
+              </div>
+              <span className="text-[10px] font-bold text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                Read Guide →
+              </span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
+              Iconic UK venues roll with bespoke track rules. Random shared corner debuffs hit both cars—shield your score with crew synergy.
+            </p>
+          </button>
+
+          {/* 6. Scoring & Rewards */}
+          <button
+            type="button"
+            onClick={() => openHowToPlay("scoring")}
+            className="group rounded-2xl border border-rose-500/30 bg-rose-500/5 p-3.5 text-left transition-all hover:border-rose-500/60 hover:bg-rose-500/10 dark:border-rose-500/20 dark:bg-rose-950/20 dark:hover:bg-rose-950/40"
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-rose-500 text-xs font-black text-white">
+                  6
+                </span>
+                <span className="text-xs font-black text-zinc-900 dark:text-zinc-100">
+                  Scoring &amp; P-Credits
+                </span>
+              </div>
+              <span className="text-[10px] font-bold text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                Read Guide →
+              </span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
+              Clear corner telemetry. Win daily to earn <strong>+25 P-Credits</strong> and build win streaks for +10 P-Credits milestone bonuses!
+            </p>
+          </button>
         </div>
       </section>
+    </>
+  )}
 
       {/* Catalog Modal for Crew, Debuff, or UK Track Cards */}
       {showCatalogModal &&
@@ -1901,17 +2573,27 @@ export function DriftClashArena({
                 </div>
               )}
 
-              <button
-                type="button"
-                onClick={() => {
-                  clearTimers();
-                  setPickerModalTarget(null);
-                  setPhase("lobby");
-                }}
-                className="rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-bold text-zinc-300 hover:bg-zinc-800"
-              >
-                ✕ Exit
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => openHowToPlay("quickstart")}
+                  className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/20 transition-colors"
+                  title="How to Play & Rules Guide"
+                >
+                  📖 Rules
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearTimers();
+                    setPickerModalTarget(null);
+                    setPhase("lobby");
+                  }}
+                  className="rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-bold text-zinc-300 hover:bg-zinc-800"
+                >
+                  ✕ Exit
+                </button>
+              </div>
             </header>
 
             {/* Main Stage Body */}
@@ -1920,6 +2602,46 @@ export function DriftClashArena({
                 {/* ── STEP 1: SELECT 3 CAR CARDS & 3 CREW CARDS ────────────── */}
                 {phase === "lineup" && (
                   <div className="space-y-4">
+                    {/* Active Challenge Header Banner */}
+                    {activeChallenge && (
+                      <div
+                        className={`rounded-2xl border p-3 flex flex-wrap items-center justify-between gap-3 shadow-lg ${
+                          CHALLENGE_THEME_CONFIGS[activeChallenge.themeStyle]?.borderClass || "border-purple-500/50"
+                        } ${
+                          CHALLENGE_THEME_CONFIGS[activeChallenge.themeStyle]?.bgGradientClass || "bg-purple-950/40"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-2xl">
+                            {CHALLENGE_THEME_CONFIGS[activeChallenge.themeStyle]?.icon || "🏆"}
+                          </span>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[9px] font-black uppercase text-black">
+                                CHALLENGE CUP ACTIVE
+                              </span>
+                              <h4 className="text-sm font-black text-white">{activeChallenge.title}</h4>
+                            </div>
+                            <p className="text-[11px] text-zinc-300">
+                              Restriction:{" "}
+                              <strong className="text-white">
+                                {activeChallenge.allowedRarity === "any"
+                                  ? "Open Rarity"
+                                  : `${activeChallenge.allowedRarity.toUpperCase()} Only`}
+                                {activeChallenge.maxTotalScore ? ` · Max ${activeChallenge.maxTotalScore} PTS` : ""}
+                              </strong>
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="block text-[10px] font-bold uppercase text-zinc-400">Purse Reward</span>
+                          <span className="text-sm font-black text-emerald-400">
+                            ⚡ +{activeChallenge.rewardPCredits} P-Credits
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Loadout Stepper Switcher */}
                     <div className="grid grid-cols-2 gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/90 p-1.5">
                       <button
@@ -1992,7 +2714,22 @@ export function DriftClashArena({
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => setSelectedCarIds(pickTopThreeIds(usableCarCards))}
+                              onClick={() => {
+                                if (activeChallenge) {
+                                  const eligible = usableCarCards.filter(
+                                    (c) => isCarEligibleForChallenge(c, activeChallenge).eligible
+                                  );
+                                  if (eligible.length >= 3) {
+                                    setSelectedCarIds(pickTopThreeIds(eligible));
+                                  } else {
+                                    alert(
+                                      `Only ${eligible.length} qualifying cars found in your garage for this challenge.`
+                                    );
+                                  }
+                                } else {
+                                  setSelectedCarIds(pickTopThreeIds(usableCarCards));
+                                }
+                              }}
                               className="rounded-xl border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-xs font-black text-amber-300 hover:bg-amber-500/25"
                             >
                               ⚡ Auto-Pick Best 3
@@ -2013,20 +2750,41 @@ export function DriftClashArena({
                           </div>
                         )}
 
+                        {challengeIneligibleCount > 0 && activeChallenge && (
+                          <div className="rounded-2xl border border-rose-500/50 bg-rose-500/15 p-3 text-xs font-bold text-rose-300">
+                            ⚠️ {challengeIneligibleCount} of your equipped cars do not meet the <strong>{activeChallenge.title}</strong> restrictions ({activeChallenge.allowedRarity !== "any" ? `${activeChallenge.allowedRarity.toUpperCase()} Only` : ""}{activeChallenge.maxTotalScore ? ` · Max ${activeChallenge.maxTotalScore} PTS` : ""}). Please swap them with qualifying cars to launch the match.
+                          </div>
+                        )}
+
                         <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
                           {selectedCarCards.map((car, idx) => {
                             const slotIdx = idx as 0 | 1 | 2;
                             const isLoaner = car.userId === "loaner";
+                            const carEligibility = activeChallenge
+                              ? isCarEligibleForChallenge(car, activeChallenge)
+                              : { eligible: true };
                             return (
                               <div
                                 key={`${slotIdx}-${car.id}`}
-                                className="flex flex-col justify-between rounded-2xl border border-zinc-800 bg-zinc-950 p-2 sm:p-3"
+                                className={`flex flex-col justify-between rounded-2xl border p-2 sm:p-3 ${
+                                  !carEligibility.eligible
+                                    ? "border-rose-500/80 bg-rose-950/20"
+                                    : "border-zinc-800 bg-zinc-950"
+                                }`}
                               >
                                 <div className="mb-1.5 flex items-center justify-between text-[10px] font-black">
                                   <span className="text-amber-400">CAR #{slotIdx + 1}</span>
-                                  {isLoaner && (
+                                  {!carEligibility.eligible ? (
+                                    <span className="rounded bg-rose-500/30 border border-rose-500 px-1.5 py-0.5 text-[9px] text-rose-200 animate-pulse">
+                                      INELIGIBLE
+                                    </span>
+                                  ) : isLoaner ? (
                                     <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] text-amber-300">
                                       LOANER
+                                    </span>
+                                  ) : (
+                                    <span className="rounded bg-zinc-800 border border-zinc-700 px-1.5 py-0.5 text-[9px] text-emerald-400">
+                                      🔋 {car.battlesRemaining ?? car.maxBattles ?? 6}L
                                     </span>
                                   )}
                                 </div>
@@ -2044,6 +2802,11 @@ export function DriftClashArena({
                                   <p className="truncate text-center text-xs font-black text-white">
                                     {car.name}
                                   </p>
+                                  {!carEligibility.eligible && (
+                                    <p className="text-center text-[10px] font-bold text-rose-400 leading-tight">
+                                      {carEligibility.reason}
+                                    </p>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() =>
@@ -2083,10 +2846,13 @@ export function DriftClashArena({
                             </button>
                             <button
                               type="button"
+                              disabled={!isLineupEligible}
                               onClick={handleStartTrackRoulette}
-                              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-3.5 py-1.5 text-xs font-black uppercase tracking-wider text-black shadow-md shadow-amber-500/25 hover:scale-[1.02]"
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-3.5 py-1.5 text-xs font-black uppercase tracking-wider text-black shadow-md shadow-amber-500/25 hover:scale-[1.02] disabled:opacity-40 disabled:cursor-not-allowed"
                             >
-                              <span>Spin UK Track →</span>
+                              <span>
+                                {!isLineupEligible ? "⚠️ Lineup Invalid" : "Spin UK Track →"}
+                              </span>
                             </button>
                           </div>
                         </div>
@@ -2171,10 +2937,15 @@ export function DriftClashArena({
 
                           <button
                             type="button"
+                            disabled={!isLineupEligible}
                             onClick={handleStartTrackRoulette}
-                            className="inline-flex min-h-12 flex-1 sm:flex-initial items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-6 text-xs font-black uppercase tracking-wider text-black shadow-[0_0_25px_rgba(245,158,11,0.35)] hover:scale-[1.01] sm:text-sm"
+                            className="inline-flex min-h-12 flex-1 sm:flex-initial items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-6 text-xs font-black uppercase tracking-wider text-black shadow-[0_0_25px_rgba(245,158,11,0.35)] hover:scale-[1.01] sm:text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                           >
-                            <span>🇬🇧 Lock Loadout &amp; Spin UK Track →</span>
+                            <span>
+                              {!isLineupEligible
+                                ? `⚠️ ${challengeIneligibleCount} Ineligible Car(s) in Lineup`
+                                : "🇬🇧 Lock Loadout & Spin UK Track →"}
+                            </span>
                           </button>
                         </>
                       )}
@@ -2431,19 +3202,19 @@ export function DriftClashArena({
                           <div className="grid grid-cols-4 gap-2 text-center text-xs">
                             <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-1.5">
                               <span className="block text-[9px] font-black uppercase text-zinc-400">DRIFT</span>
-                              <span className="font-black text-white">{activeCar.stats?.drift ?? 0}</span>
+                              <span className="font-black text-white">{normalizeStatValue(activeCar.stats?.drift)}</span>
                             </div>
                             <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-1.5">
                               <span className="block text-[9px] font-black uppercase text-zinc-400">ACCEL</span>
-                              <span className="font-black text-white">{activeCar.stats?.accel ?? 0}</span>
+                              <span className="font-black text-white">{normalizeStatValue(activeCar.stats?.accel)}</span>
                             </div>
                             <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-1.5">
                               <span className="block text-[9px] font-black uppercase text-zinc-400">GRIP</span>
-                              <span className="font-black text-white">{activeCar.stats?.grip ?? 0}</span>
+                              <span className="font-black text-white">{normalizeStatValue(activeCar.stats?.grip)}</span>
                             </div>
                             <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-1.5">
                               <span className="block text-[9px] font-black uppercase text-zinc-400">STEER</span>
-                              <span className="font-black text-white">{activeCar.stats?.steer ?? 0}</span>
+                              <span className="font-black text-white">{normalizeStatValue(activeCar.stats?.steer)}</span>
                             </div>
                           </div>
 
@@ -2487,16 +3258,16 @@ export function DriftClashArena({
 
                     // Base Stats
                     const pBase = {
-                      drift: Number(playerCar.stats.drift) || 0,
-                      accel: Number(playerCar.stats.accel) || 0,
-                      grip: Number(playerCar.stats.grip) || 0,
-                      steer: Number(playerCar.stats.steer) || 0,
+                      drift: normalizeStatValue(playerCar.stats.drift),
+                      accel: normalizeStatValue(playerCar.stats.accel),
+                      grip: normalizeStatValue(playerCar.stats.grip),
+                      steer: normalizeStatValue(playerCar.stats.steer),
                     };
                     const rBase = {
-                      drift: Number(rivalCar.stats.drift) || 0,
-                      accel: Number(rivalCar.stats.accel) || 0,
-                      grip: Number(rivalCar.stats.grip) || 0,
-                      steer: Number(rivalCar.stats.steer) || 0,
+                      drift: normalizeStatValue(rivalCar.stats.drift),
+                      accel: normalizeStatValue(rivalCar.stats.accel),
+                      grip: normalizeStatValue(rivalCar.stats.grip),
+                      steer: normalizeStatValue(rivalCar.stats.steer),
                     };
 
                     // Crew Stats
@@ -2508,23 +3279,41 @@ export function DriftClashArena({
                     const pCrewStats = applyCrewModsToStats(pBase, pCrewMods);
                     const rCrewStats = applyCrewModsToStats(rBase, rCrewMods);
 
-                    // Debuff / Final Stats
-                    const pDebuffPen = playerDebuffDef.penalties;
-                    const rDebuffPen = rivalDebuffDef.penalties;
+                    // Debuff / Final Stats (shielded by crew debuffShield)
+                    const pShield = Math.min(1, Math.max(0, pCrewMods?.debuffShield ?? 0));
+                    const rShield = Math.min(1, Math.max(0, rCrewMods?.debuffShield ?? 0));
+
+                    const pDebuffBreakdown = computeDebuffBreakdown({
+                      card: playerCar,
+                      debuffCard: playerDebuffDef,
+                      trackCard: activeTrackDef,
+                      shield: pShield,
+                    });
+
+                    const rDebuffBreakdown = computeDebuffBreakdown({
+                      card: rivalCar,
+                      debuffCard: rivalDebuffDef,
+                      trackCard: activeTrackDef,
+                      shield: rShield,
+                    });
+
                     const pFinalStats = {
-                      drift: Math.max(1, pCrewStats.drift - (pDebuffPen.driftPenalty ?? 0)),
-                      accel: Math.max(1, pCrewStats.accel - (pDebuffPen.accelPenalty ?? 0)),
-                      grip: Math.max(1, pCrewStats.grip - (pDebuffPen.gripPenalty ?? 0)),
-                      steer: Math.max(1, pCrewStats.steer - (pDebuffPen.steerPenalty ?? 0)),
+                      drift: Math.max(1, pCrewStats.drift - pDebuffBreakdown.effectiveDriftPenalty),
+                      accel: Math.max(1, pCrewStats.accel - pDebuffBreakdown.effectiveAccelPenalty),
+                      grip: Math.max(1, pCrewStats.grip - pDebuffBreakdown.effectiveGripPenalty),
+                      steer: Math.max(1, pCrewStats.steer - pDebuffBreakdown.effectiveSteerPenalty),
                     };
                     const rFinalStats = {
-                      drift: Math.max(1, rCrewStats.drift - (rDebuffPen.driftPenalty ?? 0)),
-                      accel: Math.max(1, rCrewStats.accel - (rDebuffPen.accelPenalty ?? 0)),
-                      grip: Math.max(1, rCrewStats.grip - (rDebuffPen.gripPenalty ?? 0)),
-                      steer: Math.max(1, rCrewStats.steer - (rDebuffPen.steerPenalty ?? 0)),
+                      drift: Math.max(1, rCrewStats.drift - rDebuffBreakdown.effectiveDriftPenalty),
+                      accel: Math.max(1, rCrewStats.accel - rDebuffBreakdown.effectiveAccelPenalty),
+                      grip: Math.max(1, rCrewStats.grip - rDebuffBreakdown.effectiveGripPenalty),
+                      steer: Math.max(1, rCrewStats.steer - rDebuffBreakdown.effectiveSteerPenalty),
                     };
 
-                    const isCrewStage = battleAnimStep === "crew_overlay" || battleAnimStep === "battle_shake_1";
+                    const isCrewStage =
+                      battleAnimStep === "crew_overlay" ||
+                      battleAnimStep === "battle_shake_1" ||
+                      battleAnimStep === "prompt_debuff";
                     const isPromptCrew = battleAnimStep === "prompt_crew";
                     const isDebuffOrLater =
                       battleAnimStep === "debuff_overlay" ||
@@ -2665,7 +3454,7 @@ export function DriftClashArena({
                     let pCardClass = "transition-all duration-500 will-change-transform ";
                     if (battleAnimStep === "cards_entrance") {
                       pCardClass += "-translate-x-8 opacity-80 rotate-2 duration-700 ease-out";
-                    } else if (battleAnimStep === "head_to_head" || battleAnimStep === "prompt_crew") {
+                    } else if (battleAnimStep === "head_to_head" || battleAnimStep === "prompt_crew" || battleAnimStep === "prompt_debuff") {
                       pCardClass += "translate-x-[12%] sm:translate-x-[16%] scale-100 rotate-1 z-20 duration-500";
                     } else if (battleAnimStep === "crew_overlay") {
                       pCardClass += "translate-x-[12%] sm:translate-x-[16%] scale-105 rotate-1 z-20 duration-300";
@@ -2689,7 +3478,7 @@ export function DriftClashArena({
                     let rCardClass = "transition-all duration-500 will-change-transform ";
                     if (battleAnimStep === "cards_entrance") {
                       rCardClass += "translate-x-8 opacity-80 -rotate-2 duration-700 ease-out";
-                    } else if (battleAnimStep === "head_to_head" || battleAnimStep === "prompt_crew") {
+                    } else if (battleAnimStep === "head_to_head" || battleAnimStep === "prompt_crew" || battleAnimStep === "prompt_debuff") {
                       rCardClass += "-translate-x-[12%] sm:-translate-x-[16%] scale-100 -rotate-1 z-20 duration-500";
                     } else if (battleAnimStep === "crew_overlay") {
                       rCardClass += "-translate-x-[12%] sm:-translate-x-[16%] scale-105 -rotate-1 z-20 duration-300";
@@ -2891,6 +3680,19 @@ export function DriftClashArena({
                                           </div>
                                         );
                                       })()}
+
+                                      {/* PROMINENT TOTAL DEBUFF SUMMARY BADGE */}
+                                      {isDebuffOrLater && pDebuffBreakdown.hasAnyDebuff && (
+                                        <div className="animate-pulse flex items-center justify-center gap-1 rounded-xl bg-rose-950/95 border-2 border-rose-500 px-2 py-0.5 shadow-[0_0_15px_rgba(244,63,94,0.7)] text-white w-full max-w-[200px]">
+                                          <span className="text-[10px]">⚠️</span>
+                                          <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-rose-300 shrink-0">
+                                            TOTAL:
+                                          </span>
+                                          <span className="text-[10px] sm:text-xs font-black text-rose-100 truncate">
+                                            {pDebuffBreakdown.totalSummary}
+                                          </span>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 )}
@@ -2908,11 +3710,11 @@ export function DriftClashArena({
                                   className="drop-shadow-2xl"
                                 />
 
-                                {/* Subtle Debuff Micro Badge (No covering description text) */}
+                                {/* Debuff Micro Badge */}
                                 {isDebuffOrLater && (
-                                  <div className="absolute inset-x-1 bottom-1 z-20 flex items-center justify-center gap-1 rounded-lg border border-rose-500/80 bg-zinc-950/90 py-0.5 px-1.5 shadow backdrop-blur-sm">
-                                    <span className="text-xs">{playerDebuffDef.icon}</span>
-                                    <span className="text-[9px] font-black uppercase text-rose-400 truncate">
+                                  <div className="absolute inset-x-1 bottom-1 z-20 flex items-center justify-center gap-1 rounded-lg border border-rose-500/80 bg-zinc-950/95 py-0.5 px-1.5 shadow-xl backdrop-blur-md">
+                                    <span className="text-xs shrink-0">{playerDebuffDef.icon}</span>
+                                    <span className="text-[9px] sm:text-[10px] font-black uppercase text-rose-300 truncate">
                                       {playerDebuffDef.name}
                                     </span>
                                   </div>
@@ -2977,6 +3779,19 @@ export function DriftClashArena({
                                           </span>
                                         </div>
                                       )}
+
+                                      {/* PROMINENT TOTAL DEBUFF SUMMARY BADGE FOR RIVAL */}
+                                      {isDebuffOrLater && rDebuffBreakdown.hasAnyDebuff && (
+                                        <div className="animate-pulse flex items-center justify-center gap-1 rounded-xl bg-rose-950/95 border-2 border-rose-500 px-2 py-0.5 shadow-[0_0_15px_rgba(244,63,94,0.7)] text-white w-full max-w-[200px]">
+                                          <span className="text-[10px]">⚠️</span>
+                                          <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-rose-300 shrink-0">
+                                            TOTAL:
+                                          </span>
+                                          <span className="text-[10px] sm:text-xs font-black text-rose-100 truncate">
+                                            {rDebuffBreakdown.totalSummary}
+                                          </span>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 )}
@@ -2994,11 +3809,11 @@ export function DriftClashArena({
                                   className="drop-shadow-2xl"
                                 />
 
-                                {/* Subtle Debuff Micro Badge (No covering description text) */}
+                                {/* Debuff Micro Badge */}
                                 {isDebuffOrLater && (
-                                  <div className="absolute inset-x-1 bottom-1 z-20 flex items-center justify-center gap-1 rounded-lg border border-rose-500/80 bg-zinc-950/90 py-0.5 px-1.5 shadow backdrop-blur-sm">
-                                    <span className="text-xs">{rivalDebuffDef.icon}</span>
-                                    <span className="text-[9px] font-black uppercase text-rose-400 truncate">
+                                  <div className="absolute inset-x-1 bottom-1 z-20 flex items-center justify-center gap-1 rounded-lg border border-rose-500/80 bg-zinc-950/95 py-0.5 px-1.5 shadow-xl backdrop-blur-md">
+                                    <span className="text-xs shrink-0">{rivalDebuffDef.icon}</span>
+                                    <span className="text-[9px] sm:text-[10px] font-black uppercase text-rose-300 truncate">
                                       {rivalDebuffDef.name}
                                     </span>
                                   </div>
@@ -3033,15 +3848,26 @@ export function DriftClashArena({
                             </div>
                           )}
 
-                          {/* Center Battle Indicator 2: Battle Shake 2 */}
-                          {battleAnimStep === "battle_shake_2" && (
-                            <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 z-30 text-center animate-in zoom-in-75 duration-200">
-                              <div className="inline-block rounded-2xl border-2 border-rose-500 bg-black/90 px-4 py-2.5 shadow-[0_0_35px_rgba(244,63,94,0.6)]">
-                                <span className="text-xl">💥</span>
-                                <p className="text-xs sm:text-sm font-black uppercase tracking-wider text-rose-300">
-                                  FINAL APEX TRANSITION!
+                          {/* Center Battle Indicator: Debuff Overlay Hit */}
+                          {battleAnimStep === "debuff_overlay" && (
+                            <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 z-30 text-center animate-in zoom-in-75 duration-200 px-3">
+                              <div className="inline-block rounded-2xl border-2 border-rose-500 bg-zinc-950/95 p-3 sm:px-6 sm:py-3.5 shadow-[0_0_35px_rgba(244,63,94,0.7)] backdrop-blur-md">
+                                <span className="text-2xl animate-pulse">⚠️</span>
+                                <p className="text-xs sm:text-sm font-black uppercase tracking-wider text-rose-400">
+                                  CORNER DEBUFFS APPLIED!
                                 </p>
-                                <p className="text-[10px] font-bold text-zinc-300">Full throttle into the outer clip!</p>
+                                <div className="mt-1.5 flex flex-col sm:flex-row items-center justify-center gap-2 text-[10px] sm:text-[11px] font-bold text-zinc-200">
+                                  <div className="flex items-center gap-1 rounded-lg bg-rose-950/80 border border-rose-500/50 px-2.5 py-1 text-rose-200">
+                                    <span>YOU:</span>
+                                    <span className="text-white font-extrabold">{playerDebuffDef.name}</span>
+                                    <span className="text-rose-300">({pDebuffBreakdown.totalSummary})</span>
+                                  </div>
+                                  <div className="flex items-center gap-1 rounded-lg bg-rose-950/80 border border-rose-500/50 px-2.5 py-1 text-rose-200">
+                                    <span>RIVAL:</span>
+                                    <span className="text-white font-extrabold">{rivalDebuffDef.name}</span>
+                                    <span className="text-rose-300">({rDebuffBreakdown.totalSummary})</span>
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           )}
@@ -3175,6 +4001,84 @@ export function DriftClashArena({
                             </div>
                           )}
 
+                          {/* ── INTERACTIVE FUNNY TRACK HAZARD INCIDENT POPUP (1 of 20 SCENARIOS) ── */}
+                          {battleAnimStep === "prompt_debuff" && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
+                              <div className="relative w-full max-w-sm sm:max-w-md rounded-3xl border-2 border-amber-500/80 bg-zinc-950 p-5 sm:p-6 shadow-[0_0_60px_rgba(245,158,11,0.5)] text-center">
+                                {/* Header Badge */}
+                                <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/60 bg-amber-500/20 px-3 py-1 mb-2">
+                                  <span className="text-xs animate-pulse">⚠️</span>
+                                  <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-amber-300">
+                                    Corner {activeCornerIdx + 1} Hazard Incident
+                                  </span>
+                                </div>
+
+                                {/* Animated Big Emoji Circle */}
+                                <div className="mx-auto my-3 flex h-20 w-20 sm:h-24 sm:w-24 items-center justify-center rounded-3xl border-2 border-amber-400/50 bg-gradient-to-b from-amber-500/20 via-zinc-900 to-black text-4xl sm:text-5xl shadow-[0_0_25px_rgba(245,158,11,0.3)] animate-bounce">
+                                  {debuffScenario?.icon || "⚠️"}
+                                </div>
+
+                                {/* Title */}
+                                <h3 className="text-lg sm:text-xl font-black uppercase tracking-tight text-white mt-1">
+                                  {debuffScenario?.title || "Track Incident!"}
+                                </h3>
+
+                                {/* Small Description */}
+                                <p className="text-xs sm:text-sm text-zinc-300 mt-2 px-1 leading-relaxed">
+                                  {debuffScenario?.description || "A sudden mishap on the track disrupted corner entry!"}
+                                </p>
+
+                                {/* Debuffs Notice Box */}
+                                <div className="mt-4 rounded-2xl border border-rose-500/40 bg-rose-950/25 p-3 text-left">
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-rose-300">
+                                      Incoming Hazard Penalties
+                                    </span>
+                                    <span className="text-[8px] font-bold text-zinc-400">
+                                      Applied on Continue
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col gap-1.5">
+                                    <div className="flex items-center justify-between rounded-xl bg-black/60 px-2.5 py-1.5 border border-zinc-800">
+                                      <span className="text-[9px] font-black text-rose-400 shrink-0">YOU:</span>
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className="text-xs">{playerDebuffDef.icon}</span>
+                                        <span className="text-[11px] font-extrabold text-white truncate max-w-[140px]">
+                                          {playerDebuffDef.name}
+                                        </span>
+                                      </div>
+                                      <span className="text-[10px] font-black text-rose-300 shrink-0">
+                                        {pDebuffBreakdown.hasAnyDebuff ? pDebuffBreakdown.totalSummary : "No Debuff"}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center justify-between rounded-xl bg-black/60 px-2.5 py-1.5 border border-zinc-800">
+                                      <span className="text-[9px] font-black text-zinc-400 shrink-0">RIVAL:</span>
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className="text-xs">{rivalDebuffDef.icon}</span>
+                                        <span className="text-[11px] font-extrabold text-white truncate max-w-[140px]">
+                                          {rivalDebuffDef.name}
+                                        </span>
+                                      </div>
+                                      <span className="text-[10px] font-black text-rose-300 shrink-0">
+                                        {rDebuffBreakdown.hasAnyDebuff ? rDebuffBreakdown.totalSummary : "No Debuff"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Continue Button */}
+                                <button
+                                  type="button"
+                                  onClick={handleContinueFromDebuff}
+                                  className="mt-5 w-full flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-6 py-3.5 text-xs sm:text-sm font-black uppercase tracking-wider text-white shadow-[0_0_30px_rgba(245,158,11,0.6)] hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer"
+                                >
+                                  <span>Continue &amp; Apply Debuffs</span>
+                                  <span className="text-base">→</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
                           {/* Center Battle Indicator 2: Battle Shake 2 */}
                           {battleAnimStep === "battle_shake_2" && (
                             <div className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 z-30 text-center animate-in zoom-in-75 duration-200">
@@ -3303,6 +4207,29 @@ export function DriftClashArena({
                           </span>
                         </div>
                       )}
+
+                      {activeChallenge && battleBanner.won && (
+                        <div
+                          className={`mt-4 rounded-2xl border-2 p-3 text-center shadow-lg ${
+                            CHALLENGE_THEME_CONFIGS[activeChallenge.themeStyle]?.borderClass || "border-purple-500"
+                          } ${
+                            CHALLENGE_THEME_CONFIGS[activeChallenge.themeStyle]?.bgGradientClass || "bg-purple-950/60"
+                          }`}
+                        >
+                          <span className="text-2xl">🏆</span>
+                          <h4 className="text-base font-black text-white">
+                            CHALLENGE CUP WON: {activeChallenge.title}
+                          </h4>
+                          <p className="text-xs text-zinc-300 mt-0.5">
+                            You conquered this challenge series and claimed the victory purse!
+                          </p>
+                          {activeChallenge.rewardPCredits > 0 && (
+                            <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-3.5 py-1 text-xs font-black text-black">
+                              ⚡ +{activeChallenge.rewardPCredits} P-Credits Awarded!
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* 3-Corner Complete Breakdown with full Buffs & Debuffs Telemetry */}
@@ -3313,10 +4240,21 @@ export function DriftClashArena({
                         const rCrewDef = resolveCrewDef(s.rivalCrewCard);
                         const pMods = pCrewDef.modifiers ?? {};
                         const rMods = rCrewDef.modifiers ?? {};
-                        const pPen = s.playerDebuffCard.penalties ?? {};
-                        const rPen = s.rivalDebuffCard.penalties ?? {};
                         const pShield = Math.min(1, Math.max(0, pMods.debuffShield ?? 0));
                         const rShield = Math.min(1, Math.max(0, rMods.debuffShield ?? 0));
+
+                        const pDebuff = s.playerDebuffBreakdown ?? computeDebuffBreakdown({
+                          card: s.playerCard,
+                          debuffCard: s.playerDebuffCard,
+                          trackCard: s.trackCard,
+                          shield: pShield,
+                        });
+                        const rDebuff = s.rivalDebuffBreakdown ?? computeDebuffBreakdown({
+                          card: s.rivalCard,
+                          debuffCard: s.rivalDebuffCard,
+                          trackCard: s.trackCard,
+                          shield: rShield,
+                        });
 
                         // Player buffs
                         const pBuffBadges: string[] = [];
@@ -3332,15 +4270,18 @@ export function DriftClashArena({
 
                         // Player penalties
                         const pPenBadges: string[] = [];
-                        if (pPen.driftPenalty) pPenBadges.push(`-${pPen.driftPenalty} DRIFT`);
-                        if (pPen.accelPenalty) pPenBadges.push(`-${pPen.accelPenalty} ACCEL`);
-                        if (pPen.gripPenalty) pPenBadges.push(`-${pPen.gripPenalty} GRIP`);
-                        if (pPen.steerPenalty) pPenBadges.push(`-${pPen.steerPenalty} STEER`);
-                        if (pPen.flatPenalty) pPenBadges.push(`-${pPen.flatPenalty} PTS`);
-                        if (pPen.condition) {
+                        if (pDebuff.effectiveDriftPenalty > 0) pPenBadges.push(`-${pDebuff.effectiveDriftPenalty} DRIFT`);
+                        if (pDebuff.effectiveAccelPenalty > 0) pPenBadges.push(`-${pDebuff.effectiveAccelPenalty} ACCEL`);
+                        if (pDebuff.effectiveGripPenalty > 0) pPenBadges.push(`-${pDebuff.effectiveGripPenalty} GRIP`);
+                        if (pDebuff.effectiveSteerPenalty > 0) pPenBadges.push(`-${pDebuff.effectiveSteerPenalty} STEER`);
+                        if (pDebuff.conditionMet && pDebuff.effectiveConditionPenalty > 0) {
                           pPenBadges.push(
-                            `${pPen.condition.stat.toUpperCase()} ${pPen.condition.op} ${pPen.condition.threshold} (-${pPen.condition.extraPenalty} PTS)`
+                            `${pDebuff.conditionStat?.toUpperCase()} ${pDebuff.conditionOp} ${pDebuff.conditionThreshold} (-${pDebuff.effectiveConditionPenalty} PTS)`
                           );
+                        }
+                        if (pDebuff.effectiveFlatPenalty > 0) pPenBadges.push(`-${pDebuff.effectiveFlatPenalty} PTS`);
+                        if (pDebuff.trackHazardMet && pDebuff.effectiveTrackHazardPenalty > 0) {
+                          pPenBadges.push(`Track Hazard: -${pDebuff.effectiveTrackHazardPenalty} PTS`);
                         }
 
                         // Rival buffs
@@ -3357,15 +4298,18 @@ export function DriftClashArena({
 
                         // Rival penalties
                         const rPenBadges: string[] = [];
-                        if (rPen.driftPenalty) rPenBadges.push(`-${rPen.driftPenalty} DRIFT`);
-                        if (rPen.accelPenalty) rPenBadges.push(`-${rPen.accelPenalty} ACCEL`);
-                        if (rPen.gripPenalty) rPenBadges.push(`-${rPen.gripPenalty} GRIP`);
-                        if (rPen.steerPenalty) rPenBadges.push(`-${rPen.steerPenalty} STEER`);
-                        if (rPen.flatPenalty) rPenBadges.push(`-${rPen.flatPenalty} PTS`);
-                        if (rPen.condition) {
+                        if (rDebuff.effectiveDriftPenalty > 0) rPenBadges.push(`-${rDebuff.effectiveDriftPenalty} DRIFT`);
+                        if (rDebuff.effectiveAccelPenalty > 0) rPenBadges.push(`-${rDebuff.effectiveAccelPenalty} ACCEL`);
+                        if (rDebuff.effectiveGripPenalty > 0) rPenBadges.push(`-${rDebuff.effectiveGripPenalty} GRIP`);
+                        if (rDebuff.effectiveSteerPenalty > 0) rPenBadges.push(`-${rDebuff.effectiveSteerPenalty} STEER`);
+                        if (rDebuff.conditionMet && rDebuff.effectiveConditionPenalty > 0) {
                           rPenBadges.push(
-                            `${rPen.condition.stat.toUpperCase()} ${rPen.condition.op} ${rPen.condition.threshold} (-${rPen.condition.extraPenalty} PTS)`
+                            `${rDebuff.conditionStat?.toUpperCase()} ${rDebuff.conditionOp} ${rDebuff.conditionThreshold} (-${rDebuff.effectiveConditionPenalty} PTS)`
                           );
+                        }
+                        if (rDebuff.effectiveFlatPenalty > 0) rPenBadges.push(`-${rDebuff.effectiveFlatPenalty} PTS`);
+                        if (rDebuff.trackHazardMet && rDebuff.effectiveTrackHazardPenalty > 0) {
+                          rPenBadges.push(`Track Hazard: -${rDebuff.effectiveTrackHazardPenalty} PTS`);
                         }
 
                         return (
@@ -3548,11 +4492,9 @@ export function DriftClashArena({
                                     <div className="flex items-center gap-1.5 font-bold text-rose-400">
                                       <span>⚠️ {s.playerDebuffCard.icon}</span>
                                       <span className="truncate">{s.playerDebuffCard.name}</span>
-                                      {pShield > 0 && (
-                                        <span className="ml-auto text-[8px] font-black uppercase text-cyan-300 bg-cyan-950 border border-cyan-500/40 rounded px-1.5 py-0.2">
-                                          {Math.round(pShield * 100)}% Shielded
-                                        </span>
-                                      )}
+                                      <span className="ml-auto text-[8px] font-black uppercase text-rose-200 bg-rose-950 border border-rose-500/50 rounded px-1.5 py-0.2">
+                                        TOTAL: {pDebuff.totalSummary}
+                                      </span>
                                     </div>
                                     <div className="flex flex-wrap gap-1">
                                       {pPenBadges.length > 0 ? (
@@ -3565,7 +4507,7 @@ export function DriftClashArena({
                                           </span>
                                         ))
                                       ) : (
-                                        <span className="text-[9px] text-zinc-400">{s.playerDebuffCard.ability}</span>
+                                        <span className="text-[9px] text-zinc-400">No penalties applied</span>
                                       )}
                                     </div>
                                   </div>
@@ -3607,11 +4549,9 @@ export function DriftClashArena({
                                     <div className="flex items-center gap-1.5 font-bold text-rose-400">
                                       <span>⚠️ {s.rivalDebuffCard.icon}</span>
                                       <span className="truncate">{s.rivalDebuffCard.name}</span>
-                                      {rShield > 0 && (
-                                        <span className="ml-auto text-[8px] font-black uppercase text-cyan-300 bg-cyan-950 border border-cyan-500/40 rounded px-1.5 py-0.2">
-                                          {Math.round(rShield * 100)}% Shielded
-                                        </span>
-                                      )}
+                                      <span className="ml-auto text-[8px] font-black uppercase text-rose-200 bg-rose-950 border border-rose-500/50 rounded px-1.5 py-0.2">
+                                        TOTAL: {rDebuff.totalSummary}
+                                      </span>
                                     </div>
                                     <div className="flex flex-wrap gap-1">
                                       {rPenBadges.length > 0 ? (
@@ -3624,7 +4564,7 @@ export function DriftClashArena({
                                           </span>
                                         ))
                                       ) : (
-                                        <span className="text-[9px] text-zinc-400">{s.rivalDebuffCard.ability}</span>
+                                        <span className="text-[9px] text-zinc-400">No penalties applied</span>
                                       )}
                                     </div>
                                   </div>
@@ -3651,8 +4591,98 @@ export function DriftClashArena({
                       })}
                     </div>
 
+                    {/* Pit Garage Status & Mechanical Report */}
+                    {pitReport.length > 0 && (
+                      <div className="rounded-3xl border border-amber-500/40 bg-zinc-900/90 p-4 space-y-2.5 text-left shadow-lg">
+                        <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                          <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                            <span>🛠️</span> Pit Garage Report
+                          </span>
+                          <span className="text-[10px] font-bold uppercase text-zinc-400">
+                            Mechanical Wear &amp; Repairs
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          {pitReport.map((ev, rIdx) => (
+                            <div
+                              key={rIdx}
+                              className={`flex items-center justify-between gap-3 rounded-2xl p-3 border ${
+                                ev.type === "fault"
+                                  ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
+                                  : "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <span className="text-2xl">{ev.type === "fault" ? ev.faultIcon || "⚠️" : "✅"}</span>
+                                <div>
+                                  <p className="text-xs font-black">
+                                    {ev.cardName}: {ev.type === "fault" ? `Mechanical Breakdown · ${ev.faultName}` : "Fully Repaired & Race Ready!"}
+                                  </p>
+                                  <p className="text-[11px] opacity-80 leading-relaxed">
+                                    {ev.type === "fault"
+                                      ? `Car broke down! Must sit out ${ev.battlesNeeded} battles in maintenance or use a ${ev.faultName} Repair Kit.`
+                                      : `Pit crew completed full maintenance overhaul. ${ev.freshBattles} fresh battles ready!`}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
-                      {hasEarlyAccess ? (
+                      {activeChallenge ? (
+                        <>
+                          {completedChallengeIds.includes(activeChallenge.id) ||
+                          challengeWonCelebration?.challengeCompleted ? (
+                            <div className="flex flex-col items-center gap-1.5">
+                              <span className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-emerald-500/40 bg-emerald-950/60 px-6 text-sm font-black uppercase text-emerald-300 shadow-lg">
+                                ✓ Challenge Completed Today
+                              </span>
+                              <span className="text-[11px] font-bold text-zinc-400">
+                                Daily purse claimed · Resets at 00:00 UTC
+                              </span>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleRequestReplayChallenge(activeChallenge)}
+                              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500 px-6 text-sm font-black uppercase text-white shadow-[0_0_25px_rgba(168,85,247,0.4)] hover:scale-[1.02]"
+                            >
+                              <span>🔄 Replay Challenge Cup</span>
+                              {activeChallenge.entryCostPCredits > 0 && (
+                                <span className="rounded-full bg-black/40 border border-amber-400/50 px-2 py-0.5 text-[10px] font-black text-amber-300">
+                                  🪙 {activeChallenge.entryCostPCredits}
+                                </span>
+                              )}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              clearTimers();
+                              setActiveChallenge(null);
+                              setArenaLobbyTab("challenges");
+                              setPhase("lobby");
+                            }}
+                            className="min-h-12 rounded-2xl border border-purple-500/50 bg-purple-950/40 px-5 text-xs font-black uppercase tracking-wider text-purple-300 hover:bg-purple-900/50"
+                          >
+                            🏆 All Challenges
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              clearTimers();
+                              setActiveChallenge(null);
+                              setPhase("lobby");
+                            }}
+                            className="min-h-12 rounded-2xl border border-zinc-700 bg-zinc-900 px-5 text-xs font-bold text-zinc-300 hover:bg-zinc-800"
+                          >
+                            Back to Lobby
+                          </button>
+                        </>
+                      ) : hasEarlyAccess ? (
                         <button
                           type="button"
                           onClick={handleLaunchGame}
@@ -3669,13 +4699,15 @@ export function DriftClashArena({
                           <span>🔒 Early Access Required</span>
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => setPhase("lobby")}
-                        className="min-h-12 rounded-2xl border border-zinc-700 bg-zinc-900 px-5 text-xs font-bold text-zinc-300 hover:bg-zinc-800"
-                      >
-                        Back to Lobby
-                      </button>
+                      {!activeChallenge && (
+                        <button
+                          type="button"
+                          onClick={() => setPhase("lobby")}
+                          className="min-h-12 rounded-2xl border border-zinc-700 bg-zinc-900 px-5 text-xs font-bold text-zinc-300 hover:bg-zinc-800"
+                        >
+                          Back to Lobby
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -3716,20 +4748,33 @@ export function DriftClashArena({
 
                   <div className="grid grid-cols-2 gap-3 overflow-y-auto pr-1 sm:grid-cols-3 md:grid-cols-4">
                     {(pickerModalTarget.type === "car"
-                      ? usableCarCards
+                      ? (carCards.length >= 3 ? carCards : usableCarCards)
                       : usableCrewCards
                     ).map((c, idx, list) => {
                       const isSelectedHere =
                         pickerModalTarget.type === "car"
                           ? selectedCarIds[pickerModalTarget.slotIdx] === c.id
                           : selectedCrewIds[pickerModalTarget.slotIdx] === c.id;
+                      const broken = pickerModalTarget.type === "car" && isCarBroken(c);
+                      const eligibility =
+                        pickerModalTarget.type === "car" && activeChallenge
+                          ? isCarEligibleForChallenge(c, activeChallenge)
+                          : { eligible: true };
+                      const isEligible = eligibility.eligible;
+                      const matchingRepair = broken
+                        ? maintenanceCards.find((m) => canRepairCarWithMaintenanceCard(c, m))
+                        : null;
                       return (
                         <div
                           key={c.id}
                           className={`flex flex-col justify-between rounded-2xl border-2 p-2 text-left transition-all ${
-                            isSelectedHere
-                              ? "border-amber-400 bg-amber-500/15"
-                              : "border-zinc-800 bg-zinc-900 hover:border-amber-500/60"
+                            broken
+                              ? "border-rose-500/50 bg-rose-950/20"
+                              : !isEligible
+                                ? "border-zinc-800 bg-zinc-950/40 opacity-70"
+                                : isSelectedHere
+                                  ? "border-amber-400 bg-amber-500/15"
+                                  : "border-zinc-800 bg-zinc-900 hover:border-amber-500/60"
                           }`}
                         >
                           <button
@@ -3747,29 +4792,69 @@ export function DriftClashArena({
                               </span>
                               <span className="text-[10px] font-bold text-amber-300">
                                 {pickerModalTarget.type === "car"
-                                  ? `${scoreCardForSector(c, "entry").total} base`
+                                  ? (broken
+                                      ? "⚠️ Broken"
+                                      : `🔋 ${c.battlesRemaining ?? c.maxBattles ?? 6}L`)
                                   : "⚡ Crew"}
                               </span>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                assignCardToSlot(
-                                  pickerModalTarget.type,
-                                  pickerModalTarget.slotIdx,
-                                  c.id
-                                )
-                              }
-                              className={`w-full rounded-xl py-1.5 text-[11px] font-black transition-colors ${
-                                isSelectedHere
-                                  ? "bg-amber-500 text-black"
-                                  : "bg-zinc-800 text-amber-300 hover:bg-amber-500 hover:text-black"
-                              }`}
-                            >
-                              {isSelectedHere
-                                ? "✓ Equipped"
-                                : `Select Slot #${pickerModalTarget.slotIdx + 1}`}
-                            </button>
+                            {broken ? (
+                              <div className="space-y-1 pt-0.5">
+                                <div className="rounded-xl bg-rose-500/15 border border-rose-500/30 px-2 py-1 text-center">
+                                  <span className="text-[10px] font-black uppercase text-rose-400 block truncate">
+                                    ⚠️ {c.fault?.name || "Broken"}
+                                  </span>
+                                  <span className="text-[9px] text-zinc-400 block">
+                                    Sits out {c.fault?.battlesRemaining} battle(s)
+                                  </span>
+                                </div>
+                                {matchingRepair ? (
+                                  <button
+                                    type="button"
+                                    disabled={repairingCarId === c.id}
+                                    onClick={() => handleQuickRepair(c, matchingRepair)}
+                                    className="w-full rounded-xl bg-gradient-to-r from-emerald-400 via-teal-500 to-emerald-500 py-1.5 text-[10px] font-black uppercase text-black hover:opacity-95 shadow-md"
+                                  >
+                                    {repairingCarId === c.id
+                                      ? "Repairing..."
+                                      : `🛠️ Quick Fix (-${matchingRepair.repairBattles}L)`}
+                                  </button>
+                                ) : (
+                                  <div className="rounded-xl bg-zinc-800/80 px-1 py-1 text-center text-[9px] text-zinc-500 italic">
+                                    Needs {c.fault?.type} Kit
+                                  </div>
+                                )}
+                              </div>
+                            ) : !isEligible ? (
+                              <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 px-2 py-1.5 text-center">
+                                <span className="text-[10px] font-black uppercase text-amber-400 block truncate">
+                                  🔒 Ineligible
+                                </span>
+                                <span className="text-[9px] text-zinc-400 block">
+                                  {eligibility.reason}
+                                </span>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  assignCardToSlot(
+                                    pickerModalTarget.type,
+                                    pickerModalTarget.slotIdx,
+                                    c.id
+                                  )
+                                }
+                                className={`w-full rounded-xl py-1.5 text-[11px] font-black transition-colors ${
+                                  isSelectedHere
+                                    ? "bg-amber-500 text-black"
+                                    : "bg-zinc-800 text-amber-300 hover:bg-amber-500 hover:text-black"
+                                }`}
+                              >
+                                {isSelectedHere
+                                  ? "✓ Equipped"
+                                  : `Select Slot #${pickerModalTarget.slotIdx + 1}`}
+                              </button>
+                            )}
                           </div>
                         </div>
                       );
@@ -3864,8 +4949,8 @@ export function DriftClashArena({
                         <>
                           <dt className="font-bold text-zinc-400">Stats</dt>
                           <dd className="font-bold text-amber-300">
-                            DRIFT {card.stats.drift} · ACCEL {card.stats.accel} · GRIP{" "}
-                            {card.stats.grip} · STEER {card.stats.steer}
+                            DRIFT {normalizeStatValue(card.stats.drift)} · ACCEL {normalizeStatValue(card.stats.accel)} · GRIP{" "}
+                            {normalizeStatValue(card.stats.grip)} · STEER {normalizeStatValue(card.stats.steer)}
                           </dd>
                         </>
                       )}
@@ -3911,6 +4996,78 @@ export function DriftClashArena({
             document.body
           );
         })()}
+
+      {/* Challenge Replay Entry Fee Confirmation Modal */}
+      {challengeReplayConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
+          <div className="relative w-full max-w-sm rounded-3xl border-2 border-purple-500/80 bg-zinc-950 p-6 shadow-[0_0_50px_rgba(168,85,247,0.45)] text-center">
+            {/* Icon Badge */}
+            <div className="mx-auto my-2 flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-purple-400/40 bg-purple-500/20 text-3xl shadow-inner animate-pulse">
+              🔄
+            </div>
+
+            {/* Header */}
+            <h3 className="text-lg font-black uppercase tracking-tight text-white mt-2">
+              Replay Challenge Cup?
+            </h3>
+
+            {/* Challenge Title */}
+            <p className="text-xs font-bold text-purple-300 mt-1">
+              {challengeReplayConfirm.title}
+            </p>
+
+            {/* Fee Deduct Notice Box */}
+            <div className="mt-4 rounded-2xl border border-amber-500/40 bg-amber-950/25 p-3.5 text-center">
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 block mb-1">
+                ⚠️ Entry Fee Required
+              </span>
+              <p className="text-xs text-zinc-200 leading-relaxed">
+                Replaying this challenge will deduct{" "}
+                <strong className="text-amber-400 font-black text-sm">
+                  {challengeReplayConfirm.entryCostPCredits} P-Credits
+                </strong>{" "}
+                again.
+              </p>
+              <span className="text-[10px] text-zinc-400 block mt-2">
+                Current Balance: <strong className="text-white">{internalPCredits} P-Credits</strong>
+              </span>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="mt-5 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const ch = challengeReplayConfirm;
+                  setChallengeReplayConfirm(null);
+                  handleLaunchChallenge(ch);
+                }}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500 px-5 py-3 text-xs sm:text-sm font-black uppercase tracking-wider text-white shadow-[0_0_25px_rgba(168,85,247,0.5)] hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer"
+              >
+                <span>Pay {challengeReplayConfirm.entryCostPCredits} P-Credits &amp; Replay</span>
+                <span>→</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setChallengeReplayConfirm(null)}
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-xs font-bold text-zinc-300 hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Driver Manual & Instructions on How to Play Overlay */}
+      <ClashHowToPlayModal
+        isOpen={showHowToPlayModal}
+        onClose={() => setShowHowToPlayModal(false)}
+        initialTab={howToPlayTab}
+        onOpenCatalog={(category) => {
+          setShowCatalogModal(category);
+        }}
+      />
     </div>
   );
 }

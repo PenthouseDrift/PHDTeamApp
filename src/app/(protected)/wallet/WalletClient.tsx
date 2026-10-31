@@ -7,7 +7,7 @@ import { createWalletCheckout } from "@/actions/wallet";
 import { QRPopover } from "@/components/QRPopover";
 import { EmbeddedCheckout } from "@/components/marketplace/EmbeddedCheckout";
 
-const EMBEDDED = process.env.NEXT_PUBLIC_SUMUP_EMBEDDED === "true";
+const EMBEDDED = process.env.NEXT_PUBLIC_SUMUP_EMBEDDED !== "false";
 
 interface WalletPricing {
   membership: PriceBreakdown;
@@ -48,6 +48,7 @@ export function WalletClient({
     currency: string;
     email?: string;
     itemLabel: string;
+    url?: string;
   } | null>(null);
 
   const isMembershipActive = membership?.status === "active";
@@ -74,6 +75,7 @@ export function WalletClient({
           currency: res.data.currency,
           email: res.data.email,
           itemLabel: itemType === "daypass" ? "Day passes" : "Rental hours",
+          url: res.data.url,
         });
       } else {
         window.location.href = res.data.url;
@@ -100,6 +102,7 @@ export function WalletClient({
           amount={embedded.amount}
           currency={embedded.currency}
           email={embedded.email}
+          hostedUrl={embedded.url}
           onCancel={() => setEmbedded(null)}
           label={embedded.itemLabel}
           successTitle="Payment received"

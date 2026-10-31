@@ -5,6 +5,7 @@ import { CardMaker } from "@/components/cards/CardMaker";
 import { FullArtCardMaker } from "@/components/cards/FullArtCardMaker";
 import { TcgPackManagerAdmin } from "@/tcg/components/TcgPackManagerAdmin";
 import { TcgClashCardsAdmin } from "@/tcg/components/TcgClashCardsAdmin";
+import { TcgChallengesAdmin } from "@/tcg/components/TcgChallengesAdmin";
 import type { CardData } from "@/lib/card-maker";
 import type { FullArtCardData } from "@/lib/full-art-card";
 import { CREW_CARD_SET, DEBUFF_CARD_SET, UK_TRACK_CARD_SET } from "@/lib/crew-cards";
@@ -12,7 +13,7 @@ import { P_CREDIT_BUNDLES } from "@/tcg/config";
 import type { ClashGameCardsConfig } from "@/tcg/storage";
 import type { PCreditBundle, TcgCustomPackWithCards } from "@/tcg/types";
 
-export type CardMakerTabKind = "full-art" | "packs" | "clash-cards" | "original";
+export type CardMakerTabKind = "full-art" | "packs" | "clash-cards" | "challenges" | "original";
 
 const TABS: Array<{ id: CardMakerTabKind; label: string; hint: string }> = [
   {
@@ -29,6 +30,11 @@ const TABS: Array<{ id: CardMakerTabKind; label: string; hint: string }> = [
     id: "clash-cards",
     label: "Clash Game Cards",
     hint: "Manage Crew Advantages, Debuff Cards & UK Track Cards (edit rules, upload art, or create bespoke cards)",
+  },
+  {
+    id: "challenges",
+    label: "Clash Challenges",
+    hint: "Create and configure Tandem Clash challenge series, rarity cups, power caps & rewards",
   },
   {
     id: "original",
@@ -75,7 +81,7 @@ export function CardMakerTabs({
       <div
         role="tablist"
         aria-label="Card maker and store tabs"
-        className="grid grid-cols-1 gap-2 rounded-2xl bg-zinc-100 p-1.5 dark:bg-zinc-800 sm:max-w-5xl sm:grid-cols-4"
+        className="grid grid-cols-1 gap-2 rounded-2xl bg-zinc-100 p-1.5 dark:bg-zinc-800 sm:max-w-5xl sm:grid-cols-5"
       >
         {TABS.map((t) => {
           const active = kind === t.id;
@@ -144,6 +150,15 @@ export function CardMakerTabs({
         hidden={kind !== "clash-cards"}
       >
         <TcgClashCardsAdmin initialConfig={initialClashCardsConfig} />
+      </div>
+
+      <div
+        role="tabpanel"
+        id="card-kind-panel-challenges"
+        aria-labelledby="card-kind-tab-challenges"
+        hidden={kind !== "challenges"}
+      >
+        <TcgChallengesAdmin />
       </div>
 
       <div

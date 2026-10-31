@@ -34,6 +34,7 @@ export function DriftClashShell({
       ? [
           { href: "/admin/card-maker", label: "Card Studio", icon: "🛠️", exact: false },
           { href: "/admin/member-cards", label: "All Cards", icon: "🗂️", exact: false },
+          { href: "/admin/challenges", label: "Challenges", icon: "🏆", exact: false },
         ]
       : []),
   ];

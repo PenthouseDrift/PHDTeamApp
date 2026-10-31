@@ -10,16 +10,16 @@ import { FULL_ART_TIERS, MAX_ART_STYLES, type FullArtCardData, type FullArtTier 
 /** A function returning a number in [0, 1). The server passes a crypto-based one; tests pass a fixed one. */
 export type Rng = () => number;
 
-// ── Rarity & Stats (1–10 per stat -> Total /40 determines Rarity) ──────────
+// ── Rarity & Stats (1–25 per stat -> Total /100 determines Rarity) ──────────
 
 /**
- * Each of the 4 stats (DRIFT, ACCEL, GRIP, STEER) is rolled independently from 1 to 10 (total 4–40).
- * The card's rarity tier is derived directly from its total /40 score:
- *   - Bronze:  4 – 23  (5,680 / 10,000 = 56.80%)
- *   - Silver: 24 – 27  (2,490 / 10,000 = 24.90%, ~1 in 4)
- *   - Gold:   28 – 31  (1,355 / 10,000 = 13.55%, ~1 in 7)
- *   - Legend: 32 – 40  (  475 / 10,000 =  4.75%, ~1 in 21)
- * Mythic is never rolled in packs; it can only be created by an admin.
+ * Each of the 4 stats (DRIFT, ACCEL, GRIP, STEER) is rolled independently from 1 to 25 (total 4–100).
+ * The card's rarity tier is derived directly from its total /100 score:
+ *   - Bronze:  4 – 59  (~69.2%, ~1 in 1.4)
+ *   - Silver: 60 – 74  (~24.7%, ~1 in 4)
+ *   - Gold:   75 – 84  (~5.09%, ~1 in 20)
+ *   - Legend: 85 – 99  (~0.99%, ~1 in 101)
+ *   - Mythic: 100/100  (1 in 390,625 jackpot roll, or admin created)
  */
 export const RARITY_STAT_BRACKETS: Array<{
   tier: FullArtTier;
@@ -28,10 +28,11 @@ export const RARITY_STAT_BRACKETS: Array<{
   oneIn: number;
   chance: number;
 }> = [
-  { tier: "legend", minTotal: 32, maxTotal: 40, oneIn: 21, chance: 475 / 10000 },
-  { tier: "gold", minTotal: 28, maxTotal: 31, oneIn: 7, chance: 1355 / 10000 },
-  { tier: "silver", minTotal: 24, maxTotal: 27, oneIn: 4, chance: 2490 / 10000 },
-  { tier: "bronze", minTotal: 4, maxTotal: 23, oneIn: 2, chance: 5680 / 10000 },
+  { tier: "mythic", minTotal: 100, maxTotal: 100, oneIn: 390625, chance: 1 / 390625 },
+  { tier: "legend", minTotal: 85, maxTotal: 99, oneIn: 101, chance: 3875 / 390625 },
+  { tier: "gold", minTotal: 75, maxTotal: 84, oneIn: 20, chance: 19871 / 390625 },
+  { tier: "silver", minTotal: 60, maxTotal: 74, oneIn: 4, chance: 96500 / 390625 },
+  { tier: "bronze", minTotal: 4, maxTotal: 59, oneIn: 1, chance: 270378 / 390625 },
 ];
 
 export const RARITY_ODDS: Array<{ tier: FullArtTier; oneIn: number; chance: number }> =
@@ -46,23 +47,24 @@ export function statTotal(stats: FullArtCardData["stats"]): number {
   );
 }
 
-/** Determine a pack card's rarity tier from its 4 rolled stats (total 4–40). Mythic remains admin-only. */
+/** Determine a pack card's rarity tier from its 4 rolled stats (total 4–100). Perfect 100 awards Mythic! */
 export function tierFromStats(stats: FullArtCardData["stats"]): FullArtTier {
   const total = statTotal(stats);
-  if (total >= 32) return "legend";
-  if (total >= 28) return "gold";
-  if (total >= 24) return "silver";
+  if (total >= 100) return "mythic";
+  if (total >= 85) return "legend";
+  if (total >= 75) return "gold";
+  if (total >= 60) return "silver";
   return "bronze";
 }
 
-/** Roll all 4 stats independently from 1 to 10. */
+/** Roll all 4 stats independently from 1 to 25. */
 export function rollStats(tierOrRng: FullArtTier | Rng, maybeRng?: Rng): FullArtCardData["stats"] {
   const rng = typeof tierOrRng === "function" ? tierOrRng : (maybeRng as Rng);
-  const one = () => String(1 + Math.floor(rng() * 10));
+  const one = () => String(1 + Math.floor(rng() * 25));
   return { drift: one(), accel: one(), grip: one(), steer: one() };
 }
 
-/** Roll all 4 stats (1–10 each) and derive the corresponding rarity tier from their sum (/40). */
+/** Roll all 4 stats (1–25 each) and derive the corresponding rarity tier from their sum (/100). */
 export function rollStatsAndRarity(rng: Rng): {
   stats: FullArtCardData["stats"];
   tier: FullArtTier;
@@ -139,6 +141,16 @@ export interface MemberCard extends Omit<FullArtCardData, "id" | "updatedAt"> {
   listingId?: string;
   /** Asking price in P-Credits when listed on the TCG Marketplace. */
   listedPrice?: number;
+  /** Total battles before car breaks down (random 2..10 for fresh cars) */
+  maxBattles?: number;
+  /** Battles remaining before breakdown (counts down to 0) */
+  battlesRemaining?: number;
+  /** Active mechanical fault when durability reaches 0 */
+  fault?: import("./mechanical-faults").MechanicalFault | null;
+  /** If cardType === "maintenance", which fault it repairs */
+  targetFault?: import("./mechanical-faults").MechanicalFaultType;
+  /** If cardType === "maintenance", how many battles it reduces from cooldown */
+  repairBattles?: number;
 }
 
 /** Server-side copy, which also remembers the car photo so a re-roll can use it again. */
@@ -156,9 +168,9 @@ export const BONUS_CARD_CHANCE = 1;
 
 /**
  * The chance a pack also holds a third card: one of the set cards an admin chose to make pullable
- * (see the admin card maker). 1 in 30. These are fixed card images, never redrawn.
+ * (see the admin card maker). 1 in 100. These are fixed card images, never redrawn.
  */
-export const FEATURED_CARD_CHANCE = 1 / 30;
+export const FEATURED_CARD_CHANCE = 1 / 100;
 
 /**
  * Member cards are shown slightly zoomed in. If the AI still draws a border around its picture despite

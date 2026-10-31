@@ -14,7 +14,7 @@ import {
 import { createPCreditsCheckout, getMyTcgBalances } from "@/tcg/actions";
 import type { PCreditBundle } from "@/tcg/types";
 
-const EMBEDDED = process.env.NEXT_PUBLIC_SUMUP_EMBEDDED === "true";
+const EMBEDDED = process.env.NEXT_PUBLIC_SUMUP_EMBEDDED !== "false";
 
 const panel =
   "rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900";
@@ -46,6 +46,7 @@ export function TcgPCreditsShop({
     email?: string;
     bundleName: string;
     pCredits: number;
+    url?: string;
   } | null>(null);
 
   function handleBuyBundle(bundle: PCreditBundle) {
@@ -67,6 +68,7 @@ export function TcgPCreditsShop({
             email: res.data.email,
             bundleName: res.data.bundleName,
             pCredits: res.data.pCredits,
+            url: res.data.url,
           });
           setActiveBundleId(null);
         } else {
@@ -87,6 +89,7 @@ export function TcgPCreditsShop({
           amount={embedded.amount}
           currency={embedded.currency}
           email={embedded.email}
+          hostedUrl={embedded.url}
           onCancel={() => setEmbedded(null)}
           onPaid={async () => {
             try {
@@ -158,7 +161,7 @@ export function TcgPCreditsShop({
               Purchase P-Credits
             </h3>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Instant top-up via SumUp secure checkout. You&apos;ll receive an email confirmation receipt automatically.
+              Instant top-up via embedded SumUp checkout. Pay securely with Card, Apple Pay, or Google Pay.
             </p>
           </div>
           {isAdmin && (
@@ -244,6 +247,9 @@ export function TcgPCreditsShop({
                       `Buy · £${effectiveGbp.toFixed(2)}`
                     )}
                   </button>
+                  <p className="text-[10px] text-center font-medium text-zinc-400">
+                    Card · Pay · GPay
+                  </p>
                 </div>
               </div>
             );

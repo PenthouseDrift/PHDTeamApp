@@ -247,6 +247,8 @@ function CardPackWizardForm({
   const [crew, setCrew] = useState<MemberCard | null>(null);
   /** The rare fourth card from the admin's pullable set. */
   const [featured, setFeatured] = useState<MemberCard | null>(null);
+  /** The Maintenance Consumable card for repairing mechanical faults. */
+  const [maintenance, setMaintenance] = useState<MemberCard | null>(null);
   const [ready, setReady] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [confirmReroll, setConfirmReroll] = useState(false);
@@ -357,6 +359,7 @@ function CardPackWizardForm({
     setBonus(null);
     setCrew(null);
     setFeatured(null);
+    setMaintenance(null);
     setReady(false);
     setRevealed(false);
     setConfirmReroll(false);
@@ -382,6 +385,7 @@ function CardPackWizardForm({
         setBonus(res.data.bonus);
         setCrew(res.data.crew);
         setFeatured(res.data.featured);
+        setMaintenance(res.data.maintenance);
         setCredits(res.data.credits);
         setReady(true);
       } else {
@@ -457,7 +461,16 @@ function CardPackWizardForm({
     const finalCard = card?.rerolled || !REROLL_ENABLED;
     return (
       <div className="space-y-4">
-        <PackOpening key={run} ready={ready} card={card} bonus={bonus} crew={crew} featured={featured} onRevealed={onRevealed} />
+        <PackOpening
+          key={run}
+          ready={ready}
+          card={card}
+          bonus={bonus}
+          crew={crew}
+          featured={featured}
+          maintenance={maintenance}
+          onRevealed={onRevealed}
+        />
 
         {error && (
           <p role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-xs font-semibold text-red-600 dark:text-red-400">

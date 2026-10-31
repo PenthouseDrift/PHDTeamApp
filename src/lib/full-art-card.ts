@@ -1,4 +1,5 @@
 import { ART_STYLES } from "@/lib/card-maker";
+import type { MechanicalFault, MechanicalFaultType } from "@/lib/mechanical-faults";
 
 /**
  * Full art cards: the picture fills the whole card and the tier (bronze, silver, gold, legend)
@@ -6,7 +7,7 @@ import { ART_STYLES } from "@/lib/card-maker";
  * renderer and the server actions share one definition.
  */
 
-/** "mythic" is admin-only: it is never rolled in a card pack, only set by hand in the admin card maker. */
+/** "mythic" can be awarded on a perfect 100/100 roll, or set by hand in the admin card maker. */
 export type FullArtTier = "bronze" | "silver" | "gold" | "legend" | "mythic";
 
 export interface TierPalette {
@@ -32,7 +33,7 @@ export const FULL_ART_TIERS: FullArtTierInfo[] = [
   { id: "silver", label: "Silver", hint: "Rain-slick blue hour", palette: { light: "#f4f7fb", accent: "#b8c0cc", dark: "#5d6572", glow: "#bfe3ff" } },
   { id: "gold", label: "Gold", hint: "Penthouse golden hour", palette: { light: "#fff2a8", accent: "#e8b923", dark: "#8a6508", glow: "#ffd75e" } },
   { id: "legend", label: "Legend", hint: "Mythic cosmic drift", palette: { light: "#e8f4ff", accent: "#a78bfa", dark: "#3b2a85", glow: "#7df9ff" } },
-  { id: "mythic", label: "Mythic", hint: "Molten crimson & gold. Admin only", palette: { light: "#ffe9b0", accent: "#ff2d55", dark: "#4a0618", glow: "#ff4d6d" } },
+  { id: "mythic", label: "Mythic", hint: "Molten crimson & gold. 100 pts or admin", palette: { light: "#ffe9b0", accent: "#ff2d55", dark: "#4a0618", glow: "#ff4d6d" } },
 ];
 
 export const tierInfo = (tier: FullArtTier): FullArtTierInfo => FULL_ART_TIERS.find((t) => t.id === tier) ?? FULL_ART_TIERS[0];
@@ -128,12 +129,22 @@ export interface FullArtCardData {
   imageY: number;
   driver: string;
   team: string;
-  /** Distinguishes standard RC drift car cards from Crew Advantage, Debuff Hazard, and UK Track cards. */
-  cardType?: "car" | "crew" | "debuff" | "track";
+  /** Distinguishes standard RC drift car cards from Crew Advantage, Debuff Hazard, UK Track, and Maintenance Consumable cards. */
+  cardType?: "car" | "crew" | "debuff" | "track" | "maintenance";
   /** If cardType is "crew" | "debuff" | "track", the definition ID (e.g. "crew-01-...", "debuff-01-...", "track-01-..."). */
   crewCardId?: string;
-  /** Emoji/icon for Crew, Debuff, or Track cards. */
+  /** Emoji/icon for Crew, Debuff, Track, or Maintenance cards. */
   crewIcon?: string;
+  /** Target fault type if cardType === "maintenance" */
+  targetFault?: MechanicalFaultType;
+  /** Battles reduced from maintenance cooldown if cardType === "maintenance" */
+  repairBattles?: number;
+  /** Total battles before car breaks down */
+  maxBattles?: number;
+  /** Battles remaining before breakdown (counts down to 0) */
+  battlesRemaining?: number;
+  /** Active mechanical fault when durability reaches 0 */
+  fault?: MechanicalFault | null;
   updatedAt?: number;
 }
 
@@ -183,19 +194,28 @@ export function sanitizeFullArtCard(input: Partial<FullArtCardData> | null | und
   const i = input ?? {};
   const stats = i.stats ?? ({} as Partial<FullArtStats>);
   const url = typeof i.imageUrl === "string" ? i.imageUrl.trim() : "";
+  const resolvedTier: FullArtTier =
+    (i.tier as string) === "god"
+      ? "legend"
+      : FULL_ART_TIERS.some((t) => t.id === i.tier)
+        ? (i.tier as FullArtTier)
+        : "bronze";
   return {
     id: typeof i.id === "string" && /^[a-z0-9-]{8,64}$/i.test(i.id) ? i.id : undefined,
     name: clampStr(i.name, 40),
     ability: clampStr(i.ability, 48),
     effect: clampStr(i.effect, 160),
     // Cards saved when the top tier was called "god" are now legend cards.
-    tier: (i.tier as string) === "god" ? "legend" : FULL_ART_TIERS.some((t) => t.id === i.tier) ? (i.tier as FullArtTier) : "bronze",
-    stats: {
-      drift: clampStr(stats.drift, 3),
-      accel: clampStr(stats.accel, 3),
-      grip: clampStr(stats.grip, 3),
-      steer: clampStr(stats.steer, 3),
-    },
+    tier: resolvedTier,
+    stats:
+      resolvedTier === "mythic"
+        ? { drift: "25", accel: "25", grip: "25", steer: "25" }
+        : {
+            drift: clampStr(stats.drift, 3),
+            accel: clampStr(stats.accel, 3),
+            grip: clampStr(stats.grip, 3),
+            steer: clampStr(stats.steer, 3),
+          },
     imageUrl:
       (/^https:\/\/\S+$/i.test(url) && url.length <= 600) || url.startsWith("data:image/svg+xml;utf8,")
         ? url
@@ -210,5 +230,8 @@ export function sanitizeFullArtCard(input: Partial<FullArtCardData> | null | und
       : {}),
     ...(typeof i.crewCardId === "string" && i.crewCardId ? { crewCardId: clampStr(i.crewCardId, 64) } : {}),
     ...(typeof i.crewIcon === "string" && i.crewIcon ? { crewIcon: clampStr(i.crewIcon, 16) } : {}),
+    ...(typeof i.maxBattles === "number" ? { maxBattles: clampNum(i.maxBattles, 1, 99, 6) } : {}),
+    ...(typeof i.battlesRemaining === "number" ? { battlesRemaining: clampNum(i.battlesRemaining, 0, 99, 6) } : {}),
+    ...(i.fault ? { fault: i.fault } : {}),
   };
 }

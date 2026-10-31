@@ -75,13 +75,14 @@ function Spinner({ className = "" }: { className?: string }) {
   );
 }
 
-type State = "loading" | "ready" | "finalising" | "paid" | "error";
+type State = "loading" | "ready" | "finalising" | "wallet_pending" | "paid" | "error";
 
 export function EmbeddedCheckout({
   checkoutId,
   amount,
   currency,
   email,
+  hostedUrl,
   onCancel,
   finalizeUrl = "/api/checkout/finalize",
   label = "Checkout",
@@ -95,6 +96,8 @@ export function EmbeddedCheckout({
   checkoutId: string;
   amount: number;
   currency: string;
+  /** Direct SumUp hosted checkout URL enabling native Apple Pay & Google Pay */
+  hostedUrl?: string;
   /** Buyer's email, pre-filled so SCA/3DS has it and the field is hidden. */
   email?: string;
   onCancel?: () => void;
@@ -122,6 +125,72 @@ export function EmbeddedCheckout({
   const [error, setError] = useState<string | null>(null);
   const [orderRef, setOrderRef] = useState<string | null>(null);
   const [autoCheckedIn, setAutoCheckedIn] = useState(false);
+  const [activeWallet, setActiveWallet] = useState<"apple" | "google" | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const popupRef = useRef<Window | null>(null);
+
+  const checkoutUrl = hostedUrl || (checkoutId ? `https://pay.sumup.com/b2c/Q${checkoutId}` : "");
+
+  function stopWalletPolling() {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }
+
+  useEffect(() => {
+    return () => stopWalletPolling();
+  }, []);
+
+  function handleWalletPay(wallet: "apple" | "google") {
+    if (!checkoutUrl) return;
+    setActiveWallet(wallet);
+    setError(null);
+    setState("wallet_pending");
+
+    const popup = window.open(
+      checkoutUrl,
+      "sumup_wallet_checkout",
+      "width=500,height=720,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes"
+    );
+    popupRef.current = popup;
+
+    stopWalletPolling();
+    pollTimerRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(finalizeUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ checkoutId }),
+        });
+        const data = await res.json();
+        if (data && data.status === "paid") {
+          stopWalletPolling();
+          if (popupRef.current && !popupRef.current.closed) {
+            try {
+              popupRef.current.close();
+            } catch {
+              /* ignore */
+            }
+          }
+          setOrderRef(data.orderRef || data.ref || null);
+          setAutoCheckedIn(Boolean(data.autoCheckedIn));
+          setState("paid");
+          onPaid?.();
+          cardRef.current?.unmount();
+          router.refresh();
+        }
+      } catch {
+        /* retry next poll interval */
+      }
+    }, 1800);
+  }
+
+  function cancelWalletPay() {
+    stopWalletPolling();
+    setActiveWallet(null);
+    setState("ready");
+  }
   // Portals only work after mount (no document on the server).
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -254,8 +323,6 @@ export function EmbeddedCheckout({
   }, [mounted, checkoutId, amount, currency, email, finalizeUrl, router, onPaid]);
 
 
-  console.log(state)
-
   const showSpinnerOverlay = state === "loading" || state === "finalising";
 
   if (!mounted) return null;
@@ -350,12 +417,95 @@ export function EmbeddedCheckout({
                 </p>
               )}
 
+              {/* Express Digital Wallet (Apple Pay / Google Pay) */}
+              {state === "wallet_pending" ? (
+                <div className="mb-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-center">
+                  <div className="flex items-center justify-center gap-2 font-black text-amber-500 dark:text-amber-300 text-xs sm:text-sm">
+                    <Spinner className="h-4 w-4 text-amber-500" />
+                    <span>
+                      Waiting for {activeWallet === "apple" ? "Apple Pay" : "Google Pay"} confirmation…
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                    Complete your payment authorization in the secure SumUp window. This screen will automatically confirm and credit your balance as soon as payment is authorized.
+                  </p>
+                  <div className="mt-3 flex items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={cancelWalletPay}
+                      className="rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-1.5 text-xs font-bold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
+                    >
+                      Back to card form
+                    </button>
+                    {checkoutUrl && (
+                      <a
+                        href={checkoutUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-bold text-amber-600 dark:text-amber-400 underline hover:opacity-85"
+                      >
+                        Re-open window ↗
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="mb-4 space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-zinc-400">
+                    <span>Express Checkout</span>
+                    <span className="text-amber-600 dark:text-amber-400 font-extrabold">Instant 1-Tap</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* Apple Pay Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleWalletPay("apple")}
+                      className="group flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-black px-3 py-2 text-white shadow-sm transition-all hover:bg-zinc-900 active:scale-[0.99] border border-black"
+                      aria-label="Pay with Apple Pay"
+                    >
+                      <span className="text-sm font-semibold tracking-tight">Pay</span>
+                    </button>
+
+                    {/* Google Pay Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleWalletPay("google")}
+                      className="group flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-white dark:bg-zinc-950 px-3 py-2 text-zinc-900 dark:text-white shadow-sm transition-all hover:bg-zinc-100 dark:hover:bg-zinc-900 active:scale-[0.99] border border-zinc-300 dark:border-zinc-700"
+                      aria-label="Pay with Google Pay"
+                    >
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z" />
+                        <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z" />
+                        <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z" />
+                        <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
+                      </svg>
+                      <span className="text-xs font-bold font-sans">GPay</span>
+                    </button>
+                  </div>
+
+                  <div className="relative my-3 flex items-center justify-center">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-zinc-200 dark:border-zinc-800" />
+                    </div>
+                    <span className="relative bg-white dark:bg-zinc-900 px-2.5 text-[10px] font-black uppercase tracking-wider text-zinc-400">
+                      Or pay with card
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* SumUp mounts the card form into this element. It stays mounted
                   and visible so the SDK always has a sized target to render into
                   (hiding it with opacity-0 can make the widget collapse). The
                   spinner sits ABOVE it as an absolute overlay while loading or
                   finalising, then fades out to reveal the form. */}
               <div id={containerId} className="min-h-[220px]" />
+
+              {/* Security and methods trust banner */}
+              <div className="mt-3 flex items-center justify-center gap-1.5 text-[10px] text-zinc-400 border-t border-zinc-100 dark:border-zinc-800/80 pt-2.5">
+                <span>🔒 Secured by SumUp · Pay · Google Pay · Visa · Mastercard · Amex</span>
+              </div>
 
               {showSpinnerOverlay && (
                 <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-white dark:bg-zinc-900">

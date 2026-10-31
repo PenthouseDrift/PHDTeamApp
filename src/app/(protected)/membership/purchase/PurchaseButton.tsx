@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { createMembershipCheckout } from "@/actions/membership";
 import { EmbeddedCheckout } from "@/components/marketplace/EmbeddedCheckout";
 
-const EMBEDDED = process.env.NEXT_PUBLIC_SUMUP_EMBEDDED === "true";
+const EMBEDDED = process.env.NEXT_PUBLIC_SUMUP_EMBEDDED !== "false";
 
 interface PurchaseButtonProps {
   userId: string;
@@ -25,7 +25,7 @@ export function PurchaseButton({
 }: PurchaseButtonProps) {
   const [isPending, startTransition] = useTransition();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [embedded, setEmbedded] = useState<{ checkoutId: string; amount: number; currency: string; email?: string } | null>(null);
+  const [embedded, setEmbedded] = useState<{ checkoutId: string; amount: number; currency: string; email?: string; url?: string } | null>(null);
 
   function handlePurchaseClick() {
     if (isDisabled) return;
@@ -43,6 +43,7 @@ export function PurchaseButton({
             amount: res.data.amount,
             currency: res.data.currency,
             email: res.data.email,
+            url: res.data.url,
           });
         } else {
           window.location.href = res.data.url;
@@ -61,6 +62,7 @@ export function PurchaseButton({
           amount={embedded.amount}
           currency={embedded.currency}
           email={embedded.email}
+          hostedUrl={embedded.url}
           onCancel={() => setEmbedded(null)}
           label="Membership"
           successTitle="Membership active"

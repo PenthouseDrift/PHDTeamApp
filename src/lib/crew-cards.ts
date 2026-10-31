@@ -1346,7 +1346,7 @@ export function scaleCrewCardDefinition(
   const baseMods = baseDef.modifiers ?? {};
   const scaledMods: CrewCardModifiers = {};
 
-  const statScale = [1, 2, 3, 4];
+  const statScale = [2, 3, 5, 8];
   const scaleStat = (val?: number) => {
     if (!val || val <= 0) return undefined;
     return statScale[tIdx];
@@ -1359,21 +1359,21 @@ export function scaleCrewCardDefinition(
 
   if (baseMods.flatBonus !== undefined) {
     const flatScale = [
-      Math.max(1, Math.round(baseMods.flatBonus * 0.6)),
-      Math.max(2, Math.round(baseMods.flatBonus * 1.0)),
-      Math.max(4, Math.round(baseMods.flatBonus * 1.6)),
-      Math.max(6, Math.round(baseMods.flatBonus * 2.2)),
+      Math.max(2, Math.round(baseMods.flatBonus * 1.5)),
+      Math.max(5, Math.round(baseMods.flatBonus * 2.5)),
+      Math.max(10, Math.round(baseMods.flatBonus * 4.0)),
+      Math.max(15, Math.round(baseMods.flatBonus * 6.0)),
     ];
     scaledMods.flatBonus = flatScale[tIdx];
   }
 
   if (baseMods.boostWeakestStat !== undefined) {
-    const weakestScale = [1, 2, 3, 4];
+    const weakestScale = [2, 3, 5, 8];
     scaledMods.boostWeakestStat = weakestScale[tIdx];
   }
 
   if (baseMods.minStatFloor !== undefined) {
-    const floorScale = [6, 7, 8, 9];
+    const floorScale = [15, 17, 20, 23];
     scaledMods.minStatFloor = floorScale[tIdx];
   }
 
@@ -1383,22 +1383,22 @@ export function scaleCrewCardDefinition(
   }
 
   if (baseMods.underdogBonus !== undefined) {
-    const underdogScale = [2, 3, 5, 7];
+    const underdogScale = [5, 8, 12, 18];
     scaledMods.underdogBonus = underdogScale[tIdx];
   }
 
   if (baseMods.bronzeExtraBonus !== undefined) {
-    const bronzeExtraScale = [1, 2, 3, 4];
+    const bronzeExtraScale = [3, 5, 8, 12];
     scaledMods.bronzeExtraBonus = bronzeExtraScale[tIdx];
   }
 
   if (baseMods.giantSlayerBonus !== undefined) {
-    const slayerScale = [2, 3, 5, 7];
+    const slayerScale = [5, 8, 12, 18];
     scaledMods.giantSlayerBonus = slayerScale[tIdx];
   }
 
   if (baseMods.cornerSpecialist) {
-    const specScale = [1, 2, 4, 6];
+    const specScale = [3, 5, 10, 15];
     scaledMods.cornerSpecialist = {
       corners: baseMods.cornerSpecialist.corners,
       bonusPoints: specScale[tIdx],
@@ -1431,9 +1431,9 @@ export function scaleDebuffCardDefinition(
   const basePen = baseDef.penalties ?? {};
   const scaledPen: DebuffCardPenalties = {};
 
-  const statPenScale = [1, 2, 3, 4];
-  const flatPenScale = [1, 2, 4, 6];
-  const condExtraScale = [2, 3, 5, 7];
+  const statPenScale = [2, 3, 5, 8];
+  const flatPenScale = [2, 5, 10, 15];
+  const condExtraScale = [4, 8, 14, 20];
 
   if (basePen.driftPenalty) scaledPen.driftPenalty = statPenScale[tIdx];
   if (basePen.accelPenalty) scaledPen.accelPenalty = statPenScale[tIdx];
@@ -1445,7 +1445,10 @@ export function scaleDebuffCardDefinition(
     scaledPen.condition = {
       stat: basePen.condition.stat,
       op: basePen.condition.op,
-      threshold: basePen.condition.threshold,
+      threshold:
+        basePen.condition.threshold <= 10
+          ? Math.round(basePen.condition.threshold * 2.5)
+          : basePen.condition.threshold,
       extraPenalty: condExtraScale[tIdx],
     };
   }

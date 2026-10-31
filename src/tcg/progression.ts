@@ -72,13 +72,23 @@ export const TIER_BASE_POWER: Record<FullArtTier, number> = {
 export const TIER_CLASH_BONUS: Record<FullArtTier, number> = {
   bronze: 0,
   silver: 2,
-  gold: 4,
-  legend: 7,
-  mythic: 10,
+  gold: 5,
+  legend: 8,
+  mythic: 12,
 };
 
 export const DAILY_CLASH_WIN_REWARD_PCREDITS = 25;
 export const STREAK_MILESTONE_REWARD_PCREDITS = 10;
+
+/** Normalize stat value to 1..25 scale, self-healing legacy 1..10 cards */
+export function normalizeStatValue(val: unknown): number {
+  const num = Number(val);
+  if (!Number.isFinite(num) || num <= 0) return 1;
+  if (num <= 10) {
+    return Math.min(25, Math.max(1, Math.round(num * 2.5)));
+  }
+  return Math.min(25, Math.max(1, Math.round(num)));
+}
 
 export function getCardPower(card: Pick<MemberCard, "tier" | "stats" | "cardType" | "crewCardId">): number {
   const base = TIER_BASE_POWER[card.tier] ?? 20;
@@ -86,10 +96,10 @@ export function getCardPower(card: Pick<MemberCard, "tier" | "stats" | "cardType
     return base + 45;
   }
   const statSum =
-    (Number(card.stats?.drift) || 0) +
-    (Number(card.stats?.accel) || 0) +
-    (Number(card.stats?.grip) || 0) +
-    (Number(card.stats?.steer) || 0);
+    normalizeStatValue(card.stats?.drift) +
+    normalizeStatValue(card.stats?.accel) +
+    normalizeStatValue(card.stats?.grip) +
+    normalizeStatValue(card.stats?.steer);
   return base + statSum * 3;
 }
 
@@ -384,38 +394,38 @@ function applyTrackConditionModifier(
   const scalePen = (pen: number) => (halfSpinPenalty ? -Math.ceil(Math.abs(pen) / 2) : pen);
 
   if (trackCondition.id === "track-ice") {
-    if (accel >= 8 && grip < 7) {
-      const d = scalePen(-6);
+    if (accel >= 20 && grip < 17) {
+      const d = scalePen(-15);
       return { delta: d, label: `❄️ Ice Spin-Out (${d} pts)` };
     }
-    if (grip >= 7) return { delta: 3, label: "❄️ Ice Grip (+3 pts)" };
+    if (grip >= 17) return { delta: 8, label: "❄️ Ice Grip (+8 pts)" };
   } else if (trackCondition.id === "track-touge") {
-    if (accel >= 9 && steer < 8) {
-      const d = scalePen(-6);
+    if (accel >= 22 && steer < 20) {
+      const d = scalePen(-15);
       return { delta: d, label: `⛰️ Hairpin Understeer (${d} pts)` };
     }
-    if (steer >= 8) return { delta: 3, label: "⛰️ Touge Angle (+3 pts)" };
+    if (steer >= 20) return { delta: 8, label: "⛰️ Touge Angle (+8 pts)" };
   } else if (trackCondition.id === "track-rain") {
-    if (drift >= 9 && grip < 7) {
-      const d = scalePen(-5);
+    if (drift >= 22 && grip < 17) {
+      const d = scalePen(-12);
       return { delta: d, label: `🌧️ Wet Over-Rotate (${d} pts)` };
     }
-    if (grip >= 7) return { delta: 4, label: "🌧️ Wet Traction (+4 pts)" };
+    if (grip >= 17) return { delta: 10, label: "🌧️ Wet Traction (+10 pts)" };
   } else if (trackCondition.id === "track-grassroots") {
-    if (cardTier === "bronze") return { delta: 5, label: "📣 Grassroots Bronze (+5 pts)" };
-    if (cardTier === "silver") return { delta: 3, label: "📣 Grassroots Silver (+3 pts)" };
+    if (cardTier === "bronze") return { delta: 12, label: "📣 Grassroots Bronze (+12 pts)" };
+    if (cardTier === "silver") return { delta: 8, label: "📣 Grassroots Silver (+8 pts)" };
     if (cardTier === "legend" || cardTier === "mythic") {
-      return { delta: -4, label: "⚖️ Supercar Ballast (-4 pts)" };
+      return { delta: -10, label: "⚖️ Supercar Ballast (-10 pts)" };
     }
   } else if (trackCondition.id === "track-meihan") {
-    if (drift < 7) {
-      const d = scalePen(-5);
+    if (drift < 17) {
+      const d = scalePen(-12);
       return { delta: d, label: `🔥 Shallow Entry (${d} pts)` };
     }
-    if (drift >= 8) return { delta: 3, label: "🔥 Wall Commitment (+3 pts)" };
+    if (drift >= 20) return { delta: 8, label: "🔥 Wall Commitment (+8 pts)" };
   } else if (trackCondition.id === "track-standard") {
-    if (accel >= 9 && grip <= 5) {
-      const d = scalePen(-5);
+    if (accel >= 22 && grip <= 13) {
+      const d = scalePen(-12);
       return { delta: d, label: `⚠️ Wheelspin (${d} pts)` };
     }
   }
@@ -437,67 +447,47 @@ export function scoreCardForSector(
   breakdown: string;
   warning?: string | null;
 } {
-  const rawDrift = Number(card.stats?.drift) || 0;
-  const rawAccel = Number(card.stats?.accel) || 0;
-  const rawGrip = Number(card.stats?.grip) || 0;
-  const rawSteer = Number(card.stats?.steer) || 0;
+  const rawDrift = normalizeStatValue(card.stats?.drift);
+  const rawAccel = normalizeStatValue(card.stats?.accel);
+  const rawGrip = normalizeStatValue(card.stats?.grip);
+  const rawSteer = normalizeStatValue(card.stats?.steer);
 
   let drift = rawDrift;
   let accel = rawAccel;
   let grip = rawGrip;
   let steer = rawSteer;
 
-  const crewId = crewCard?.crewCardId ?? null;
+  const crewId = crewCard?.crewCardId ?? crewCard?.name ?? null;
+  const crewDef = crewId ? getCrewCardDefinition(crewId) : null;
+  const crewMods = crewDef?.modifiers;
 
-  // Symmetric / Self Stat Modifiers from Crew Card
-  if (crewId === "crew-04-boost-ban") {
-    drift = Math.min(8, drift);
-    accel = Math.min(8, accel);
-    grip = Math.min(8, grip);
-    steer = Math.min(8, steer);
-  }
-  if (crewId === "crew-19-inverted-grid") {
-    if (drift <= 4) drift = 7;
-    if (accel <= 4) accel = 7;
-    if (grip <= 4) grip = 7;
-    if (steer <= 4) steer = 7;
-  }
-  if (crewId === "crew-12-ziptie-tuner") {
-    const minVal = Math.min(drift, accel, grip, steer);
-    if (minVal < 7) {
-      if (drift === minVal) drift = Math.min(7, drift + 1);
-      else if (accel === minVal) accel = Math.min(7, accel + 1);
-      else if (grip === minVal) grip = Math.min(7, grip + 1);
-      else steer = Math.min(7, steer + 1);
+  // Symmetric / Self Stat Modifiers from Crew Card (100% positive buffs, capped at max 25)
+  if (crewMods) {
+    if (crewMods.minStatFloor && crewMods.minStatFloor > 0) {
+      drift = Math.max(drift, crewMods.minStatFloor);
+      accel = Math.max(accel, crewMods.minStatFloor);
+      grip = Math.max(grip, crewMods.minStatFloor);
+      steer = Math.max(steer, crewMods.minStatFloor);
     }
-  }
-  if (crewId === "crew-06-shallow-protest") {
-    steer = Math.min(10, steer + 1);
-  }
-  if (crewId === "crew-17-fresh-asphalt") {
-    grip = Math.min(10, grip + 1);
-  }
-  if (crewId === "crew-21-turbo-map") {
-    accel = Math.min(10, accel + 1);
-    drift = Math.min(10, drift + 1);
-  }
-  if (crewId === "crew-22-ackerman-knuckles") {
-    steer = Math.min(10, steer + 1);
-    drift = Math.min(10, drift + 1);
-  }
-  if (crewId === "crew-23-brass-bulkhead") {
-    grip = Math.min(10, grip + 1);
-    accel = Math.min(10, accel + 1);
-  }
-  if (crewId === "crew-24-dual-gain-gyro") {
-    steer = Math.min(10, steer + 1);
-  }
-  if (
-    crewId === "crew-26-carbon-flex-deck" &&
-    (sectorId === "chase" || sectorId === "wallride" || sectorId === "hairpin" || sectorId === "infield")
-  ) {
-    grip = Math.min(10, grip + 1);
-    steer = Math.min(10, steer + 1);
+    if (crewMods.boostWeakestStat && crewMods.boostWeakestStat > 0) {
+      const minVal = Math.min(drift, accel, grip, steer);
+      if (drift === minVal) drift = Math.max(drift, Math.min(25, drift + crewMods.boostWeakestStat));
+      else if (accel === minVal) accel = Math.max(accel, Math.min(25, accel + crewMods.boostWeakestStat));
+      else if (grip === minVal) grip = Math.max(grip, Math.min(25, grip + crewMods.boostWeakestStat));
+      else steer = Math.max(steer, Math.min(25, steer + crewMods.boostWeakestStat));
+    }
+    if (crewMods.driftBonus && crewMods.driftBonus > 0) {
+      drift = Math.max(drift, Math.min(25, drift + crewMods.driftBonus));
+    }
+    if (crewMods.accelBonus && crewMods.accelBonus > 0) {
+      accel = Math.max(accel, Math.min(25, accel + crewMods.accelBonus));
+    }
+    if (crewMods.gripBonus && crewMods.gripBonus > 0) {
+      grip = Math.max(grip, Math.min(25, grip + crewMods.gripBonus));
+    }
+    if (crewMods.steerBonus && crewMods.steerBonus > 0) {
+      steer = Math.max(steer, Math.min(25, steer + crewMods.steerBonus));
+    }
   }
 
   let statScore = 0;
@@ -536,61 +526,61 @@ export function scoreCardForSector(
   let extra = trackMod.delta;
   const warning = trackMod.label;
 
-  if (crewId === "crew-01-polished-ice" && grip >= 7) extra += 3;
-  if (crewId === "crew-02-rain-tarmac" && grip >= 7) extra += 3;
-  if (crewId === "crew-03-wall-clip-zone" && (sectorId === "wallride" || sectorId === "infield")) extra += 2;
+  if (crewId === "crew-01-polished-ice" && grip >= 17) extra += 8;
+  if (crewId === "crew-02-rain-tarmac" && grip >= 17) extra += 8;
+  if (crewId === "crew-03-wall-clip-zone" && (sectorId === "wallride" || sectorId === "infield")) extra += 5;
   if (
     crewId === "crew-04-boost-ban" &&
-    rawDrift <= 8 &&
-    rawAccel <= 8 &&
-    rawGrip <= 8 &&
-    rawSteer <= 8
+    rawDrift <= 20 &&
+    rawAccel <= 20 &&
+    rawGrip <= 20 &&
+    rawSteer <= 20
   ) {
-    extra += 3;
+    extra += 8;
   }
   if (crewId === "crew-09-grassroots-hero") {
-    if (card.tier === "bronze") extra += 7;
-    else if (card.tier === "silver") extra += 4;
+    if (card.tier === "bronze") extra += 18;
+    else if (card.tier === "silver") extra += 10;
   }
   if (crewId === "crew-11-tech-scrutineer") {
-    extra += card.tier === "bronze" || card.tier === "silver" ? 5 : 3;
+    extra += card.tier === "bronze" || card.tier === "silver" ? 12 : 8;
   }
-  if (crewId === "crew-12-ziptie-tuner") extra += 1;
+  if (crewId === "crew-12-ziptie-tuner") extra += 3;
   if (crewId === "crew-14-home-track-line") {
-    extra += card.tier === "bronze" || card.tier === "silver" ? 4 : 2;
+    extra += card.tier === "bronze" || card.tier === "silver" ? 10 : 5;
   }
-  if (crewId === "crew-15-touge-hairpins" && steer >= 7) extra += 3;
+  if (crewId === "crew-15-touge-hairpins" && steer >= 17) extra += 8;
   if (
     crewId === "crew-16-meihan-wall-ride" &&
     (sectorId === "entry" || sectorId === "sweeper" || sectorId === "wallride") &&
-    drift >= 8
+    drift >= 20
   ) {
-    extra += 4;
+    extra += 10;
   }
-  if (crewId === "crew-17-fresh-asphalt") extra += 1;
+  if (crewId === "crew-17-fresh-asphalt") extra += 3;
   if (
     crewId === "crew-18-smoke-screen" &&
     (sectorId === "entry" || sectorId === "sweeper" || sectorId === "wallride") &&
-    drift >= 7
+    drift >= 17
   ) {
-    extra += 2;
+    extra += 5;
   }
   if (
     crewId === "crew-20-proximity-laser" &&
     (sectorId === "chase" || sectorId === "hairpin" || sectorId === "wallride") &&
-    steer >= 7
+    steer >= 17
   ) {
-    extra += 3;
+    extra += 8;
   }
-  if (crewId === "crew-25-ti-turnbuckles") extra += 2;
-  if (crewId === "crew-28-vip-judge-box") extra += 4;
+  if (crewId === "crew-25-ti-turnbuckles") extra += 5;
+  if (crewId === "crew-28-vip-judge-box") extra += 10;
   if (crewId === "crew-29-p1-qualifier") {
-    if (sectorId === "entry" || sectorId === "sweeper") extra += 4;
-    if (sectorId === "wallride" || sectorId === "infield") extra += 2;
+    if (sectorId === "entry" || sectorId === "sweeper") extra += 10;
+    if (sectorId === "wallride" || sectorId === "infield") extra += 5;
   }
   if (crewId === "crew-30-twin-drift-sync") {
-    if (sectorId === "chase" || sectorId === "hairpin") extra += 5;
-    if (sectorId === "wallride" || sectorId === "infield") extra += 3;
+    if (sectorId === "chase" || sectorId === "hairpin") extra += 12;
+    if (sectorId === "wallride" || sectorId === "infield") extra += 8;
   }
 
   const total = Math.max(5, statScore + tierBonus + extra);
@@ -706,51 +696,51 @@ function evaluateOneSideInSector(params: {
 
   // 1. Self Crew Stat Buffs
   if (myCrewId === "crew-19-inverted-grid") {
-    if (drift <= 4) drift = 7;
-    if (accel <= 4) accel = 7;
-    if (grip <= 4) grip = 7;
-    if (steer <= 4) steer = 7;
+    if (drift <= 10) drift = 18;
+    if (accel <= 10) accel = 18;
+    if (grip <= 10) grip = 18;
+    if (steer <= 10) steer = 18;
   }
   if (myCrewId === "crew-12-ziptie-tuner") {
     const minVal = Math.min(drift, accel, grip, steer);
-    if (minVal < 7) {
-      if (drift === minVal) drift = Math.min(7, drift + 1);
-      else if (accel === minVal) accel = Math.min(7, accel + 1);
-      else if (grip === minVal) grip = Math.min(7, grip + 1);
-      else steer = Math.min(7, steer + 1);
+    if (minVal < 18) {
+      if (drift === minVal) drift = Math.min(18, drift + 3);
+      else if (accel === minVal) accel = Math.min(18, accel + 3);
+      else if (grip === minVal) grip = Math.min(18, grip + 3);
+      else steer = Math.min(18, steer + 3);
     }
   }
-  if (myCrewId === "crew-06-shallow-protest") steer = Math.min(10, steer + 1);
-  if (myCrewId === "crew-17-fresh-asphalt") grip = Math.min(10, grip + 1);
+  if (myCrewId === "crew-06-shallow-protest") steer = Math.min(25, steer + 3);
+  if (myCrewId === "crew-17-fresh-asphalt") grip = Math.min(25, grip + 3);
   if (myCrewId === "crew-21-turbo-map") {
-    accel = Math.min(10, accel + 1);
-    drift = Math.min(10, drift + 1);
+    accel = Math.min(25, accel + 3);
+    drift = Math.min(25, drift + 3);
   }
   if (myCrewId === "crew-22-ackerman-knuckles") {
-    steer = Math.min(10, steer + 1);
-    drift = Math.min(10, drift + 1);
+    steer = Math.min(25, steer + 3);
+    drift = Math.min(25, drift + 3);
   }
   if (myCrewId === "crew-23-brass-bulkhead") {
-    grip = Math.min(10, grip + 1);
-    accel = Math.min(10, accel + 1);
+    grip = Math.min(25, grip + 3);
+    accel = Math.min(25, accel + 3);
   }
-  if (myCrewId === "crew-24-dual-gain-gyro") steer = Math.min(10, steer + 1);
+  if (myCrewId === "crew-24-dual-gain-gyro") steer = Math.min(25, steer + 3);
   if (
     myCrewId === "crew-26-carbon-flex-deck" &&
     (sector.id === "chase" || sector.id === "wallride")
   ) {
-    grip = Math.min(10, grip + 1);
-    steer = Math.min(10, steer + 1);
+    grip = Math.min(25, grip + 3);
+    steer = Math.min(25, steer + 3);
   }
 
   // 2. Opponent Crew Stat Debuffs against this car
   if (oppCrewId === "crew-19-inverted-grid") {
-    if (drift === 10 || accel === 10 || grip === 10 || steer === 10) {
-      if (drift === 10) drift = 8;
-      if (accel === 10) accel = 8;
-      if (grip === 10) grip = 8;
-      if (steer === 10) steer = 8;
-      effectsTriggered.push(`🔄 Inverted Grid: ${sideLabel} 10s trimmed to 8`);
+    if (drift >= 24 || accel >= 24 || grip >= 24 || steer >= 24) {
+      if (drift >= 24) drift = 20;
+      if (accel >= 24) accel = 20;
+      if (grip >= 24) grip = 20;
+      if (steer >= 24) steer = 20;
+      effectsTriggered.push(`🔄 Inverted Grid: ${sideLabel} top stats trimmed to 20`);
     }
   }
   if (oppCrewId === "crew-08-rf-glitch") {
@@ -895,70 +885,6 @@ function evaluateOneSideInSector(params: {
   if (myCrewId === "crew-30-twin-drift-sync") {
     if (sector.id === "chase") extra += 5;
     if (sector.id === "wallride") extra += 3;
-  }
-
-  // 8. Opponent Crew Traps & Sabotage Penalties against this car
-  if (oppCrewId === "crew-01-polished-ice" && accel >= 8 && grip <= 7) {
-    extra -= 4;
-    effectsTriggered.push(`❄️ Polished Ice Trap: ${sideLabel} -4 pts`);
-  }
-  if (oppCrewId === "crew-02-rain-tarmac" && drift >= 9 && grip < 7) {
-    extra -= 3;
-    effectsTriggered.push(`🌧️ Rain Tarmac: ${sideLabel} -3 pts`);
-  }
-  if (
-    oppCrewId === "crew-03-wall-clip-zone" &&
-    (myRawTotal >= 34 || myCard.tier === "legend" || myCard.tier === "mythic")
-  ) {
-    extra -= 4;
-    effectsTriggered.push(`🧱 Wall Clip Zone: ${sideLabel} Legend -4 pts`);
-  }
-  if (
-    oppCrewId === "crew-05-diff-oil-spill" &&
-    (sector.id === "entry" || sector.id === "chase") &&
-    accel >= 9
-  ) {
-    extra -= 3;
-    effectsTriggered.push(`🛢️ Diff Oil Spill: ${sideLabel} -3 pts`);
-  }
-  if (oppCrewId === "crew-06-shallow-protest" && steer <= 6) {
-    extra -= 3;
-    effectsTriggered.push(`🏴 Shallow Angle Protest: ${sideLabel} -3 pts`);
-  }
-  if (oppCrewId === "crew-07-tire-bead-pop" && isMyAceSector) {
-    extra -= 8;
-    effectsTriggered.push(`💥 Rear Tire De-Bead: ${sideLabel} Ace -8 pts!`);
-  }
-  if (
-    oppCrewId === "crew-13-giant-slayer" &&
-    oppCard.tier !== "legend" &&
-    oppCard.tier !== "mythic" &&
-    (myCard.tier === "legend" || myCard.tier === "mythic")
-  ) {
-    extra -= 3;
-  }
-  if (oppCrewId === "crew-15-touge-hairpins" && accel >= 9 && steer <= 6) {
-    extra -= 3;
-    effectsTriggered.push(`⛰️ Touge Switchbacks: ${sideLabel} -3 pts`);
-  }
-  if (oppCrewId === "crew-16-meihan-wall-ride" && drift <= 6) {
-    extra -= 3;
-    effectsTriggered.push(`🔥 Meihan Wall Entry: ${sideLabel} -3 pts`);
-  }
-  if (
-    oppCrewId === "crew-18-smoke-screen" &&
-    (sector.id === "entry" || sector.id === "wallride") &&
-    oppRawDrift >= 7
-  ) {
-    extra -= 3;
-    effectsTriggered.push(`💨 Smoke Screen: ${sideLabel} -3 pts visibility`);
-  }
-  if (
-    oppCrewId === "crew-20-proximity-laser" &&
-    (sector.id === "chase" || sector.id === "wallride") &&
-    oppRawSteer >= 7
-  ) {
-    extra -= 1;
   }
 
   const score = Math.max(5, statScore + tierBonus + extra);
@@ -1130,6 +1056,192 @@ export function rollThreeDebuffCards(
   ];
 }
 
+export interface DebuffBreakdown {
+  driftPenalty: number;
+  accelPenalty: number;
+  gripPenalty: number;
+  steerPenalty: number;
+  effectiveDriftPenalty: number;
+  effectiveAccelPenalty: number;
+  effectiveGripPenalty: number;
+  effectiveSteerPenalty: number;
+  hasCondition: boolean;
+  conditionMet: boolean;
+  conditionStat?: "drift" | "accel" | "grip" | "steer";
+  conditionOp?: ">=" | "<=";
+  conditionThreshold: number;
+  conditionExtraPenalty: number;
+  effectiveConditionPenalty: number;
+  conditionLabel?: string;
+  flatPenalty: number;
+  effectiveFlatPenalty: number;
+  hasTrackHazard: boolean;
+  trackHazardMet: boolean;
+  trackHazardPenalty: number;
+  effectiveTrackHazardPenalty: number;
+  trackHazardLabel?: string;
+  totalDebuffPoints: number;
+  shieldPercent: number;
+  hasAnyDebuff: boolean;
+  statSummaryParts: string[];
+  pointSummaryParts: string[];
+  totalSummary: string;
+}
+
+export function computeDebuffBreakdown(params: {
+  card: MemberCard;
+  debuffCard?: DebuffCardDefinition | null;
+  trackCard?: TrackCardDefinition | null;
+  shield?: number;
+}): DebuffBreakdown {
+  const { card, debuffCard, trackCard, shield: rawShield = 0 } = params;
+  const shield = Math.min(1, Math.max(0, rawShield));
+  const shieldPercent = Math.round(shield * 100);
+
+  const rawDrift = normalizeStatValue(card?.stats?.drift);
+  const rawAccel = normalizeStatValue(card?.stats?.accel);
+  const rawGrip = normalizeStatValue(card?.stats?.grip);
+  const rawSteer = normalizeStatValue(card?.stats?.steer);
+  const rawMap = { drift: rawDrift, accel: rawAccel, grip: rawGrip, steer: rawSteer };
+
+  const pen = debuffCard?.penalties ?? {};
+  const driftPenalty = pen.driftPenalty ?? 0;
+  const accelPenalty = pen.accelPenalty ?? 0;
+  const gripPenalty = pen.gripPenalty ?? 0;
+  const steerPenalty = pen.steerPenalty ?? 0;
+
+  const effectiveDriftPenalty = Math.round(driftPenalty * (1 - shield));
+  const effectiveAccelPenalty = Math.round(accelPenalty * (1 - shield));
+  const effectiveGripPenalty = Math.round(gripPenalty * (1 - shield));
+  const effectiveSteerPenalty = Math.round(steerPenalty * (1 - shield));
+
+  // Condition
+  const hasCondition = Boolean(pen.condition);
+  let conditionMet = false;
+  let conditionStat = pen.condition?.stat;
+  let conditionOp = pen.condition?.op;
+  let conditionThreshold = 0;
+  let conditionExtraPenalty = pen.condition?.extraPenalty ?? 0;
+  let effectiveConditionPenalty = 0;
+  let conditionLabel = "";
+
+  if (pen.condition) {
+    conditionThreshold =
+      pen.condition.threshold <= 10
+        ? Math.round(pen.condition.threshold * 2.5)
+        : pen.condition.threshold;
+    const statVal = rawMap[pen.condition.stat];
+    conditionMet =
+      pen.condition.op === ">="
+        ? statVal >= conditionThreshold
+        : statVal <= conditionThreshold;
+    if (conditionMet) {
+      effectiveConditionPenalty = Math.round(conditionExtraPenalty * (1 - shield));
+      conditionLabel = `${pen.condition.stat.toUpperCase()} ${pen.condition.op} ${conditionThreshold} (-${effectiveConditionPenalty} PTS)`;
+    }
+  }
+
+  // Flat penalty
+  const flatPenalty = pen.flatPenalty ?? 0;
+  const effectiveFlatPenalty = Math.round(flatPenalty * (1 - shield));
+
+  // Track Hazard
+  const tRules = trackCard?.rules ?? {};
+  const hasTrackHazard = Boolean(tRules.debuffCondition);
+  let trackHazardMet = false;
+  let trackHazardPenalty = 0;
+  let effectiveTrackHazardPenalty = 0;
+  let trackHazardLabel = "";
+
+  if (tRules.debuffCondition) {
+    const dc = tRules.debuffCondition;
+    const resolveDcThreshold = (th?: number, fallback = 20) => {
+      if (th === undefined) return fallback;
+      return th <= 10 ? Math.round(th * 2.5) : th;
+    };
+    if (dc.type === "high_tier" && (card.tier === "legend" || card.tier === "mythic")) {
+      trackHazardMet = true;
+    } else if (dc.type === "stat_min" && dc.stat && rawMap[dc.stat] >= resolveDcThreshold(dc.threshold, 22)) {
+      trackHazardMet = true;
+    } else if (dc.type === "stat_max" && dc.stat && rawMap[dc.stat] <= resolveDcThreshold(dc.threshold, 15)) {
+      trackHazardMet = true;
+    }
+    if (trackHazardMet) {
+      trackHazardPenalty = dc.penaltyPoints;
+      effectiveTrackHazardPenalty = Math.round(dc.penaltyPoints * (1 - shield));
+      trackHazardLabel = `Track Hazard (-${effectiveTrackHazardPenalty} PTS)`;
+    }
+  }
+
+  const totalDebuffPoints = effectiveFlatPenalty + effectiveConditionPenalty + effectiveTrackHazardPenalty;
+
+  const statSummaryParts: string[] = [];
+  if (effectiveDriftPenalty > 0) statSummaryParts.push(`-${effectiveDriftPenalty} DRIFT`);
+  if (effectiveAccelPenalty > 0) statSummaryParts.push(`-${effectiveAccelPenalty} ACCEL`);
+  if (effectiveGripPenalty > 0) statSummaryParts.push(`-${effectiveGripPenalty} GRIP`);
+  if (effectiveSteerPenalty > 0) statSummaryParts.push(`-${effectiveSteerPenalty} STEER`);
+
+  const pointSummaryParts: string[] = [];
+  if (conditionMet && effectiveConditionPenalty > 0) {
+    pointSummaryParts.push(`-${effectiveConditionPenalty} PTS (${pen.condition?.stat.toUpperCase()} ${pen.condition?.op} ${conditionThreshold})`);
+  }
+  if (effectiveFlatPenalty > 0) {
+    pointSummaryParts.push(`-${effectiveFlatPenalty} PTS`);
+  }
+  if (effectiveTrackHazardPenalty > 0) {
+    pointSummaryParts.push(`-${effectiveTrackHazardPenalty} Track PTS`);
+  }
+
+  const hasAnyDebuff = statSummaryParts.length > 0 || totalDebuffPoints > 0;
+
+  let totalSummary = "None";
+  if (hasAnyDebuff) {
+    const items: string[] = [];
+    if (statSummaryParts.length > 0) {
+      items.push(statSummaryParts.join(", "));
+    }
+    if (totalDebuffPoints > 0) {
+      items.push(`-${totalDebuffPoints} PTS`);
+    }
+    totalSummary = items.join(" & ");
+    if (shieldPercent > 0) {
+      totalSummary += ` (🛡️ ${shieldPercent}% shielded)`;
+    }
+  }
+
+  return {
+    driftPenalty,
+    accelPenalty,
+    gripPenalty,
+    steerPenalty,
+    effectiveDriftPenalty,
+    effectiveAccelPenalty,
+    effectiveGripPenalty,
+    effectiveSteerPenalty,
+    hasCondition,
+    conditionMet,
+    conditionStat,
+    conditionOp,
+    conditionThreshold,
+    conditionExtraPenalty,
+    effectiveConditionPenalty,
+    conditionLabel,
+    flatPenalty,
+    effectiveFlatPenalty,
+    hasTrackHazard,
+    trackHazardMet,
+    trackHazardPenalty,
+    effectiveTrackHazardPenalty,
+    trackHazardLabel,
+    totalDebuffPoints,
+    shieldPercent,
+    hasAnyDebuff,
+    statSummaryParts,
+    pointSummaryParts,
+    totalSummary,
+  };
+}
+
 export interface EvaluatedCornerResult {
   cornerIdx: 0 | 1 | 2;
   sector: ClashSectorSpec;
@@ -1147,6 +1259,8 @@ export interface EvaluatedCornerResult {
   rivalBreakdown: string;
   playerCrewBonusLabel: string;
   rivalCrewBonusLabel: string;
+  playerDebuffBreakdown?: DebuffBreakdown;
+  rivalDebuffBreakdown?: DebuffBreakdown;
   debuffImpactLabel: string;
   trackImpactLabel: string;
   effectsTriggered: string[];
@@ -1168,6 +1282,7 @@ function evaluateDriverOnCorner(params: {
   score: number;
   breakdown: string;
   crewBonusLabel: string;
+  debuffBreakdown: DebuffBreakdown;
 } {
   const {
     myCard,
@@ -1187,17 +1302,17 @@ function evaluateDriverOnCorner(params: {
   const mods = crewDef.modifiers ?? {};
   const shield = Math.min(1, Math.max(0, mods.debuffShield ?? 0));
 
-  const rawDrift = Number(myCard.stats?.drift) || 0;
-  const rawAccel = Number(myCard.stats?.accel) || 0;
-  const rawGrip = Number(myCard.stats?.grip) || 0;
-  const rawSteer = Number(myCard.stats?.steer) || 0;
+  const rawDrift = normalizeStatValue(myCard.stats?.drift);
+  const rawAccel = normalizeStatValue(myCard.stats?.accel);
+  const rawGrip = normalizeStatValue(myCard.stats?.grip);
+  const rawSteer = normalizeStatValue(myCard.stats?.steer);
   const myRawTotal = rawDrift + rawAccel + rawGrip + rawSteer;
 
   const oppRawTotal =
-    (Number(oppCard.stats?.drift) || 0) +
-    (Number(oppCard.stats?.accel) || 0) +
-    (Number(oppCard.stats?.grip) || 0) +
-    (Number(oppCard.stats?.steer) || 0);
+    normalizeStatValue(oppCard.stats?.drift) +
+    normalizeStatValue(oppCard.stats?.accel) +
+    normalizeStatValue(oppCard.stats?.grip) +
+    normalizeStatValue(oppCard.stats?.steer);
 
   let drift = rawDrift;
   let accel = rawAccel;
@@ -1213,36 +1328,36 @@ function evaluateDriverOnCorner(params: {
   }
   if (mods.boostWeakestStat && mods.boostWeakestStat > 0) {
     const minVal = Math.min(drift, accel, grip, steer);
-    if (drift === minVal) drift = Math.min(10, drift + mods.boostWeakestStat);
-    else if (accel === minVal) accel = Math.min(10, accel + mods.boostWeakestStat);
-    else if (grip === minVal) grip = Math.min(10, grip + mods.boostWeakestStat);
-    else steer = Math.min(10, steer + mods.boostWeakestStat);
+    if (drift === minVal) drift = Math.min(25, drift + mods.boostWeakestStat);
+    else if (accel === minVal) accel = Math.min(25, accel + mods.boostWeakestStat);
+    else if (grip === minVal) grip = Math.min(25, grip + mods.boostWeakestStat);
+    else steer = Math.min(25, steer + mods.boostWeakestStat);
   }
 
   // 2. Crew Card Stat Bonuses (Advantage!)
-  if (mods.driftBonus) drift = Math.min(10, drift + mods.driftBonus);
-  if (mods.accelBonus) accel = Math.min(10, accel + mods.accelBonus);
-  if (mods.gripBonus) grip = Math.min(10, grip + mods.gripBonus);
-  if (mods.steerBonus) steer = Math.min(10, steer + mods.steerBonus);
+  if (mods.driftBonus) drift = Math.min(25, drift + mods.driftBonus);
+  if (mods.accelBonus) accel = Math.min(25, accel + mods.accelBonus);
+  if (mods.gripBonus) grip = Math.min(25, grip + mods.gripBonus);
+  if (mods.steerBonus) steer = Math.min(25, steer + mods.steerBonus);
 
   // 3. UK Track Card Stat Buffs
   const tRules = trackCard.rules ?? {};
-  if (tRules.driftBuff) drift = Math.min(10, drift + tRules.driftBuff);
-  if (tRules.accelBuff) accel = Math.min(10, accel + tRules.accelBuff);
-  if (tRules.gripBuff) grip = Math.min(10, grip + tRules.gripBuff);
-  if (tRules.steerBuff) steer = Math.min(10, steer + tRules.steerBuff);
+  if (tRules.driftBuff) drift = Math.min(25, drift + tRules.driftBuff);
+  if (tRules.accelBuff) accel = Math.min(25, accel + tRules.accelBuff);
+  if (tRules.gripBuff) grip = Math.min(25, grip + tRules.gripBuff);
+  if (tRules.steerBuff) steer = Math.min(25, steer + tRules.steerBuff);
 
   // 4. Random Corner Debuff Stat Penalties (Applied to both, reduced by Crew debuffShield!)
-  const pen = debuffCard.penalties ?? {};
-  const applyStatPen = (val: number, p?: number) => {
-    if (!p || p <= 0) return val;
-    const effectivePen = Math.round(p * (1 - shield));
-    return Math.max(1, val - effectivePen);
-  };
-  drift = applyStatPen(drift, pen.driftPenalty);
-  accel = applyStatPen(accel, pen.accelPenalty);
-  grip = applyStatPen(grip, pen.gripPenalty);
-  steer = applyStatPen(steer, pen.steerPenalty);
+  const debuffBreakdown = computeDebuffBreakdown({
+    card: myCard,
+    debuffCard,
+    trackCard,
+    shield,
+  });
+  drift = Math.max(1, drift - debuffBreakdown.effectiveDriftPenalty);
+  accel = Math.max(1, accel - debuffBreakdown.effectiveAccelPenalty);
+  grip = Math.max(1, grip - debuffBreakdown.effectiveGripPenalty);
+  steer = Math.max(1, steer - debuffBreakdown.effectiveSteerPenalty);
 
   // 5. Compute Corner Formula Stat Score
   let statScore = 0;
@@ -1296,64 +1411,46 @@ function evaluateDriverOnCorner(params: {
   if (tRules.buffCondition) {
     const bc = tRules.buffCondition;
     const rawMap = { drift: rawDrift, accel: rawAccel, grip: rawGrip, steer: rawSteer };
+    const resolveStatThreshold = (th?: number, fallback = 15) => {
+      if (th === undefined) return fallback;
+      return th <= 10 ? Math.round(th * 2.5) : th;
+    };
     if (bc.type === "always") {
       trackPts += bc.bonusPoints;
     } else if (bc.type === "underdog_tier" && (myCard.tier === "bronze" || myCard.tier === "silver")) {
       trackPts += bc.bonusPoints;
     } else if (
       bc.type === "balanced_stats" &&
-      Math.min(rawDrift, rawAccel, rawGrip, rawSteer) >= (bc.threshold ?? 6)
+      Math.min(rawDrift, rawAccel, rawGrip, rawSteer) >= resolveStatThreshold(bc.threshold, 15)
     ) {
       trackPts += bc.bonusPoints;
     } else if (
       bc.type === "stat_min" &&
       bc.stat &&
-      rawMap[bc.stat] >= (bc.threshold ?? 8)
+      rawMap[bc.stat] >= resolveStatThreshold(bc.threshold, 20)
     ) {
       trackPts += bc.bonusPoints;
     } else if (
       bc.type === "stat_max" &&
       bc.stat &&
-      rawMap[bc.stat] <= (bc.threshold ?? 6)
+      rawMap[bc.stat] <= resolveStatThreshold(bc.threshold, 15)
     ) {
       trackPts += bc.bonusPoints;
-    } else if (bc.type === "low_total" && myRawTotal <= (bc.threshold ?? 27)) {
+    } else if (
+      bc.type === "low_total" &&
+      myRawTotal <= (bc.threshold && bc.threshold > 40 ? bc.threshold : bc.threshold ? Math.round(bc.threshold * 2.5) : 67)
+    ) {
       trackPts += bc.bonusPoints;
     }
   }
-  if (tRules.debuffCondition) {
-    const dc = tRules.debuffCondition;
-    const rawMap = { drift: rawDrift, accel: rawAccel, grip: rawGrip, steer: rawSteer };
-    let triggeredTrackDebuff = false;
-    if (dc.type === "high_tier" && (myCard.tier === "legend" || myCard.tier === "mythic")) {
-      triggeredTrackDebuff = true;
-    } else if (dc.type === "stat_min" && dc.stat && rawMap[dc.stat] >= (dc.threshold ?? 9)) {
-      triggeredTrackDebuff = true;
-    } else if (dc.type === "stat_max" && dc.stat && rawMap[dc.stat] <= (dc.threshold ?? 6)) {
-      triggeredTrackDebuff = true;
-    }
-    if (triggeredTrackDebuff) {
-      const penPts = Math.round(dc.penaltyPoints * (1 - shield));
-      trackPts -= penPts;
-    }
+  if (debuffBreakdown.effectiveTrackHazardPenalty > 0) {
+    trackPts -= debuffBreakdown.effectiveTrackHazardPenalty;
   }
 
   // 8. Random Corner Debuff Flat & Conditional Penalty
-  let debuffRawPen = pen.flatPenalty ?? 0;
-  if (pen.condition) {
-    const rawMap = { drift: rawDrift, accel: rawAccel, grip: rawGrip, steer: rawSteer };
-    const statVal = rawMap[pen.condition.stat];
-    const condMet =
-      pen.condition.op === ">="
-        ? statVal >= pen.condition.threshold
-        : statVal <= pen.condition.threshold;
-    if (condMet) {
-      debuffRawPen += pen.condition.extraPenalty;
-    }
-  }
-  const debuffPts = -Math.round(debuffRawPen * (1 - shield));
+  const debuffPts = -(debuffBreakdown.effectiveFlatPenalty + debuffBreakdown.effectiveConditionPenalty);
 
-  if (shield > 0 && (debuffRawPen > 0 || pen.driftPenalty || pen.accelPenalty || pen.gripPenalty || pen.steerPenalty)) {
+  if (shield > 0 && debuffBreakdown.hasAnyDebuff) {
     effectsTriggered.push(
       `🛡️ ${sideLabel}: ${crewDef.icon} ${crewDef.name} shielded ${Math.round(shield * 100)}% of Debuff!`
     );
@@ -1372,10 +1469,17 @@ function evaluateDriverOnCorner(params: {
   if (crewPts > 0) crewSummaryParts.push(`+${crewPts} Pts`);
   if (shield > 0) crewSummaryParts.push(`${Math.round(shield * 100)}% Shield`);
 
+  const debuffBreakdownText = debuffBreakdown.pointSummaryParts.length > 0
+    ? ` - ${debuffBreakdown.effectiveFlatPenalty + debuffBreakdown.effectiveConditionPenalty} Debuff (${debuffBreakdown.pointSummaryParts.filter((p) => !p.includes("Track")).join(", ")})`
+    : debuffPts < 0
+      ? ` - ${Math.abs(debuffPts)} Debuff`
+      : "";
+
   return {
     score,
-    breakdown: `${formulaStr}${tierBonus ? ` + ${tierBonus} Tier` : ""}${crewPts > 0 ? ` + ${crewPts} Crew` : ""}${trackPts !== 0 ? ` ${trackPts > 0 ? `+ ${trackPts}` : `- ${Math.abs(trackPts)}`} Track` : ""}${debuffPts < 0 ? ` - ${Math.abs(debuffPts)} Debuff` : ""}`,
+    breakdown: `${formulaStr}${tierBonus ? ` + ${tierBonus} Tier` : ""}${crewPts > 0 ? ` + ${crewPts} Crew` : ""}${trackPts !== 0 ? ` ${trackPts > 0 ? `+ ${trackPts}` : `- ${Math.abs(trackPts)}`} Track` : ""}${debuffBreakdownText}`,
     crewBonusLabel: `${crewDef.icon} ${crewDef.name} (${crewSummaryParts.join(" · ") || "Active"})`,
+    debuffBreakdown,
   };
 }
 
@@ -1437,6 +1541,17 @@ export function evaluateCornerMatchup(params: {
     effectsTriggered,
   });
 
+  if (pRes.debuffBreakdown.hasAnyDebuff) {
+    effectsTriggered.push(
+      `⚠️ Your Debuff: ${playerDebuffCard.icon} ${playerDebuffCard.name} → Total Penalty: ${pRes.debuffBreakdown.totalSummary}`
+    );
+  }
+  if (rRes.debuffBreakdown.hasAnyDebuff) {
+    effectsTriggered.push(
+      `⚠️ Rival Debuff: ${rivalDebuffCard.icon} ${rivalDebuffCard.name} → Total Penalty: ${rRes.debuffBreakdown.totalSummary}`
+    );
+  }
+
   return {
     cornerIdx,
     sector,
@@ -1454,7 +1569,9 @@ export function evaluateCornerMatchup(params: {
     rivalBreakdown: rRes.breakdown,
     playerCrewBonusLabel: pRes.crewBonusLabel,
     rivalCrewBonusLabel: rRes.crewBonusLabel,
-    debuffImpactLabel: `You: ${playerDebuffCard.name} · Rival: ${rivalDebuffCard.name}`,
+    playerDebuffBreakdown: pRes.debuffBreakdown,
+    rivalDebuffBreakdown: rRes.debuffBreakdown,
+    debuffImpactLabel: `You: ${playerDebuffCard.name} (${pRes.debuffBreakdown.totalSummary}) · Rival: ${rivalDebuffCard.name} (${rRes.debuffBreakdown.totalSummary})`,
     trackImpactLabel: `${trackCard.icon} ${trackCard.name}: ${trackCard.ability}`,
     effectsTriggered,
     won: pRes.score > rRes.score,

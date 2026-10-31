@@ -132,7 +132,7 @@ const FALLBACK_BOSS_CREWS: FallbackBossCrew[] = [
         team: "PHD Works",
         tier: "mythic",
         styleIds: ["touge", "cyber"],
-        stats: { drift: "10", accel: "9", grip: "8", steer: "10" },
+        stats: { drift: "25", accel: "25", grip: "25", steer: "25" },
         imageUrl: "/icons/icon-512.png",
         imageZoom: 106,
         imageX: 50,
@@ -151,7 +151,7 @@ const FALLBACK_BOSS_CREWS: FallbackBossCrew[] = [
         team: "PHD Works",
         tier: "legend",
         styleIds: ["cyber"],
-        stats: { drift: "9", accel: "9", grip: "8", steer: "9" },
+        stats: { drift: "24", accel: "23", grip: "23", steer: "24" },
         imageUrl: "/icons/icon-512.png",
         imageZoom: 106,
         imageX: 50,
@@ -170,7 +170,7 @@ const FALLBACK_BOSS_CREWS: FallbackBossCrew[] = [
         team: "PHD Works",
         tier: "gold",
         styleIds: ["touge"],
-        stats: { drift: "9", accel: "8", grip: "8", steer: "8" },
+        stats: { drift: "20", accel: "19", grip: "19", steer: "19" },
         imageUrl: "/icons/icon-512.png",
         imageZoom: 106,
         imageX: 50,
@@ -201,7 +201,7 @@ const FALLBACK_BOSS_CREWS: FallbackBossCrew[] = [
         team: "ASBO Racing UK",
         tier: "mythic",
         styleIds: ["touge", "cyber"],
-        stats: { drift: "10", accel: "10", grip: "8", steer: "9" },
+        stats: { drift: "25", accel: "25", grip: "25", steer: "25" },
         imageUrl: "/icons/icon-512.png",
         imageZoom: 106,
         imageX: 50,
@@ -220,7 +220,7 @@ const FALLBACK_BOSS_CREWS: FallbackBossCrew[] = [
         team: "ASBO Racing UK",
         tier: "legend",
         styleIds: ["cyber"],
-        stats: { drift: "9", accel: "9", grip: "8", steer: "9" },
+        stats: { drift: "24", accel: "23", grip: "23", steer: "24" },
         imageUrl: "/icons/icon-512.png",
         imageZoom: 106,
         imageX: 50,
@@ -239,7 +239,7 @@ const FALLBACK_BOSS_CREWS: FallbackBossCrew[] = [
         team: "ASBO Racing UK",
         tier: "gold",
         styleIds: ["touge"],
-        stats: { drift: "9", accel: "8", grip: "8", steer: "9" },
+        stats: { drift: "20", accel: "19", grip: "19", steer: "20" },
         imageUrl: "/icons/icon-512.png",
         imageZoom: 106,
         imageX: 50,
@@ -270,7 +270,7 @@ const FALLBACK_BOSS_CREWS: FallbackBossCrew[] = [
         team: "Slide House Masters",
         tier: "mythic",
         styleIds: ["cyber"],
-        stats: { drift: "10", accel: "9", grip: "8", steer: "10" },
+        stats: { drift: "25", accel: "25", grip: "25", steer: "25" },
         imageUrl: "/icons/icon-512.png",
         imageZoom: 106,
         imageX: 50,
@@ -289,7 +289,7 @@ const FALLBACK_BOSS_CREWS: FallbackBossCrew[] = [
         team: "Slide House Masters",
         tier: "legend",
         styleIds: ["touge"],
-        stats: { drift: "9", accel: "9", grip: "8", steer: "9" },
+        stats: { drift: "24", accel: "23", grip: "23", steer: "24" },
         imageUrl: "/icons/icon-512.png",
         imageZoom: 106,
         imageX: 50,
@@ -308,7 +308,7 @@ const FALLBACK_BOSS_CREWS: FallbackBossCrew[] = [
         team: "Slide House Masters",
         tier: "gold",
         styleIds: ["touge", "cyber"],
-        stats: { drift: "8", accel: "9", grip: "8", steer: "9" },
+        stats: { drift: "20", accel: "19", grip: "19", steer: "20" },
         imageUrl: "/icons/icon-512.png",
         imageZoom: 106,
         imageX: 50,
@@ -339,7 +339,7 @@ const FALLBACK_BOSS_CREWS: FallbackBossCrew[] = [
         team: "Team Overdose UK",
         tier: "mythic",
         styleIds: ["cyber"],
-        stats: { drift: "10", accel: "9", grip: "9", steer: "9" },
+        stats: { drift: "25", accel: "25", grip: "25", steer: "25" },
         imageUrl: "/icons/icon-512.png",
         imageZoom: 106,
         imageX: 50,
@@ -358,7 +358,7 @@ const FALLBACK_BOSS_CREWS: FallbackBossCrew[] = [
         team: "Team Overdose UK",
         tier: "legend",
         styleIds: ["touge"],
-        stats: { drift: "9", accel: "10", grip: "8", steer: "8" },
+        stats: { drift: "24", accel: "24", grip: "23", steer: "23" },
         imageUrl: "/icons/icon-512.png",
         imageZoom: 106,
         imageX: 50,
@@ -377,7 +377,7 @@ const FALLBACK_BOSS_CREWS: FallbackBossCrew[] = [
         team: "Team Overdose UK",
         tier: "gold",
         styleIds: ["touge", "cyber"],
-        stats: { drift: "9", accel: "8", grip: "8", steer: "9" },
+        stats: { drift: "20", accel: "19", grip: "19", steer: "20" },
         imageUrl: "/icons/icon-512.png",
         imageZoom: 106,
         imageX: 50,
@@ -408,7 +408,7 @@ const FALLBACK_BOSS_CREWS: FallbackBossCrew[] = [
         team: "Soul RC Syndicate",
         tier: "mythic",
         styleIds: ["cyber", "touge"],
-        stats: { drift: "10", accel: "10", grip: "8", steer: "9" },
+        stats: { drift: "25", accel: "25", grip: "25", steer: "25" },
         imageUrl: "/icons/icon-512.png",
         imageZoom: 106,
         imageX: 50,
@@ -427,7 +427,7 @@ const FALLBACK_BOSS_CREWS: FallbackBossCrew[] = [
         team: "Soul RC Syndicate",
         tier: "legend",
         styleIds: ["touge"],
-        stats: { drift: "9", accel: "9", grip: "9", steer: "8" },
+        stats: { drift: "24", accel: "23", grip: "23", steer: "24" },
         imageUrl: "/icons/icon-512.png",
         imageZoom: 106,
         imageX: 50,
@@ -446,7 +446,7 @@ const FALLBACK_BOSS_CREWS: FallbackBossCrew[] = [
         team: "Soul RC Syndicate",
         tier: "gold",
         styleIds: ["cyber"],
-        stats: { drift: "9", accel: "8", grip: "8", steer: "9" },
+        stats: { drift: "20", accel: "19", grip: "19", steer: "20" },
         imageUrl: "/icons/icon-512.png",
         imageZoom: 106,
         imageX: 50,
@@ -699,12 +699,23 @@ export async function findNewClashOpponentAction(): Promise<ActionResult<ClashOp
 
 export async function completeClashBattleAction(input: {
   won: boolean;
+  playedCarCardIds?: string[];
 }): Promise<
   ActionResult<{
     stats: ClashPlayerStats;
     rewardGranted: number;
     streakBonusGranted: number;
     pCredits: number;
+    faultEvents: Array<{
+      type: "fault" | "repaired";
+      cardId: string;
+      cardName: string;
+      faultName?: string;
+      faultIcon?: string;
+      battlesNeeded?: number;
+      freshBattles?: number;
+    }>;
+    updatedCars?: MemberCard[];
   }>
 > {
   try {
@@ -763,8 +774,118 @@ export async function completeClashBattleAction(input: {
     const pCredits =
       totalGrant > 0 ? await grantPCredits(userId, totalGrant) : await getPCredits(userId);
 
+    // Mechanical Faults & Pit Maintenance Countdown
+    const faultEvents: Array<{
+      type: "fault" | "repaired";
+      cardId: string;
+      cardName: string;
+      faultName?: string;
+      faultIcon?: string;
+      battlesNeeded?: number;
+      freshBattles?: number;
+    }> = [];
+    const savedCardsList: StoredMemberCard[] = [];
+
+    try {
+      const { memberCardKey, memberCardsIndexKey, parseStoredCard } = await import(
+        "@/lib/member-card-store"
+      );
+      const { rollCarInitialDurability, rollMechanicalFault } = await import(
+        "@/lib/mechanical-faults"
+      );
+
+      const playedSet = new Set(
+        (input.playedCarCardIds || []).filter((id) => id && !id.startsWith("loaner-"))
+      );
+
+      const userCardIds = (await redis.zrange(
+        memberCardsIndexKey(userId),
+        0,
+        999
+      )) as string[];
+
+      if (userCardIds && userCardIds.length > 0) {
+        const rows = await redis.mget(...userCardIds.map((id) => memberCardKey(String(id))));
+
+        for (const row of rows) {
+          const c = parseStoredCard(row);
+          if (!c || c.userId !== userId) continue;
+          if (
+            c.cardType === "crew" ||
+            c.cardType === "maintenance" ||
+            c.cardType === "debuff" ||
+            c.cardType === "track"
+          ) {
+            continue;
+          }
+
+          // Case 1: Car was played in this battle -> wear down durability
+          if (playedSet.has(c.id)) {
+            const currentDurability =
+              typeof c.battlesRemaining === "number"
+                ? c.battlesRemaining
+                : (c.maxBattles ?? rollCarInitialDurability());
+
+            if (currentDurability > 1) {
+              c.battlesRemaining = currentDurability - 1;
+              savedCardsList.push(c);
+            } else {
+              // Durability exhausted -> breaks down!
+              c.battlesRemaining = 0;
+              const fault = rollMechanicalFault();
+              c.fault = fault;
+              savedCardsList.push(c);
+              faultEvents.push({
+                type: "fault",
+                cardId: c.id,
+                cardName: c.name,
+                faultName: fault.name,
+                faultIcon: fault.icon,
+                battlesNeeded: fault.battlesNeeded,
+              });
+            }
+          }
+          // Case 2: Benched car with active fault -> decrement maintenance battles
+          else if (c.fault && c.fault.battlesRemaining > 0) {
+            const nextRemaining = c.fault.battlesRemaining - 1;
+            if (nextRemaining <= 0) {
+              // Fully repaired!
+              c.fault = null;
+              const freshBattles = rollCarInitialDurability();
+              c.maxBattles = freshBattles;
+              c.battlesRemaining = freshBattles;
+              savedCardsList.push(c);
+              faultEvents.push({
+                type: "repaired",
+                cardId: c.id,
+                cardName: c.name,
+                freshBattles,
+              });
+            } else {
+              c.fault.battlesRemaining = nextRemaining;
+              savedCardsList.push(c);
+            }
+          }
+        }
+
+        if (savedCardsList.length > 0) {
+          await Promise.all(
+            savedCardsList.map((c) => redis.set(memberCardKey(c.id), JSON.stringify(c)))
+          );
+        }
+      }
+    } catch (err) {
+      console.error("[driftClash] error processing mechanical faults:", err);
+    }
+
     revalidatePath("/cards");
     revalidatePath("/");
+
+    const updatedCars = savedCardsList.map((c) => {
+      const { referenceUrl, ...rest } = c;
+      void referenceUrl;
+      return rest;
+    });
 
     return {
       success: true,
@@ -779,6 +900,8 @@ export async function completeClashBattleAction(input: {
         rewardGranted,
         streakBonusGranted,
         pCredits,
+        faultEvents,
+        updatedCars,
       },
     };
   } catch (error) {

@@ -3,6 +3,7 @@
 import { useId } from "react";
 import { Barlow_Condensed } from "next/font/google";
 import { DEFAULT_HEADER_TEXT, darken, lighten, luminance, mix, type CardData } from "@/lib/card-maker";
+import { normalizeStatValue } from "@/tcg/progression";
 
 const cardFont = Barlow_Condensed({ subsets: ["latin"], weight: ["600", "700", "800"] });
 
@@ -218,10 +219,10 @@ export function PhdCard({
   }
 
   const statEntries: Array<[string, string]> = [
-    ["Drift", card.stats.drift],
-    ["Accel", card.stats.accel],
-    ["Grip", card.stats.grip],
-    ["Steer", card.stats.steer],
+    ["Drift", String(normalizeStatValue(card.stats.drift))],
+    ["Accel", String(normalizeStatValue(card.stats.accel))],
+    ["Grip", String(normalizeStatValue(card.stats.grip))],
+    ["Steer", String(normalizeStatValue(card.stats.steer))],
   ];
 
   const abs = (style: React.CSSProperties): React.CSSProperties => ({ position: "absolute", ...style });

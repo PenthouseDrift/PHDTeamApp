@@ -1,5 +1,5 @@
 import { redis } from "@/lib/redis";
-import type { StoredMemberCard } from "@/lib/card-roll";
+import { tierFromStats, type StoredMemberCard } from "@/lib/card-roll";
 import { crewDefinitionToCardData, getCrewCardDefinition } from "@/lib/crew-cards";
 
 /**
@@ -56,11 +56,61 @@ export function parseStoredCard(raw: unknown): StoredMemberCard | null {
         };
       }
     }
-    // Auto-heal car cards where chassis/ability was previously stored as empty string
-    if (!c.cardType && !c.crewCardId && (!c.ability || c.ability.trim() === "")) {
+    // Auto-heal car cards: stats scale (25 max, x/100 total), mythic (25 25 25 25), high legend for set cards, chassis/ability or initial durability
+    if (!c.cardType && !c.crewCardId) {
+      const ability =
+        !c.ability || c.ability.trim() === ""
+          ? (c as { chassis?: string }).chassis?.trim() || c.name || ""
+          : c.ability;
+      const maxBattles = typeof c.maxBattles === "number" ? c.maxBattles : 6;
+      const battlesRemaining =
+        typeof c.battlesRemaining === "number" ? c.battlesRemaining : maxBattles;
+
+      let tier = c.tier;
+      let stats = c.stats ? { ...c.stats } : { drift: "15", accel: "15", grip: "15", steer: "15" };
+
+      if (tier === "mythic") {
+        stats = { drift: "25", accel: "25", grip: "25", steer: "25" };
+      } else if (c.featured) {
+        tier = "legend";
+        const dVal = Number.parseInt(stats.drift || "0", 10);
+        if (dVal < 20) {
+          stats = { drift: "24", accel: "23", grip: "23", steer: "24" };
+        }
+      }
+
+      // Auto-scale ANY non-mythic car (standard cards, community bonus cards, etc.) if on legacy 1..10 scale
+      if (tier !== "mythic") {
+        const vals = [
+          Number.parseInt(stats.drift, 10),
+          Number.parseInt(stats.accel, 10),
+          Number.parseInt(stats.grip, 10),
+          Number.parseInt(stats.steer, 10),
+        ].filter((n) => Number.isFinite(n));
+        if (vals.length > 0 && Math.max(...vals) <= 10) {
+          stats = {
+            drift: String(Math.min(25, Math.max(1, Math.round((Number.parseInt(stats.drift, 10) || 5) * 2.5)))),
+            accel: String(Math.min(25, Math.max(1, Math.round((Number.parseInt(stats.accel, 10) || 5) * 2.5)))),
+            grip: String(Math.min(25, Math.max(1, Math.round((Number.parseInt(stats.grip, 10) || 5) * 2.5)))),
+            steer: String(Math.min(25, Math.max(1, Math.round((Number.parseInt(stats.steer, 10) || 5) * 2.5)))),
+          };
+        }
+      }
+
+      // Re-derive rarity tier according to active RARITY_STAT_BRACKETS:
+      // Bronze: 4–59, Silver: 60–74, Gold: 75–84, Legend: 85–99, Mythic: 100
+      if (!c.featured) {
+        tier = tierFromStats(stats);
+      }
+
       return {
         ...c,
-        ability: (c as { chassis?: string }).chassis?.trim() || c.name || "",
+        ability,
+        tier,
+        stats,
+        maxBattles,
+        battlesRemaining,
+        fault: c.fault ?? null,
       };
     }
     return c;
@@ -88,9 +138,17 @@ export function communityKey(card: Pick<StoredMemberCard, "userId" | "driver" | 
   return `${card.userId}|${norm(card.driver)}|${norm(card.name)}`;
 }
 
-/** A card can stand in the pool when it is a real, current card: not re-rolled away, not itself a second-slot card, and not a Crew modifier card. */
+/** A card can stand in the pool when it is a real, current card: not re-rolled away, not itself a second-slot card, and not a Crew modifier or Maintenance card. */
 export const isCommunityCard = (card: StoredMemberCard | null): card is StoredMemberCard =>
-  Boolean(card && !card.archived && !card.bonus && card.cardType !== "crew" && !card.crewCardId && card.driver?.trim());
+  Boolean(
+    card &&
+      !card.archived &&
+      !card.bonus &&
+      card.cardType !== "crew" &&
+      card.cardType !== "maintenance" &&
+      !card.crewCardId &&
+      card.driver?.trim()
+  );
 
 /** Make this card the pool's card for its driver and car, replacing the older one. */
 export async function addToCommunityPool(card: StoredMemberCard): Promise<void> {

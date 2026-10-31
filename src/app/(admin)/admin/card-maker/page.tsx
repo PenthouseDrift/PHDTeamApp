@@ -33,6 +33,8 @@ export default async function CardMakerPage({ searchParams }: CardMakerPageProps
       ? "packs"
       : params.tab === "clash-cards"
       ? "clash-cards"
+      : params.tab === "challenges"
+      ? "challenges"
       : params.tab === "original"
       ? "original"
       : "full-art";
@@ -42,10 +44,10 @@ export default async function CardMakerPage({ searchParams }: CardMakerPageProps
       <div className="space-y-1">
         <Link
           data-page-back
-          href="/admin"
+          href="/cards"
           className="inline-flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-amber-500"
         >
-          ← Back to Admin Dashboard
+          ← Back to DriftClash Hub
         </Link>
         <h1 className="text-2xl font-black text-zinc-900 dark:text-zinc-100">
           Card maker &amp; TCG Pack Store

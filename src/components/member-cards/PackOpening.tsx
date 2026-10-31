@@ -66,6 +66,7 @@ export function PackOpening({
   bonus = null,
   crew = null,
   featured = null,
+  maintenance = null,
   onRevealed,
 }: {
   /** The card has been drawn and saved, so the pack can be opened. */
@@ -78,12 +79,22 @@ export function PackOpening({
   crew?: MemberCard | null;
   /** The rare bonus card from the admin's pullable set, shown last. */
   featured?: MemberCard | null;
+  /** The Maintenance Consumable card for repairing mechanical faults. */
+  maintenance?: MemberCard | null;
   /** Called once the card has finished revealing, so the page can show what to do next. */
   onRevealed: () => void;
 }) {
   const reduced = useReducedMotion();
   const [anim, setAnim] = useState<Anim>("drifting");
-  const slides = card ? [card, ...(bonus ? [bonus] : []), ...(crew ? [crew] : []), ...(featured ? [featured] : [])] : [];
+  const slides = card
+    ? [
+        card,
+        ...(bonus ? [bonus] : []),
+        ...(crew ? [crew] : []),
+        ...(featured ? [featured] : []),
+        ...(maintenance ? [maintenance] : []),
+      ]
+    : [];
   const scroller = useRef<HTMLDivElement>(null);
   const [slide, setSlide] = useState(0);
 
@@ -206,6 +217,7 @@ export function PackOpening({
             {bonus ? ` Your pack also had a ${tierInfo(bonus.tier).label} community card: ${bonus.name}.` : ""}
             {crew ? ` Plus a ${tierInfo(crew.tier).label} Crew Modifier card: ${crew.name}.` : ""}
             {featured ? ` A rare ${tierInfo(featured.tier).label} bonus card also dropped: ${featured.name}.` : ""}
+            {maintenance ? ` Plus a ${tierInfo(maintenance.tier).label} Maintenance Consumable: ${maintenance.name}.` : ""}
           </span>
           <div className={`pc-rays ${isLegend ? "pc-rays-rainbow" : ""}`} aria-hidden style={card.tier === "bronze" ? { display: "none" } : undefined} />
           <div className="pc-burst" aria-hidden />

@@ -20,6 +20,7 @@ const EVENT_DAY: MoreLink[] = [
   { href: "/admin/notes", title: "Notes", desc: "Staff notes", icon: "📝" },
   { href: "/admin/card-maker", title: "Card maker", desc: "Design and print PHD trading cards", icon: "🃏", adminOnly: true },
   { href: "/admin/member-cards", title: "Member cards", desc: "Every card members have opened", icon: "🎴", adminOnly: true },
+  { href: "/admin/challenges", title: "Clash challenges", desc: "Create & manage Tandem Clash cups, rarity restrictions & rewards", icon: "🏆", adminOnly: true },
 ];
 
 const MANAGE: MoreLink[] = [

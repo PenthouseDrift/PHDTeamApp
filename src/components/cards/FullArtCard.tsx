@@ -21,9 +21,9 @@ const PAD = 13; // Canvas padding around the 100 x 139.7 card in card units
 const CW = 100 + PAD * 2; // 126
 const CH = H + PAD * 2; // 165.7
 
-/** Each stat is out of 10, so the total score is out of 40. */
-const MAX_STAT = 10;
-const MAX_TOTAL_SCORE = MAX_STAT * 4;
+/** Each stat is out of 25, so the total score is out of 100. */
+const MAX_STAT = 25;
+const MAX_TOTAL_SCORE = 100;
 
 const abs = (style: React.CSSProperties): React.CSSProperties => ({ position: "absolute", ...style });
 
@@ -457,6 +457,7 @@ export function FullArtCard({
   className,
   placeholders = false,
   flat = false,
+  showDurability = true,
 }: {
   card: FullArtCardData;
   className?: string;
@@ -464,6 +465,8 @@ export function FullArtCard({
   placeholders?: boolean;
   /** Print mode: drop the on-screen edge ring. */
   flat?: boolean;
+  /** Show durability and repair status overlay for car cards (defaults to true). */
+  showDurability?: boolean;
 }) {
   const uid = useId().replace(/:/g, "");
   const tier = tierInfo(card.tier);
@@ -533,20 +536,46 @@ export function FullArtCard({
   const driver = card.driver.trim() || (placeholders ? "[Name]" : "");
   const team = card.team.trim() || (placeholders ? "[Name]" : "");
 
+  // User requested:
+  // 1) Mythic cards have stats 25 25 25 25 (total 100/100).
+  // 2) Existing legacy cards (stats <= 10) get auto-scaled by 2.5x to the 25-point scale.
+  const rawStats = isMythic
+    ? { drift: "25", accel: "25", grip: "25", steer: "25" }
+    : card.stats;
+
+  const rawVals = [
+    Number.parseInt(rawStats.drift, 10),
+    Number.parseInt(rawStats.accel, 10),
+    Number.parseInt(rawStats.grip, 10),
+    Number.parseInt(rawStats.steer, 10),
+  ].filter((n) => Number.isFinite(n));
+
+  const isLegacyCard = !isMythic && rawVals.length > 0 && Math.max(...rawVals) <= 10;
+  const scaleStatVal = (val: string) => {
+    if (isMythic) return "25";
+    const n = Number.parseInt(val, 10);
+    if (!Number.isFinite(n)) return val;
+    if (isLegacyCard) {
+      return String(Math.min(25, Math.max(1, Math.round(n * 2.5))));
+    }
+    return String(Math.min(25, Math.max(1, n)));
+  };
+
   const stats: Array<[string, string]> = [
-    ["Drift", card.stats.drift],
-    ["Accel", card.stats.accel],
-    ["Grip", card.stats.grip],
-    ["Steer", card.stats.steer],
+    ["Drift", scaleStatVal(rawStats.drift)],
+    ["Accel", scaleStatVal(rawStats.accel)],
+    ["Grip", scaleStatVal(rawStats.grip)],
+    ["Steer", scaleStatVal(rawStats.steer)],
   ];
 
   const isCrew = card.cardType === "crew" || (!card.cardType && Boolean(card.crewCardId));
   const isDebuff = card.cardType === "debuff";
   const isTrack = card.cardType === "track";
-  const isSpecialClashCard = isCrew || isDebuff || isTrack;
+  const isMaintenance = card.cardType === "maintenance";
+  const isSpecialClashCard = isCrew || isDebuff || isTrack || isMaintenance;
 
-  // The four stats added up, each counted as 0 to 10, so the most a card can score is 40.
-  // Nothing is shown while the stats are empty (a blank "__/40" only in the editor preview).
+  // The four stats added up, each counted as 0 to 25, so the most a card can score is 100.
+  // Nothing is shown while the stats are empty (a blank "__/100" only in the editor preview).
   const statNumbers = stats.map(([, value]) => Number.parseInt(value, 10)).filter((n) => Number.isFinite(n));
   const score: number | "placeholder" | null = isSpecialClashCard
     ? null
@@ -641,7 +670,7 @@ export function FullArtCard({
                 userSelect: "none",
               }}
             >
-              {card.crewIcon || getCrewCardDefinition(card.crewCardId || card.name)?.icon || (isCrew ? "⚡" : isDebuff ? "⚠️" : "🏁")}
+              {card.crewIcon || getCrewCardDefinition(card.crewCardId || card.name)?.icon || (isCrew ? "⚡" : isDebuff ? "⚠️" : isMaintenance ? "🛠️" : "🏁")}
             </span>
           </div>
         )}
@@ -731,14 +760,13 @@ export function FullArtCard({
         {/* Top row: the P mark and the tier tag */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={HEADER_LOGO_SRC} alt="" style={headerLogoStyle} />
-        {/* Top right: the tier tag with the total score directly under it (one column, so they always line up) */}
+        {/* Top right: the tier tag with the total score and durability/repair badge directly under it */}
         <div
           style={{
             ...abs({ right: headerTagLayout.right, top: headerTagLayout.top }),
             width: headerTagLayout.width,
             display: "flex",
             flexDirection: "column",
-            // Right aligned, so the score ends flush with the pill's right edge.
             alignItems: "flex-end",
             gap: "1.6cqw",
           }}
@@ -758,48 +786,168 @@ export function FullArtCard({
             {tier.label}
           </div>
 
-          {/* Total score, e.g. 23/40, or CREW / DEBUFF / TRACK badge */}
-          {isSpecialClashCard ? (
-            <span
-              style={{
-                padding: "0.9cqw 2.6cqw",
-                borderRadius: "1.2cqw",
-                background: "rgba(0,0,0,0.65)",
-                border: `0.3cqw solid ${accent}`,
-                color: pale,
-                fontSize: "3.7cqw",
-                fontWeight: 800,
-                letterSpacing: "0.06em",
-                lineHeight: 1,
-                whiteSpace: "nowrap",
-                textShadow: "0 0.2cqw 0.6cqw rgba(0,0,0,0.9)",
-              }}
-            >
-              {isTrack ? "🇬🇧 TRACK" : isDebuff ? "⚠️ DEBUFF" : "⚡ CREW"}
-            </span>
-          ) : (
-            score !== null && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-end",
+              gap: "1.2cqw",
+              width: "100%",
+            }}
+          >
+            {/* Total score, e.g. 23/40, or CREW / DEBUFF / TRACK badge */}
+            {isSpecialClashCard ? (
               <span
-                role="img"
-                aria-label={score === "placeholder" ? `Total score out of ${MAX_TOTAL_SCORE}` : `Total score ${score} out of ${MAX_TOTAL_SCORE}`}
                 style={{
                   padding: "0.9cqw 2.6cqw",
                   borderRadius: "1.2cqw",
-                  background: "rgba(0,0,0,0.5)",
+                  background: "rgba(0,0,0,0.65)",
                   border: `0.3cqw solid ${accent}`,
                   color: pale,
-                  fontSize: "4cqw",
+                  fontSize: "3.7cqw",
                   fontWeight: 800,
-                  letterSpacing: "0.04em",
+                  letterSpacing: "0.06em",
                   lineHeight: 1,
                   whiteSpace: "nowrap",
                   textShadow: "0 0.2cqw 0.6cqw rgba(0,0,0,0.9)",
                 }}
               >
-                {score === "placeholder" ? "__" : score}/{MAX_TOTAL_SCORE}
+                {isTrack ? "🇬🇧 TRACK" : isDebuff ? "⚠️ DEBUFF" : isMaintenance ? "🛠️ REPAIR" : "⚡ CREW"}
               </span>
-            )
-          )}
+            ) : (
+              score !== null && (
+                <span
+                  role="img"
+                  aria-label={score === "placeholder" ? `Total score out of ${MAX_TOTAL_SCORE}` : `Total score ${score} out of ${MAX_TOTAL_SCORE}`}
+                  style={{
+                    padding: "0.9cqw 2.4cqw",
+                    borderRadius: "1.2cqw",
+                    background: "rgba(0,0,0,0.5)",
+                    border: `0.3cqw solid ${accent}`,
+                    color: pale,
+                    fontSize: "4cqw",
+                    fontWeight: 800,
+                    letterSpacing: "0.04em",
+                    lineHeight: 1,
+                    whiteSpace: "nowrap",
+                    textShadow: "0 0.2cqw 0.6cqw rgba(0,0,0,0.9)",
+                  }}
+                >
+                  {score === "placeholder" ? "__" : score}/{MAX_TOTAL_SCORE}
+                </span>
+              )
+            )}
+
+            {/* Durability & Battles Available / Repair Overlay for Car Cards */}
+            {showDurability && !isSpecialClashCard && !placeholders && (() => {
+              const cardFault = card.fault;
+              const hasActiveFault = Boolean(cardFault && typeof cardFault.battlesRemaining === "number" && cardFault.battlesRemaining > 0);
+              const rawRemaining = card.battlesRemaining;
+              const rawMax = card.maxBattles;
+              const isLoaner = Boolean(card.id?.startsWith("loaner-") || (card as { userId?: string }).userId === "loaner");
+
+              // Needs repair if active fault or 0 battles remaining
+              const needsRepair = hasActiveFault || rawRemaining === 0;
+
+              if (needsRepair) {
+                return (
+                  <span
+                    role="img"
+                    aria-label="Needs repair"
+                    title={cardFault?.battlesRemaining ? `Needs repair (${cardFault.battlesRemaining} battles)` : "Needs repair"}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      minWidth: "6.4cqw",
+                      padding: "0.65cqw 1.8cqw",
+                      borderRadius: "1.2cqw",
+                      fontSize: "4.6cqw",
+                      fontWeight: 900,
+                      lineHeight: 1,
+                      whiteSpace: "nowrap",
+                      background: "linear-gradient(135deg, rgba(220, 38, 38, 0.96), rgba(153, 27, 27, 0.96))",
+                      border: "0.35cqw solid #fca5a5",
+                      color: "#ffffff",
+                      boxShadow: "0 0 3cqw rgba(239, 68, 68, 0.75), 0 0.6cqw 1cqw rgba(0,0,0,0.85)",
+                      textShadow: "0 0.2cqw 0.6cqw rgba(0,0,0,0.9)",
+                    }}
+                  >
+                    🔧
+                  </span>
+                );
+              }
+
+              if (isLoaner) {
+                return (
+                  <span
+                    role="img"
+                    aria-label="Rental Ready"
+                    title="Rental Ready"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      minWidth: "6.4cqw",
+                      padding: "0.65cqw 1.8cqw",
+                      borderRadius: "1.2cqw",
+                      fontSize: "4.6cqw",
+                      fontWeight: 900,
+                      lineHeight: 1,
+                      whiteSpace: "nowrap",
+                      background: "rgba(0, 0, 0, 0.75)",
+                      border: "0.35cqw solid #38bdf8",
+                      color: "#7dd3fc",
+                      boxShadow: "0 0.6cqw 1cqw rgba(0,0,0,0.8)",
+                      textShadow: "0 0.2cqw 0.6cqw rgba(0,0,0,0.9)",
+                    }}
+                  >
+                    ⚡
+                  </span>
+                );
+              }
+
+              // Active car card with durability
+              const battlesLeft = typeof rawRemaining === "number"
+                ? rawRemaining
+                : (typeof rawMax === "number" ? rawMax : 6);
+              const isLow = battlesLeft <= 2;
+
+              return (
+                <span
+                  role="img"
+                  aria-label={`${battlesLeft} battles remaining`}
+                  title={`${battlesLeft} battles remaining`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    minWidth: "6.4cqw",
+                    padding: "0.65cqw 1.8cqw",
+                    borderRadius: "1.2cqw",
+                    fontSize: "4.8cqw",
+                    fontWeight: 900,
+                    letterSpacing: "0.02em",
+                    lineHeight: 1,
+                    whiteSpace: "nowrap",
+                    background: isLow
+                      ? "linear-gradient(135deg, rgba(180, 83, 9, 0.92), rgba(120, 53, 15, 0.92))"
+                      : "rgba(0, 0, 0, 0.78)",
+                    border: isLow
+                      ? "0.35cqw solid #fcd34d"
+                      : "0.35cqw solid #34d399",
+                    color: isLow ? "#fef08a" : "#6ee7b7",
+                    boxShadow: isLow
+                      ? "0 0 2.5cqw rgba(245, 158, 11, 0.5), 0 0.6cqw 1cqw rgba(0,0,0,0.8)"
+                      : "0 0 2cqw rgba(16, 185, 129, 0.35), 0 0.6cqw 1cqw rgba(0,0,0,0.8)",
+                    textShadow: "0 0.2cqw 0.6cqw rgba(0,0,0,0.9)",
+                  }}
+                >
+                  {battlesLeft}
+                </span>
+              );
+            })()}
+          </div>
         </div>
 
         {/* Text block */}
@@ -809,7 +957,7 @@ export function FullArtCard({
               {driver && (
                 <span style={{ opacity: card.driver.trim() ? 1 : 0.6 }}>
                   <span style={{ color: light }}>
-                    {isTrack ? "Venue " : isDebuff ? "Hazard " : isCrew ? "Type " : "Driver "}
+                    {isTrack ? "Venue " : isDebuff ? "Hazard " : isCrew ? "Type " : isMaintenance ? "Kit " : "Driver "}
                   </span>
                   {driver}
                 </span>
@@ -837,7 +985,7 @@ export function FullArtCard({
             <div style={{ fontSize: "3.3cqw", fontWeight: 600, lineHeight: 1.15, marginTop: "0.8cqw", opacity: card.effect.trim() ? 0.92 : 0.55, overflowWrap: "anywhere" }}>{effect}</div>
           )}
 
-          {/* Stats or Crew Tactical Banner */}
+          {/* Stats or Tactical Banner */}
           <div
             style={{
               marginTop: "2.4cqw",
@@ -865,13 +1013,17 @@ export function FullArtCard({
               >
                 {(() => {
                   const resolvedIcon = card.crewIcon || getCrewCardDefinition(card.crewCardId || card.name)?.icon;
-                  return resolvedIcon ? `${resolvedIcon} ` : isTrack ? "🏁 " : isDebuff ? "⚠️ " : "⚡ ";
+                  return resolvedIcon ? `${resolvedIcon} ` : isTrack ? "🏁 " : isDebuff ? "⚠️ " : isMaintenance ? "🛠️ " : "⚡ ";
                 })()}
                 {isTrack
                   ? "UK DRIFT TRACK · BUFF & DEBUFF"
                   : isDebuff
                     ? "CORNER HAZARD · BOTH DRIVERS"
-                    : "CREW ADVANTAGE · TANDEM CLASH"}
+                    : isMaintenance
+                      ? ((card.repairBattles ?? 0) >= 5
+                          ? "PIT REPAIR · INSTANT FULL FIX"
+                          : `PIT REPAIR · -${card.repairBattles ?? 1} BATTLE${(card.repairBattles ?? 1) > 1 ? "S" : ""}`)
+                      : "CREW ADVANTAGE · TANDEM CLASH"}
               </span>
             ) : (
               stats.map(([statLabel, value]) => (

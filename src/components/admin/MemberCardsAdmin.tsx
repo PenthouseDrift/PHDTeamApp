@@ -13,6 +13,7 @@ import {
 import { ART_STYLES } from "@/lib/card-maker";
 import { FULL_ART_TIERS, type FullArtTier } from "@/lib/full-art-card";
 import { DEFAULT_SORT_DIRECTION, rarityLabel, sortCards, type CardSortKey, type SortDirection } from "@/lib/card-roll";
+import { normalizeStatValue } from "@/tcg/progression";
 
 /**
  * Admin view of every card members have opened, including ones they re-rolled away (kept as archived
@@ -478,7 +479,7 @@ function Viewer({
               <dd>{card.effect || "—"}</dd>
               <dt className="font-bold text-zinc-400">Stats</dt>
               <dd>
-                Drift {card.stats.drift} · Accel {card.stats.accel} · Grip {card.stats.grip} · Steer {card.stats.steer}
+                Drift {normalizeStatValue(card.stats.drift)} · Accel {normalizeStatValue(card.stats.accel)} · Grip {normalizeStatValue(card.stats.grip)} · Steer {normalizeStatValue(card.stats.steer)}
               </dd>
               <dt className="font-bold text-zinc-400">Art style</dt>
               <dd>{styles.length > 0 ? styles.join(" + ") : "Tier default"}</dd>

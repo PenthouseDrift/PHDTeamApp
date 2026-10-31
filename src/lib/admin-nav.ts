@@ -92,6 +92,7 @@ const TITLES: Array<[string, string]> = [
   ["/admin/notes", "Notes"],
   ["/admin/card-maker", "Card maker"],
   ["/admin/member-cards", "Member cards"],
+  ["/admin/challenges", "Clash challenges"],
   ["/admin/notifications", "Global alerts"],
   ["/admin/showcase-winners", "Winners"],
   ["/admin/facebook", "Facebook"],

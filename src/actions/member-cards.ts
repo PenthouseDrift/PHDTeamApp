@@ -21,6 +21,10 @@ import {
 import { sanitizeFullArtCard, tierArtPrompt, type FullArtTier } from "@/lib/full-art-card";
 import { crewDefinitionToCardData, rollCrewCardDefinition } from "@/lib/crew-cards";
 import {
+  rollCarInitialDurability,
+  rollMaintenanceConsumableCard,
+} from "@/lib/mechanical-faults";
+import {
   ALL_MEMBER_CARDS_INDEX,
   COMMUNITY_POOL_INDEX,
   FEATURED_CARDS_KEY,
@@ -82,7 +86,7 @@ async function loadOwnCard(userId: string, cardId: string): Promise<StoredMember
   return card && card.userId === userId && !card.archived ? card : null;
 }
 
-/** The art for a freshly rolled card: roll 1–10 stats, derive rarity tier from total (/40), roll styles, then Gemini draws it. */
+/** The art for a freshly rolled card: roll 1–25 stats, derive rarity tier from total (/100), roll styles, then Gemini draws it. */
 async function rollAndDraw(referenceUrl: string): Promise<{
   tier: FullArtTier;
   styleIds: string[];
@@ -247,6 +251,7 @@ export async function openCardPack(
     bonus: MemberCard | null;
     crew: MemberCard | null;
     featured: MemberCard | null;
+    maintenance: MemberCard | null;
     credits: number;
   }>
 > {
@@ -288,6 +293,7 @@ export async function openCardPack(
     const drawn = await rollAndDraw(input.referenceUrl);
     const now = Date.now();
     const title = cardTitle({ carName, chassis, driver });
+    const initialDurability = rollCarInitialDurability(rng);
     const stored: StoredMemberCard = {
       id: randomUUID(),
       userId: user.id,
@@ -310,6 +316,9 @@ export async function openCardPack(
       rerolled: false,
       ownerName: user.name,
       referenceUrl: input.referenceUrl,
+      maxBattles: initialDurability,
+      battlesRemaining: initialDurability,
+      fault: null,
     };
     await redis.set(cardKey(stored.id), JSON.stringify(stored));
     await redis.zadd(indexKey(user.id), { score: now, member: stored.id });
@@ -349,6 +358,7 @@ export async function openCardPack(
     if (bonusSource && bonusDrawn) {
       try {
         const bonusNow = Date.now();
+        const bonusDurability = rollCarInitialDurability(rng);
         bonus = {
           id: randomUUID(),
           userId: user.id,
@@ -371,6 +381,9 @@ export async function openCardPack(
           referenceUrl: bonusSource.referenceUrl,
           bonus: true,
           bonusFromCardId: bonusSource.id,
+          maxBattles: bonusDurability,
+          battlesRemaining: bonusDurability,
+          fault: null,
         };
         await redis.set(cardKey(bonus.id), JSON.stringify(bonus));
         await redis.zadd(indexKey(user.id), { score: bonusNow, member: bonus.id });
@@ -388,7 +401,7 @@ export async function openCardPack(
       const crewDef = rollCrewCardDefinition(rng, clashConfig?.crewCards);
       const crewData = crewDefinitionToCardData(crewDef);
       const crewNow = Date.now() + 1;
-      crew = {
+      const createdCrew: StoredMemberCard = {
         id: randomUUID(),
         userId: user.id,
         createdAt: crewNow,
@@ -401,15 +414,16 @@ export async function openCardPack(
         bonus: true,
         bonusFromCardId: crewDef.id,
       };
-      await redis.set(cardKey(crew.id), JSON.stringify(crew));
-      await redis.zadd(indexKey(user.id), { score: crewNow, member: crew.id });
-      await redis.zadd(ALL_MEMBER_CARDS_INDEX, { score: crewNow, member: crew.id });
+      await redis.set(cardKey(createdCrew.id), JSON.stringify(createdCrew));
+      await redis.zadd(indexKey(user.id), { score: crewNow, member: createdCrew.id });
+      await redis.zadd(ALL_MEMBER_CARDS_INDEX, { score: crewNow, member: createdCrew.id });
+      crew = createdCrew;
     } catch (error) {
       console.error("[member-cards] could not save the crew card:", error);
       crew = null;
     }
 
-    // 4. A 1 in 30 chance of a fourth bonus card: one of the admin's set cards. Its picture is fixed (not drawn), so
+    // 4. A 1 in 100 chance of a fourth bonus card: one of the admin's set cards. Its picture is fixed (not drawn), so
     // this is instant. Anything going wrong here leaves the rest of the pack untouched.
     let featured: StoredMemberCard | null = null;
     if (rng() < FEATURED_CARD_CHANCE) {
@@ -417,6 +431,13 @@ export async function openCardPack(
         const source = await pickFeaturedCard();
         if (source) {
           const featuredNow = Date.now() + 2;
+          const rawStats = source.stats || { drift: "24", accel: "23", grip: "23", steer: "24" };
+          const stats = {
+            drift: String(Math.max(23, Math.min(25, Math.round(Number(rawStats.drift || 24) > 10 ? Number(rawStats.drift) : Number(rawStats.drift || 9) * 2.5)))),
+            accel: String(Math.max(23, Math.min(25, Math.round(Number(rawStats.accel || 23) > 10 ? Number(rawStats.accel) : Number(rawStats.accel || 9) * 2.5)))),
+            grip: String(Math.max(23, Math.min(25, Math.round(Number(rawStats.grip || 23) > 10 ? Number(rawStats.grip) : Number(rawStats.grip || 9) * 2.5)))),
+            steer: String(Math.max(23, Math.min(25, Math.round(Number(rawStats.steer || 24) > 10 ? Number(rawStats.steer) : Number(rawStats.steer || 9) * 2.5)))),
+          };
           featured = {
             id: randomUUID(),
             userId: user.id,
@@ -424,8 +445,8 @@ export async function openCardPack(
             name: source.name,
             ability: source.ability,
             effect: source.effect,
-            tier: source.tier,
-            stats: source.stats,
+            tier: "legend",
+            stats,
             imageUrl: source.imageUrl,
             imageZoom: source.imageZoom,
             imageX: source.imageX,
@@ -451,6 +472,31 @@ export async function openCardPack(
       }
     }
 
+    // 5. Every Standard Pack includes 1 Maintenance Consumable Card for repairing Mechanical Faults!
+    let maintenance: StoredMemberCard | null = null;
+    try {
+      const maintData = rollMaintenanceConsumableCard(rng);
+      const maintNow = Date.now() + 3;
+      maintenance = {
+        id: randomUUID(),
+        userId: user.id,
+        createdAt: maintNow,
+        ...maintData,
+        styleIds: [],
+        kept: true,
+        rerolled: false,
+        ownerName: user.name,
+        referenceUrl: "",
+        bonus: true,
+      };
+      await redis.set(cardKey(maintenance.id), JSON.stringify(maintenance));
+      await redis.zadd(indexKey(user.id), { score: maintNow, member: maintenance.id });
+      await redis.zadd(ALL_MEMBER_CARDS_INDEX, { score: maintNow, member: maintenance.id });
+    } catch (error) {
+      console.error("[member-cards] could not save the maintenance card:", error);
+      maintenance = null;
+    }
+
     revalidatePath("/cards");
     revalidateTag("admin-members", "max");
     return {
@@ -460,6 +506,7 @@ export async function openCardPack(
         bonus: bonus ? publicCard(bonus) : null,
         crew: crew ? publicCard(crew) : null,
         featured: featured ? publicCard(featured) : null,
+        maintenance: maintenance ? publicCard(maintenance) : null,
         credits: await getCardCredits(user.id),
       },
     };
