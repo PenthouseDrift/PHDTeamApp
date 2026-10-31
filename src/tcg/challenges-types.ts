@@ -1,5 +1,5 @@
 import type { FullArtTier } from "@/lib/full-art-card";
-import type { MemberCard } from "@/lib/card-roll";
+import { type MemberCard, tierFromStats } from "@/lib/card-roll";
 import { getNormalizedCardStats, normalizeStatValue } from "@/tcg/progression";
 import {
   CREW_CARD_SET,
@@ -183,12 +183,14 @@ export function isCarEligibleForChallenge(
   // Check rarity constraint (case-insensitive & trimmed)
   const reqTier = (challenge.allowedRarity || "any").toLowerCase().trim();
   const cardTier = (card.tier || "").toLowerCase().trim();
+  const statsTier = (card.stats ? tierFromStats(card.stats) : cardTier).toLowerCase().trim();
+  const effectiveTier = cardTier || statsTier;
 
   if (reqTier && reqTier !== "any") {
-    if (cardTier !== reqTier) {
+    if (effectiveTier !== reqTier || statsTier !== reqTier) {
       return {
         eligible: false,
-        reason: `Requires ${challenge.allowedRarity.toUpperCase()} tier only (${cardTier ? cardTier.toUpperCase() : "UNKNOWN"} card)`,
+        reason: `Requires ${challenge.allowedRarity.toUpperCase()} tier only (${(effectiveTier || "UNKNOWN").toUpperCase()} card)`,
       };
     }
   }

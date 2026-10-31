@@ -1310,6 +1310,12 @@ export function DriftClashArena({
     slotIdx: 0 | 1 | 2,
     cardId: string
   ) {
+    if (type === "car" && activeChallenge) {
+      const card = carCards.find((c) => c.id === cardId);
+      if (card && !isCarEligibleForChallenge(card, activeChallenge).eligible) {
+        return;
+      }
+    }
     const setter = type === "car" ? setSelectedCarIds : setSelectedCrewIds;
     setter((prev) => {
       const next: [string, string, string] = [...prev] as [string, string, string];
@@ -1399,7 +1405,7 @@ export function DriftClashArena({
       setPreviewCarSlot(null);
       setPlayerCarOrder([0, 1, 2]);
       setRivalCarOrder([0, 1, 2]);
-      handleStartTrackRoulette();
+      handleStartTrackRoulette(res.data.challenge);
     } catch (err) {
       console.error("handleLaunchChallenge error:", err);
       alert("Error entering challenge cup.");
@@ -1417,7 +1423,8 @@ export function DriftClashArena({
   }
 
   // Launch Step 1: Randomise UK Track Card Roulette + Matchmaking
-  function handleStartTrackRoulette() {
+  function handleStartTrackRoulette(challengeOverride?: TandemClashChallenge | null) {
+    const effectiveChallenge = challengeOverride !== undefined ? challengeOverride : activeChallenge;
     clearTimers();
     setPickerModalTarget(null);
     setTrackLockedIn(false);
@@ -1470,7 +1477,7 @@ export function DriftClashArena({
 
     startTransition(async () => {
       // In challenge cups, the opponent is strictly configured for the cup spec; only casual lobby randomizes rival
-      const oppPromise = !activeChallenge ? findNewClashOpponentAction().catch(() => null) : null;
+      const oppPromise = !effectiveChallenge ? findNewClashOpponentAction().catch(() => null) : null;
       await new Promise((r) => setTimeout(r, totalSpinTime));
       if (oppPromise) {
         const oppRes = await oppPromise;
@@ -5450,10 +5457,23 @@ export function DriftClashArena({
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 overflow-y-auto pr-1 sm:grid-cols-3 md:grid-cols-4">
-                    {(pickerModalTarget.type === "car"
-                      ? (carCards.length >= 3 ? carCards : usableCarCards)
-                      : usableCrewCards
-                    ).map((c, idx, list) => {
+                    {(() => {
+                      const baseList =
+                        pickerModalTarget.type === "car"
+                          ? carCards.length >= 3
+                            ? carCards
+                            : usableCarCards
+                          : usableCrewCards;
+                      const displayList =
+                        pickerModalTarget.type === "car" && activeChallenge
+                          ? [...baseList].sort((a, b) => {
+                              const aElig = isCarEligibleForChallenge(a, activeChallenge).eligible ? 1 : 0;
+                              const bElig = isCarEligibleForChallenge(b, activeChallenge).eligible ? 1 : 0;
+                              return bElig - aElig;
+                            })
+                          : baseList;
+                      return displayList;
+                    })().map((c, idx, list) => {
                       const isSelectedHere =
                         pickerModalTarget.type === "car"
                           ? selectedCarIds[pickerModalTarget.slotIdx] === c.id

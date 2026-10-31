@@ -427,7 +427,7 @@ export const CLASH_TRACK_CONDITIONS: ClashTrackCondition[] = [
     icon: "❄️",
     badgeColor: "border-cyan-500/50 bg-cyan-500/15 text-cyan-200",
     summary: "Low-grip warehouse concrete! Smooth throttle & high GRIP win.",
-    spinOutWarning: "⚠️ SPIN-OUT RISK: Any car with ACCEL >= 8 and GRIP < 7 spins out (-6 pts)! Cars with GRIP >= 7 gain +3 pts.",
+    spinOutWarning: "⚠️ SPIN-OUT RISK: Any car with ACCEL >= 20 and GRIP < 17 spins out (-15 pts)! Cars with GRIP >= 17 gain +8 pts.",
   },
   {
     id: "track-touge",
@@ -435,7 +435,7 @@ export const CLASH_TRACK_CONDITIONS: ClashTrackCondition[] = [
     icon: "⛰️",
     badgeColor: "border-emerald-500/50 bg-emerald-500/15 text-emerald-200",
     summary: "Narrow hairpin layout! High STEER lock dominates.",
-    spinOutWarning: "⚠️ WALL-TAP RISK: Any car with ACCEL >= 9 and STEER < 8 understeers into the rail (-6 pts)! STEER >= 8 gains +3 pts.",
+    spinOutWarning: "⚠️ WALL-TAP RISK: Any car with ACCEL >= 22 and STEER < 20 understeers into the rail (-15 pts)! STEER >= 20 gains +8 pts.",
   },
   {
     id: "track-rain",
@@ -443,7 +443,7 @@ export const CLASH_TRACK_CONDITIONS: ClashTrackCondition[] = [
     icon: "🌧️",
     badgeColor: "border-blue-500/50 bg-blue-500/15 text-blue-200",
     summary: "Standing water on the racing line! Balanced GRIP & STEER required.",
-    spinOutWarning: "⚠️ OVER-ROTATE RISK: Cars with DRIFT >= 9 and GRIP < 7 spin out (-5 pts)! Cars with GRIP >= 7 gain +4 pts.",
+    spinOutWarning: "⚠️ OVER-ROTATE RISK: Cars with DRIFT >= 22 and GRIP < 17 spin out (-12 pts)! Cars with GRIP >= 17 gain +10 pts.",
   },
   {
     id: "track-grassroots",
@@ -451,7 +451,7 @@ export const CLASH_TRACK_CONDITIONS: ClashTrackCondition[] = [
     icon: "📣",
     badgeColor: "border-amber-500/50 bg-amber-500/15 text-amber-200",
     summary: "Street-spec showcase! Judges reward low-tier builds and penalize supercars.",
-    spinOutWarning: "⚖️ BRACKET HANDICAP: Bronze cars get +5 pts & Silver cars get +3 pts! Legend/Mythic cars carry -4 pts ballast.",
+    spinOutWarning: "⚖️ BRACKET HANDICAP: Bronze cars get +12 pts & Silver cars get +8 pts! Legend/Mythic cars carry -10 pts ballast.",
   },
   {
     id: "track-meihan",
@@ -459,7 +459,7 @@ export const CLASH_TRACK_CONDITIONS: ClashTrackCondition[] = [
     icon: "🔥",
     badgeColor: "border-rose-500/50 bg-rose-500/15 text-rose-200",
     summary: "High-speed wall ride! Judges demand massive DRIFT angle.",
-    spinOutWarning: "⚠️ SHALLOW ANGLE PENALTY: Cars with DRIFT < 7 lose -5 pts! Cars with DRIFT >= 8 gain +3 pts.",
+    spinOutWarning: "⚠️ SHALLOW ANGLE PENALTY: Cars with DRIFT < 17 lose -12 pts! Cars with DRIFT >= 20 gain +8 pts.",
   },
   {
     id: "track-standard",
@@ -467,7 +467,7 @@ export const CLASH_TRACK_CONDITIONS: ClashTrackCondition[] = [
     icon: "🏁",
     badgeColor: "border-purple-500/50 bg-purple-500/15 text-purple-200",
     summary: "Official PHD competition carpet/P-Tile layout.",
-    spinOutWarning: "⚠️ WHEELSPIN CHECK: Unbalanced builds with ACCEL >= 9 and GRIP <= 5 lose -5 pts from wheelspin!",
+    spinOutWarning: "⚠️ WHEELSPIN CHECK: Unbalanced builds with ACCEL >= 22 and GRIP <= 13 lose -12 pts from wheelspin!",
   },
 ];
 
@@ -842,14 +842,14 @@ function evaluateOneSideInSector(params: {
     effectsTriggered.push(`📡 Signal Glitch: ${sideLabel} -1 STEER & -1 DRIFT`);
   }
 
-  // 3. Symmetric 10.5T Boost Ban Cap (if either side equipped it)
+  // 3. Symmetric Works Spec Cap (if either side equipped it)
   if (myCrewId === "crew-04-boost-ban" || oppCrewId === "crew-04-boost-ban") {
-    if (drift > 8 || accel > 8 || grip > 8 || steer > 8) {
-      drift = Math.min(8, drift);
-      accel = Math.min(8, accel);
-      grip = Math.min(8, grip);
-      steer = Math.min(8, steer);
-      effectsTriggered.push(`🚨 10.5T Boost Ban: ${sideLabel} stats capped at 8`);
+    if (drift > 20 || accel > 20 || grip > 20 || steer > 20) {
+      drift = Math.min(20, drift);
+      accel = Math.min(20, accel);
+      grip = Math.min(20, grip);
+      steer = Math.min(20, steer);
+      effectsTriggered.push(`🚨 Factory Spec Cap: ${sideLabel} stats capped at 20`);
     }
   }
 
@@ -905,17 +905,17 @@ function evaluateOneSideInSector(params: {
   }
 
   // 7. Self Crew Flat Bonuses
-  if (myCrewId === "crew-01-polished-ice" && grip >= 7) extra += 3;
-  if (myCrewId === "crew-02-rain-tarmac" && grip >= 7) extra += 3;
-  if (myCrewId === "crew-03-wall-clip-zone" && sector.id === "wallride") extra += 2;
+  if (myCrewId === "crew-01-polished-ice" && grip >= 17) extra += 8;
+  if (myCrewId === "crew-02-rain-tarmac" && grip >= 17) extra += 8;
+  if (myCrewId === "crew-03-wall-clip-zone" && sector.id === "wallride") extra += 5;
   if (
     myCrewId === "crew-04-boost-ban" &&
-    rawDrift <= 8 &&
-    rawAccel <= 8 &&
-    rawGrip <= 8 &&
-    rawSteer <= 8
+    rawDrift <= 20 &&
+    rawAccel <= 20 &&
+    rawGrip <= 20 &&
+    rawSteer <= 20
   ) {
-    extra += 3;
+    extra += 8;
   }
   if (myCrewId === "crew-09-grassroots-hero") {
     if (myCard.tier === "bronze") {
@@ -928,7 +928,7 @@ function evaluateOneSideInSector(params: {
   }
   if (myCrewId === "crew-10-box-stock-killer" && myRawTotal < oppRawTotal) {
     extra += 5;
-    effectsTriggered.push(`📦 Box-Stock Killer: ${sideLabel} +5 pts (${myRawTotal}/40 vs ${oppRawTotal}/40)`);
+    effectsTriggered.push(`📦 Box-Stock Killer: ${sideLabel} +5 pts (${myRawTotal}/100 vs ${oppRawTotal}/100)`);
   }
   if (myCrewId === "crew-11-tech-scrutineer") {
     extra += myCard.tier === "bronze" || myCard.tier === "silver" ? 5 : 3;
@@ -946,28 +946,28 @@ function evaluateOneSideInSector(params: {
   if (myCrewId === "crew-14-home-track-line") {
     extra += myCard.tier === "bronze" || myCard.tier === "silver" ? 4 : 2;
   }
-  if (myCrewId === "crew-15-touge-hairpins" && steer >= 7) extra += 3;
+  if (myCrewId === "crew-15-touge-hairpins" && steer >= 17) extra += 8;
   if (
     myCrewId === "crew-16-meihan-wall-ride" &&
     (sector.id === "entry" || sector.id === "wallride") &&
-    drift >= 8
+    drift >= 20
   ) {
-    extra += 4;
+    extra += 8;
   }
-  if (myCrewId === "crew-17-fresh-asphalt") extra += 1;
+  if (myCrewId === "crew-17-fresh-asphalt") extra += 3;
   if (
     myCrewId === "crew-18-smoke-screen" &&
     (sector.id === "entry" || sector.id === "wallride") &&
-    drift >= 7
+    drift >= 17
   ) {
-    extra += 2;
+    extra += 5;
   }
   if (
     myCrewId === "crew-20-proximity-laser" &&
     (sector.id === "chase" || sector.id === "wallride") &&
-    steer >= 7
+    steer >= 17
   ) {
-    extra += 3;
+    extra += 8;
   }
   if (myCrewId === "crew-25-ti-turnbuckles") extra += 2;
   if (myCrewId === "crew-28-vip-judge-box") extra += 4;

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import type { ActionResult } from "@/types";
-import type { MemberCard, StoredMemberCard } from "@/lib/card-roll";
+import { type MemberCard, type StoredMemberCard, tierFromStats } from "@/lib/card-roll";
 import {
   ALL_MEMBER_CARDS_INDEX,
   memberCardKey,
@@ -274,7 +274,9 @@ export async function getChallengeOpponentAction(
       candidateCards = cards.filter((c) => {
         if (userId && c.userId === userId) return false;
         if (challenge.allowedRarity && challenge.allowedRarity !== "any") {
-          if (c.tier !== challenge.allowedRarity) return false;
+          const statsTier = tierFromStats(c.stats);
+          const cTier = (c.tier || statsTier).toLowerCase().trim();
+          if (cTier !== targetTier || statsTier !== targetTier) return false;
         }
         if (typeof challenge.maxTotalScore === "number" && challenge.maxTotalScore > 0) {
           const total = getCarNormalizedTotalScore(c);
@@ -301,15 +303,13 @@ export async function getChallengeOpponentAction(
     while (selectedBestCars.length < 3) {
       const idx = selectedBestCars.length;
       const targetStat =
-        challenge.maxTotalScore && challenge.maxTotalScore <= 60
-          ? "15"
-          : targetTier === "legend"
-            ? "23"
-            : targetTier === "gold"
-              ? "19"
-              : targetTier === "silver"
-                ? "17"
-                : "15";
+        targetTier === "legend"
+          ? "23" // 23 * 4 = 92 (Legend: 85-99)
+          : targetTier === "gold"
+            ? "20" // 20 * 4 = 80 (Gold: 75-84)
+            : targetTier === "silver"
+              ? "17" // 17 * 4 = 68 (Silver: 60-74)
+              : "14"; // 14 * 4 = 56 (Bronze: 4-59)
 
       selectedBestCars.push({
         id: `challenge-filler-${targetTier}-${idx}`,
