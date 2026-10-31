@@ -201,23 +201,44 @@ export const rarityLabel = (tier: FullArtTier) => FULL_ART_TIERS.find((t) => t.i
 
 // ── Sorting the collection ──────────────────────────────────────────────────
 
-export type CardSortKey = "newest" | "name" | "team" | "driver" | "rarity";
+export type CardSortKey = "power" | "rarity" | "newest" | "name" | "team" | "driver";
 export type SortDirection = "asc" | "desc";
 
-/** The direction that makes sense first for each sort: A to Z for text, best first for rarity, latest first for newest. */
+/** Calculate card total power out of 100, accounting for Mythic 100/100 and legacy stat normalization. */
+export function getCardTotalPower(card: { tier: FullArtTier; stats?: FullArtCardData["stats"] }): number {
+  if (card.tier === "mythic") return 100;
+  if (!card.stats) return 0;
+  const rawStats = card.stats;
+  const rawVals = [
+    Number.parseInt(rawStats.drift || "0", 10),
+    Number.parseInt(rawStats.accel || "0", 10),
+    Number.parseInt(rawStats.grip || "0", 10),
+    Number.parseInt(rawStats.steer || "0", 10),
+  ].filter((n) => Number.isFinite(n));
+
+  if (rawVals.length === 0) return 0;
+  const isLegacy = Math.max(...rawVals) <= 10;
+  return rawVals.reduce((sum, n) => {
+    const val = isLegacy ? Math.min(25, Math.max(1, Math.round(n * 2.5))) : Math.min(25, Math.max(1, n));
+    return sum + val;
+  }, 0);
+}
+
+/** The direction that makes sense first for each sort: highest power/rarity first, latest first for newest, A to Z for text. */
 export const DEFAULT_SORT_DIRECTION: Record<CardSortKey, SortDirection> = {
+  power: "desc",
+  rarity: "desc",
   newest: "desc",
   name: "asc",
   team: "asc",
   driver: "asc",
-  rarity: "desc",
 };
 
 /**
  * A sorted copy of the cards. Text sorts ignore case, and cards with nothing in that field (for
- * example no team) always go last. Ties fall back to name, then newest first.
+ * example no team) always go last. Ties fall back to power, then rarity, name, and newest first.
  */
-export function sortCards<T extends Pick<MemberCard, "name" | "team" | "driver" | "tier" | "createdAt">>(
+export function sortCards<T extends Pick<MemberCard, "name" | "team" | "driver" | "tier" | "createdAt"> & { stats?: FullArtCardData["stats"] }>(
   cards: T[],
   key: CardSortKey,
   direction: SortDirection
@@ -228,7 +249,9 @@ export function sortCards<T extends Pick<MemberCard, "name" | "team" | "driver" 
 
   return [...cards].sort((a, b) => {
     let result = 0;
-    if (key === "rarity") {
+    if (key === "power") {
+      result = (getCardTotalPower(a) - getCardTotalPower(b)) * sign;
+    } else if (key === "rarity") {
       result = (RARITY_RANK[a.tier] - RARITY_RANK[b.tier]) * sign;
     } else if (key === "newest") {
       result = (a.createdAt - b.createdAt) * sign;
@@ -239,6 +262,6 @@ export function sortCards<T extends Pick<MemberCard, "name" | "team" | "driver" 
       if (fa && !fb) return -1;
       result = text(fa, fb) * sign;
     }
-    return result || text(a.name, b.name) || b.createdAt - a.createdAt;
+    return result || (getCardTotalPower(b) - getCardTotalPower(a)) || (RARITY_RANK[b.tier] - RARITY_RANK[a.tier]) || text(a.name, b.name) || b.createdAt - a.createdAt;
   });
 }

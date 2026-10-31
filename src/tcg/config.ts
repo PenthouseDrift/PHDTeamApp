@@ -1,12 +1,14 @@
 import type { FullArtTier } from "@/lib/full-art-card";
 import type { PCreditBundle, QuickSellRateTable } from "./types";
+import { isCarBroken } from "@/lib/mechanical-faults";
+import type { MemberCard } from "@/lib/card-roll";
 
 /**
  * Penthouse TCG — Configuration & Economy Constants
  */
 
 /**
- * Fixed Quick Sell payouts in P-Credits per card rarity tier.
+ * Fixed Quick Sell payouts in P-Credits per card rarity tier (healthy state).
  * Quick selling permanently deletes the card and immediately credits the owner.
  */
 export const QUICK_SELL_PRICES: QuickSellRateTable = {
@@ -15,6 +17,18 @@ export const QUICK_SELL_PRICES: QuickSellRateTable = {
   gold: 50,
   legend: 100,
   mythic: 250,
+};
+
+/**
+ * Reduced Quick Sell payouts in P-Credits if a car is in a state of needing repair:
+ * Legend: 25p, Gold: 15p, Silver: 5p, Bronze: 2p, Mythic: 50p.
+ */
+export const BROKEN_QUICK_SELL_PRICES: QuickSellRateTable = {
+  bronze: 2,
+  silver: 5,
+  gold: 15,
+  legend: 25,
+  mythic: 50,
 };
 
 /** Default price in P-Credits for a Standard Pack in the Pack Store. */
@@ -66,8 +80,25 @@ export const P_CREDIT_BUNDLES: PCreditBundle[] = [
   },
 ];
 
-export function getQuickSellPrice(tier: FullArtTier): number {
-  return QUICK_SELL_PRICES[tier] ?? QUICK_SELL_PRICES.bronze;
+/**
+ * Returns the Quick Sell payout in P-Credits.
+ * Accepts either:
+ * - A FullArtTier string (with optional isBroken boolean)
+ * - A card object (automatically checks if the card is in a state of needing repair)
+ */
+export function getQuickSellPrice(
+  tierOrCard: FullArtTier | (Pick<MemberCard, "tier"> & { fault?: any; battlesRemaining?: number; cardType?: string }),
+  isBroken?: boolean
+): number {
+  if (typeof tierOrCard === "string") {
+    const table = isBroken ? BROKEN_QUICK_SELL_PRICES : QUICK_SELL_PRICES;
+    return table[tierOrCard] ?? table.bronze;
+  }
+
+  const tier = tierOrCard.tier;
+  const broken = isBroken !== undefined ? isBroken : isCarBroken(tierOrCard);
+  const table = broken ? BROKEN_QUICK_SELL_PRICES : QUICK_SELL_PRICES;
+  return table[tier] ?? table.bronze;
 }
 
 /** True when a sale price is valid and strictly lower than the regular price. */

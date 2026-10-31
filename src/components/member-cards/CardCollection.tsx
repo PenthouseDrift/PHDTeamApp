@@ -26,19 +26,18 @@ import {
 } from "@/tcg/actions";
 import { isCarBroken, canRepairCarWithMaintenanceCard } from "@/lib/mechanical-faults";
 import type { TcgMarketListing } from "@/tcg/types";
+import { PitGarageRepairModal } from "./PitGarageRepairModal";
 
 /**
- * "My cards": the member's collection. Sort by newest, name, team, driver or rarity; tap a card for a
+ * "My cards": the member's collection. Sort by total power, rarity, or newest; tap a card for a
  * large view with its details. A card that was just opened can still be kept or re-rolled once from the
  * large view.
  */
 
 const SORTS: Array<{ key: CardSortKey; label: string }> = [
-  { key: "newest", label: "Newest" },
-  { key: "name", label: "Name" },
-  { key: "team", label: "Team" },
-  { key: "driver", label: "Driver" },
+  { key: "power", label: "Total Power" },
   { key: "rarity", label: "Rarity" },
+  { key: "newest", label: "Newest" },
 ];
 
 const panel = "rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900";
@@ -71,7 +70,7 @@ export function CardCollection({
 }) {
   const [cards, setCards] = useState(initialCards);
   const [tierFilter, setTierFilter] = useState<string>("all");
-  const [sortKey, setSortKey] = useState<CardSortKey>("newest");
+  const [sortKey, setSortKey] = useState<CardSortKey>("power");
   const [direction, setDirection] = useState<SortDirection>("desc");
   const [openId, setOpenId] = useState<string | null>(null);
   const [quickSellTarget, setQuickSellTarget] = useState<MemberCard | null>(null);
@@ -326,7 +325,8 @@ export function CardCollection({
 
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4" aria-label="Your cards">
             {sorted.map((c) => {
-              const payout = getQuickSellPrice(c.tier);
+              const payout = getQuickSellPrice(c);
+              const broken = isCarBroken(c);
               return (
                 <li key={c.id} className="space-y-2">
                   <div className="relative">
@@ -354,7 +354,11 @@ export function CardCollection({
                       className="inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-extrabold text-zinc-800 shadow-sm transition-colors hover:border-amber-500 hover:bg-amber-500/10 hover:text-amber-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-amber-500/60 dark:hover:bg-amber-500/10 dark:hover:text-amber-400"
                     >
                       <span>Quick sell</span>
-                      <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-black text-amber-600 dark:text-amber-400">
+                      <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-black ${
+                        broken
+                          ? "bg-rose-500/15 text-rose-600 dark:text-rose-400"
+                          : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                      }`}>
                         +{payout} P
                       </span>
                     </button>
@@ -412,10 +416,15 @@ export function CardCollection({
                   <p className="mx-auto max-w-xs text-xs leading-relaxed text-zinc-400">
                     You will receive{" "}
                     <strong className="text-amber-400">
-                      +{getQuickSellPrice(quickSellTarget.tier)} P-Credits
+                      +{getQuickSellPrice(quickSellTarget)} P-Credits
                     </strong>{" "}
                     instantly. This permanently deletes the card from your collection.
                   </p>
+                  {isCarBroken(quickSellTarget) && (
+                    <p className="mt-2 text-[11px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/30 rounded-xl px-2.5 py-1.5">
+                      ⚠️ Reduced payout ({getQuickSellPrice(quickSellTarget)} P) because this car needs repair.
+                    </p>
+                  )}
                 </div>
 
                 {quickSellError && (
@@ -445,7 +454,7 @@ export function CardCollection({
                 >
                   {quickSellPending
                     ? "Selling…"
-                    : `Confirm (+${getQuickSellPrice(quickSellTarget.tier)} P)`}
+                    : `Confirm (+${getQuickSellPrice(quickSellTarget)} P)`}
                 </button>
               </div>
             </div>
@@ -525,6 +534,7 @@ function CardViewer({
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [repairPending, setRepairPending] = useState(false);
+  const [showRepairModal, setShowRepairModal] = useState(false);
   const [pending, startTransition] = useTransition();
   const [shownId, setShownId] = useState<string | null>(null);
 
@@ -574,9 +584,10 @@ function CardViewer({
     setShownId(card?.id ?? null);
     setConfirm(false);
     setConfirmQuickSell(false);
+    setShowRepairModal(false);
     setError(null);
     setStatusMessage(null);
-    setListPriceText(card ? String(getQuickSellPrice(card.tier) * 2) : "");
+    setListPriceText(card ? String(getQuickSellPrice(card) * 2) : "");
   }
 
   useEffect(() => {
@@ -670,7 +681,7 @@ function CardViewer({
     });
   }
 
-  const quickSellPayout = card ? getQuickSellPrice(card.tier) : 0;
+  const quickSellPayout = card ? getQuickSellPrice(card) : 0;
 
   return (
     <dialog
@@ -683,8 +694,29 @@ function CardViewer({
       aria-labelledby="card-viewer-title"
       className="fixed inset-0 m-0 h-[100dvh] max-h-[100dvh] w-screen max-w-none overflow-y-auto rounded-none border-0 bg-zinc-950 p-0 text-zinc-100 backdrop:bg-black/80 backdrop:backdrop-blur-sm sm:m-auto sm:h-auto sm:max-h-[92dvh] sm:w-[min(60rem,94vw)] sm:rounded-3xl sm:border sm:border-amber-500/30"
     >
-      {card && (
-        <div className="grid gap-6 p-5 sm:p-7 md:grid-cols-[minmax(0,22rem)_1fr]">
+      {card &&
+        (showRepairModal && isCarBroken(card) ? (
+          <PitGarageRepairModal
+            car={card}
+            allCards={allCards}
+            onBack={() => setShowRepairModal(false)}
+            onClose={() => {
+              setShowRepairModal(false);
+              onClose();
+            }}
+            onRepairSuccess={(updatedCar, usedKitId) => {
+              setStatusMessage(
+                !updatedCar.fault
+                  ? "✅ Car fully repaired! Restored to full battle-ready status."
+                  : `✅ Maintenance applied! Cooldown reduced to ${updatedCar.fault.battlesRemaining} battle(s).`
+              );
+              onRepairApplied?.(updatedCar, usedKitId);
+              onChange(updatedCar);
+              setShowRepairModal(false);
+            }}
+          />
+        ) : (
+          <div className="grid gap-6 p-5 sm:p-7 md:grid-cols-[minmax(0,22rem)_1fr]">
           <div className="mx-auto w-full max-w-[22rem]">
             <FullArtCard card={card} className="drop-shadow-2xl" />
           </div>
@@ -777,52 +809,43 @@ function CardViewer({
 
             {/* Repair Controls for a Broken Car */}
             {isCarBroken(card) && (
-              <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 space-y-3">
-                <div className="flex items-center gap-2.5 text-rose-300">
-                  <span className="text-2xl">⚠️</span>
-                  <div>
-                    <h4 className="font-black text-sm text-white">Active Mechanical Breakdown</h4>
-                    <p className="text-xs text-rose-200/90 leading-relaxed">
-                      {card.fault?.name} — Must sit out {card.fault?.battlesRemaining} battle(s) in maintenance, or use a matching repair kit below.
+              <div className="rounded-2xl border border-rose-500/40 bg-gradient-to-br from-rose-950/40 via-zinc-950 to-black p-4 space-y-3 shadow-lg">
+                <div className="flex items-center gap-3 text-rose-300">
+                  <span className="text-3xl shrink-0 animate-pulse">⚠️</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="font-black text-sm text-white uppercase tracking-wider">
+                        Mechanical Breakdown
+                      </h4>
+                      <span className="rounded-full bg-rose-500/20 border border-rose-500/40 px-2 py-0.5 text-[10px] font-black text-rose-300 shrink-0">
+                        Sits out {card.fault?.battlesRemaining} battle(s)
+                      </span>
+                    </div>
+                    <p className="text-xs text-rose-200/90 leading-relaxed mt-0.5">
+                      {card.fault?.name} — Must sit out {card.fault?.battlesRemaining} battle(s) in maintenance, or use a matching repair kit from your Pit Garage.
                     </p>
                   </div>
                 </div>
-                {matchingConsumables.length > 0 ? (
-                  <div className="space-y-2 pt-1 border-t border-rose-500/20">
-                    <p className="text-xs font-bold text-zinc-300">
-                      Available Repair Kits in your Pit Garage:
-                    </p>
-                    <div className="space-y-1.5">
-                      {matchingConsumables.map((kit) => (
-                        <div
-                          key={kit.id}
-                          className="flex items-center justify-between gap-3 rounded-xl bg-zinc-900 border border-zinc-700 p-2.5"
-                        >
-                          <div>
-                            <span className="font-black text-xs text-white block">{kit.name}</span>
-                            <span className="text-[11px] font-bold text-emerald-400">
-                              {(kit.repairBattles ?? 0) >= 5
-                                ? "Instant Full Repair"
-                                : `Reduces cooldown by ${kit.repairBattles} battle(s)`}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            disabled={repairPending}
-                            onClick={() => handleApplyRepair(card.id, kit.id)}
-                            className="rounded-xl bg-emerald-500 px-3 py-1.5 text-xs font-black uppercase text-black hover:bg-emerald-400 disabled:opacity-50"
-                          >
-                            {repairPending ? "..." : "Use Kit"}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-zinc-400 italic pt-1 border-t border-rose-500/20">
-                    You don&apos;t have an {card.fault?.type} repair kit in your collection yet. Open standard packs to pull one, or play {card.fault?.battlesRemaining} battles with your other cars!
-                  </p>
-                )}
+
+                {/* Single Prominent Repair Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowRepairModal(true)}
+                  className="w-full min-h-12 flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 px-5 py-3 text-sm font-black uppercase tracking-wider text-black shadow-lg shadow-emerald-500/25 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                >
+                  <span>🔧</span>
+                  <span>Repair In Pit Garage</span>
+                  {matchingConsumables.length > 0 ? (
+                    <span className="rounded-full bg-black/25 px-2.5 py-0.5 text-xs text-black font-black">
+                      {matchingConsumables.length} Available
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-rose-950/80 border border-rose-500/40 px-2.5 py-0.5 text-[10px] text-rose-200 font-bold">
+                      0 Kits
+                    </span>
+                  )}
+                  <span className="text-base font-black">→</span>
+                </button>
               </div>
             )}
 
@@ -953,6 +976,11 @@ function CardViewer({
                     <p className="text-xs font-bold text-red-200">
                       Quick sell this {rarityLabel(card.tier)} card for {quickSellPayout} P-Credits?
                     </p>
+                    {isCarBroken(card) && (
+                      <p className="rounded-lg border border-rose-500/40 bg-rose-950/40 px-2.5 py-1 text-[11px] font-bold text-rose-300">
+                        ⚠️ Reduced payout ({quickSellPayout} P) because this car needs repair.
+                      </p>
+                    )}
                     <p className="text-[11px] text-red-300/90">
                       This permanently deletes the card from your collection and immediately credits {quickSellPayout} P-Credits to your balance.
                     </p>
@@ -1039,7 +1067,7 @@ function CardViewer({
             </div>
           </div>
         </div>
-      )}
+      ))}
     </dialog>
   );
 }

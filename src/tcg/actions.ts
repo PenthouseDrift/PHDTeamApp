@@ -201,7 +201,7 @@ export async function quickSellCard(
       await removeMarketListingRecord(existingListingId, cardId);
     }
 
-    const payout = getQuickSellPrice(card.tier);
+    const payout = getQuickSellPrice(card);
 
     // Delete the card record and remove it from member & global indices
     await redis

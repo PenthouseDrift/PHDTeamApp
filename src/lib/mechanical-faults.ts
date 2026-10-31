@@ -333,14 +333,17 @@ export function rollMaintenanceConsumableCard(rng: () => number = Math.random): 
 }
 
 /**
- * Checks if a car currently has an active mechanical fault.
+ * Checks if a car currently has an active mechanical fault or is out of durability (needs repair).
  */
-export function isCarBroken(card: (Pick<MemberCard, "fault"> & { cardType?: string }) | null | undefined): boolean {
+export function isCarBroken(card: (Pick<MemberCard, "fault"> & { cardType?: string; battlesRemaining?: number }) | null | undefined): boolean {
   if (!card) return false;
   if (card.cardType === "crew" || card.cardType === "debuff" || card.cardType === "track" || card.cardType === "maintenance") {
     return false;
   }
-  return Boolean(card.fault && card.fault.battlesRemaining > 0);
+  return Boolean(
+    (card.fault && card.fault.battlesRemaining > 0) ||
+    (typeof card.battlesRemaining === "number" && card.battlesRemaining <= 0)
+  );
 }
 
 /**
