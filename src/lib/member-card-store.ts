@@ -1,6 +1,6 @@
 import { redis } from "@/lib/redis";
 import { tierFromStats, type StoredMemberCard } from "@/lib/card-roll";
-import { crewDefinitionToCardData, getCrewCardDefinition } from "@/lib/crew-cards";
+import { crewDefinitionToCardData, getCrewCardDefinition, scaleCrewCardDefinition } from "@/lib/crew-cards";
 
 /**
  * Where member cards live in Redis, shared by the member actions and the admin view.
@@ -40,13 +40,15 @@ export function parseStoredCard(raw: unknown): StoredMemberCard | null {
     if ((c.cardType === "crew" || c.crewCardId) && c.crewCardId) {
       const def = getCrewCardDefinition(c.crewCardId);
       if (def) {
-        const fresh = crewDefinitionToCardData(def);
+        const tier = (c.tier as any) || def.tier;
+        const scaled = scaleCrewCardDefinition(def, tier);
+        const fresh = crewDefinitionToCardData(scaled);
         return {
           ...c,
           name: fresh.name,
           ability: fresh.ability,
           effect: fresh.effect,
-          tier: fresh.tier,
+          tier: scaled.tier,
           driver: fresh.driver,
           team: fresh.team,
           imageUrl: fresh.imageUrl,
