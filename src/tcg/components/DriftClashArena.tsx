@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { FullArtCard } from "@/components/cards/FullArtCard";
 import { rarityLabel, type MemberCard } from "@/lib/card-roll";
@@ -38,7 +38,9 @@ import {
 import {
   completeClashBattleAction,
   findNewClashOpponentAction,
+  getHazardGarageSamplesAction,
 } from "@/tcg/clash";
+import type { HazardGarageSample } from "@/lib/track-hazards";
 import {
   CLASH_SECTORS,
   applyCrewModsToStats,
@@ -981,6 +983,20 @@ export function DriftClashArena({
     };
   }, []);
 
+  // Members and their garage cars for the member Track Hazards. Loaded ahead of time so the track roll stays instant,
+  // and topped up after every roll so the next match gets fresh ones. If it never loads, those hazards just don't come up.
+  const hazardSamplesRef = useRef<HazardGarageSample[]>([]);
+  const refreshHazardSamples = useCallback(() => {
+    getHazardGarageSamplesAction()
+      .then((samples) => {
+        hazardSamplesRef.current = samples;
+      })
+      .catch(() => null);
+  }, []);
+  useEffect(() => {
+    refreshHazardSamples();
+  }, [refreshHazardSamples]);
+
   const [localCards, setLocalCards] = useState<MemberCard[]>(cards);
   useEffect(() => {
     setLocalCards(cards);
@@ -1541,7 +1557,8 @@ export function DriftClashArena({
     setPhase("track_roulette");
 
     const tracks = trackCatalogDefs.length > 0 ? trackCatalogDefs : UK_TRACK_CARD_SET;
-    const chosenTrack = rollUkTrackCard(tracks);
+    const chosenTrack = rollUkTrackCard(tracks, Math.random, hazardSamplesRef.current);
+    refreshHazardSamples();
     const chosenIdx = tracks.findIndex((t) => t.id === chosenTrack.id);
     const finalTrackIdx = chosenIdx >= 0 ? chosenIdx : 0;
     const startOffset = Math.floor(Math.random() * tracks.length);

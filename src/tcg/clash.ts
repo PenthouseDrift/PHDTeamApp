@@ -14,6 +14,8 @@ import {
   parseStoredCard,
 } from "@/lib/member-card-store";
 import type { MemberCard, StoredMemberCard } from "@/lib/card-roll";
+import { getMemberIds } from "@/lib/member-roster";
+import { cleanHazardSample, type HazardGarageSample } from "@/lib/track-hazards";
 import type { ActionResult } from "@/types";
 import {
   CLASH_TRACK_CONDITIONS,
@@ -696,6 +698,59 @@ export async function findNewClashOpponentAction(): Promise<ActionResult<ClashOp
   } catch (error) {
     console.error("[driftClash] findNewClashOpponentAction error:", error);
     return { success: false, error: "Could not find a new rival crew." };
+  }
+}
+
+/** How many member and garage car pairs to send, and how many members to look at to find them. */
+const HAZARD_SAMPLE_COUNT = 6;
+const HAZARD_MEMBERS_TO_CHECK = 14;
+
+/**
+ * Random members and one car from each of their GARAGES (the cars added in "My cars", not trading cards), used to
+ * fill in the member Track Hazards. Only a display name and a car name leave the server, never ids, emails or
+ * photos. The name is the member's nickname, or the first word of their name. The signed-in player is left out.
+ * Returns an empty list on any problem, in which case the member hazards simply don't come up.
+ */
+export async function getHazardGarageSamplesAction(): Promise<HazardGarageSample[]> {
+  try {
+    const session = await auth();
+    const userId = session?.user?.id;
+    if (!userId) return [];
+
+    const ids = (await getMemberIds()).filter((id) => id !== userId && !id.startsWith("guest_"));
+    // Shuffle with a proper random source (Fisher-Yates), then look at a handful of members.
+    for (let i = ids.length - 1; i > 0; i--) {
+      const j = randomInt(0, i + 1);
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+    }
+    const candidates = ids.slice(0, HAZARD_MEMBERS_TO_CHECK);
+    if (candidates.length === 0) return [];
+
+    const garages = await Promise.all(
+      candidates.map(async (id) => {
+        const carIds = ((await redis.smembers(`member:${id}:cars`)) as unknown[]).map(String);
+        return { id, carId: carIds.length > 0 ? carIds[randomInt(0, carIds.length)] : null };
+      })
+    );
+
+    const samples: HazardGarageSample[] = [];
+    for (const { id, carId } of garages) {
+      if (!carId || samples.length >= HAZARD_SAMPLE_COUNT) continue;
+      const [member, carName] = await Promise.all([
+        redis.hmget<Record<string, unknown>>(`member:${id}`, "nickname", "name"),
+        redis.hget(`car:${carId}`, "name"),
+      ]);
+      const nickname = typeof member?.nickname === "string" ? member.nickname.trim() : "";
+      const fullName = typeof member?.name === "string" ? member.name.trim() : "";
+      const user = nickname || fullName.split(/\s+/)[0] || "";
+      const car = typeof carName === "string" ? carName.trim() : "";
+      const sample = cleanHazardSample({ user, car });
+      if (sample) samples.push(sample);
+    }
+    return samples;
+  } catch (error) {
+    console.error("[driftClash] getHazardGarageSamplesAction error:", error);
+    return [];
   }
 }
 

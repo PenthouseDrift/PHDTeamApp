@@ -5,7 +5,6 @@ import {
   CREW_CARD_SET,
   DEBUFF_CARD_SET,
   DYNAMIC_TRACK_BUFF_PRESETS,
-  DYNAMIC_TRACK_HAZARD_PRESETS,
   LOANER_CREW_DEFINITIONS,
   STARTER_LOANER_CREW_DEFINITION,
   UK_TRACK_CARD_SET,
@@ -19,6 +18,7 @@ import {
   type DebuffCardDefinition,
   type TrackCardDefinition,
 } from "@/lib/crew-cards";
+import { rollTrackHazardPreset, type HazardGarageSample } from "@/lib/track-hazards";
 
 /**
  * DriftClash Gamified Progression, UK Track Cards, Random Debuff Cards & Crew Advantage Scoring Engine
@@ -987,7 +987,9 @@ export function evaluateClashMatchup(params: {
  */
 export function rollUkTrackCard(
   pool: TrackCardDefinition[] = UK_TRACK_CARD_SET,
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  /** Members and their garage cars. When given, hazards built around them can come up too. */
+  hazardSamples: HazardGarageSample[] = []
 ): TrackCardDefinition {
   const list = pool.length > 0 ? pool : UK_TRACK_CARD_SET;
   const venue = list[Math.floor(rng() * list.length)] ?? UK_TRACK_CARD_SET[0];
@@ -995,9 +997,7 @@ export function rollUkTrackCard(
   const buffPreset =
     DYNAMIC_TRACK_BUFF_PRESETS[Math.floor(rng() * DYNAMIC_TRACK_BUFF_PRESETS.length)] ??
     DYNAMIC_TRACK_BUFF_PRESETS[0];
-  const hazardPreset =
-    DYNAMIC_TRACK_HAZARD_PRESETS[Math.floor(rng() * DYNAMIC_TRACK_HAZARD_PRESETS.length)] ??
-    DYNAMIC_TRACK_HAZARD_PRESETS[0];
+  const hazardPreset = rollTrackHazardPreset(rng, hazardSamples);
 
   const b = buffPreset.rules ?? {};
   const d = hazardPreset.rules ?? {};
