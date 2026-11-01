@@ -8,8 +8,11 @@
  *                 full pass of the marker from one side of the bar to the other takes 1 point off what is available.
  *                 At 0 the run ends by itself and scores nothing.
  *  - Allocation:  a level playing field: both sides start with 10 in every stat (not the car they are driving) and spend
- *                 a pool of 15 points across the four stats in secret. Each stat is a judge. Win the judge (higher
- *                 stat after allocation) and you score a fixed award. Ties score for nobody.
+ *                 a pool of 15 points across the four stats in secret. Each stat is a judge, and the judges are NOT
+ *                 worth the same: the four awards are 6, 4, 3 and 2 points, dealt to the stats at random and shown
+ *                 before anyone spends. Win a judge (higher stat after allocation) and you score its award. Ties score
+ *                 for nobody. The awards add up to an odd number (15), so two sides that each win every judge they
+ *                 can never finish level: which judges you win matters, not just how many.
  *
  * The rival's stats are hidden from the player, so the player has to guess. Everything in here is pure (no React, no
  * Math.random unless the caller passes it as `rng`) so it can be tested on its own.
@@ -37,8 +40,26 @@ export const FINALE_POINT_CAP = 15;
 export const ALLOCATION_POOL = 15;
 /** Every stat starts here in the Allocation game, for both sides. The cars' own stats are not used. */
 export const ALLOCATION_BASE = 10;
-/** Points for winning one judge in the Allocation game (4 judges, so at most 12). */
-export const JUDGE_POINTS = 3;
+/**
+ * What the four judges in the Allocation game are worth. They are dealt to the four stats at random each time
+ * (see `rollAllocationWeights`). They add up to 15, an odd number, so when every judge is won by someone the two
+ * sides can never score the same.
+ */
+export const ALLOCATION_AWARDS = [6, 4, 3, 2] as const;
+/** Each stat's judge award in the Allocation game. */
+export type FinaleWeights = Record<FinaleStat, number>;
+/** The awards in a fixed order, for when none were dealt (a skipped or older finale). */
+export const DEFAULT_ALLOCATION_WEIGHTS: FinaleWeights = { drift: 6, accel: 4, grip: 3, steer: 2 };
+
+/** Deal the four awards to the four stats at random. */
+export function rollAllocationWeights(rng: Rng = Math.random): FinaleWeights {
+  const awards = [...ALLOCATION_AWARDS];
+  for (let i = awards.length - 1; i > 0; i--) {
+    const j = Math.min(i, Math.floor(rng() * (i + 1)));
+    [awards[i], awards[j]] = [awards[j], awards[i]];
+  }
+  return { drift: awards[0], accel: awards[1], grip: awards[2], steer: awards[3] };
+}
 /** The fewest points a perfect timing run is worth (a car with grip + steer of 2). */
 export const TIMING_MIN_MAX_POINTS = 6;
 /** The most points a perfect timing run is worth (a car with grip + steer of 50). */
@@ -60,7 +81,7 @@ export const FINALE_MODE_INFO: Record<FinaleMode, { icon: string; title: string;
   allocation: {
     icon: "🎛️",
     title: "Setup Allocation",
-    blurb: `Both cars start from ${ALLOCATION_BASE} in every stat, whatever car you are driving. Spend ${ALLOCATION_POOL} setup points across the four stats. Each stat is a judge: beat the rival's stat and you score ${JUDGE_POINTS} points. Allocations are secret until the reveal.`,
+    blurb: `Both cars start from ${ALLOCATION_BASE} in every stat, whatever car you are driving. Spend ${ALLOCATION_POOL} setup points across the four stats. Each stat is a judge, and they are not worth the same: the awards (${ALLOCATION_AWARDS.join(", ")}) are dealt to the stats at random and shown to both of you. Beat the rival's stat to win its award. Allocations are secret until the reveal.`,
   },
 };
 
@@ -70,7 +91,8 @@ export type FinaleChoice =
   | { mode: "stat_duel"; stat: FinaleStat }
   /** `passes` = full passes the marker made before it was stopped. Each one took 1 point off what was available. */
   | { mode: "timing"; accuracy: number; passes: number }
-  | { mode: "allocation"; allocation: FinaleAllocation };
+  /** `weights` = what each stat's judge is worth this time (the same for both sides). */
+  | { mode: "allocation"; allocation: FinaleAllocation; weights: FinaleWeights };
 
 export interface FinaleOutcome {
   mode: FinaleMode;
@@ -111,6 +133,25 @@ export function sanitizeAllocation(a: Partial<FinaleAllocation> | undefined): Fi
   return out;
 }
 
+/** Spread the pool in proportion to what each judge is worth (the sensible default when you do not choose). */
+export function proportionalAllocation(weights: FinaleWeights): FinaleAllocation {
+  const total = FINALE_STATS.reduce((sum, s) => sum + weights[s], 0) || 1;
+  const out = emptyAllocation();
+  let left = ALLOCATION_POOL;
+  // Whole points by largest remainder, so the pool is spent exactly.
+  const exact = FINALE_STATS.map((s) => ({ stat: s, share: (weights[s] / total) * ALLOCATION_POOL }));
+  for (const e of exact) {
+    out[e.stat] = Math.floor(e.share);
+    left -= out[e.stat];
+  }
+  exact.sort((a, b) => (b.share % 1) - (a.share % 1));
+  for (let i = 0; left > 0; i = (i + 1) % exact.length) {
+    out[exact[i].stat] += 1;
+    left -= 1;
+  }
+  return out;
+}
+
 /** Spread the pool as evenly as possible. */
 export function evenAllocation(): FinaleAllocation {
   const out = emptyAllocation();
@@ -145,12 +186,16 @@ export function timingPointsAvailable(stats: CornerFinalStats, passes: number): 
 }
 
 /** The choice the player gets if they skip the finale. */
-export function defaultPlayerChoice(mode: FinaleMode, playerStats: CornerFinalStats): FinaleChoice {
+export function defaultPlayerChoice(
+  mode: FinaleMode,
+  playerStats: CornerFinalStats,
+  weights: FinaleWeights = DEFAULT_ALLOCATION_WEIGHTS
+): FinaleChoice {
   if (mode === "stat_duel") {
     const best = FINALE_STATS.reduce((a, b) => (playerStats[b] > playerStats[a] ? b : a), FINALE_STATS[0]);
     return { mode, stat: best };
   }
-  if (mode === "allocation") return { mode, allocation: evenAllocation() };
+  if (mode === "allocation") return { mode, allocation: proportionalAllocation(weights), weights };
   return { mode, accuracy: 0.5, passes: 0 };
 }
 
@@ -187,33 +232,36 @@ export function rivalTimingAccuracy(skill: number, rng: Rng): number {
 }
 
 /**
- * Both sides start from the same stats, so this is a pure guessing game about where the other side will spend. The
- * rival guesses that the player spreads its points about evenly, give or take (a wider guess the lower its skill),
- * then spends just enough to beat the stats it thinks are cheapest.
+ * Both sides start from the same stats, so this is a guessing game about where the other side will spend, over
+ * judges that are not worth the same. The rival guesses that the player spends in proportion to what the judges are
+ * worth, give or take (a wider guess the lower its skill). It then looks at every set of judges it could afford to
+ * beat that guess on and takes the set that is worth the most, spending what is left on those same judges.
  */
-function rivalAllocation(skill: number, rng: Rng): FinaleAllocation {
-  const average = ALLOCATION_POOL / FINALE_STATS.length;
-  const spread = 1.5 + (1 - clamp(skill, 0, 1)) * 3;
+function rivalAllocation(skill: number, weights: FinaleWeights, rng: Rng): FinaleAllocation {
+  const spread = 3 + (1 - clamp(skill, 0, 1)) * 3;
+  const guess = proportionalAllocation(weights);
   const guessedPlayer = emptyAllocation();
-  for (const s of FINALE_STATS) guessedPlayer[s] = Math.max(0, average + gaussian(rng) * spread);
+  for (const s of FINALE_STATS) guessedPlayer[s] = Math.max(0, guess[s] + gaussian(rng) * spread);
 
-  // How many setup points it takes to beat each stat. Win the cheapest judges first.
-  const cost = FINALE_STATS.map((s) => ({
-    stat: s,
-    cost: Math.floor(guessedPlayer[s]) + 1,
-  })).sort((a, b) => a.cost - b.cost || rng() - 0.5);
+  let best: { set: FinaleStat[]; value: number; cost: number } = { set: [], value: -1, cost: 0 };
+  for (let mask = 0; mask < 1 << FINALE_STATS.length; mask++) {
+    const set = FINALE_STATS.filter((_, i) => (mask & (1 << i)) !== 0);
+    const cost = set.reduce((sum, s) => sum + Math.floor(guessedPlayer[s]) + 1, 0);
+    if (cost > ALLOCATION_POOL) continue;
+    // A touch of noise so equally good sets are not always broken the same way.
+    const value = set.reduce((sum, s) => sum + weights[s], 0) + rng() * 0.01;
+    if (value > best.value) best = { set, value, cost };
+  }
 
   const out = emptyAllocation();
-  let left = ALLOCATION_POOL;
-  for (const c of cost) {
-    if (c.cost <= left) {
-      out[c.stat] += c.cost;
-      left -= c.cost;
-    }
+  for (const s of best.set) out[s] = Math.floor(guessedPlayer[s]) + 1;
+  let left = ALLOCATION_POOL - best.cost;
+  // What is left goes onto the judges it is already winning, the most valuable first.
+  const winning = [...best.set].sort((a, b) => weights[b] - weights[a]);
+  for (let i = 0; left > 0 && winning.length > 0; i = (i + 1) % winning.length) {
+    out[winning[i]] += 1;
+    left -= 1;
   }
-  // Any left over goes onto the judges it is already winning, or the cheapest one if it won none.
-  const spendOn = cost.find((c) => out[c.stat] > 0)?.stat ?? cost[0].stat;
-  out[spendOn] += left;
   return sanitizeAllocation(out);
 }
 
@@ -223,13 +271,16 @@ export function chooseRivalFinale(input: {
   rivalStats: CornerFinalStats;
   playerStats: CornerFinalStats;
   skill: number;
+  /** What each judge is worth in the Allocation game (the same weights the player was shown). */
+  weights?: FinaleWeights;
   rng?: Rng;
 }): FinaleChoice {
   const { mode, rivalStats, playerStats, skill } = input;
+  const weights = input.weights ?? DEFAULT_ALLOCATION_WEIGHTS;
   const rng = input.rng ?? Math.random;
   if (mode === "timing") return { mode, accuracy: rivalTimingAccuracy(skill, rng), passes: rivalTimingPasses(skill, rng) };
   // The setup game ignores the cars' stats: everyone starts from the same base.
-  if (mode === "allocation") return { mode, allocation: rivalAllocation(skill, rng) };
+  if (mode === "allocation") return { mode, allocation: rivalAllocation(skill, weights, rng), weights };
   const estimate = estimateStats(playerStats, skill, rng);
   const values = FINALE_STATS.map((s) => rivalStats[s] - estimate[s]);
   return { mode, stat: FINALE_STATS[pickIndex(values, skill, rng)] };
@@ -267,27 +318,35 @@ export function resolveFinale(input: {
   if (playerChoice.mode === "allocation" && rivalChoice.mode === "allocation") {
     const pa = sanitizeAllocation(playerChoice.allocation);
     const ra = sanitizeAllocation(rivalChoice.allocation);
-    let pWins = 0;
-    let rWins = 0;
+    const weights = playerChoice.weights ?? DEFAULT_ALLOCATION_WEIGHTS;
+    let playerPoints = 0;
+    let rivalPoints = 0;
+    const won: string[] = [];
+    const lost: string[] = [];
     // Everyone starts from the same base, so only the allocations are compared (the cars' stats are not used).
     for (const s of FINALE_STATS) {
       const p = ALLOCATION_BASE + pa[s];
       const r = ALLOCATION_BASE + ra[s];
-      if (p > r) pWins += 1;
-      else if (r > p) rWins += 1;
+      if (p > r) {
+        playerPoints += weights[s];
+        won.push(`${FINALE_STAT_LABEL[s]} +${weights[s]}`);
+      } else if (r > p) {
+        rivalPoints += weights[s];
+        lost.push(`${FINALE_STAT_LABEL[s]} +${weights[s]}`);
+      }
     }
-    const playerPoints = capPoints(pWins * JUDGE_POINTS);
-    const rivalPoints = capPoints(rWins * JUDGE_POINTS);
+    playerPoints = capPoints(playerPoints);
+    rivalPoints = capPoints(rivalPoints);
     const spread = (a: FinaleAllocation) => FINALE_STATS.map((s) => ALLOCATION_BASE + a[s]).join("/");
     return {
       mode: "allocation",
       playerPoints,
       rivalPoints,
-      playerChoice: { mode: "allocation", allocation: pa },
-      rivalChoice: { mode: "allocation", allocation: ra },
-      summary: `Setup Allocation: you ${spread(pa)} v rival ${spread(ra)} (drift/accel/grip/steer). You won ${pWins} of 4 judges (${signed(
-        playerPoints
-      )}), the rival won ${rWins} (${signed(rivalPoints)})`,
+      playerChoice: { mode: "allocation", allocation: pa, weights },
+      rivalChoice: { mode: "allocation", allocation: ra, weights },
+      summary: `Setup Allocation: you ${spread(pa)} v rival ${spread(ra)} (drift/accel/grip/steer). You won ${
+        won.length > 0 ? won.join(", ") : "no judges"
+      } (${signed(playerPoints)}); the rival won ${lost.length > 0 ? lost.join(", ") : "no judges"} (${signed(rivalPoints)})`,
     };
   }
 

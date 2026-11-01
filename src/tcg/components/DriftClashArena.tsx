@@ -82,12 +82,15 @@ import { carInsight, pickBestCarIds, pickBestCrewIds, type LineupContext } from 
 import {
   applyFinaleToResult,
   chooseRivalFinale,
+  DEFAULT_ALLOCATION_WEIGHTS,
   defaultPlayerChoice,
   resolveFinale,
+  rollAllocationWeights,
   rollFinaleMode,
   type FinaleChoice,
   type FinaleMode,
   type FinaleOutcome,
+  type FinaleWeights,
 } from "../finale";
 import { ClashFinalePanel } from "./ClashFinalePanel";
 import { ClashFinaleResult } from "./ClashFinaleResult";
@@ -1184,6 +1187,8 @@ export function DriftClashArena({
     cornerIdx: 0 | 1 | 2;
     mode: FinaleMode;
     base: EvaluatedCornerResult;
+    /** What each stat's judge is worth if the finale is Setup Allocation. */
+    weights: FinaleWeights;
   } | null>(null);
   // Previewing crew card selection in crew_prep phase
   const [previewCrewIdx, setPreviewCrewIdx] = useState<number | null>(null);
@@ -1918,11 +1923,12 @@ export function DriftClashArena({
 
     // 4. The FINALE: a random last game that can still swing the corner. The corner is only judged once it is done.
     const mode = rollFinaleMode();
+    const weights = rollAllocationWeights();
     if (autoFinale) {
-      completeFinale(cornerIdx, result, mode, null, true);
+      completeFinale(cornerIdx, result, mode, null, true, weights);
       return;
     }
-    setPendingFinale({ cornerIdx, mode, base: result });
+    setPendingFinale({ cornerIdx, mode, base: result, weights });
     // The crew is deployed and the cars slam together in the middle. Only then is the game for the finale drawn.
     setBattleAnimStep("finale_clash");
     const toRoulette = setTimeout(() => setBattleAnimStep("finale_roulette"), FINALE_CLASH_MS);
@@ -1961,7 +1967,8 @@ export function DriftClashArena({
     base: EvaluatedCornerResult,
     mode: FinaleMode,
     playerChoice: FinaleChoice | null,
-    instant = false
+    instant = false,
+    weights: FinaleWeights = DEFAULT_ALLOCATION_WEIGHTS
   ) {
     clearTimers();
     let result = base;
@@ -1974,12 +1981,13 @@ export function DriftClashArena({
         rivalStats,
         playerStats,
         skill: opponent.aiSkill ?? CASUAL_AI_SKILL,
+        weights,
         rng: Math.random,
       });
       finished = resolveFinale({
         playerStats,
         rivalStats,
-        playerChoice: playerChoice ?? defaultPlayerChoice(mode, playerStats),
+        playerChoice: playerChoice ?? defaultPlayerChoice(mode, playerStats, weights),
         rivalChoice,
       });
       result = applyFinaleToResult(base, finished);
@@ -2017,7 +2025,7 @@ export function DriftClashArena({
         battleAnimStep === "finale_roulette" ||
         battleAnimStep === "prompt_finale")
     ) {
-      completeFinale(pendingFinale.cornerIdx, pendingFinale.base, pendingFinale.mode, null, true);
+      completeFinale(pendingFinale.cornerIdx, pendingFinale.base, pendingFinale.mode, null, true, pendingFinale.weights);
       setBattleAnimStep("corner_finished");
       return;
     }
@@ -4703,8 +4711,16 @@ export function DriftClashArena({
                               cornerNumber={sector.number}
                               carName={playerCar.name}
                               playerStats={pendingFinale.base.playerFinalStats}
+                              weights={pendingFinale.weights}
                               onSubmit={(choice) =>
-                                completeFinale(pendingFinale.cornerIdx, pendingFinale.base, pendingFinale.mode, choice)
+                                completeFinale(
+                                  pendingFinale.cornerIdx,
+                                  pendingFinale.base,
+                                  pendingFinale.mode,
+                                  choice,
+                                  false,
+                                  pendingFinale.weights
+                                )
                               }
                               onSkip={handleSkipBattleAnimation}
                             />

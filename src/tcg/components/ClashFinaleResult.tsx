@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ALLOCATION_BASE,
+  DEFAULT_ALLOCATION_WEIGHTS,
   FINALE_MODE_INFO,
   FINALE_STATS,
   FINALE_STAT_LABEL,
-  JUDGE_POINTS,
   sanitizeAllocation,
   timingMaxPoints,
   type FinaleOutcome,
@@ -59,17 +59,18 @@ function buildRows(outcome: FinaleOutcome, playerStats: CornerFinalStats, rivalS
   if (pc.mode === "allocation" && rc.mode === "allocation") {
     const pa = sanitizeAllocation(pc.allocation);
     const ra = sanitizeAllocation(rc.allocation);
+    const weights = pc.weights ?? DEFAULT_ALLOCATION_WEIGHTS;
     return FINALE_STATS.map((stat) => {
       const you = ALLOCATION_BASE + pa[stat];
       const rival = ALLOCATION_BASE + ra[stat];
       return {
-        label: FINALE_STAT_LABEL[stat],
+        label: `${FINALE_STAT_LABEL[stat]} · worth ${weights[stat]}`,
         you: String(you),
         youSub: `${ALLOCATION_BASE} + ${pa[stat]}`,
         rival: String(rival),
         rivalSub: `${ALLOCATION_BASE} + ${ra[stat]}`,
-        youPts: you > rival ? JUDGE_POINTS : 0,
-        rivalPts: rival > you ? JUDGE_POINTS : 0,
+        youPts: you > rival ? weights[stat] : 0,
+        rivalPts: rival > you ? weights[stat] : 0,
       };
     });
   }

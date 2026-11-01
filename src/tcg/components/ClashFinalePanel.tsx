@@ -7,15 +7,15 @@ import {
   FINALE_MODE_INFO,
   FINALE_STATS,
   FINALE_STAT_LABEL,
-  JUDGE_POINTS,
   allocationTotal,
-  evenAllocation,
+  proportionalAllocation,
   timingAccuracy,
   timingMaxPoints,
   type FinaleAllocation,
   type FinaleChoice,
   type FinaleMode,
   type FinaleStat,
+  type FinaleWeights,
 } from "../finale";
 import type { CornerFinalStats } from "../progression";
 
@@ -44,6 +44,8 @@ interface ClashFinalePanelProps {
   carName: string;
   /** The player's own stats for this corner (after Crew, track and debuffs). The rival's are never passed in. */
   playerStats: CornerFinalStats;
+  /** What each stat's judge is worth in the Setup Allocation game (dealt at random, the same for both sides). */
+  weights: FinaleWeights;
   onSubmit: (choice: FinaleChoice) => void;
   /** Settle the finale with default picks. */
   onSkip: () => void;
@@ -53,7 +55,7 @@ interface ClashFinalePanelProps {
  * The last decision on a corner. Shows the player's own stats and keeps the rival's hidden. Calls `onSubmit` once, with
  * the player's pick.
  */
-export function ClashFinalePanel({ mode, cornerNumber, carName, playerStats, onSubmit, onSkip }: ClashFinalePanelProps) {
+export function ClashFinalePanel({ mode, cornerNumber, carName, playerStats, weights, onSubmit, onSkip }: ClashFinalePanelProps) {
   const info = FINALE_MODE_INFO[mode];
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/85 p-3 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200 sm:items-center">
@@ -83,7 +85,7 @@ export function ClashFinalePanel({ mode, cornerNumber, carName, playerStats, onS
 
         <div className="mt-4">
           {mode === "stat_duel" && <StatDuel playerStats={playerStats} onSubmit={onSubmit} />}
-          {mode === "allocation" && <Allocation onSubmit={onSubmit} />}
+          {mode === "allocation" && <Allocation weights={weights} onSubmit={onSubmit} />}
           {mode === "timing" && <Timing playerStats={playerStats} onSubmit={onSubmit} />}
         </div>
 
@@ -144,9 +146,11 @@ function StatDuel({ playerStats, onSubmit }: { playerStats: CornerFinalStats; on
 
 // ── 2. Setup Allocation ───────────────────────────────────────────────────
 
-function Allocation({ onSubmit }: { onSubmit: (c: FinaleChoice) => void }) {
-  const [alloc, setAlloc] = useState<FinaleAllocation>(() => evenAllocation());
+function Allocation({ weights, onSubmit }: { weights: FinaleWeights; onSubmit: (c: FinaleChoice) => void }) {
+  // Starts spread in proportion to what each judge is worth; change it however you like.
+  const [alloc, setAlloc] = useState<FinaleAllocation>(() => proportionalAllocation(weights));
   const left = ALLOCATION_POOL - allocationTotal(alloc);
+  const biggest = Math.max(...FINALE_STATS.map((s) => weights[s]));
 
   const change = (stat: FinaleStat, delta: number) =>
     setAlloc((prev) => {
@@ -158,12 +162,24 @@ function Allocation({ onSubmit }: { onSubmit: (c: FinaleChoice) => void }) {
     <div>
       <p className="mb-2 text-xs font-black text-zinc-200" aria-live="polite">
         Setup points left: <span className={left === 0 ? "text-emerald-300" : "text-amber-300"}>{left}</span> / {ALLOCATION_POOL}
-        <span className="ml-2 text-[10px] font-bold text-zinc-500">Win a stat = +{JUDGE_POINTS} pts</span>
+      </p>
+      <p className="mb-2 text-[10px] font-bold text-zinc-500">
+        Each stat is a judge worth a different award. Beat the rival&apos;s stat to win its award.
       </p>
       <ul className="space-y-1.5">
         {FINALE_STATS.map((stat) => (
           <li key={stat} className="flex items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-2.5 py-2">
             <span className="w-14 text-left text-[10px] font-black uppercase tracking-wider text-zinc-400">{FINALE_STAT_LABEL[stat]}</span>
+            <span
+              className={`rounded-full border px-2 py-0.5 text-[10px] font-black ${
+                weights[stat] === biggest
+                  ? "border-amber-400 bg-amber-500/20 text-amber-300"
+                  : "border-zinc-700 bg-zinc-800 text-zinc-300"
+              }`}
+              aria-label={`worth ${weights[stat]} points`}
+            >
+              {weights[stat]} pts
+            </span>
             <span className="text-sm font-black text-zinc-300">{ALLOCATION_BASE}</span>
             <span className="text-xs font-black text-emerald-300">{alloc[stat] > 0 ? `+${alloc[stat]}` : ""}</span>
             <span className="text-xs font-black text-zinc-600" aria-hidden>
@@ -179,7 +195,7 @@ function Allocation({ onSubmit }: { onSubmit: (c: FinaleChoice) => void }) {
               >
                 −
               </button>
-              <span className="w-12 text-center text-sm font-black text-amber-300" aria-label={`${FINALE_STAT_LABEL[stat]} total ${ALLOCATION_BASE + alloc[stat]}`}>
+              <span className="w-10 text-center text-sm font-black text-amber-300" aria-label={`${FINALE_STAT_LABEL[stat]} total ${ALLOCATION_BASE + alloc[stat]}`}>
                 {ALLOCATION_BASE + alloc[stat]}
               </span>
               <button
@@ -195,7 +211,7 @@ function Allocation({ onSubmit }: { onSubmit: (c: FinaleChoice) => void }) {
           </li>
         ))}
       </ul>
-      <button type="button" onClick={() => onSubmit({ mode: "allocation", allocation: alloc })} className={confirmClass}>
+      <button type="button" onClick={() => onSubmit({ mode: "allocation", allocation: alloc, weights })} className={confirmClass}>
         {left > 0 ? `Lock in setup (${left} unspent)` : "Lock in setup"}
         <span aria-hidden>→</span>
       </button>

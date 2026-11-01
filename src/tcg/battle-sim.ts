@@ -34,6 +34,7 @@ import {
   chooseRivalFinale,
   defaultPlayerChoice,
   resolveFinale,
+  rollAllocationWeights,
   rollFinaleMode,
   type FinaleChoice,
 } from "./finale";
@@ -369,15 +370,17 @@ export function simulateBattle(cfg: SimConfig, rng: Rng): SimResult {
     let judged = result;
     if (cfg.finale && result.playerFinalStats && result.rivalFinalStats) {
       const mode = rollFinaleMode(rng);
+      const weights = rollAllocationWeights(rng);
       const playerChoice: FinaleChoice =
         mode === "timing"
           ? { mode, accuracy: cfg.player === "good" ? 0.8 : 0.5, passes: cfg.player === "good" ? 0 : 1 }
-          : defaultPlayerChoice(mode, result.playerFinalStats);
+          : defaultPlayerChoice(mode, result.playerFinalStats, weights);
       const rivalChoice = chooseRivalFinale({
         mode,
         rivalStats: result.rivalFinalStats,
         playerStats: result.playerFinalStats,
         skill: rivalSkill,
+        weights,
         rng,
       });
       judged = applyFinaleToResult(
