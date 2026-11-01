@@ -153,10 +153,10 @@ export interface SimConfig {
   rivalBuilder?: (rng: Rng) => { carPool: MemberCard[]; crewPool: MemberCard[]; skill: number };
 
   /**
-   * Play the finale (see finale.ts) on every corner, after both Crew cards are down. Off by default, because the
-   * stored difficulty curves (difficulty-curves.ts) were measured without it; turn it on and re-run
-   * scripts/calibrate-difficulty.ts to measure the game as it now plays. A "good" player picks their best stat, an
-   * even setup and times a run at 80% in the first pass; a "casual" one times a run at 50% after one pass.
+   * Play the finale (see finale.ts) on every corner, after both Crew cards are down, as the game now does. On by
+   * default. Turn it off to compare with the game as it was before the finale. A "good" player picks their best
+   * stat, spreads the setup points in proportion to the awards and times a run at 80% in the first pass; a
+   * "casual" one times a run at 50% after one pass.
    */
   finale?: boolean;
 }
@@ -173,6 +173,7 @@ export const DEFAULT_SIM: SimConfig = {
   rivalCarSkip: 0,
   rivalCrewCount: 9,
   rivalCrewBoost: 0,
+  finale: true,
 };
 
 const byPowerDesc = (a: MemberCard, b: MemberCard) => getCardPower(b) - getCardPower(a);

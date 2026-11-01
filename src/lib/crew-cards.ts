@@ -1421,6 +1421,17 @@ export function scaleCrewCardDefinition(
   };
 }
 
+/**
+ * How far a debuff's condition loosens for each rarity step. A Bronze debuff that punishes cars with "DRIFT >= 22" hits
+ * about a third of the cars in the game; at 2 per step, a Legend one ("DRIFT >= 16") hits about two thirds, so a
+ * rarer debuff reaches more cars as well as hitting harder.
+ */
+export const CONDITION_REACH_STEP = 2;
+/** A ">=" condition never loosens below this, so it still singles out the stronger half of a car's stats. */
+export const MIN_CONDITION_THRESHOLD = 12;
+/** A "<=" condition never loosens above this. */
+export const MAX_CONDITION_THRESHOLD = 24;
+
 export function scaleDebuffCardDefinition(
   baseDef: DebuffCardDefinition,
   targetTier: FullArtTier
@@ -1447,13 +1458,20 @@ export function scaleDebuffCardDefinition(
   if (basePen.flatPenalty) scaledPen.flatPenalty = flatPenScale[tIdx];
 
   if (basePen.condition) {
+    // The rarer the debuff, the more cars its condition catches: the threshold loosens by CONDITION_REACH_STEP per
+    // rarity (">= 22" on a Bronze debuff is ">= 16" on a Legend one), never below MIN_CONDITION_THRESHOLD.
+    const baseThreshold =
+      basePen.condition.threshold <= 10
+        ? Math.round(basePen.condition.threshold * 2.5)
+        : basePen.condition.threshold;
+    const reach = CONDITION_REACH_STEP * tIdx;
     scaledPen.condition = {
       stat: basePen.condition.stat,
       op: basePen.condition.op,
       threshold:
-        basePen.condition.threshold <= 10
-          ? Math.round(basePen.condition.threshold * 2.5)
-          : basePen.condition.threshold,
+        basePen.condition.op === ">="
+          ? Math.max(MIN_CONDITION_THRESHOLD, baseThreshold - reach)
+          : Math.min(MAX_CONDITION_THRESHOLD, baseThreshold + reach),
       extraPenalty: condExtraScale[tIdx],
     };
   }
