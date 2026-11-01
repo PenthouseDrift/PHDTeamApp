@@ -217,10 +217,10 @@ export function ClashHowToPlayModal({
                     <span className="flex h-6 w-6 items-center justify-center rounded-full bg-rose-500 text-xs font-black text-white">
                       4
                     </span>
-                    <h4 className="font-black text-white">Shared Debuffs &amp; Verdict</h4>
+                    <h4 className="font-black text-white">Debuffs &amp; Verdict</h4>
                   </div>
                   <p className="text-xs text-zinc-400 leading-relaxed">
-                    A random hazard strikes <em>both</em> drivers on each corner. Corner scores calculate automatically. The driver who wins <strong>2 out of 3 corners</strong> takes the match victory and rewards!
+                    On each corner you are dealt 3 debuff cards and play one on the rival&apos;s car, while the rival plays one on yours. Corner scores calculate automatically. The driver who wins <strong>2 out of 3 corners</strong> takes the match victory and rewards!
                   </p>
                 </div>
               </div>
@@ -540,10 +540,10 @@ export function ClashHowToPlayModal({
               {/* Shared Corner Debuffs */}
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
                 <h4 className="text-xs font-black uppercase tracking-wider text-amber-400 mb-2">
-                  ⚠️ Shared Corner Debuffs
+                  ⚠️ Corner Debuffs
                 </h4>
                 <p className="text-xs text-zinc-300 leading-relaxed">
-                  On each corner, a hazard is rolled that affects <strong>both drivers equally</strong> (e.g. <em>Slick Patch</em>, <em>Gyro Wobble</em>, or <em>Wall Brush</em>).
+                  On each corner you are dealt <strong>3 random debuff cards</strong> (some hit harder than others) and play <strong>one on the rival&apos;s car</strong> (e.g. <em>Slick Patch</em>, <em>Gyro Wobble</em>, or <em>Wall Brush</em>). The rival does the same to you, at the same time. Each card shows how much it would cost the rival&apos;s car.
                   <br />
                   <span className="text-cyan-300 font-bold">
                     💡 Tactical Tip: Crew Cards with <strong>Debuff Shielding</strong> protect your score from these penalties!

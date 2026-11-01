@@ -484,6 +484,14 @@ export async function getPlayerClashStats(userId: string): Promise<ClashPlayerSt
   }
 }
 
+/**
+ * A real car card: not a Crew card, a Repair Kit (maintenance), a debuff or a track card. A member's collection
+ * holds all of these, and only the first kind can be driven. (Challenges use the same test.)
+ */
+function isPlainCarCard(card: Pick<MemberCard, "cardType" | "crewCardId" | "name">): boolean {
+  return !card.cardType && !card.crewCardId && !isCrewCard(card);
+}
+
 export async function pickClashOpponent(excludeUserId?: string): Promise<ClashOpponent> {
   try {
     // If excludeUserId was not provided, try to extract current user session
@@ -507,7 +515,7 @@ export async function pickClashOpponent(excludeUserId?: string): Promise<ClashOp
 
       // Strictly filter community cars: NEVER include the player's own cards
       const rivalCars = validCards
-        .filter((c) => !isCrewCard(c))
+        .filter((c) => isPlainCarCard(c))
         .filter((c) => Boolean(c.userId && (!excludeUserId || c.userId !== excludeUserId)));
 
       // Collect distinct rival users who have cards in the pool and are NOT the player
@@ -551,9 +559,10 @@ export async function pickClashOpponent(excludeUserId?: string): Promise<ClashOp
 
               if (isCrewCard(parsed)) {
                 driverCrewCards.push(publicCard(parsed));
-              } else {
+              } else if (isPlainCarCard(parsed)) {
                 driverCars.push(publicCard(parsed));
               }
+              // Repair Kits, debuff and track cards are neither: the rival can't drive them.
             }
           }
 
@@ -971,7 +980,7 @@ export async function getDriftClashLeaderboard(
         const progress = getCollectorProgress(userCards, clashWins, packsOpened);
 
         // Find highest-power car card for showcase
-        const carOnly = userCards.filter((c) => c.cardType !== "crew" && !c.crewCardId);
+        const carOnly = userCards.filter((c) => isPlainCarCard(c));
         const sortedByPower = [...(carOnly.length > 0 ? carOnly : userCards)].sort(
           (a, b) => getCardPower(b) - getCardPower(a)
         );

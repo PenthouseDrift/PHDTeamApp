@@ -3,7 +3,7 @@ import type { CarInsight } from "@/tcg/lineup-insight";
 
 /**
  * Under each car on the lineup screen: what this track's buffs and hazards do to this car. Only the track is shown.
- * The corner types and debuffs are rolled per match but stay hidden until each corner is raced.
+ * The corner types stay hidden until each corner is raced, and debuffs are only dealt at the corner itself.
  */
 export function CarTrackEffects({
   carName,

@@ -2,8 +2,13 @@
  * Tandem Clash battle simulator, for tuning the rival AI. It plays whole 3-corner battles with the
  * game's real scoring (`evaluateCornerMatchup`) and the same turn order as the arena:
  *
- *   per corner: the player sees the rival's car and picks theirs, both debuffs show, the player picks a
- *   Crew card, the rival picks its Crew card without seeing the player's, then the corner is scored.
+ *   per corner: the player sees the rival's car and picks theirs; each side is dealt 3 debuff cards and
+ *   plays one on the other's car (the picks are made at the same time); the player picks a Crew card,
+ *   the rival picks its Crew card without seeing the player's, then (with `finale` on) both sides play a random
+ *   finale, and the corner is scored.
+ *
+ *   A "good" player plays the debuff that hurts the rival's car most; a "casual" one plays the rarest card
+ *   they are dealt (a human picks the shiny one).
  *
  * The winner is the side with more corners, then the higher total, with an exact tie going to the player
  * (the same rule as `finishBattleAndShowVerdict` in DriftClashArena).
@@ -25,6 +30,14 @@ import type { FullArtTier } from "@/lib/full-art-card";
 import { rollStatsForTier } from "@/lib/pack-config";
 import { getBestCrewCardsForRarity, getCarNormalizedTotalScore } from "./challenges-types";
 import {
+  applyFinaleToResult,
+  chooseRivalFinale,
+  defaultPlayerChoice,
+  resolveFinale,
+  rollFinaleMode,
+  type FinaleChoice,
+} from "./finale";
+import {
   STARTER_LOANER_CREW_CARDS,
   evaluateCornerMatchup,
   getCardPower,
@@ -36,6 +49,7 @@ import {
   NEUTRAL_DEBUFF,
   arrangeRival,
   chooseRivalCrew,
+  chooseRivalDebuff,
   crewCardsFromSpecs,
   rivalCarPoolFrom,
   rollRivalCrewSpecs,
@@ -136,6 +150,14 @@ export interface SimConfig {
    * cars and Crew the rival chooses from and how well it plays.
    */
   rivalBuilder?: (rng: Rng) => { carPool: MemberCard[]; crewPool: MemberCard[]; skill: number };
+
+  /**
+   * Play the finale (see finale.ts) on every corner, after both Crew cards are down. Off by default, because the
+   * stored difficulty curves (difficulty-curves.ts) were measured without it; turn it on and re-run
+   * scripts/calibrate-difficulty.ts to measure the game as it now plays. A "good" player picks their best stat, an
+   * even setup and times a run at 80%; a "casual" one times a run at 50%.
+   */
+  finale?: boolean;
 }
 
 export const DEFAULT_SIM: SimConfig = {
@@ -185,12 +207,13 @@ export interface SimResult {
 export function simulateBattle(cfg: SimConfig, rng: Rng): SimResult {
   const player = makePlayer(rng, cfg);
 
-  // The roulette: track, corner types and both sides' debuffs.
+  // The roulette: track and corner types. Debuffs are chosen corner by corner below.
   const track = rollUkTrackCard(UK_TRACK_CARD_SET, rng);
   const sectors = rollThreeClashSectors(rng);
-  const playerDebuffs = rollThreeDebuffCards(DEBUFF_CARD_SET, rng);
-  const rivalDebuffs = rollThreeDebuffCards(DEBUFF_CARD_SET, rng);
-  const ctx: RivalContext = { track, sectors, rivalDebuffs };
+  /** The debuff that lands on each side's car at each corner (chosen by the other side). */
+  const debuffsOnPlayer: DebuffCardDefinition[] = [];
+  const debuffsOnRival: DebuffCardDefinition[] = [];
+  const ctx: RivalContext = { track, sectors, rivalDebuffs: debuffsOnRival };
 
   // The rival's cars and Crew.
   const community = cfg.rivalBuilder
@@ -254,6 +277,37 @@ export function simulateBattle(cfg: SimConfig, rng: Rng): SimResult {
     playerCarsLeft.splice(playerCarsLeft.indexOf(carSlot), 1);
     const playerCar = player.cars[carSlot];
 
+    // Each side is dealt 3 debuff cards and plays one on the other's car, at the same time.
+    const playerHand = rollThreeDebuffCards(DEBUFF_CARD_SET, rng);
+    const rivalHand = rollThreeDebuffCards(DEBUFF_CARD_SET, rng);
+    let playerPick = 0;
+    if (cfg.player === "good") {
+      const hurt = playerHand.map((debuff) => {
+        const r = evaluateCornerMatchup({
+          cornerIdx: k,
+          sector: sectors[k],
+          playerCard: playerCar,
+          rivalCard: rivalCar,
+          playerCrewCard: null,
+          rivalCrewCard: null,
+          playerDebuffCard: NEUTRAL_DEBUFF,
+          rivalDebuffCard: debuff,
+          trackCard: track,
+        });
+        return r.playerScore - r.rivalScore;
+      });
+      playerPick = hurt.indexOf(Math.max(...hurt));
+    } else {
+      const rarity = playerHand.map((d) => TIER_RANK[d.tier] ?? 0);
+      playerPick = rarity.indexOf(Math.max(...rarity));
+    }
+    const rivalPick =
+      cfg.rival === "old"
+        ? 0
+        : chooseRivalDebuff({ cornerIdx: k, ctx, rivalCar, playerCar, hand: rivalHand, skill: rivalSkill, rng });
+    debuffsOnRival[k] = playerHand[playerPick];
+    debuffsOnPlayer[k] = rivalHand[rivalPick];
+
     // The player picks a Crew card, seeing both debuffs.
     let crewSlot: number;
     if (cfg.player === "good" && playerCrewLeft.length > 1) {
@@ -265,8 +319,8 @@ export function simulateBattle(cfg: SimConfig, rng: Rng): SimResult {
           rivalCard: rivalCar,
           playerCrewCard: player.crew[slot],
           rivalCrewCard: null,
-          playerDebuffCard: playerDebuffs[k],
-          rivalDebuffCard: rivalDebuffs[k],
+          playerDebuffCard: debuffsOnPlayer[k],
+          rivalDebuffCard: debuffsOnRival[k],
           trackCard: track,
         });
         return winProb(r.playerScore - r.rivalScore);
@@ -293,7 +347,7 @@ export function simulateBattle(cfg: SimConfig, rng: Rng): SimResult {
             crew: rivalCrew,
             usedCrew: rivalCrewUsed,
             playerCar,
-            playerDebuff: playerDebuffs[k] as DebuffCardDefinition,
+            playerDebuff: debuffsOnPlayer[k],
             playerCars: player.cars,
             skill: rivalSkill,
             rng,
@@ -307,14 +361,34 @@ export function simulateBattle(cfg: SimConfig, rng: Rng): SimResult {
       rivalCard: rivalCar,
       playerCrewCard: player.crew[crewSlot],
       rivalCrewCard: rivalCrew[rivalCrewIdx],
-      playerDebuffCard: playerDebuffs[k],
-      rivalDebuffCard: rivalDebuffs[k],
+      playerDebuffCard: debuffsOnPlayer[k],
+      rivalDebuffCard: debuffsOnRival[k],
       trackCard: track,
     });
-    playerTotal += result.playerScore;
-    rivalTotal += result.rivalScore;
-    if (result.won) playerCorners++;
-    else if (!result.tied) rivalCorners++;
+    // The finale: a random last game for the corner, settled before it is judged.
+    let judged = result;
+    if (cfg.finale && result.playerFinalStats && result.rivalFinalStats) {
+      const mode = rollFinaleMode(rng);
+      const playerChoice: FinaleChoice =
+        mode === "timing"
+          ? { mode, accuracy: cfg.player === "good" ? 0.8 : 0.5 }
+          : defaultPlayerChoice(mode, result.playerFinalStats);
+      const rivalChoice = chooseRivalFinale({
+        mode,
+        rivalStats: result.rivalFinalStats,
+        playerStats: result.playerFinalStats,
+        skill: rivalSkill,
+        rng,
+      });
+      judged = applyFinaleToResult(
+        result,
+        resolveFinale({ playerStats: result.playerFinalStats, rivalStats: result.rivalFinalStats, playerChoice, rivalChoice })
+      );
+    }
+    playerTotal += judged.playerScore;
+    rivalTotal += judged.rivalScore;
+    if (judged.won) playerCorners++;
+    else if (!judged.tied) rivalCorners++;
   }
 
   const playerWon = playerCorners > rivalCorners || (playerCorners === rivalCorners && playerTotal >= rivalTotal);

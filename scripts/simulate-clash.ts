@@ -27,10 +27,11 @@ if (mode === "tune") {
   const only = process.argv.slice(3) as FullArtTier[];
   for (const tier of only.length > 0 ? only : TIERS) {
     console.log(`\n── ${tier} challenge ──`);
-    for (const rivalCarSkip of [0.3, 0.4, 0.5]) {
-      for (const rivalCrewCount of [3, 4, 5]) {
-        row(`car skip ${rivalCarSkip}, crew of ${rivalCrewCount}, skill 0.9`, {
-          ...DEFAULT_SIM, tier, rival: "ai", skill: 0.9, rivalCrewCount, rivalCarSkip,
+    const skill = Number(process.env.SKILL ?? 0.9);
+    for (const rivalCarSkip of [0.1, 0.2, 0.3, 0.4, 0.5]) {
+      for (const rivalCrewCount of [3, 4, 5, 6]) {
+        row(`car skip ${rivalCarSkip}, crew of ${rivalCrewCount}, skill ${skill}`, {
+          ...DEFAULT_SIM, tier, rival: "ai", skill, rivalCrewCount, rivalCarSkip,
         });
       }
     }

@@ -1117,7 +1117,7 @@ export function FullArtCard({
                 {isTrack
                   ? "UK DRIFT TRACK · BUFF & DEBUFF"
                   : isDebuff
-                    ? "CORNER HAZARD · BOTH DRIVERS"
+                    ? "CORNER DEBUFF · PLAYED ON A RIVAL"
                     : isMaintenance
                       ? ((card.repairBattles ?? 0) >= 5
                           ? "PIT REPAIR · INSTANT FULL FIX"

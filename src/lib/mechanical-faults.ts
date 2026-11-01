@@ -1,5 +1,5 @@
 import type { FullArtTier } from "@/lib/full-art-card";
-import { CLASH_RARITY_ODDS, rollClashRarityTier } from "@/lib/crew-cards";
+import { CLASH_RARITY_ODDS, escapeSvgText, rollClashRarityTier } from "@/lib/crew-cards";
 import type { MemberCard } from "@/lib/card-roll";
 
 export type MechanicalFaultType = "engine" | "transmission" | "suspension" | "electronics";
@@ -230,12 +230,12 @@ export function buildMaintenanceCardSvgDataUrl(def: {
     <line x1="300" y1="130" x2="300" y2="470" stroke="${def.accentColor}" stroke-opacity="0.3" stroke-width="2"/>
     <!-- Category Header -->
     <text x="300" y="115" text-anchor="middle" fill="${def.accentColor}" font-family="system-ui, sans-serif" font-size="20" font-weight="900" letter-spacing="4">PIT GARAGE · MAINTENANCE</text>
-    <text x="300" y="145" text-anchor="middle" fill="#d4d4d8" font-family="system-ui, sans-serif" font-size="14" font-weight="700" letter-spacing="2">TARGET: ${def.targetFaultName.toUpperCase()}</text>
+    <text x="300" y="145" text-anchor="middle" fill="#d4d4d8" font-family="system-ui, sans-serif" font-size="14" font-weight="700" letter-spacing="2">TARGET: ${escapeSvgText(def.targetFaultName.toUpperCase())}</text>
     <!-- Center Icon -->
-    <text x="300" y="300" text-anchor="middle" font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif" font-size="105" dominant-baseline="central">${def.icon}</text>
+    <text x="300" y="300" text-anchor="middle" font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif" font-size="105" dominant-baseline="central">${escapeSvgText(def.icon)}</text>
     <!-- Repair Badge -->
     <rect x="150" y="470" width="300" height="38" rx="19" fill="#000000" fill-opacity="0.75" stroke="${def.accentColor}" stroke-width="2"/>
-    <text x="300" y="495" text-anchor="middle" fill="${def.accentColor}" font-family="system-ui, sans-serif" font-size="16" font-weight="900" letter-spacing="2">${badgeLabel}</text>
+    <text x="300" y="495" text-anchor="middle" fill="${def.accentColor}" font-family="system-ui, sans-serif" font-size="16" font-weight="900" letter-spacing="2">${escapeSvgText(badgeLabel)}</text>
   </svg>`;
 
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;

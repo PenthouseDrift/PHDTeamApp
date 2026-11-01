@@ -1,18 +1,19 @@
 /**
  * Tandem Clash rival AI.
  *
- * The rival used to play its cars and Crew cards in a fixed array order, whatever the track, the
- * corners or the debuffs. This module makes it think the way a good player does:
+ * The rival used to play its cars and Crew cards in a fixed array order, whatever the track or the
+ * corners. This module makes it think the way a good player does:
  *
- *   1. ROSTER  From a pool of cars and Crew cards, pick the best 3 + 3 for THIS battle's track, corner
- *              types and debuffs (not just the highest rated).
+ *   1. ROSTER  From a pool of cars and Crew cards, pick the best 3 + 3 for THIS battle's track and corner
+ *              types (not just the highest rated).
  *   2. ORDER   Decide which car goes on which corner and which Crew card suits which corner.
- *   3. PLAY    At each corner, choose which Crew card to spend, weighing what it is worth here against
- *              what it would be worth on the corners still to come.
+ *   3. DEBUFF  At each corner it is dealt 3 debuff cards and plays the one that hurts the player's car most.
+ *   4. PLAY    Then it chooses which Crew card to spend, weighing what it is worth here against what it
+ *              would be worth on the corners still to come.
  *
- * It only uses information a human has: the track, the corner types, its own debuffs, the player's
- * three cars, and (once a corner starts) the player's car and debuff there. It cannot see the player's
- * Crew cards or future debuffs.
+ * It only uses information a human has: the track, the corner types, the player's three cars, and (once a
+ * corner starts) the player's car there and the debuff the player chose to play on it. It cannot see the
+ * player's Crew cards, the player's debuff hand, or debuffs for corners still to come.
  *
  * Every decision goes through `pickIndex`, which takes a `skill` from 0 to 1. At 1 it always takes the
  * best option. Lower, it sometimes takes the second or third best, the way a person misjudges. Skill is
@@ -44,7 +45,10 @@ type Corner = 0 | 1 | 2;
 export interface RivalContext {
   track: TrackCardDefinition;
   sectors: ClashSectorSpec[];
-  /** The rival's own three debuffs, one per corner. */
+  /**
+   * The debuff the player has chosen to play on the rival's car, by corner. Only corners where the player has
+   * already chosen are known; a missing entry counts as no debuff.
+   */
   rivalDebuffs: DebuffCardDefinition[];
   /** The Crew definitions in play (admin-edited ones included). Defaults to the built-in set. */
   crewDefs?: CrewCardDefinition[];
@@ -61,6 +65,33 @@ export const NEUTRAL_DEBUFF: DebuffCardDefinition = {
   name: "Unknown hazard",
   penalties: {},
 };
+
+/**
+ * A Crew card that does nothing. Scoring a corner "before any Crew card is played" needs one, because the engine
+ * otherwise falls back to a loaner Crew card, which does have effects. Look it up with `NO_CREW_POOL`.
+ */
+export const NO_CREW_DEF: CrewCardDefinition = {
+  id: "no-crew",
+  setNumber: 0,
+  name: "No Crew card",
+  category: "None",
+  ability: "No Crew card played yet",
+  effect: "",
+  tier: "bronze",
+  icon: "➖",
+  accentColor: "#71717a",
+  pullWeight: 0,
+  modifiers: {},
+};
+export const NO_CREW_CARD: MemberCard = {
+  id: "no-crew",
+  userId: "none",
+  ...crewDefinitionToCardData(NO_CREW_DEF),
+  styleIds: [],
+  kept: true,
+  rerolled: false,
+  createdAt: 0,
+} as MemberCard;
 
 /** How many Crew cards are looked at in detail when choosing from a big pool. */
 const CREW_SHORTLIST_PER_CORNER = 4;
@@ -90,13 +121,14 @@ export function pickIndex(values: number[], skill: number, rng: Rng): number {
 
 /**
  * The rival's chance (0 to 1) of winning a corner with this car and Crew card against this car. The
- * player's Crew card is unknown to the rival, so it assumes none (the corner's loaner card).
+ * player's Crew card is unknown to the rival, so it assumes none (the corner's loaner card). `playerDebuff` is
+ * the debuff the rival plays on the player's car; `rivalCrew` can be null before the rival has chosen one.
  */
 function cornerWinProb(
   ctx: RivalContext,
   corner: Corner,
   rivalCar: MemberCard,
-  rivalCrew: MemberCard,
+  rivalCrew: MemberCard | null,
   playerCar: MemberCard,
   playerDebuff: DebuffCardDefinition = NEUTRAL_DEBUFF
 ): number {
@@ -218,8 +250,30 @@ export function arrangeRival(input: {
 }
 
 /**
- * Which of the rival's remaining Crew cards to play on this corner. Called once the corner has started,
- * so the player's car and debuff here are known. Each option is valued by how likely it wins this corner
+ * Which of the 3 debuff cards the rival was dealt to play on the player's car at this corner. Each is valued by
+ * how likely it makes the rival win the corner against the player's car (the rival's own incoming debuff is not
+ * known yet, since both sides choose at the same time, and the player's Crew card is hidden).
+ *
+ * Returns an index into `hand`.
+ */
+export function chooseRivalDebuff(input: {
+  cornerIdx: Corner;
+  ctx: RivalContext;
+  rivalCar: MemberCard;
+  playerCar: MemberCard;
+  hand: DebuffCardDefinition[];
+  skill: number;
+  rng: Rng;
+}): number {
+  const { cornerIdx, ctx, rivalCar, playerCar, hand, skill, rng } = input;
+  if (hand.length <= 1) return 0;
+  const values = hand.map((debuff) => cornerWinProb(ctx, cornerIdx, rivalCar, null, playerCar, debuff));
+  return pickIndex(values, skill, rng);
+}
+
+/**
+ * Which of the rival's remaining Crew cards to play on this corner. Called once the corner has started and
+ * both debuffs are chosen, so the player's car and the debuff on it here are known. Each option is valued by how likely it wins this corner
  * plus the best the other cards could do on the corners still to come.
  *
  * Returns an index into `crew`.
@@ -353,15 +407,14 @@ export interface ChallengeDifficulty {
  * casual, half good) beats a challenge about 3 times in 10.
  */
 export const CHALLENGE_DIFFICULTY: Record<string, ChallengeDifficulty> = {
-  bronze: { skill: 0.9, carSkip: 0.4, crewCount: 4, crewBoost: 0 },
-  silver: { skill: 0.9, carSkip: 0.5, crewCount: 3, crewBoost: 0 },
-  gold: { skill: 0.9, carSkip: 0.3, crewCount: 3, crewBoost: 0 },
-  legend: { skill: 0.95, carSkip: 0.4, crewCount: 4, crewBoost: 0 },
-  // Mythic rivals play perfectly with the full car and Crew choice (the top of the strength ladder before Crew
-  // cards get rarer). Measured at about 31% for a typical player.
-  mythic: { skill: 1, carSkip: 0, crewCount: 10, crewBoost: 0 },
-  // A challenge that allows any rarity is built from Bronze cars.
-  any: { skill: 0.9, carSkip: 0.4, crewCount: 4, crewBoost: 0 },
+  bronze: { skill: 0.9, carSkip: 0.4, crewCount: 5, crewBoost: 0 },
+  silver: { skill: 0.9, carSkip: 0.4, crewCount: 4, crewBoost: 0 },
+  gold: { skill: 0.9, carSkip: 0.3, crewCount: 5, crewBoost: 0 },
+  legend: { skill: 0.95, carSkip: 0.4, crewCount: 6, crewBoost: 0 },
+  // Mythic rivals play perfectly with the full car and Crew choice and a slightly better Crew (the start of the top of the ladder).
+  mythic: { skill: 1, carSkip: 0, crewCount: 10, crewBoost: 0.1 },
+  // A challenge that allows any rarity is built from Bronze cards.
+  any: { skill: 0.9, carSkip: 0.4, crewCount: 5, crewBoost: 0 },
 };
 
 /** How many cars the rival can choose its three from. */
@@ -458,4 +511,4 @@ export function difficultyFor(challenge: { allowedRarity: string; targetWinRateP
 }
 
 /** Casual battles are against other members' cards, so the AI only arranges them well. */
-export const CASUAL_AI_SKILL = 0.9;
+export const CASUAL_AI_SKILL = 1;

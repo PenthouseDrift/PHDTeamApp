@@ -1406,6 +1406,14 @@ export function computeTrackBreakdown(params: {
   };
 }
 
+/** A car's four stats (1 to 25) once Crew, track buffs and debuffs have all been applied for a corner. */
+export interface CornerFinalStats {
+  drift: number;
+  accel: number;
+  grip: number;
+  steer: number;
+}
+
 export interface EvaluatedCornerResult {
   cornerIdx: 0 | 1 | 2;
   sector: ClashSectorSpec;
@@ -1430,6 +1438,17 @@ export interface EvaluatedCornerResult {
   debuffImpactLabel: string;
   trackImpactLabel: string;
   effectsTriggered: string[];
+  /** Each car's stats at the end of the corner (after Crew, track and debuffs). Used by the finale. */
+  playerFinalStats?: CornerFinalStats;
+  rivalFinalStats?: CornerFinalStats;
+  /** Points the finale added to (or took from) each side. 0 until the finale has been resolved. */
+  playerFinalePoints?: number;
+  rivalFinalePoints?: number;
+  /** What happened in the finale, for the summary line. */
+  finaleSummary?: string;
+  /** The corner scores before the finale's points were added (the reveal shows these until the final total). */
+  playerScoreBeforeFinale?: number;
+  rivalScoreBeforeFinale?: number;
   won: boolean;
   tied: boolean;
 }
@@ -1450,6 +1469,7 @@ function evaluateDriverOnCorner(params: {
   crewBonusLabel: string;
   debuffBreakdown: DebuffBreakdown;
   trackBreakdown: TrackBreakdown;
+  finalStats: CornerFinalStats;
 } {
   const {
     myCard,
@@ -1598,6 +1618,7 @@ function evaluateDriverOnCorner(params: {
     crewBonusLabel: `${crewDef.icon} ${crewDef.name} (${crewSummaryParts.join(" · ") || "Active"})`,
     debuffBreakdown,
     trackBreakdown,
+    finalStats: { drift, accel, grip, steer },
   };
 }
 
@@ -1694,6 +1715,8 @@ export function evaluateCornerMatchup(params: {
     debuffImpactLabel: `You: ${playerDebuffCard.name} (${pRes.debuffBreakdown.totalSummary}) · Rival: ${rivalDebuffCard.name} (${rRes.debuffBreakdown.totalSummary})`,
     trackImpactLabel: `${trackCard.icon} ${trackCard.name}: ${trackCard.ability}`,
     effectsTriggered,
+    playerFinalStats: pRes.finalStats,
+    rivalFinalStats: rRes.finalStats,
     won: pRes.score > rRes.score,
     tied: pRes.score === rRes.score,
   };

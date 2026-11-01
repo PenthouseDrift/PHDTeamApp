@@ -65,13 +65,28 @@ import { ClashHowToPlayModal, type HowToPlayTab } from "./ClashHowToPlayModal";
 import { ClashChallengesView } from "./ClashChallengesView";
 import {
   CASUAL_AI_SKILL,
+  NEUTRAL_DEBUFF,
+  NO_CREW_CARD,
+  NO_CREW_DEF,
   arrangeRival,
   chooseRivalCrew,
+  chooseRivalDebuff,
   crewCardsFromSpecs,
   type RivalContext,
   type Trio,
 } from "../rival-ai";
 import { carInsight, pickBestCarIds, pickBestCrewIds, type LineupContext } from "../lineup-insight";
+import {
+  applyFinaleToResult,
+  chooseRivalFinale,
+  defaultPlayerChoice,
+  resolveFinale,
+  rollFinaleMode,
+  type FinaleChoice,
+  type FinaleMode,
+} from "../finale";
+import { ClashFinalePanel } from "./ClashFinalePanel";
+import { ClashFinaleRoulette } from "./ClashFinaleRoulette";
 import { CarTrackEffects } from "./CarTrackEffects";
 import { useUtcMidnightCountdown } from "../hooks/useUtcCountdown";
 import {
@@ -84,6 +99,23 @@ import {
   startChallengeBattleAction,
   completeChallengeBattleAction,
 } from "../challenges-actions";
+
+type DebuffTrio = [DebuffCardDefinition, DebuffCardDefinition, DebuffCardDefinition];
+/** A corner nobody has played a debuff on yet. */
+const noDebuffs = (): DebuffTrio => [NEUTRAL_DEBUFF, NEUTRAL_DEBUFF, NEUTRAL_DEBUFF];
+const isNoDebuff = (d?: DebuffCardDefinition | null) => !d || d.id === NEUTRAL_DEBUFF.id;
+/** A debuff definition as a card the FullArtCard can draw. The id must be unique for the card dealt. */
+function debuffToMemberCard(def: DebuffCardDefinition, id: string): MemberCard {
+  return {
+    ...debuffDefinitionToCardData(def),
+    id,
+    userId: "debuff",
+    styleIds: [],
+    kept: true,
+    rerolled: false,
+    createdAt: 0,
+  } as MemberCard;
+}
 
 export interface DebuffScenario {
   id: number;
@@ -645,6 +677,22 @@ type GamePhase =
 
 type LoadoutSection = "cars" | "crew";
 
+// How long each beat of the end of a corner lasts (ms).
+/** The crew is shown deployed before the finale game is drawn. */
+const CREW_DEPLOYED_MS = 1500;
+/** After the crew card is played the cars come together in the middle for this long, before the finale is drawn. */
+const FINALE_CLASH_MS = 2400;
+/** The cars clash before the reveal starts. */
+const CLASH_MS = 2000;
+/** A pause on the face-off before the first rival stat appears. */
+const REVEAL_LEAD_MS = 500;
+/** Each of the rival's four stats is shown for this long before the next. */
+const REVEAL_STAT_MS = 800;
+/** The totals stay up this long before the winner is announced. */
+const REVEAL_TOTALS_MS = 2000;
+/** The winner banner shows for this long before the corner is done. */
+const WINNER_MS = 1800;
+
 type CornerSubStage = "car_draw" | "choose_crew" | "debuff_and_score";
 
 type BattleAnimStep =
@@ -656,6 +704,10 @@ type BattleAnimStep =
   | "battle_shake_1"
   | "prompt_crew"
   | "crew_overlay"
+  | "finale_clash"
+  | "finale_roulette"
+  | "prompt_finale"
+  | "reveal_stats"
   | "battle_shake_2"
   | "knockout_and_winner"
   | "corner_finished";
@@ -1100,16 +1152,16 @@ export function DriftClashArena({
   const [playerCarAssignments, setPlayerCarAssignments] = useState<Array<0 | 1 | 2 | null>>([null, null, null]);
   const [rivalCarAssignments, setRivalCarAssignments] = useState<Array<0 | 1 | 2 | null>>([null, null, null]);
   const [rivalCrewOrder, setRivalCrewOrder] = useState<[0 | 1 | 2, 0 | 1 | 2, 0 | 1 | 2]>([0, 1, 2]);
-  const [playerMatchDebuffs, setPlayerMatchDebuffs] = useState<
-    [DebuffCardDefinition, DebuffCardDefinition, DebuffCardDefinition]
-  >(() => rollThreeDebuffCards(DEBUFF_CARD_SET));
-  const [rivalMatchDebuffs, setRivalMatchDebuffs] = useState<
-    [DebuffCardDefinition, DebuffCardDefinition, DebuffCardDefinition]
-  >(() => rollThreeDebuffCards(DEBUFF_CARD_SET));
-
+  // The debuff that lands on each side's car at each corner. Each side plays the debuff for the OTHER side's car at
+  // the corner itself, so until then a corner holds "no debuff".
+  const [debuffsOnPlayer, setDebuffsOnPlayer] = useState<DebuffTrio>(noDebuffs);
+  const [debuffsOnRival, setDebuffsOnRival] = useState<DebuffTrio>(noDebuffs);
+  // The 3 debuff cards dealt for the corner being played: yours (to play on the rival's car) and the rival's.
+  const [debuffHand, setDebuffHand] = useState<DebuffCardDefinition[]>([]);
+  const [rivalDebuffHand, setRivalDebuffHand] = useState<DebuffCardDefinition[]>([]);
+  const [debuffPickIdx, setDebuffPickIdx] = useState<number | null>(null);
   const [activeCornerIdx, setActiveCornerIdx] = useState<0 | 1 | 2>(0);
   const [battleAnimStep, setBattleAnimStep] = useState<BattleAnimStep>("cards_entrance");
-  const [debuffScenario, setDebuffScenario] = useState<DebuffScenario | null>(null);
   const [cornerSubStage, setCornerSubStage] = useState<CornerSubStage>("car_draw");
   const [carDrawShuffleTick, setCarDrawShuffleTick] = useState(0);
   const [carDrawLocked, setCarDrawLocked] = useState(false);
@@ -1119,6 +1171,15 @@ export function DriftClashArena({
   const [rivalCrewAssignments, setRivalCrewAssignments] = useState<Array<number | null>>([null, null, null]);
   const [playedCrewIndices, setPlayedCrewIndices] = useState<Array<0 | 1 | 2>>([]);
   const [cornerResults, setCornerResults] = useState<EvaluatedCornerResult[]>([]);
+  // The finale for the corner being played: after both Crew cards are down and before the corner is judged. `base`
+  // is the corner's result without the finale's points. The rival's stats stay hidden until the finale is done.
+  // How much of the rival's car the reveal has shown so far: 1 to 4 stats, then 5 for the totals.
+  const [rivalReveal, setRivalReveal] = useState(0);
+  const [pendingFinale, setPendingFinale] = useState<{
+    cornerIdx: 0 | 1 | 2;
+    mode: FinaleMode;
+    base: EvaluatedCornerResult;
+  } | null>(null);
   // Previewing crew card selection in crew_prep phase
   const [previewCrewIdx, setPreviewCrewIdx] = useState<number | null>(null);
   // Previewing car card selection in car_select phase
@@ -1477,10 +1538,12 @@ export function DriftClashArena({
 
     const rolledSectors = rollThreeClashSectors();
     setActiveSectors(rolledSectors);
-    const debuffPool =
-      debuffCatalogDefs.length >= 3 ? debuffCatalogDefs : DEBUFF_CARD_SET;
-    setPlayerMatchDebuffs(rollThreeDebuffCards(debuffPool));
-    setRivalMatchDebuffs(rollThreeDebuffCards(debuffPool));
+    // Debuffs are played corner by corner, not rolled up front.
+    setDebuffsOnPlayer(noDebuffs());
+    setDebuffsOnRival(noDebuffs());
+    setDebuffHand([]);
+    setRivalDebuffHand([]);
+    setDebuffPickIdx(null);
     setRivalCrewOrder([0, 1, 2]);
 
     // Animate roulette cycling through UK tracks with realistic slot deceleration
@@ -1568,12 +1631,14 @@ export function DriftClashArena({
 
   /** What the rival knows about this battle: the track, the corner types, and its own debuffs. */
   function rivalContext(): RivalContext {
-    return { track: activeTrackDef, sectors: activeSectors, rivalDebuffs: rivalMatchDebuffs, crewDefs: crewCatalogDefs };
+    return { track: activeTrackDef, sectors: activeSectors, rivalDebuffs: debuffsOnRival, crewDefs: crewCatalogDefs };
   }
 
   // ── STEP 3: ARCADE GAME VIEW CORNER BATTLE ANIMATION ────────────────────────
   function startCornerBattle(cornerIdx: 0 | 1 | 2) {
     clearTimers();
+    setPendingFinale(null);
+    setRivalReveal(0);
     setActiveCornerIdx(cornerIdx);
 
     // If this corner already has an assigned car, crew and evaluated result (e.g. replaying)
@@ -1646,10 +1711,9 @@ export function DriftClashArena({
       const t2 = setTimeout(() => setBattleAnimStep("debuff_overlay"), 4500);
       const t3 = setTimeout(() => setBattleAnimStep("battle_shake_1"), 5900);
       const t4 = setTimeout(() => setBattleAnimStep("crew_overlay"), 7500);
-      const t5 = setTimeout(() => setBattleAnimStep("battle_shake_2"), 9000);
-      const t6 = setTimeout(() => setBattleAnimStep("knockout_and_winner"), 10500);
-      const t7 = setTimeout(() => setBattleAnimStep("corner_finished"), 12000);
-      timersRef.current.push(t0, t1, t2, t3, t4, t5, t6, t7);
+      // The finale is not replayed; the clash and the reveal are.
+      scheduleClashReveal(7500 + CREW_DEPLOYED_MS);
+      timersRef.current.push(t0, t1, t2, t3, t4);
       return;
     }
 
@@ -1666,17 +1730,91 @@ export function DriftClashArena({
       setBattleAnimStep("battle_initial");
     }, 2000);
 
-    // 4. Track Incident / Mechanical Debuffs strike after the battle animation has played for a few seconds: 4800ms
-    // Pauses battle on the hazard incident popup so players see the track event before calling crew!
+    // 4. After the cars have clashed for a few seconds (4800ms) each side is dealt 3 debuff cards. The battle
+    // pauses so the player can pick the one to play on the rival's car before calling their crew.
     const t2 = setTimeout(() => {
-      const scenario = DEBUFF_SCENARIOS[Math.floor(Math.random() * DEBUFF_SCENARIOS.length)];
-      setDebuffScenario(scenario);
+      dealDebuffHands();
       setBattleAnimStep("prompt_debuff");
     }, 4800);
 
     timersRef.current.push(t0, t1, t2);
   }
 
+  /** Deal 3 debuff cards to each side for the corner being played. */
+  function dealDebuffHands(): { mine: DebuffCardDefinition[]; theirs: DebuffCardDefinition[] } {
+    const pool = debuffCatalogDefs.length >= 3 ? debuffCatalogDefs : DEBUFF_CARD_SET;
+    const mine = rollThreeDebuffCards(pool);
+    const theirs = rollThreeDebuffCards(pool);
+    setDebuffHand(mine);
+    setRivalDebuffHand(theirs);
+    setDebuffPickIdx(null);
+    return { mine, theirs };
+  }
+  /** The two cars on a corner. */
+  function carsForCorner(cornerIdx: 0 | 1 | 2) {
+    const playerCar = selectedCarCards[playerCarAssignments[cornerIdx] ?? playerCarOrder[cornerIdx] ?? 0];
+    const rivalCar = opponent.cards[rivalCarAssignments[cornerIdx] ?? rivalCarOrder[cornerIdx] ?? 0] ?? opponent.cards[0];
+    return { playerCar, rivalCar };
+  }
+  /** Which card in a hand hurts the rival's car most on this corner (used when the player skips the pick). */
+  function bestDebuffIndex(hand: DebuffCardDefinition[], cornerIdx: 0 | 1 | 2): number {
+    if (hand.length <= 1) return 0;
+    const { playerCar, rivalCar } = carsForCorner(cornerIdx);
+    const margin = hand.map((debuff) => {
+      const r = evaluateCornerMatchup({
+        cornerIdx,
+        sector: activeSectors[cornerIdx],
+        playerCard: playerCar,
+        rivalCard: rivalCar,
+        playerCrewCard: null,
+        rivalCrewCard: null,
+        playerDebuffCard: NEUTRAL_DEBUFF,
+        rivalDebuffCard: debuff,
+        trackCard: activeTrackDef,
+        crewPool: crewCatalogDefs,
+      });
+      return r.playerScore - r.rivalScore;
+    });
+    return margin.indexOf(Math.max(...margin));
+  }
+  /**
+   * Lock in a corner's debuffs: the player's pick goes on the rival's car and the AI's pick (made at the same time,
+   * without seeing the player's) goes on the player's car.
+   */
+  function playDebuffs(
+    cornerIdx: 0 | 1 | 2,
+    mineHand: DebuffCardDefinition[],
+    theirsHand: DebuffCardDefinition[],
+    pickIdx: number
+  ): { onPlayer: DebuffCardDefinition; onRival: DebuffCardDefinition } {
+    const { playerCar, rivalCar } = carsForCorner(cornerIdx);
+    const onRival = mineHand[pickIdx] ?? mineHand[0] ?? NEUTRAL_DEBUFF;
+    const aiIdx = chooseRivalDebuff({
+      cornerIdx,
+      ctx: rivalContext(),
+      rivalCar,
+      playerCar,
+      hand: theirsHand,
+      skill: opponent.aiSkill ?? CASUAL_AI_SKILL,
+      rng: Math.random,
+    });
+    const onPlayer = theirsHand[aiIdx] ?? theirsHand[0] ?? NEUTRAL_DEBUFF;
+    setDebuffsOnRival((prev) => {
+      const next = [...prev] as DebuffTrio;
+      next[cornerIdx] = onRival;
+      return next;
+    });
+    setDebuffsOnPlayer((prev) => {
+      const next = [...prev] as DebuffTrio;
+      next[cornerIdx] = onPlayer;
+      return next;
+    });
+    return { onPlayer, onRival };
+  }
+  function handleConfirmDebuffPick(pickIdx: number) {
+    playDebuffs(activeCornerIdx, debuffHand, rivalDebuffHand, pickIdx);
+    handleContinueFromDebuff();
+  }
   function handleContinueFromDebuff() {
     clearTimers();
     // 1. Debuffs hit the cars & display incoming penalties!
@@ -1702,7 +1840,13 @@ export function DriftClashArena({
     timersRef.current.push(t1, t2);
   }
 
-  function handleApplyCrewAndResumeBattle(chosenCrewIdx: number, targetCornerIdx?: 0 | 1 | 2) {
+  function handleApplyCrewAndResumeBattle(
+    chosenCrewIdx: number,
+    targetCornerIdx?: 0 | 1 | 2,
+    playedNow?: { onPlayer: DebuffCardDefinition; onRival: DebuffCardDefinition },
+    /** Skipping: settle the finale with default picks instead of asking the player. */
+    autoFinale = false
+  ) {
     clearTimers();
     const cornerIdx = targetCornerIdx !== undefined ? targetCornerIdx : activeCornerIdx;
     setActiveCornerIdx(cornerIdx);
@@ -1718,14 +1862,19 @@ export function DriftClashArena({
     const rivalCarsInOrder = [0, 1, 2].map(
       (k) => opponent.cards[rivalCarAssignments[k] ?? k] ?? opponent.cards[k] ?? opponent.cards[0]
     ) as Trio<MemberCard>;
+    const debuffOnPlayer = playedNow?.onPlayer ?? debuffsOnPlayer[cornerIdx];
+    const debuffOnRival = playedNow?.onRival ?? debuffsOnRival[cornerIdx];
+    const crewCtx: RivalContext = playedNow
+      ? { ...rivalContext(), rivalDebuffs: debuffsOnRival.map((d, i) => (i === cornerIdx ? debuffOnRival : d)) }
+      : rivalContext();
     const rivalChosenIdx = chooseRivalCrew({
       cornerIdx,
-      ctx: rivalContext(),
+      ctx: crewCtx,
       cars: rivalCarsInOrder,
       crew: rivalCrewCards,
       usedCrew: usedRivalCrew,
       playerCar: playerCarForCorner,
-      playerDebuff: playerMatchDebuffs[cornerIdx],
+      playerDebuff: debuffOnPlayer,
       playerCars: selectedCarCards,
       skill: opponent.aiSkill ?? CASUAL_AI_SKILL,
       rng: Math.random,
@@ -1741,8 +1890,8 @@ export function DriftClashArena({
     const rivalCar = opponent.cards[rivalCarSlot] ?? opponent.cards[0];
     const playerCrew = selectedCrewCards[chosenCrewIdx];
     const rivalCrew = rivalCrewCards[rivalChosenIdx];
-    const playerDebuffDef = playerMatchDebuffs[cornerIdx];
-    const rivalDebuffDef = rivalMatchDebuffs[cornerIdx];
+    const playerDebuffDef = debuffOnPlayer;
+    const rivalDebuffDef = debuffOnRival;
 
     const result = evaluateCornerMatchup({
       cornerIdx,
@@ -1758,33 +1907,105 @@ export function DriftClashArena({
     });
 
     setPlayedCrewIndices((prev) => [...prev, chosenCrewIdx as 0 | 1 | 2]);
+
+    // 4. The FINALE: a random last game that can still swing the corner. The corner is only judged once it is done.
+    const mode = rollFinaleMode();
+    if (autoFinale) {
+      completeFinale(cornerIdx, result, mode, null, true);
+      return;
+    }
+    setPendingFinale({ cornerIdx, mode, base: result });
+    // The crew is deployed and the cars slam together in the middle. Only then is the game for the finale drawn.
+    setBattleAnimStep("finale_clash");
+    const toRoulette = setTimeout(() => setBattleAnimStep("finale_roulette"), FINALE_CLASH_MS);
+    timersRef.current.push(toRoulette);
+  }
+
+  /**
+   * The clash and the reveal, from the moment the finale is settled: the cars clash, then the rival car's stats
+   * appear one by one, then both corner totals, then the winner. `offset` delays the whole thing (used by the replay).
+   */
+  function scheduleClashReveal(offset = 0) {
+    const at = (ms: number, fn: () => void) => timersRef.current.push(setTimeout(fn, offset + ms));
+    at(0, () => {
+      setRivalReveal(0);
+      setBattleAnimStep("battle_shake_2");
+    });
+    at(CLASH_MS, () => {
+      setRivalReveal(0);
+      setBattleAnimStep("reveal_stats");
+    });
+    for (let level = 1; level <= 4; level++) {
+      at(CLASH_MS + REVEAL_LEAD_MS + (level - 1) * REVEAL_STAT_MS, () => setRivalReveal(level));
+    }
+    const totalsAt = CLASH_MS + REVEAL_LEAD_MS + 4 * REVEAL_STAT_MS;
+    at(totalsAt, () => setRivalReveal(5));
+    at(totalsAt + REVEAL_TOTALS_MS, () => setBattleAnimStep("knockout_and_winner"));
+    at(totalsAt + REVEAL_TOTALS_MS + WINNER_MS, () => setBattleAnimStep("corner_finished"));
+  }
+
+  /**
+   * Settle the finale: the rival makes its pick (without seeing the player's), both picks are resolved, and the points
+   * are added to the corner. Then the stats are revealed and the clash plays out. `instant` stores the result and stops.
+   */
+  function completeFinale(
+    cornerIdx: 0 | 1 | 2,
+    base: EvaluatedCornerResult,
+    mode: FinaleMode,
+    playerChoice: FinaleChoice | null,
+    instant = false
+  ) {
+    clearTimers();
+    let result = base;
+    const playerStats = base.playerFinalStats;
+    const rivalStats = base.rivalFinalStats;
+    if (playerStats && rivalStats) {
+      const rivalChoice = chooseRivalFinale({
+        mode,
+        rivalStats,
+        playerStats,
+        skill: opponent.aiSkill ?? CASUAL_AI_SKILL,
+        rng: Math.random,
+      });
+      const outcome = resolveFinale({
+        playerStats,
+        rivalStats,
+        playerChoice: playerChoice ?? defaultPlayerChoice(mode, playerStats),
+        rivalChoice,
+      });
+      result = applyFinaleToResult(base, outcome);
+    }
+    setPendingFinale(null);
     setCornerResults((prev) => {
       const next = [...prev];
       next[cornerIdx] = result;
       return next;
     });
+    if (instant) return;
 
-    // 4. Crew buffs apply and counter the debuffs!
-    setBattleAnimStep("crew_overlay");
-
-    // Door-to-door clash shake 2 (Apex Clash!)
-    const t1 = setTimeout(() => {
-      setBattleAnimStep("battle_shake_2");
-    }, 1600);
-
-    const t2 = setTimeout(() => {
-      setBattleAnimStep("knockout_and_winner");
-    }, 3200);
-
-    const t3 = setTimeout(() => {
-      setBattleAnimStep("corner_finished");
-    }, 4600);
-
-    timersRef.current.push(t1, t2, t3);
+    // 5. The clash plays, the rival's stats are revealed one by one, then the totals, then the winner.
+    scheduleClashReveal();
   }
 
   function handleSkipBattleAnimation() {
     clearTimers();
+    // Skipping the debuff pick plays the debuff that hurts the rival's car most, then carries on to the crew.
+    if (battleAnimStep === "prompt_debuff") {
+      handleConfirmDebuffPick(debuffPickIdx ?? bestDebuffIndex(debuffHand, activeCornerIdx));
+      return;
+    }
+    // Skipping the finale settles it with default picks (your best stat, an even setup, a middling run).
+    if (
+      pendingFinale &&
+      (battleAnimStep === "crew_overlay" ||
+        battleAnimStep === "finale_clash" ||
+        battleAnimStep === "finale_roulette" ||
+        battleAnimStep === "prompt_finale")
+    ) {
+      completeFinale(pendingFinale.cornerIdx, pendingFinale.base, pendingFinale.mode, null, true);
+      setBattleAnimStep("corner_finished");
+      return;
+    }
     const cornerIdx = activeCornerIdx;
     if (!cornerResults[cornerIdx]) {
       const alreadyPlayedCrew = playerCrewAssignments
@@ -1794,7 +2015,13 @@ export function DriftClashArena({
         (idx) => !alreadyPlayedCrew.includes(idx) && !playedCrewIndices.includes(idx)
       );
       const chosenCrew = previewCrewIdx ?? available[0] ?? 0;
-      handleApplyCrewAndResumeBattle(chosenCrew, cornerIdx);
+      // Skipped before any debuff was played: deal and play them now so the corner still has its debuffs.
+      let playedNow: { onPlayer: DebuffCardDefinition; onRival: DebuffCardDefinition } | undefined;
+      if (isNoDebuff(debuffsOnRival[cornerIdx]) && isNoDebuff(debuffsOnPlayer[cornerIdx])) {
+        const { mine, theirs } = dealDebuffHands();
+        playedNow = playDebuffs(cornerIdx, mine, theirs, bestDebuffIndex(mine, cornerIdx));
+      }
+      handleApplyCrewAndResumeBattle(chosenCrew, cornerIdx, playedNow, true);
     }
     setBattleAnimStep("corner_finished");
   }
@@ -1825,8 +2052,8 @@ export function DriftClashArena({
       const rCar = opponent.cards[rivalCarSlot] ?? opponent.cards[0];
       const pCrew = selectedCrewCards[playerCrewSlot];
       const rCrew = rivalCrewCards[rivalCrewSlot];
-      const pDebuff = playerMatchDebuffs[cornerIdx];
-      const rDebuff = rivalMatchDebuffs[cornerIdx];
+      const pDebuff = debuffsOnPlayer[cornerIdx];
+      const rDebuff = debuffsOnRival[cornerIdx];
 
       return evaluateCornerMatchup({
         cornerIdx,
@@ -3478,8 +3705,8 @@ export function DriftClashArena({
                     const assignedRivalCrewIdx = rivalCrewAssignments[activeCornerIdx] ?? rivalCrewOrder[activeCornerIdx] ?? 0;
                     const playerCrew = selectedCrewCards[assignedPlayerCrewIdx];
                     const rivalCrew = rivalCrewCards[assignedRivalCrewIdx];
-                    const playerDebuffDef = playerMatchDebuffs[activeCornerIdx];
-                    const rivalDebuffDef = rivalMatchDebuffs[activeCornerIdx];
+                    const playerDebuffDef = debuffsOnPlayer[activeCornerIdx];
+                    const rivalDebuffDef = debuffsOnRival[activeCornerIdx];
                     const currentResult = cornerResults[activeCornerIdx];
 
                     // Base Stats (Normalized)
@@ -3559,16 +3786,32 @@ export function DriftClashArena({
                       battleAnimStep === "debuff_overlay" ||
                       battleAnimStep === "battle_shake_1";
                     const isPromptCrew = battleAnimStep === "prompt_crew";
+                    // After the Crew cards are down the corner goes: crew_overlay -> finale_roulette -> prompt_finale (the
+                    // finale game) -> battle_shake_2 (the clash) -> reveal_stats (the rival's stats, one by one, then the
+                    // totals) -> knockout_and_winner -> corner_finished.
                     const isCrewStage =
                       battleAnimStep === "crew_overlay" ||
+                      battleAnimStep === "finale_clash" ||
+                      battleAnimStep === "finale_roulette" ||
+                      battleAnimStep === "prompt_finale" ||
                       battleAnimStep === "battle_shake_2" ||
+                      battleAnimStep === "reveal_stats" ||
                       battleAnimStep === "knockout_and_winner" ||
                       battleAnimStep === "corner_finished";
+                    // The corner's result before the finale is settled (only set while the finale is still to come).
+                    const pendingBase = pendingFinale?.cornerIdx === activeCornerIdx ? pendingFinale.base : null;
                     const isCrewOrLater = isCrewStage;
-                    const isDebuffOrLater =
-                      isDebuffStage ||
-                      isPromptCrew ||
-                      isCrewStage;
+                    const isDebuffOrLater = isDebuffStage || isPromptCrew || isCrewStage;
+                    // How much of the rival car is shown: 0 = nothing, 1 to 4 = that many stats (drift, accel, grip,
+                    // steer) and 5 = everything, including the points. Only the reveal steps count up, and the steps
+                    // after them show it all.
+                    const revealLevel =
+                      battleAnimStep === "knockout_and_winner" || battleAnimStep === "corner_finished"
+                        ? 5
+                        : battleAnimStep === "reveal_stats"
+                          ? rivalReveal
+                          : 0;
+                    const hideRival = revealLevel < 5;
 
                     // Compute unshielded debuffed stats for the initial debuff phase (before crew is called)
                     const pInitialDebuff = computeDebuffBreakdown({
@@ -3635,117 +3878,93 @@ export function DriftClashArena({
                       steer: Math.max(1, previewTrackStats.steer - pPreviewDebuff.effectiveSteerPenalty),
                     };
 
+                    // Stats shown on each car. The track's buffs are in from the very first step, then the debuff, then Crew.
                     const pDisplayStats = isCrewOrLater
                       ? pFinalStats
                       : isPromptCrew
                         ? previewCrewStats
                         : isDebuffStage
                           ? pDebuffedStats
-                          : pBase;
-
+                          : pBaseTrackStats;
                     const rDisplayStats = isCrewOrLater
                       ? rFinalStats
                       : isDebuffStage || isPromptCrew
                         ? rDebuffedStats
-                        : rBase;
+                        : rBaseTrackStats;
+                    // The coloured +/- chips show what the latest step changed: track buffs first, then the debuff, then Crew.
+                    // The track's bonus or hazard POINTS for each car right now (a Crew shield only counts once it is played).
+                    const pTrackNow = computeTrackBreakdown({
+                      card: playerCar,
+                      trackCard: activeTrackDef,
+                      shield: isCrewOrLater ? pShield : isPromptCrew ? previewShield : 0,
+                    });
+                    const rTrackNow = computeTrackBreakdown({
+                      card: rivalCar,
+                      trackCard: activeTrackDef,
+                      shield: isCrewStage ? rShield : 0,
+                    });
+                    const trackChip = (net: number) =>
+                      net === 0 ? null : (
+                        <div
+                          className={`flex w-full max-w-[200px] items-center justify-center gap-1 rounded-xl border-2 px-2 py-0.5 shadow-lg ${
+                            net > 0 ? "border-emerald-500 bg-emerald-950/95 text-emerald-200" : "border-rose-500 bg-rose-950/95 text-rose-200"
+                          }`}
+                        >
+                          <span className="text-[10px]" aria-hidden>{activeTrackDef.icon}</span>
+                          <span className="shrink-0 text-[8px] font-black uppercase tracking-wider sm:text-[9px]">TRACK</span>
+                          <span className="truncate text-[10px] font-black sm:text-xs">
+                            {net > 0 ? "+" : ""}
+                            {net} PTS
+                          </span>
+                        </div>
+                      );
+                    const pDiffTarget = pDisplayStats;
+                    const pDiffBase = isCrewOrLater || isPromptCrew ? pDebuffedStats : isDebuffStage ? pBaseTrackStats : pBase;
+                    const rDiffTarget = isCrewOrLater ? rFinalStats : rDisplayStats;
+                    const rDiffBase = isCrewOrLater || isPromptCrew ? rDebuffedStats : isDebuffStage ? rBaseTrackStats : rBase;
+                    const statDiffs = (target: typeof pBase, base: typeof pBase) => ({
+                      drift: target.drift !== base.drift ? getStatDiffInfo(target.drift, base.drift) : null,
+                      accel: target.accel !== base.accel ? getStatDiffInfo(target.accel, base.accel) : null,
+                      grip: target.grip !== base.grip ? getStatDiffInfo(target.grip, base.grip) : null,
+                      steer: target.steer !== base.steer ? getStatDiffInfo(target.steer, base.steer) : null,
+                    });
+                    const pDiffs = statDiffs(pDiffTarget, pDiffBase);
+                    const rDiffs = statDiffs(rDiffTarget, rDiffBase);
+                    const showPlayerCrewGlow = isCrewOrLater || (isPromptCrew && previewCrewIdx !== null);
+                    const showPlayerStatChanges = true;
 
-                    // Diffs calculation
-                    const pDiffTarget = isCrewOrLater
-                      ? pFinalStats
-                      : isPromptCrew
-                        ? previewCrewStats
-                        : isDebuffStage
-                          ? pDebuffedStats
-                          : pBase;
-                    const pDiffBase = isCrewOrLater
-                      ? pDebuffedStats
-                      : isPromptCrew
-                        ? pDebuffedStats
-                        : pBase;
-
-                    const pDiffs = {
-                      drift: (isCrewStage || isPromptCrew || isDebuffOrLater) && pDiffTarget.drift !== pDiffBase.drift
-                        ? getStatDiffInfo(pDiffTarget.drift, pDiffBase.drift)
-                        : null,
-                      accel: (isCrewStage || isPromptCrew || isDebuffOrLater) && pDiffTarget.accel !== pDiffBase.accel
-                        ? getStatDiffInfo(pDiffTarget.accel, pDiffBase.accel)
-                        : null,
-                      grip: (isCrewStage || isPromptCrew || isDebuffOrLater) && pDiffTarget.grip !== pDiffBase.grip
-                        ? getStatDiffInfo(pDiffTarget.grip, pDiffBase.grip)
-                        : null,
-                      steer: (isCrewStage || isPromptCrew || isDebuffOrLater) && pDiffTarget.steer !== pDiffBase.steer
-                        ? getStatDiffInfo(pDiffTarget.steer, pDiffBase.steer)
-                        : null,
-                    };
-
-                    const rDiffTarget = isCrewStage
-                      ? rFinalStats
-                      : (isDebuffStage || isPromptCrew)
-                        ? rDebuffedStats
-                        : rBase;
-                    const rDiffBase = isCrewStage ? rDebuffedStats : rBase;
-
-                    const rDiffs = {
-                      drift: (isCrewStage || isDebuffOrLater) && rDiffTarget.drift !== rDiffBase.drift
-                        ? getStatDiffInfo(rDiffTarget.drift, rDiffBase.drift)
-                        : null,
-                      accel: (isCrewStage || isDebuffOrLater) && rDiffTarget.accel !== rDiffBase.accel
-                        ? getStatDiffInfo(rDiffTarget.accel, rDiffBase.accel)
-                        : null,
-                      grip: (isCrewStage || isDebuffOrLater) && rDiffTarget.grip !== rDiffBase.grip
-                        ? getStatDiffInfo(rDiffTarget.grip, rDiffBase.grip)
-                        : null,
-                      steer: (isCrewStage || isDebuffOrLater) && rDiffTarget.steer !== rDiffBase.steer
-                        ? getStatDiffInfo(rDiffTarget.steer, rDiffBase.steer)
-                        : null,
-                    };
-
-                    const showPlayerCrewGlow = isCrewStage || (isPromptCrew && previewCrewIdx !== null);
-                    const showPlayerStatChanges = isCrewStage || isDebuffOrLater || (isPromptCrew && previewCrewIdx !== null);
-
-                    const pBaseCornerScore = scoreCardForSector(playerCar, sector.id).total;
-                    const rBaseCornerScore = scoreCardForSector(rivalCar, sector.id).total;
-
-                    const pDebuffedCornerScore = scoreCardForSector(
-                      {
-                        ...playerCar,
-                        stats: {
-                          drift: String(pDebuffedStats.drift),
-                          accel: String(pDebuffedStats.accel),
-                          grip: String(pDebuffedStats.grip),
-                          steer: String(pDebuffedStats.steer),
-                        },
-                      },
-                      sector.id
-                    ).total;
-
-                    const rDebuffedCornerScore = scoreCardForSector(
-                      {
-                        ...rivalCar,
-                        stats: {
-                          drift: String(rDebuffedStats.drift),
-                          accel: String(rDebuffedStats.accel),
-                          grip: String(rDebuffedStats.grip),
-                          steer: String(rDebuffedStats.steer),
-                        },
-                      },
-                      sector.id
-                    ).total;
-
-                    const pPreviewScore =
-                      scoreCardForSector(
-                        {
-                          ...playerCar,
-                          stats: {
-                            drift: String(previewCrewStats.drift),
-                            accel: String(previewCrewStats.accel),
-                            grip: String(previewCrewStats.grip),
-                            steer: String(previewCrewStats.steer),
-                          },
-                        },
-                        sector.id
-                      ).total + (previewMods.flatBonus ?? 0);
-
+                    // The running totals come from the real scoring engine at every step, so they always add up the same way
+                    // the final result does: the car's stats, tier, the TRACK's buffs and hazard, then the debuff, then Crew.
+                    // Before a Crew card is played a "no Crew" stand-in is used (the engine would otherwise use a loaner card).
+                    const scoringPool = [NO_CREW_DEF, ...crewCatalogDefs];
+                    const scoreStage = (
+                      playerDebuffCard: DebuffCardDefinition,
+                      rivalDebuffCard: DebuffCardDefinition,
+                      playerCrewCard: MemberCard
+                    ) =>
+                      evaluateCornerMatchup({
+                        cornerIdx: activeCornerIdx,
+                        sector,
+                        playerCard: playerCar,
+                        rivalCard: rivalCar,
+                        playerCrewCard,
+                        rivalCrewCard: NO_CREW_CARD,
+                        playerDebuffCard,
+                        rivalDebuffCard,
+                        trackCard: activeTrackDef,
+                        crewPool: scoringPool,
+                      });
+                    // Cars only, with the track's effects (before any debuff is played).
+                    const baseStage = scoreStage(NEUTRAL_DEBUFF, NEUTRAL_DEBUFF, NO_CREW_CARD);
+                    // Plus the debuffs just played.
+                    const debuffStage = scoreStage(playerDebuffDef, rivalDebuffDef, NO_CREW_CARD);
+                    // Plus the Crew card you are looking at.
+                    const previewStage = scoreStage(playerDebuffDef, rivalDebuffDef, activePreviewCrewCard);
+                    const pBaseCornerScore = baseStage.playerScore;
+                    const rBaseCornerScore = baseStage.rivalScore;
+                    const pDebuffedCornerScore = debuffStage.playerScore;
+                    const rDebuffedCornerScore = debuffStage.rivalScore;
+                    const pPreviewScore = previewStage.playerScore;
                     const pCrewScore =
                       scoreCardForSector(
                         {
@@ -3774,8 +3993,13 @@ export function DriftClashArena({
                         sector.id
                       ).total + (rCrewMods.flatBonus ?? 0);
 
+                    // Your points stay at the pre-finale number until the final total is revealed.
                     const pScore = isCrewStage
-                      ? (currentResult?.playerScore ?? pCrewScore)
+                      ? currentResult
+                        ? revealLevel >= 5
+                          ? currentResult.playerScore
+                          : (currentResult.playerScoreBeforeFinale ?? currentResult.playerScore)
+                        : (pendingBase?.playerScore ?? pCrewScore)
                       : isPromptCrew
                         ? pPreviewScore
                         : isDebuffStage
@@ -3792,6 +4016,12 @@ export function DriftClashArena({
                     let pCardClass = "transition-all duration-500 will-change-transform ";
                     if (battleAnimStep === "cards_entrance") {
                       pCardClass += "-translate-x-8 opacity-80 rotate-2 duration-700 ease-out";
+                    } else if (battleAnimStep === "finale_clash") {
+                      // The cars slam together in the middle of the track.
+                      pCardClass += "translate-x-[38%] sm:translate-x-[52%] scale-110 rotate-6 animate-clash-shake z-30";
+                    } else if (battleAnimStep === "finale_roulette" || battleAnimStep === "prompt_finale" || battleAnimStep === "reveal_stats") {
+                      // ...and stay locked together while the finale is drawn, played and revealed.
+                      pCardClass += "translate-x-[38%] sm:translate-x-[52%] scale-105 rotate-3 z-30 duration-500";
                     } else if (battleAnimStep === "head_to_head" || battleAnimStep === "prompt_crew" || battleAnimStep === "prompt_debuff") {
                       pCardClass += "translate-x-[12%] sm:translate-x-[16%] scale-100 rotate-1 z-20 duration-500";
                     } else if (battleAnimStep === "battle_initial") {
@@ -3818,6 +4048,10 @@ export function DriftClashArena({
                     let rCardClass = "transition-all duration-500 will-change-transform ";
                     if (battleAnimStep === "cards_entrance") {
                       rCardClass += "translate-x-8 opacity-80 -rotate-2 duration-700 ease-out";
+                    } else if (battleAnimStep === "finale_clash") {
+                      rCardClass += "-translate-x-[38%] sm:-translate-x-[52%] scale-110 -rotate-6 animate-clash-shake z-30";
+                    } else if (battleAnimStep === "finale_roulette" || battleAnimStep === "prompt_finale" || battleAnimStep === "reveal_stats") {
+                      rCardClass += "-translate-x-[38%] sm:-translate-x-[52%] scale-105 -rotate-3 z-30 duration-500";
                     } else if (battleAnimStep === "head_to_head" || battleAnimStep === "prompt_crew" || battleAnimStep === "prompt_debuff") {
                       rCardClass += "-translate-x-[12%] sm:-translate-x-[16%] scale-100 -rotate-1 z-20 duration-500";
                     } else if (battleAnimStep === "battle_initial") {
@@ -3886,13 +4120,21 @@ export function DriftClashArena({
                                           : battleAnimStep === "battle_initial"
                                             ? "Tandem Entry Clash! ⚔️"
                                             : battleAnimStep === "prompt_debuff"
-                                              ? "Track Incident! ⚠️"
+                                              ? "Pick a Debuff! ⚠️"
                                               : battleAnimStep === "debuff_overlay"
                                                 ? "Debuffs Applied! ⚠️"
                                                 : battleAnimStep === "battle_shake_1"
                                                   ? "Hazard Battle! ⚠️"
                                                   : battleAnimStep === "prompt_crew"
                                                     ? "Pick Crew Card ⚡"
+                                                    : battleAnimStep === "finale_clash"
+                                                    ? "Cars Collide! 💥"
+                                                    : battleAnimStep === "finale_roulette"
+                                                    ? "Drawing the Finale 🎲"
+                                                    : battleAnimStep === "prompt_finale"
+                                                    ? "Final Showdown 🎯"
+                                                    : battleAnimStep === "reveal_stats"
+                                                    ? (rivalReveal >= 5 ? "Totals In! 🧮" : "Revealing Rival… 🔍")
                                                     : battleAnimStep === "crew_overlay"
                                                       ? "Crew Advantage! ⚡"
                                                       : battleAnimStep === "battle_shake_2"
@@ -4048,6 +4290,7 @@ export function DriftClashArena({
                                         );
                                       })()}
 
+                                      {trackChip(pTrackNow.totalNetPoints)}
                                       {/* PROMINENT TOTAL DEBUFF SUMMARY BADGE */}
                                       {isDebuffOrLater && pDebuffBreakdown.hasAnyDebuff && (
                                         <div className="animate-pulse flex items-center justify-center gap-1 rounded-xl bg-rose-950/95 border-2 border-rose-500 px-2 py-0.5 shadow-[0_0_15px_rgba(244,63,94,0.7)] text-white w-full max-w-[200px]">
@@ -4093,7 +4336,7 @@ export function DriftClashArena({
                             <div className="space-y-1">
                               <div className="flex items-center justify-between px-1">
                                 <span className="truncate text-xs font-black text-rose-400">
-                                  {rScore} PTS
+                                  {hideRival ? "??? PTS" : `${rScore} PTS`}
                                 </span>
                                 <span className="rounded-full bg-rose-500/20 border border-rose-500/40 px-2 py-0.5 text-[9px] sm:text-[10px] font-black uppercase text-rose-300 truncate max-w-[100px]">
                                   {opponent.driverName}
@@ -4110,8 +4353,8 @@ export function DriftClashArena({
                                   </>
                                 )}
 
-                                {/* Floating Stat Value Changes Animated Directly Over Rival Card */}
-                                {(isCrewStage || isDebuffOrLater) && (
+                                {/* Floating Stat Value Changes Animated Directly Over Rival Card (hidden until the reveal) */}
+                                {showPlayerStatChanges && !hideRival && (
                                   <div className="pointer-events-none absolute inset-x-0 top-2 sm:top-3 z-30 flex flex-col items-center gap-1 animate-in zoom-in-75 duration-300">
                                     <div className="flex flex-wrap justify-center gap-1 px-1">
                                       {rDiffs.drift && rDiffs.drift.diff !== 0 && (
@@ -4148,6 +4391,7 @@ export function DriftClashArena({
                                       )}
 
                                       {/* PROMINENT TOTAL DEBUFF SUMMARY BADGE FOR RIVAL */}
+                                      {trackChip(rTrackNow.totalNetPoints)}
                                       {isDebuffOrLater && rDebuffBreakdown.hasAnyDebuff && (
                                         <div className="animate-pulse flex items-center justify-center gap-1 rounded-xl bg-rose-950/95 border-2 border-rose-500 px-2 py-0.5 shadow-[0_0_15px_rgba(244,63,94,0.7)] text-white w-full max-w-[200px]">
                                           <span className="text-[10px]">⚠️</span>
@@ -4166,11 +4410,12 @@ export function DriftClashArena({
                                 <FullArtCard
                                   card={{
                                     ...rivalCar,
+                                    // Hidden stats show as "?" and the card's /100 total is left off, until the reveal.
                                     stats: {
-                                      drift: String(rDisplayStats.drift),
-                                      accel: String(rDisplayStats.accel),
-                                      grip: String(rDisplayStats.grip),
-                                      steer: String(rDisplayStats.steer),
+                                      drift: revealLevel >= 1 ? String(rDisplayStats.drift) : "?",
+                                      accel: revealLevel >= 2 ? String(rDisplayStats.accel) : "?",
+                                      grip: revealLevel >= 3 ? String(rDisplayStats.grip) : "?",
+                                      steer: revealLevel >= 4 ? String(rDisplayStats.steer) : "?",
                                     },
                                   }}
                                   className="drop-shadow-2xl"
@@ -4223,7 +4468,7 @@ export function DriftClashArena({
                                 <p className="text-xs sm:text-sm font-black uppercase tracking-wider text-amber-300">
                                   HAZARD IMPACT!
                                 </p>
-                                <p className="text-[10px] font-bold text-zinc-300">Both cars battling through the track incident!</p>
+                                <p className="text-[10px] font-bold text-zinc-300">Both cars fighting through the debuffs!</p>
                               </div>
                             </div>
                           )}
@@ -4234,18 +4479,18 @@ export function DriftClashArena({
                               <div className="inline-block rounded-2xl border-2 border-rose-500 bg-zinc-950/95 p-3 sm:px-6 sm:py-3.5 shadow-[0_0_35px_rgba(244,63,94,0.7)] backdrop-blur-md">
                                 <span className="text-2xl animate-pulse">⚠️</span>
                                 <p className="text-xs sm:text-sm font-black uppercase tracking-wider text-rose-400">
-                                  CORNER DEBUFFS APPLIED!
+                                  CORNER DEBUFFS PLAYED!
                                 </p>
                                 <div className="mt-1.5 flex flex-col sm:flex-row items-center justify-center gap-2 text-[10px] sm:text-[11px] font-bold text-zinc-200">
                                   <div className="flex items-center gap-1 rounded-lg bg-rose-950/80 border border-rose-500/50 px-2.5 py-1 text-rose-200">
-                                    <span>YOU:</span>
+                                    <span>ON YOU (RIVAL&apos;S PICK):</span>
                                     <span className="text-white font-extrabold">{playerDebuffDef.name}</span>
                                     <span className="text-rose-300">({pDebuffBreakdown.totalSummary})</span>
                                   </div>
                                   <div className="flex items-center gap-1 rounded-lg bg-rose-950/80 border border-rose-500/50 px-2.5 py-1 text-rose-200">
-                                    <span>RIVAL:</span>
+                                    <span>ON RIVAL (YOUR PICK):</span>
                                     <span className="text-white font-extrabold">{rivalDebuffDef.name}</span>
-                                    <span className="text-rose-300">({rDebuffBreakdown.totalSummary})</span>
+                                    {!hideRival && <span className="text-rose-300">({rDebuffBreakdown.totalSummary})</span>}
                                   </div>
                                 </div>
                               </div>
@@ -4381,82 +4626,108 @@ export function DriftClashArena({
                             </div>
                           )}
 
-                          {/* ── INTERACTIVE FUNNY TRACK HAZARD INCIDENT POPUP (1 of 80 SCENARIOS) ── */}
+                          {/* ── FINALE: a random last game that can still swing the corner ── */}
+                          {battleAnimStep === "finale_roulette" && pendingFinale && pendingFinale.cornerIdx === activeCornerIdx && (
+                            <ClashFinaleRoulette
+                              key={`roulette-${activeCornerIdx}-${pendingFinale.mode}`}
+                              mode={pendingFinale.mode}
+                              cornerNumber={sector.number}
+                              onDone={() => setBattleAnimStep("prompt_finale")}
+                            />
+                          )}
+                          {battleAnimStep === "prompt_finale" && pendingFinale && pendingFinale.cornerIdx === activeCornerIdx && pendingFinale.base.playerFinalStats && (
+                            <ClashFinalePanel
+                              key={`finale-${activeCornerIdx}-${pendingFinale.mode}`}
+                              mode={pendingFinale.mode}
+                              cornerNumber={sector.number}
+                              carName={playerCar.name}
+                              playerStats={pendingFinale.base.playerFinalStats}
+                              onSubmit={(choice) =>
+                                completeFinale(pendingFinale.cornerIdx, pendingFinale.base, pendingFinale.mode, choice)
+                              }
+                              onSkip={handleSkipBattleAnimation}
+                            />
+                          )}
+
+                          {/* ── PICK A DEBUFF: 3 cards are dealt and one is played on the rival's car ── */}
                           {battleAnimStep === "prompt_debuff" && (
-                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200">
-                              <div className="relative w-full max-w-sm sm:max-w-md rounded-3xl border-2 border-amber-500/80 bg-zinc-950 p-5 sm:p-6 shadow-[0_0_60px_rgba(245,158,11,0.5)] text-center">
-                                {/* Header Badge */}
-                                <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/60 bg-amber-500/20 px-3 py-1 mb-2">
-                                  <span className="text-xs animate-pulse">⚠️</span>
-                                  <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-amber-300">
-                                    Corner {activeCornerIdx + 1} Hazard Incident
+                            <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/85 p-3 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200 sm:items-center">
+                              <div
+                                role="dialog"
+                                aria-modal="true"
+                                aria-label="Choose a debuff to play on the rival's car"
+                                className="relative my-auto w-full max-w-lg rounded-3xl border-2 border-rose-500/80 bg-zinc-950 p-4 text-center shadow-[0_0_60px_rgba(244,63,94,0.45)] sm:p-6"
+                              >
+                                <div className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/60 bg-rose-500/20 px-3 py-1">
+                                  <span className="text-xs" aria-hidden>⚠️</span>
+                                  <span className="text-[10px] font-black uppercase tracking-wider text-rose-300 sm:text-[11px]">
+                                    Corner {activeCornerIdx + 1} · Play a debuff
                                   </span>
                                 </div>
-
-                                {/* Animated Big Emoji Circle */}
-                                <div className="mx-auto my-3 flex h-20 w-20 sm:h-24 sm:w-24 items-center justify-center rounded-3xl border-2 border-amber-400/50 bg-gradient-to-b from-amber-500/20 via-zinc-900 to-black text-4xl sm:text-5xl shadow-[0_0_25px_rgba(245,158,11,0.3)] animate-bounce">
-                                  {debuffScenario?.icon || "⚠️"}
-                                </div>
-
-                                {/* Title */}
-                                <h3 className="text-lg sm:text-xl font-black uppercase tracking-tight text-white mt-1">
-                                  {debuffScenario?.title || "Track Incident!"}
+                                <h3 className="mt-2 text-lg font-black uppercase tracking-tight text-white sm:text-xl">
+                                  Hit {opponent.driverName}&apos;s {rivalCar.name}
                                 </h3>
-
-                                {/* Small Description */}
-                                <p className="text-xs sm:text-sm text-zinc-300 mt-2 px-1 leading-relaxed">
-                                  {debuffScenario?.description || "A sudden mishap on the track disrupted corner entry!"}
+                                <p className="mt-1 text-xs text-zinc-400">
+                                  Pick one of your 3 debuff cards. The rival is picking one for your car too. Their car&apos;s stats are hidden.
                                 </p>
-
-                                {/* Debuffs Notice Box */}
-                                <div className="mt-4 rounded-2xl border border-rose-500/40 bg-rose-950/25 p-3 text-left">
-                                  <div className="flex items-center justify-between mb-1.5">
-                                    <span className="text-[9px] font-black uppercase tracking-wider text-rose-300">
-                                      Incoming Hazard Penalties
-                                    </span>
-                                    <span className="text-[8px] font-bold text-zinc-400">
-                                      Applied on Continue
-                                    </span>
-                                  </div>
-                                  <div className="flex flex-col gap-1.5">
-                                    <div className="flex items-center justify-between rounded-xl bg-black/60 px-2.5 py-1.5 border border-zinc-800">
-                                      <span className="text-[9px] font-black text-rose-400 shrink-0">YOU:</span>
-                                      <div className="flex items-center gap-1.5 min-w-0">
-                                        <span className="text-xs">{playerDebuffDef.icon}</span>
-                                        <span className="text-[11px] font-extrabold text-white truncate max-w-[140px]">
-                                          {playerDebuffDef.name}
+                                <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-3">
+                                  {debuffHand.map((def, i) => {
+                                    // The rival car's stats are hidden, so the card shows its own rule instead of
+                                    // what it would do to that car.
+                                    const selected = debuffPickIdx === i;
+                                    return (
+                                      <button
+                                        key={`${def.id}-${def.tier}-${i}`}
+                                        type="button"
+                                        onClick={() => setDebuffPickIdx(i)}
+                                        aria-pressed={selected}
+                                        aria-label={`${def.name}, ${def.tier}: ${def.ability}`}
+                                        className={`flex cursor-pointer flex-col gap-1.5 rounded-2xl border-2 p-1.5 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
+                                          selected
+                                            ? "-translate-y-1 border-amber-400 bg-amber-500/15 shadow-[0_0_25px_rgba(245,158,11,0.5)]"
+                                            : "border-zinc-800 bg-zinc-900/60 hover:border-zinc-600"
+                                        }`}
+                                      >
+                                        <FullArtCard card={debuffToMemberCard(def, `hand-${activeCornerIdx}-${i}-${def.id}`)} />
+                                        <span className="rounded-lg bg-rose-500/20 px-1.5 py-1 text-center text-[10px] font-black leading-tight text-rose-200">
+                                          {def.ability}
                                         </span>
-                                      </div>
-                                      <span className="text-[10px] font-black text-rose-300 shrink-0">
-                                        {pDebuffBreakdown.hasAnyDebuff ? pDebuffBreakdown.totalSummary : "No Debuff"}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center justify-between rounded-xl bg-black/60 px-2.5 py-1.5 border border-zinc-800">
-                                      <span className="text-[9px] font-black text-zinc-400 shrink-0">RIVAL:</span>
-                                      <div className="flex items-center gap-1.5 min-w-0">
-                                        <span className="text-xs">{rivalDebuffDef.icon}</span>
-                                        <span className="text-[11px] font-extrabold text-white truncate max-w-[140px]">
-                                          {rivalDebuffDef.name}
-                                        </span>
-                                      </div>
-                                      <span className="text-[10px] font-black text-rose-300 shrink-0">
-                                        {rDebuffBreakdown.hasAnyDebuff ? rDebuffBreakdown.totalSummary : "No Debuff"}
-                                      </span>
-                                    </div>
-                                  </div>
+                                      </button>
+                                    );
+                                  })}
                                 </div>
-
-                                {/* Continue Button */}
                                 <button
                                   type="button"
-                                  onClick={handleContinueFromDebuff}
-                                  className="mt-5 w-full flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-6 py-3.5 text-xs sm:text-sm font-black uppercase tracking-wider text-white shadow-[0_0_30px_rgba(245,158,11,0.6)] hover:brightness-110 active:scale-[0.98] transition-all cursor-pointer"
+                                  disabled={debuffPickIdx === null}
+                                  onClick={() => debuffPickIdx !== null && handleConfirmDebuffPick(debuffPickIdx)}
+                                  className="mt-5 flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-6 py-3.5 text-xs font-black uppercase tracking-wider text-white shadow-[0_0_30px_rgba(245,158,11,0.6)] transition-all hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none sm:text-sm"
                                 >
-                                  <span>Inspect Hazard &amp; Call Pit Crew</span>
-                                  <span className="text-base">→</span>
+                                  <span>{debuffPickIdx === null ? "Choose a debuff" : "Play it on the rival"}</span>
+                                  <span className="text-base" aria-hidden>→</span>
                                 </button>
                               </div>
                             </div>
+                          )}
+                          {/* The cars slam together in the middle before the final showdown is drawn */}
+                          {battleAnimStep === "finale_clash" && (
+                            <>
+                              <div
+                                className="pointer-events-none absolute left-1/2 top-1/2 z-40 -translate-x-1/2 -translate-y-1/2 text-6xl motion-safe:animate-ping sm:text-7xl"
+                                aria-hidden
+                              >
+                                💥
+                              </div>
+                              <div className="pointer-events-none absolute inset-x-0 bottom-4 z-40 px-3 text-center animate-in zoom-in-75 duration-200">
+                                <div className="inline-block rounded-2xl border-2 border-cyan-400 bg-zinc-950/95 px-4 py-2.5 shadow-[0_0_35px_rgba(6,182,212,0.7)] backdrop-blur-md">
+                                  <p className="text-xs sm:text-sm font-black uppercase tracking-wider text-cyan-300">
+                                    ⚡ Crew locked in · Final showdown!
+                                  </p>
+                                  <p className="text-[10px] sm:text-[11px] font-bold text-zinc-200">
+                                    The cars collide. One last game decides the corner.
+                                  </p>
+                                </div>
+                              </div>
+                            </>
                           )}
 
                           {/* Center Battle Indicator: Crew Buff Applied */}
@@ -4470,6 +4741,7 @@ export function DriftClashArena({
                                 <p className="text-[10px] sm:text-[11px] font-bold text-zinc-200 mt-0.5">
                                   Deploying crew tuning &amp; counter buffs!
                                 </p>
+
                               </div>
                             </div>
                           )}
@@ -4483,6 +4755,54 @@ export function DriftClashArena({
                                   APEX CLASH!
                                 </p>
                                 <p className="text-[10px] font-bold text-zinc-300">Full-throttle battle for the corner finish!</p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* The reveal: the rival car's stats appear one by one next to yours, then both totals. */}
+                          {battleAnimStep === "reveal_stats" && currentResult?.playerFinalStats && currentResult.rivalFinalStats && (
+                            <div
+                              className="pointer-events-none absolute inset-x-0 bottom-3 z-40 flex justify-center px-3 animate-in slide-in-from-bottom-4 duration-300"
+                              role="status"
+                              aria-live="polite"
+                            >
+                              <div className="w-full max-w-sm rounded-2xl border-2 border-cyan-400/70 bg-zinc-950/95 p-3 shadow-[0_0_35px_rgba(6,182,212,0.5)] backdrop-blur-md">
+                                <p className="text-center text-[10px] font-black uppercase tracking-wider text-cyan-300">
+                                  🔍 Rival revealed
+                                </p>
+                                <ul className="mt-1.5 space-y-1">
+                                  {(["drift", "accel", "grip", "steer"] as const).map((stat, i) => {
+                                    const shown = rivalReveal >= i + 1;
+                                    const mine = currentResult.playerFinalStats![stat];
+                                    const theirs = currentResult.rivalFinalStats![stat];
+                                    return (
+                                      <li
+                                        key={stat}
+                                        className={`grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-lg px-2 py-0.5 text-xs font-black transition-opacity duration-300 ${
+                                          shown ? "opacity-100" : "opacity-30"
+                                        }`}
+                                      >
+                                        <span className={`text-right ${shown && mine >= theirs ? "text-emerald-300" : "text-zinc-300"}`}>{mine}</span>
+                                        <span className="w-14 text-center text-[9px] uppercase tracking-wider text-zinc-500">{stat}</span>
+                                        <span className={`text-left ${shown && theirs > mine ? "text-rose-300" : "text-zinc-300"}`}>
+                                          {shown ? theirs : "?"}
+                                        </span>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                                {rivalReveal >= 5 && (
+                                  <div className="mt-2 border-t border-zinc-800 pt-2 text-center animate-in zoom-in-75 duration-300">
+                                    <p className="text-sm font-black text-white">
+                                      <span className="text-amber-300">{currentResult.playerScore} PTS</span>
+                                      <span className="mx-2 text-zinc-500">vs</span>
+                                      <span className="text-rose-300">{currentResult.rivalScore} PTS</span>
+                                    </p>
+                                    {currentResult.finaleSummary && (
+                                      <p className="mt-1 text-[10px] font-bold text-zinc-300">{currentResult.finaleSummary}</p>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           )}
@@ -4513,6 +4833,13 @@ export function DriftClashArena({
                                   {currentResult.playerScore} PTS vs {currentResult.rivalScore} PTS
                                   {currentResult.won && ` (+${currentResult.playerScore - currentResult.rivalScore} PTS LEAD)`}
                                 </p>
+                                {currentResult.finaleSummary && (
+                                  <p className="mt-1 max-w-xs text-[10px] font-bold text-zinc-300">
+                                    Finale: {(currentResult.playerFinalePoints ?? 0) >= 0 ? "+" : ""}
+                                    {currentResult.playerFinalePoints ?? 0} you · {(currentResult.rivalFinalePoints ?? 0) >= 0 ? "+" : ""}
+                                    {currentResult.rivalFinalePoints ?? 0} rival
+                                  </p>
+                                )}
                               </div>
                             </div>
                           )}
@@ -4933,7 +5260,7 @@ export function DriftClashArena({
                                   <div className="flex flex-col gap-1 pt-1 border-t border-zinc-800/70">
                                     <div className="flex items-center gap-1.5 font-bold text-rose-400">
                                       <span>⚠️ {s.playerDebuffCard.icon}</span>
-                                      <span className="truncate">{s.playerDebuffCard.name}</span>
+                                      <span className="truncate"><span className="mr-1 text-[8px] font-black uppercase tracking-wide text-zinc-500">Rival&apos;s pick</span>{s.playerDebuffCard.name}</span>
                                       <span className="ml-auto text-[8px] font-black uppercase text-rose-200 bg-rose-950 border border-rose-500/50 rounded px-1.5 py-0.2">
                                         TOTAL: {pDebuff.totalSummary}
                                       </span>

@@ -5,8 +5,8 @@ import type { FullArtCardData, FullArtTier } from "@/lib/full-art-card";
  *  1. 30 Crew Advantage Cards (`CREW_CARD_SET`) — Pullable in Standard Packs; 100% positive advantages!
  *     Players bring 3 Crew Cards into a Clash (filled with Loaner Crew Cards if they own < 3)
  *     and choose 1 Crew Card to deploy on each of the 3 Corners.
- *  2. 12 Randomised Corner Debuff Cards (`DEBUFF_CARD_SET`) — Drawn automatically each Corner and
- *     applied symmetrically to BOTH drivers.
+ *  2. 12 Corner Debuff Cards (`DEBUFF_CARD_SET`) — Each corner, each side is dealt 3 at random (at random
+ *     rarities) and plays one on the OTHER side's car.
  *  3. 10 UK RC Drift Track Cards (`UK_TRACK_CARD_SET`) — Randomised at the start of each Clash
  *     with venue-specific Track Buffs and Track Debuffs.
  *
@@ -81,7 +81,7 @@ export interface DebuffCardPenalties {
   accelPenalty?: number;
   gripPenalty?: number;
   steerPenalty?: number;
-  /** Flat point deduction applied to both drivers on this corner */
+  /** Flat point deduction to the car this debuff is played on, on this corner */
   flatPenalty?: number;
   /** Conditional extra penalty (or exemption) based on a car's stat */
   condition?: {
@@ -169,6 +169,11 @@ export interface TrackCardDefinition {
  * Generates an inline SVG data URI for a Crew, Debuff, or UK Track Card so `card.imageUrl`
  * works everywhere (`FullArtCard`, thumbnails, marketplace, admin lists) with zero external requests.
  */
+/** Makes text safe to put inside an SVG. A bare "&" (as in "Telemetry & ESC") makes the whole image fail to load. */
+export function escapeSvgText(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+
 export function buildCrewCardSvgDataUrl(def: {
   icon: string;
   category: string;
@@ -197,9 +202,9 @@ export function buildCrewCardSvgDataUrl(def: {
     <circle cx="300" cy="295" r="195" fill="url(#ring)"/>
     <circle cx="300" cy="295" r="145" fill="none" stroke="${def.accentColor}" stroke-opacity="0.45" stroke-width="4" stroke-dasharray="14 10"/>
     <circle cx="300" cy="295" r="112" fill="#09090b" fill-opacity="0.78" stroke="${def.accentColor}" stroke-opacity="0.85" stroke-width="3"/>
-    <text x="300" y="120" text-anchor="middle" fill="${def.accentColor}" font-family="system-ui, sans-serif" font-size="22" font-weight="900" letter-spacing="5">${def.category.toUpperCase()}</text>
-    <text x="300" y="295" text-anchor="middle" font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif" font-size="110" dominant-baseline="central">${def.icon}</text>
-    <text x="300" y="478" text-anchor="middle" fill="#a1a1aa" font-family="system-ui, sans-serif" font-size="18" font-weight="800" letter-spacing="4">${footerText}</text>
+    <text x="300" y="120" text-anchor="middle" fill="${def.accentColor}" font-family="system-ui, sans-serif" font-size="22" font-weight="900" letter-spacing="5">${escapeSvgText(def.category.toUpperCase())}</text>
+    <text x="300" y="295" text-anchor="middle" font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, sans-serif" font-size="110" dominant-baseline="central">${escapeSvgText(def.icon)}</text>
+    <text x="300" y="478" text-anchor="middle" fill="#a1a1aa" font-family="system-ui, sans-serif" font-size="18" font-weight="800" letter-spacing="4">${escapeSvgText(footerText)}</text>
   </svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }

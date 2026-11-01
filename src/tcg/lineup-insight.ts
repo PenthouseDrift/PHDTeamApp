@@ -2,9 +2,10 @@
  * What the track means for the cars and Crew cards a member brings, and the Auto-Pick that uses it.
  *
  * Only what the member is allowed to know is used. The track, with its buff and hazard, is shown before the
- * lineup is chosen. The three corner types and the three debuffs are NOT: they are rolled when the match starts
- * but only revealed one corner at a time during the battle, so nothing here reads them. Instead the picks are
- * judged across every corner type the game can roll, with the debuffs it can roll averaged in.
+ * lineup is chosen. The three corner types are NOT (they are rolled when the match starts and only revealed one
+ * corner at a time), and neither are the debuffs (each side is dealt 3 and plays one at the corner itself), so
+ * nothing here reads them. Instead the picks are judged across every corner type the game can roll, with the
+ * debuffs it could be dealt averaged in.
  */
 import type { MemberCard } from "@/lib/card-roll";
 import { DEBUFF_CARD_SET, type CrewCardDefinition, type DebuffCardDefinition, type TrackCardDefinition } from "@/lib/crew-cards";
