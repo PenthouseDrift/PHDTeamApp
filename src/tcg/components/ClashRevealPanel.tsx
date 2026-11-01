@@ -270,6 +270,7 @@ function ScoreColumn({
       <p className="mt-0.5 text-[8px] font-bold text-zinc-400">
         Stats <span className="font-black text-zinc-200">{parts.statScore}</span>
       </p>
+      <p className="mx-auto max-w-[11rem] text-[7px] font-bold leading-tight text-zinc-500">{parts.statFormula}</p>
       <span className="mt-0.5 flex flex-wrap items-center justify-center gap-0.5">
         {lines.map((l) => (
           <span

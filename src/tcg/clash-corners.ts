@@ -146,11 +146,21 @@ function custom(
   calc: SectorCalc
 ): CornerDef {
   const untuned = calc.score;
+  const t = TUNING[spec.id];
+  // The balancing step is part of the sum, so it is written into the formula and the working. Nothing is hidden.
+  const tuningText = t ? ` ×${String(t.k)} ${t.b >= 0 ? "+" : "−"} ${String(Math.abs(t.b))}` : "";
+  const score = (stats: CornerStats) => Math.max(0, Math.round(tune(spec.id, untuned(stats))));
   return {
-    spec: { ...spec, formulaBadge: `${formula} + Tier Bonus`, formulaLabel: `${formula} + Tier` },
+    spec: {
+      ...spec,
+      formulaBadge: `${formula}${t ? `, then${tuningText}` : ""} + Tier Bonus`,
+      formulaLabel: `${formula}${t ? `, then${tuningText}` : ""} + Tier`,
+    },
     calc: {
-      score: (stats) => Math.max(0, Math.round(tune(spec.id, untuned(stats)))),
-      breakdown: calc.breakdown,
+      score,
+      breakdown: t
+        ? (stats) => `(${calc.breakdown(stats)} = ${untuned(stats)}, then${tuningText} = ${score(stats)})`
+        : calc.breakdown,
       untuned,
     },
   };

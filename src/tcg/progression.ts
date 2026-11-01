@@ -1448,6 +1448,8 @@ export interface CornerStatStages {
 export interface CornerScoreParts {
   /** Points from the corner's formula applied to the final stats. */
   statScore: number;
+  /** The working for `statScore`, e.g. "(TOTAL 64 = 64, then ×0.933 + 9.4 = 69)". */
+  statFormula: string;
   tierBonus: number;
   /** Flat and conditional points from the Crew card. */
   crewPts: number;
@@ -1672,6 +1674,7 @@ function evaluateDriverOnCorner(params: {
   const score = Math.max(5, unfloored);
   const scoreParts: CornerScoreParts = {
     statScore,
+    statFormula: formulaStr,
     tierBonus,
     crewPts,
     trackPts,

@@ -3960,9 +3960,24 @@ export function DriftClashArena({
                         </div>
                       );
                     const pDiffTarget = pDisplayStats;
-                    const pDiffBase = isCrewOrLater || isPromptCrew ? pDebuffedStats : isDebuffStage ? pBaseTrackStats : pBase;
+                    // Once the Crew card is down the chips show each stat's net change from the card's own number, which
+                    // is exactly what the breakdown at the bottom adds up to (a shield that softens a debuff is not
+                    // shown as a gain, so a stat that ended lower never shows a plus).
+                    const pDiffBase = isCrewOrLater
+                      ? (settledResult?.playerStatStages?.base ?? pBase)
+                      : isPromptCrew
+                        ? pDebuffedStats
+                        : isDebuffStage
+                          ? pBaseTrackStats
+                          : pBase;
                     const rDiffTarget = isCrewOrLater ? rFinalStats : rDisplayStats;
-                    const rDiffBase = isCrewOrLater || isPromptCrew ? rDebuffedStats : isDebuffStage ? rBaseTrackStats : rBase;
+                    const rDiffBase = isCrewOrLater
+                      ? (settledResult?.rivalStatStages?.base ?? rBase)
+                      : isPromptCrew
+                        ? rDebuffedStats
+                        : isDebuffStage
+                          ? rBaseTrackStats
+                          : rBase;
                     const statDiffs = (target: typeof pBase, base: typeof pBase) => ({
                       drift: target.drift !== base.drift ? getStatDiffInfo(target.drift, base.drift) : null,
                       accel: target.accel !== base.accel ? getStatDiffInfo(target.accel, base.accel) : null,
