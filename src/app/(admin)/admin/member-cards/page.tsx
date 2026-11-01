@@ -39,7 +39,7 @@ export default async function MemberCardsPage() {
             ⚡ Crew, Debuff &amp; Track Cards
           </Link>
           <Link
-            href="/admin/card-maker?tab=packs"
+            href="/admin/driftclash/packs"
             className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 text-xs font-black text-black shadow-sm transition-colors hover:bg-amber-400"
           >
             ⚙️ Edit Packs &amp; P-Credits

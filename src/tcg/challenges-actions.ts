@@ -5,7 +5,17 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import type { ActionResult } from "@/types";
+import {
+  RIVAL_CAR_POOL,
+  dialsForWinRate,
+  difficultyFor,
+  crewCardsFromSpecs,
+  rivalCarPoolFrom,
+  rollRivalCrewSpecs,
+} from "./rival-ai";
 import { type MemberCard, type StoredMemberCard, tierFromStats } from "@/lib/card-roll";
+import type { FullArtTier } from "@/lib/full-art-card";
+import { DEFAULT_SIM, winRate } from "./battle-sim";
 import {
   ALL_MEMBER_CARDS_INDEX,
   memberCardKey,
@@ -52,6 +62,13 @@ const userCompletedChallengesKey = (userId: string, date: string) =>
 async function requireAdmin(): Promise<boolean> {
   const session = await auth();
   return session?.user?.role === "admin";
+}
+
+/** A whole percent from 1 to 95, or null for the standard difficulty. */
+function cleanTargetWinRate(v: unknown): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) && n >= 1 ? Math.min(95, n) : null;
 }
 
 function parseChallenge(raw: unknown): TandemClashChallenge | null {
@@ -174,7 +191,23 @@ export async function getChallengeOpponentAction(
     if (!challenge) {
       return { success: false, error: "Challenge not found" };
     }
+    return await buildChallengeOpponent(challenge, userId);
+  } catch (error) {
+    console.error("[challenges-actions] getChallengeOpponentAction error:", error);
+    return { success: false, error: "Could not generate challenge opponent." };
+  }
+}
 
+/**
+ * Builds the rival for a challenge: the admin's hand-picked team, or an automated one from the community's
+ * cars of the right rarity. Its strength comes from the challenge's target win rate, or the standard
+ * difficulty. Also used by the admin's win-rate estimate, so what is tested is what players face.
+ */
+async function buildChallengeOpponent(
+  challenge: TandemClashChallenge,
+  userId: string | undefined
+): Promise<ActionResult<ClashOpponent>> {
+  try {
     // Case A: Custom Admin Challenge with hand-picked cards
     if (challenge.customRival?.carCardIds && challenge.customRival.carCardIds.length >= 3) {
       const cardIds = challenge.customRival.carCardIds.slice(0, 3);
@@ -256,6 +289,7 @@ export async function getChallengeOpponentAction(
             cards: challengeCars,
             crewCard: crewCards[0],
             crewCards,
+            aiSkill: difficultyFor(challenge).skill,
           },
         };
       }
@@ -294,42 +328,42 @@ export async function getChallengeOpponentAction(
       candidateCards.sort((a, b) => getCarNormalizedTotalScore(b) - getCarNormalizedTotalScore(a));
     }
 
-    // Pick top 3 cards
-    const selectedBestCars: MemberCard[] = [];
+    // The rival chooses its cars from a pool: good cars of the right rarity, not only the very best.
+    // The strongest are skipped (a share of the list, whatever its size) so a challenge is beatable.
+    const difficulty = difficultyFor(challenge);
+    const sortedCandidates: MemberCard[] = [];
     for (const card of candidateCards) {
-      if (selectedBestCars.length >= 3) break;
-      if (!selectedBestCars.some((c) => c.id === card.id)) {
-        selectedBestCars.push(card);
-      }
+      if (!sortedCandidates.some((c) => c.id === card.id)) sortedCandidates.push(card);
     }
 
-    // Backfill if fewer than 3 cards meeting the constraints
-    const backfillNames = ["Spec-R Works", "Apex RDX", "Ghost S15"];
-    while (selectedBestCars.length < 3) {
-      const idx = selectedBestCars.length;
-      const targetStat =
-        targetTier === "legend"
-          ? "23" // 23 * 4 = 92 (Legend: 85-99)
-          : targetTier === "gold"
-            ? "20" // 20 * 4 = 80 (Gold: 75-84)
-            : targetTier === "silver"
-              ? "17" // 17 * 4 = 68 (Silver: 60-74)
-              : "14"; // 14 * 4 = 56 (Bronze: 4-59)
-
-      selectedBestCars.push({
+    // Fill the pool with hand-tuned cars when there aren't enough qualifying member cards.
+    const backfillNames = ["Spec-R Works", "Apex RDX", "Ghost S15", "Kei Missile", "Touge Hero", "Night Runner"];
+    const fillStat =
+      targetTier === "mythic"
+        ? "25" // 25 * 4 = 100 (Mythic)
+        : targetTier === "legend"
+        ? "23" // 23 * 4 = 92 (Legend: 85-99)
+        : targetTier === "gold"
+          ? "20" // 20 * 4 = 80 (Gold: 75-84)
+          : targetTier === "silver"
+            ? "17" // 17 * 4 = 68 (Silver: 60-74)
+            : "14"; // 14 * 4 = 56 (Bronze: 4-59)
+    while (sortedCandidates.length < RIVAL_CAR_POOL) {
+      const idx = sortedCandidates.length;
+      sortedCandidates.push({
         id: `challenge-filler-${targetTier}-${idx}`,
         userId: "challenge-bot",
-        name: `${challenge.title} ${backfillNames[idx]}`,
+        name: `${challenge.title} ${backfillNames[idx % backfillNames.length]}`,
         ability: "Pro Competition Chassis",
         effect: "Hand-tuned precision RC drift setup.",
         tier: targetTier,
-        stats: { drift: targetStat, accel: targetStat, grip: targetStat, steer: targetStat },
+        stats: { drift: fillStat, accel: fillStat, grip: fillStat, steer: fillStat },
         imageUrl: "/icons/icon-512.png",
         imageZoom: 106,
         imageX: 50,
         imageY: 50,
-        driver: `${challenge.badge || challenge.title} #${idx + 1}`,
-        team: challenge.title,
+        driver: "",
+        team: "",
         styleIds: [],
         kept: true,
         rerolled: false,
@@ -338,15 +372,21 @@ export async function getChallengeOpponentAction(
     }
 
     // Sanitize challenge cars: enforce exact tier and strip individual member ownership
-    const sanitizedChallengeCars: MemberCard[] = selectedBestCars.map((c, idx) => ({
+    const carPool: MemberCard[] = rivalCarPoolFrom(sortedCandidates, RIVAL_CAR_POOL, difficulty.carSkip).map((c, idx) => ({
       ...c,
       tier: targetTier,
-      driver: `${challenge.badge || challenge.title} #${idx + 1}`,
+      driver: `${challenge.badge || challenge.title} #${(idx % 3) + 1}`,
       team: challenge.title,
     }));
+    const sanitizedChallengeCars = carPool.slice(0, 3);
 
-    const tierForCrew = challenge.allowedRarity !== "any" ? challenge.allowedRarity : "gold";
-    const crewCards = getBestCrewCardsForRarity(tierForCrew);
+    // The rival's Crew collection: random cards at pack odds, like a member's, to choose its three from.
+    const crewPoolSpecs = rollRivalCrewSpecs(Math.random, difficulty.crewCount, difficulty.crewBoost);
+    const crewPoolCards = crewCardsFromSpecs(crewPoolSpecs);
+    const crewCards: [MemberCard, MemberCard, MemberCard] =
+      crewPoolCards.length >= 3
+        ? [crewPoolCards[0], crewPoolCards[1], crewPoolCards[2]]
+        : getBestCrewCardsForRarity(challenge.allowedRarity !== "any" ? challenge.allowedRarity : "bronze");
 
     const opponent: ClashOpponent = {
       id: `opponent-${challenge.id}`,
@@ -357,6 +397,9 @@ export async function getChallengeOpponentAction(
       cards: sanitizedChallengeCars,
       crewCard: crewCards[0],
       crewCards,
+      carPool,
+      crewPoolSpecs,
+      aiSkill: difficulty.skill,
     };
 
     return { success: true, data: opponent };
@@ -603,6 +646,7 @@ export async function saveAdminChallengeAction(
       isSystem: isSystemChallenge,
       createdAt: Date.now(),
       customRival: input.customRival ?? null,
+      targetWinRatePct: cleanTargetWinRate(input.targetWinRatePct),
     };
 
     await redis.set(challengeKey(id), JSON.stringify(challenge));
@@ -700,5 +744,87 @@ export async function listAdminChallengeCandidateCardsAction(): Promise<
   } catch (error) {
     console.error("[challenges-actions] listAdminChallengeCandidateCardsAction error:", error);
     return { success: false, error: "Failed to load candidate cards." };
+  }
+}
+
+// ── Admin: test a challenge's difficulty ─────────────────────────────────────
+
+export interface WinRateEstimate {
+  /** Percent of simulated battles won by a casual player, a good player, and the average of the two. */
+  casualPct: number;
+  goodPct: number;
+  typicalPct: number;
+  battles: number;
+  /** The target was outside what can be reached for this rarity, so the nearest reachable value was used. */
+  clamped: boolean;
+}
+
+/**
+ * Plays simulated battles against the challenge as it is set up in the admin form (it need not be saved) and
+ * reports how often players win. A "typical" player is half casual (cars in power order, Crew in order) and half
+ * good (picks the best car and Crew for each corner), with 4 cars of the rarity and 8 Crew cards.
+ * For a hand-picked rival the result also reflects the cars and Crew you chose.
+ */
+export async function estimateChallengeWinRateAction(input: AdminChallengeInput): Promise<ActionResult<WinRateEstimate>> {
+  try {
+    if (!(await requireAdmin())) return { success: false, error: "Admin clearance required" };
+    const session = await auth();
+
+    const rarity = input.allowedRarity || "any";
+    const draft: TandemClashChallenge = {
+      id: "draft-estimate",
+      title: input.title?.trim() || "Draft challenge",
+      subtitle: input.subtitle?.trim() || "",
+      description: "",
+      badge: input.badge?.trim() || "Draft",
+      themeStyle: input.themeStyle || "legend",
+      allowedRarity: rarity,
+      maxTotalScore: typeof input.maxTotalScore === "number" && input.maxTotalScore > 0 ? input.maxTotalScore : null,
+      entryCostPCredits: 0,
+      rewardPCredits: 0,
+      createdAt: 0,
+      customRival: input.customRival ?? null,
+      targetWinRatePct: cleanTargetWinRate(input.targetWinRatePct),
+    };
+
+    const built = await buildChallengeOpponent(draft, session?.user?.id);
+    if (!built.success) return { success: false, error: built.error };
+    const opponent = built.data;
+    const difficulty = difficultyFor(draft);
+    const tier = (rarity === "any" ? "bronze" : rarity) as FullArtTier;
+
+    const rivalBuilder = (rng: () => number) =>
+      opponent.carPool && opponent.crewPoolSpecs
+        ? {
+            carPool: opponent.carPool,
+            crewPool: crewCardsFromSpecs(rollRivalCrewSpecs(rng, difficulty.crewCount, difficulty.crewBoost)),
+            skill: opponent.aiSkill ?? difficulty.skill,
+          }
+        : {
+            carPool: opponent.cards,
+            crewPool: opponent.crewCards ? [...opponent.crewCards] : [opponent.crewCard, opponent.crewCard, opponent.crewCard],
+            skill: opponent.aiSkill ?? difficulty.skill,
+          };
+
+    const BATTLES = 220;
+    const base = { ...DEFAULT_SIM, tier, rival: "ai" as const, rivalBuilder };
+    const casual = winRate({ ...base, player: "casual" }, BATTLES, 31);
+    const good = winRate({ ...base, player: "good" }, BATTLES, 32);
+
+    const target = draft.targetWinRatePct;
+    const clamped = typeof target === "number" ? dialsForWinRate(rarity, target).clamped : false;
+    return {
+      success: true,
+      data: {
+        casualPct: Math.round(casual * 100),
+        goodPct: Math.round(good * 100),
+        typicalPct: Math.round(((casual + good) / 2) * 100),
+        battles: BATTLES * 2,
+        clamped,
+      },
+    };
+  } catch (error) {
+    console.error("[challenges-actions] estimateChallengeWinRateAction error:", error);
+    return { success: false, error: "Could not run the test battles." };
   }
 }

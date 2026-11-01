@@ -3,12 +3,14 @@
  * they switch on "New dashboard" in Profile). Pure data + functions with no
  * server imports, so it's safe to use from client components.
  *
- * Information architecture (5 tabs):
+ * Information architecture (5 tabs, plus the DriftClash game button):
  *   Home    – check in, events, guest check-in
- *   Garage  – My Cars, Cards, Tuning Advisor, Gear Calculator (+ shared setups)
+ *   Garage  – My Cars, Tuning Advisor, Gear Calculator (+ shared setups)
  *   Passes  – membership, day passes, rental hours (buy + balances)
  *   Market  – browse, my listings, orders (+ basket in the top bar)
  *   Menu    – profile, showcase, share, QR, reports/admin, switch back, sign out
+ *   DriftClash – the card game: collection, Clash Arena, pack store, marketplace. It gets its own
+ *             button in the middle of the mobile bar (and a highlighted link in the desktop sidebar).
  *
  * Every existing page lives under exactly one tab, so a member always knows
  * where they are. Top-level pages show the tab bar; deeper pages show a Back
@@ -16,7 +18,7 @@
  * payment redirect or a deep link).
  */
 
-export type TabKey = "home" | "garage" | "passes" | "market" | "menu";
+export type TabKey = "home" | "garage" | "passes" | "market" | "menu" | "game";
 
 export interface NavTab {
   key: TabKey;
@@ -32,6 +34,9 @@ export const NEW_TABS: NavTab[] = [
   { key: "menu", label: "Menu", href: "/dashboard2/menu" },
 ];
 
+/** The DriftClash game. Shown as the raised centre button on mobile, so it is not one of the five NEW_TABS. */
+export const GAME_TAB: NavTab = { key: "game", label: "DriftClash", href: "/cards" };
+
 export interface SectionChip {
   label: string;
   href: string;
@@ -40,7 +45,6 @@ export interface SectionChip {
 /** Secondary navigation shown under the top bar on a section's top-level pages. */
 export const GARAGE_CHIPS: SectionChip[] = [
   { label: "My cars", href: "/cars" },
-  { label: "Cards", href: "/cards" },
   { label: "Tuning advisor", href: "/tuning-advisor" },
   { label: "Gear calculator", href: "/calculator" },
 ];
@@ -72,9 +76,12 @@ export function tabForPath(pathname: string): TabKey {
   ) {
     return "menu";
   }
+  // The card game: the Deck (with Tandem Clash at the top), pack store, marketplace, P-Credits and ranks all live under /cards.
+  if (p.startsWith("/cards") || p.startsWith("/clash") || p.startsWith("/game")) {
+    return "game";
+  }
   if (
     p.startsWith("/cars") ||
-    p.startsWith("/cards") ||
     p.startsWith("/calculator") ||
     p.startsWith("/tuning") || // also covers /tuning-advisor
     p.startsWith("/share")
@@ -146,12 +153,12 @@ export function titleFor(pathname: string): string {
   if (p.startsWith("/dashboard2/events")) return "Events";
   if (p.startsWith("/dashboard2/guest")) return "Guest check-in";
   if (p.startsWith("/track-checkin")) return "Check in";
-  if (p === "/cards") return "My cards";
+  if (p === "/cards") return "DriftClash";
   if (p.startsWith("/cards/new")) return "Open a pack";
   if (p.startsWith("/profile")) return "Profile";
   if (p.startsWith("/showcase")) return "Showcase";
   if (p.startsWith("/asbo-rc")) return "ASBO-RC reports";
   if (p.startsWith("/membership")) return "Membership";
-  const tab = NEW_TABS.find((t) => t.key === tabForPath(p));
+  const tab = [...NEW_TABS, GAME_TAB].find((t) => t.key === tabForPath(p));
   return tab ? (tab.key === "market" ? "Marketplace" : tab.label) : "Penthouse Drift";
 }

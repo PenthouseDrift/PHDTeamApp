@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useTransition } from "react";
 import type { MemberCard } from "@/lib/card-roll";
 import type { FullArtTier } from "@/lib/full-art-card";
+import { ChallengeDifficultyField } from "./ChallengeDifficultyField";
 import { CREW_CARD_SET } from "@/lib/crew-cards";
 import {
   CHALLENGE_THEME_CONFIGS,
@@ -72,6 +73,7 @@ export function ClashChallengesView({
   const [formMaxScore, setFormMaxScore] = useState<string>("");
   const [formEntryFee, setFormEntryFee] = useState<string>("0");
   const [formReward, setFormReward] = useState<string>("50");
+  const [formTargetWinRate, setFormTargetWinRate] = useState<string>("");
   const [formRivalMode, setFormRivalMode] = useState<"auto" | "custom">("auto");
   const [formDriverName, setFormDriverName] = useState("Phantom Rival");
   const [formTeamName, setFormTeamName] = useState("Midnight Syndicate");
@@ -132,6 +134,7 @@ export function ClashChallengesView({
       setFormMaxScore(challengeToEdit.maxTotalScore ? String(challengeToEdit.maxTotalScore) : "");
       setFormEntryFee(String(challengeToEdit.entryCostPCredits || 0));
       setFormReward(String(challengeToEdit.rewardPCredits || 0));
+      setFormTargetWinRate(challengeToEdit.targetWinRatePct ? String(challengeToEdit.targetWinRatePct) : "");
       if (challengeToEdit.customRival) {
         setFormRivalMode("custom");
         setFormDriverName(challengeToEdit.customRival.driverName || "Phantom Rival");
@@ -176,6 +179,7 @@ export function ClashChallengesView({
       setFormMaxScore("");
       setFormEntryFee("0");
       setFormReward("50");
+      setFormTargetWinRate("");
       setFormRivalMode("auto");
       setFormDriverName("Phantom Rival");
       setFormTeamName("Midnight Syndicate");
@@ -204,14 +208,8 @@ export function ClashChallengesView({
     }
   };
 
-  const handleSaveChallenge = () => {
-    if (!formTitle.trim()) {
-      alert("Please provide a challenge title.");
-      return;
-    }
-
-    startTransition(async () => {
-      const input: AdminChallengeInput = {
+  /** The challenge as it is filled in now. Used to save it and to test its difficulty. */
+  const buildInput = (): AdminChallengeInput => ({
         id: editingChallenge?.id,
         title: formTitle.trim(),
         subtitle: formSubtitle.trim() || `${formRarity.toUpperCase()} Spec Challenge`,
@@ -232,7 +230,17 @@ export function ClashChallengesView({
                 crewCards: formRivalCrew,
               }
             : null,
-      };
+    targetWinRatePct: formTargetWinRate.trim() ? Number(formTargetWinRate) : null,
+  });
+
+  const handleSaveChallenge = () => {
+    if (!formTitle.trim()) {
+      alert("Please provide a challenge title.");
+      return;
+    }
+
+    startTransition(async () => {
+      const input = buildInput();
 
       const res = await saveAdminChallengeAction(input);
       if (res.success) {
@@ -638,6 +646,7 @@ export function ClashChallengesView({
                       <option value="silver">Silver Only</option>
                       <option value="gold">Gold Only</option>
                       <option value="legend">Legend Only</option>
+                      <option value="mythic">Mythic Only</option>
                     </select>
                   </div>
                   <div>
@@ -697,6 +706,15 @@ export function ClashChallengesView({
                   </div>
                 </div>
               </div>
+
+              {/* Difficulty: the win rate players should have */}
+              <ChallengeDifficultyField
+                value={formTargetWinRate}
+                onChange={setFormTargetWinRate}
+                rarity={formRarity}
+                handPicked={formRivalMode === "custom" && formSelectedCardIds.length === 3}
+                buildInput={buildInput}
+              />
 
               {/* Rival Selection Mode */}
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3 space-y-3">

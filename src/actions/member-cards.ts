@@ -5,7 +5,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import { getCardCredits, refundCardCredit, spendCardCredit } from "@/lib/card-credits";
-import { CardArtError, generateArtImage, isBlobUrl } from "@/lib/card-art-generate";
+import { CardArtError, isBlobUrl } from "@/lib/card-art-generate";
 import {
   BONUS_CARD_CHANCE,
   FEATURED_CARD_CHANCE,
@@ -13,12 +13,12 @@ import {
   REROLL_ENABLED,
   canRerollCard,
   cardTitle,
-  rollStatsAndRarity,
-  rollStyleIds,
   type MemberCard,
   type StoredMemberCard,
 } from "@/lib/card-roll";
-import { sanitizeFullArtCard, tierArtPrompt, type FullArtTier } from "@/lib/full-art-card";
+import { sanitizeFullArtCard } from "@/lib/full-art-card";
+import { rollAndDrawSlot, slotOverrides, type DrawnSlot } from "@/lib/pack-draw";
+import { loadStandardPackRuntime } from "@/lib/pack-config-store";
 import { crewDefinitionToCardData, rollCrewCardDefinition } from "@/lib/crew-cards";
 import {
   rollCarInitialDurability,
@@ -26,16 +26,14 @@ import {
 } from "@/lib/mechanical-faults";
 import {
   ALL_MEMBER_CARDS_INDEX,
-  COMMUNITY_POOL_INDEX,
   FEATURED_CARDS_KEY,
   MEMBER_CARD_ID_PATTERN,
   addToCommunityPool,
-  ensureCommunityPool,
   fullArtCardKey,
-  isCommunityCard,
   memberCardKey as cardKey,
   memberCardsIndexKey as indexKey,
   parseStoredCard as parseCard,
+  pickCommunityCardSource,
 } from "@/lib/member-card-store";
 import { saveSpecSheet } from "@/actions/spec-sheets";
 import { updateCarParts } from "@/actions/cars";
@@ -86,29 +84,15 @@ async function loadOwnCard(userId: string, cardId: string): Promise<StoredMember
   return card && card.userId === userId && !card.archived ? card : null;
 }
 
-/** The art for a freshly rolled card: roll 1–25 stats, derive rarity tier from total (/100), roll styles, then Gemini draws it. */
-async function rollAndDraw(referenceUrl: string): Promise<{
-  tier: FullArtTier;
-  styleIds: string[];
-  stats: MemberCard["stats"];
-  imageUrl: string;
-}> {
-  const { stats, tier } = rollStatsAndRarity(rng);
-  const styleIds = rollStyleIds(rng);
-  const prompt = tierArtPrompt(tier, styleIds);
-
-  // Image models sometimes return no picture. Try once more with the same roll before giving up.
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const { imageUrl } = await generateArtImage({ referenceUrl, prompt, aspectRatio: "3:4", folder: "member-cards" });
-      return { tier, styleIds, stats, imageUrl };
-    } catch (error) {
-      lastError = error;
-      console.error(`[member-cards] art attempt ${attempt + 1} failed:`, error);
-    }
-  }
-  throw lastError;
+/**
+ * The art for a freshly rolled card: roll 1–25 stats, derive rarity tier from total (/100), roll styles, then Gemini draws it.
+ * When the Standard Pack has been set up on the DriftClash Card packs page and switched on, its rarity entries (custom
+ * styles and fixed set cards) can take the place of the normal card. Switched off, this rolls exactly as it always has.
+ * `useConfig` is false for re-rolls, which always make a normal card.
+ */
+async function rollAndDraw(referenceUrl: string, useConfig = true): Promise<DrawnSlot> {
+  const runtime = useConfig ? await loadStandardPackRuntime() : null;
+  return rollAndDrawSlot({ referenceUrl, rng, runtime });
 }
 
 /**
@@ -150,55 +134,12 @@ async function pickFeaturedCard(): Promise<(ReturnType<typeof sanitizeFullArtCar
   }
 }
 
-/** Up to this many cards are looked at when the pool is big; a small pool is looked at in full. */
-const POOL_SAMPLE = 12;
-const POOL_LOAD_ALL_UNDER = 100;
-
 /**
- * A random card from the community pool to build the second card from, or null when the pool is
- * empty. The pool holds one card for each driver and car (see member-card-store.ts), so a member
- * who has made lots of cards is no more likely to be picked than one who has made a single card.
- * Another member's driver and car is preferred; if the pool holds only the opener's own, one of
- * those is used instead. Cards without a usable car photo are skipped.
+ * A random card from the community pool to build another card from, or null when the pool is empty.
+ * See pickCommunityCardSource in member-card-store.ts.
  */
-async function pickBonusSource(userId: string, excludeIds: string[] = []): Promise<StoredMemberCard | null> {
-  try {
-    await ensureCommunityPool();
-    const total = await redis.zcard(COMMUNITY_POOL_INDEX);
-    if (!total) return null;
-
-    // A small pool is read in full, so the pick is exactly even. A big one is sampled at random places.
-    let ids: string[];
-    if (total <= POOL_LOAD_ALL_UNDER) {
-      ids = (await redis.zrange(COMMUNITY_POOL_INDEX, 0, -1)) as string[];
-    } else {
-      const picks = await Promise.all(
-        Array.from({ length: POOL_SAMPLE }, () => {
-          const position = Math.floor(rng() * total);
-          return redis.zrange(COMMUNITY_POOL_INDEX, position, position) as Promise<string[]>;
-        })
-      );
-      ids = [...new Set(picks.flat())];
-    }
-    ids = ids.map(String).filter((id) => MEMBER_CARD_ID_PATTERN.test(id));
-    if (ids.length === 0) return null;
-
-    const allCards = (await redis.mget(...ids.map((id) => cardKey(id))))
-      .map(parseCard)
-      .filter((c): c is StoredMemberCard => isCommunityCard(c) && isBlobUrl(c.referenceUrl));
-    if (allCards.length === 0) return null;
-
-    let cards = allCards.filter((c) => !excludeIds.includes(c.id));
-    if (cards.length === 0) {
-      cards = allCards;
-    }
-    const others = cards.filter((c) => c.userId !== userId);
-    const candidates = others.length > 0 ? others : cards;
-    return candidates.length > 0 ? candidates[Math.floor(rng() * candidates.length)] : null;
-  } catch (error) {
-    console.error("[member-cards] could not pick a bonus card:", error);
-    return null;
-  }
+function pickBonusSource(userId: string, excludeIds: string[] = []): Promise<StoredMemberCard | null> {
+  return pickCommunityCardSource(userId, excludeIds, rng);
 }
 
 function friendlyError(error: unknown): string {
@@ -323,6 +264,7 @@ export async function openCardPack(
         driver: source1.driver,
         team: source1.team,
         styleIds: drawn1.styleIds,
+        ...slotOverrides(drawn1),
         kept: true,
         rerolled: false,
         ownerName: user.name,
@@ -356,6 +298,7 @@ export async function openCardPack(
         driver: source2.driver,
         team: source2.team,
         styleIds: drawn2.styleIds,
+        ...slotOverrides(drawn2),
         kept: true,
         rerolled: false,
         ownerName: user.name,
@@ -402,6 +345,7 @@ export async function openCardPack(
         driver,
         team,
         styleIds: drawn.styleIds,
+        ...slotOverrides(drawn),
         // With re-rolling switched off there is nothing left to decide, so the card is kept straight away.
         kept: !REROLL_ENABLED,
         rerolled: false,
@@ -465,6 +409,7 @@ export async function openCardPack(
             driver: bonusSource.driver,
             team: bonusSource.team,
             styleIds: bonusDrawn.styleIds,
+            ...slotOverrides(bonusDrawn),
             kept: true,
             rerolled: false,
             ownerName: user.name,
@@ -635,11 +580,12 @@ export async function rerollCard(cardId: string): Promise<ActionResult<{ card: M
     const fresh = await loadOwnCard(user.id, cardId);
     if (!fresh || !canRerollCard(fresh)) return { success: false, error: "This card can't be re-rolled any more." };
 
-    const drawn = await rollAndDraw(fresh.referenceUrl);
+    const drawn = await rollAndDraw(fresh.referenceUrl, false);
     const updated: StoredMemberCard = {
       ...fresh,
       tier: drawn.tier,
       styleIds: drawn.styleIds,
+      ...slotOverrides(drawn),
       stats: drawn.stats,
       imageUrl: drawn.imageUrl,
       imageZoom: MEMBER_ART_ZOOM,

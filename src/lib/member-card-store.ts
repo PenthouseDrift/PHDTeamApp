@@ -1,5 +1,6 @@
 import { redis } from "@/lib/redis";
-import { tierFromStats, type StoredMemberCard } from "@/lib/card-roll";
+import { isBlobUrl } from "@/lib/card-art-generate";
+import { tierFromStats, type Rng, type StoredMemberCard } from "@/lib/card-roll";
 import { crewDefinitionToCardData, getCrewCardDefinition, scaleCrewCardDefinition } from "@/lib/crew-cards";
 
 /**
@@ -107,7 +108,8 @@ export function parseStoredCard(raw: unknown): StoredMemberCard | null {
 
       // Re-derive rarity tier according to active RARITY_STAT_BRACKETS:
       // Bronze: 4–59, Silver: 60–74, Gold: 75–84, Legend: 85–99, Mythic: 100
-      if (!c.featured) {
+      // A fixed set card from a per-rarity pack (setCardId) keeps the rarity it was saved with.
+      if (!c.featured && !c.setCardId) {
         tier = tierFromStats(stats);
       }
 
@@ -152,6 +154,7 @@ export const isCommunityCard = (card: StoredMemberCard | null): card is StoredMe
     card &&
       !card.archived &&
       !card.bonus &&
+      !card.setCardId &&
       card.cardType !== "crew" &&
       card.cardType !== "maintenance" &&
       !card.crewCardId &&
@@ -225,4 +228,59 @@ export async function rebuildCommunityPool(): Promise<number> {
 /** Build the pool the first time it is needed, from the cards made before the pool existed. */
 export async function ensureCommunityPool(): Promise<void> {
   if (!(await redis.get(POOL_BUILT))) await rebuildCommunityPool();
+}
+
+// ── Picking a community car to build a card from ────────────────────────────
+
+/** Up to this many cards are looked at when the pool is big; a small pool is looked at in full. */
+const POOL_SAMPLE = 12;
+const POOL_LOAD_ALL_UNDER = 100;
+
+/**
+ * A random card from the community pool to build another card from, or null when the pool is
+ * empty. The pool holds one card for each driver and car, so a member who has made lots of cards is
+ * no more likely to be picked than one who has made a single card. Another member's driver and car
+ * is preferred; if the pool holds only the opener's own, one of those is used instead. Cards without
+ * a usable car photo are skipped.
+ */
+export async function pickCommunityCardSource(
+  userId: string,
+  excludeIds: string[],
+  rng: Rng
+): Promise<StoredMemberCard | null> {
+  try {
+    await ensureCommunityPool();
+    const total = await redis.zcard(COMMUNITY_POOL_INDEX);
+    if (!total) return null;
+
+    // A small pool is read in full, so the pick is exactly even. A big one is sampled at random places.
+    let ids: string[];
+    if (total <= POOL_LOAD_ALL_UNDER) {
+      ids = (await redis.zrange(COMMUNITY_POOL_INDEX, 0, -1)) as string[];
+    } else {
+      const picks = await Promise.all(
+        Array.from({ length: POOL_SAMPLE }, () => {
+          const position = Math.floor(rng() * total);
+          return redis.zrange(COMMUNITY_POOL_INDEX, position, position) as Promise<string[]>;
+        })
+      );
+      ids = [...new Set(picks.flat())];
+    }
+    ids = ids.map(String).filter((id) => MEMBER_CARD_ID_PATTERN.test(id));
+    if (ids.length === 0) return null;
+
+    const allCards = (await redis.mget(...ids.map((id) => memberCardKey(id))))
+      .map(parseStoredCard)
+      .filter((c): c is StoredMemberCard => isCommunityCard(c) && isBlobUrl(c.referenceUrl));
+    if (allCards.length === 0) return null;
+
+    let cards = allCards.filter((c) => !excludeIds.includes(c.id));
+    if (cards.length === 0) cards = allCards;
+    const others = cards.filter((c) => c.userId !== userId);
+    const candidates = others.length > 0 ? others : cards;
+    return candidates.length > 0 ? candidates[Math.floor(rng() * candidates.length)] : null;
+  } catch (error) {
+    console.error("[member-card-store] could not pick a community card:", error);
+    return null;
+  }
 }

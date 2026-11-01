@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { CardCollection } from "@/components/member-cards/CardCollection";
 import type { MemberCard } from "@/lib/card-roll";
+import type { TandemClashChallenge } from "@/tcg/challenges-types";
+import type { ComingSoonCard } from "@/lib/coming-soon";
+import type { ShowcaseRareCard } from "@/tcg/storage";
 import { P_CREDIT_BUNDLES } from "@/tcg/config";
-import {
-  DAILY_CLASH_WIN_REWARD_PCREDITS,
-  getCollectorProgress,
-} from "@/tcg/progression";
+import { DAILY_CLASH_WIN_REWARD_PCREDITS, getCollectorProgress } from "@/tcg/progression";
 import type {
   ClashOpponent,
   ClashPlayerStats,
@@ -19,6 +19,8 @@ import type {
   TcgTab,
 } from "@/tcg/types";
 import { DriftClashArena } from "./DriftClashArena";
+import { GameBottomNav, type GameNavItem } from "./GameBottomNav";
+import { TcgHome } from "./TcgHome";
 import { DriftClashLeaderboard } from "./DriftClashLeaderboard";
 import { TcgMarketplace } from "./TcgMarketplace";
 import { TcgPackStore } from "./TcgPackStore";
@@ -38,21 +40,18 @@ const TABS: Array<{
   }) => string | null;
 }> = [
   {
+    id: "home",
+    label: "Home",
+    shortLabel: "Home",
+    icon: "🏁",
+    badge: ({ dailyWinAvailable }) => (dailyWinAvailable ? `+${DAILY_CLASH_WIN_REWARD_PCREDITS}P` : null),
+  },
+  {
     id: "collection",
     label: "My Deck",
     shortLabel: "Deck",
     icon: "🃏",
     badge: ({ cards }) => String(cards),
-  },
-  {
-    id: "clash",
-    label: "Clash Arena",
-    shortLabel: "Clash",
-    icon: "⚡",
-    badge: ({ dailyWinAvailable }) =>
-      dailyWinAvailable
-        ? `+${DAILY_CLASH_WIN_REWARD_PCREDITS}P`
-        : null,
   },
   {
     id: "store",
@@ -71,7 +70,7 @@ const TABS: Array<{
   {
     id: "p-credits",
     label: "P-Credits",
-    shortLabel: "Bank",
+    shortLabel: "P-Credits",
     icon: "🪙",
   },
   {
@@ -85,7 +84,7 @@ const TABS: Array<{
 export function TcgApp({
   userId,
   isAdmin = false,
-  initialTab = "collection",
+  initialTab = "home",
   initialCards,
   initialPackCredits,
   initialPCredits,
@@ -99,6 +98,10 @@ export function TcgApp({
   initialLeaderboard = [],
   hasEarlyAccess = false,
   checkoutConfirmed = false,
+  initialChallenges = [],
+  initialCompletedChallengeIds = [],
+  initialRareCards = [],
+  initialComingSoon = [],
 }: {
   userId: string;
   isAdmin?: boolean;
@@ -116,6 +119,10 @@ export function TcgApp({
   initialLeaderboard?: DriftClashLeaderboardEntry[];
   hasEarlyAccess?: boolean;
   checkoutConfirmed?: boolean;
+  initialChallenges?: TandemClashChallenge[];
+  initialCompletedChallengeIds?: string[];
+  initialRareCards?: ShowcaseRareCard[];
+  initialComingSoon?: ComingSoonCard[];
 }) {
   const [tab, setTab] = useState<TcgTab>(initialTab);
   const [cards, setCards] = useState<MemberCard[]>(initialCards);
@@ -123,6 +130,8 @@ export function TcgApp({
   const [pCredits, setPCredits] = useState<number>(initialPCredits);
   const [listings, setListings] = useState<TcgMarketListing[]>(initialListings);
   const [clashStats, setClashStats] = useState<ClashPlayerStats>(initialClashStats);
+  // Which view the play section on Home is showing: the two play buttons, or the full challenges list.
+  const [lobbyTab, setLobbyTab] = useState<"quick" | "challenges">("quick");
 
   const progress = useMemo(
     () => getCollectorProgress(cards, clashStats.wins, cards.length),
@@ -134,6 +143,23 @@ export function TcgApp({
       setTab(initialTab);
     }
   }, [initialTab]);
+
+  // The same sections and badges as the header panel, for the bar fixed to the bottom of a phone screen.
+  const navItems: GameNavItem[] = TABS.map((t) => ({
+    id: t.id,
+    label: t.label,
+    shortLabel: t.shortLabel,
+    icon: t.icon,
+    badge:
+      t.badge?.({
+        cards: cards.length,
+        listings: listings.length,
+        packs: initialCustomPacks.length + 1,
+        dailyWinAvailable: !clashStats.dailyWinClaimed,
+        hasEarlyAccess,
+      }) ?? null,
+    urgent: t.id === "home" && !clashStats.dailyWinClaimed,
+  }));
 
   return (
     <div className="space-y-4 pb-28 sm:space-y-5 sm:pb-8">
@@ -234,24 +260,20 @@ export function TcgApp({
             </span>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setTab("clash")}
-            className="flex items-center gap-1.5 shrink-0 rounded-md bg-zinc-900 px-2 py-0.5 font-bold text-zinc-300 hover:text-white"
-          >
+          <div className="flex items-center gap-1.5 shrink-0 rounded-md bg-zinc-900 px-2 py-0.5 font-bold text-zinc-300">
             <span>
               ⚔️ <strong className="text-emerald-400">{clashStats.wins}W</strong>/{clashStats.losses}L
             </span>
             {clashStats.streak > 0 && (
               <span className="text-amber-400">🔥{clashStats.streak}</span>
             )}
-          </button>
+          </div>
         </div>
 
-        {/* Responsive Segmented Game Navigation (Visible across Mobile & Desktop) */}
+        {/* Game navigation for tablets and desktop. On phones the same sections are the bar fixed above the main tabs. */}
         <nav
           aria-label="DriftClash game navigation"
-          className="mt-3 grid grid-cols-3 gap-1.5 rounded-2xl bg-zinc-900/90 p-1.5 sm:grid-cols-6"
+          className="mt-3 hidden grid-cols-6 gap-1.5 rounded-2xl bg-zinc-900/90 p-1.5 md:grid"
         >
           {TABS.map((t) => {
             const active = tab === t.id;
@@ -271,9 +293,7 @@ export function TcgApp({
                 className={`flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-xs font-black transition-all ${
                   active
                     ? "bg-amber-500 text-black shadow-sm"
-                    : t.id === "clash"
-                      ? "border border-amber-500/50 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
-                      : "text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                    : "text-zinc-300 hover:bg-zinc-800 hover:text-white"
                 }`}
               >
                 <span aria-hidden>{t.icon}</span>
@@ -284,7 +304,7 @@ export function TcgApp({
                     className={`rounded-full px-1.5 py-0.5 text-[10px] font-extrabold ${
                       active
                         ? "bg-black/20 text-black"
-                        : t.id === "clash" && !clashStats.dailyWinClaimed
+                        : t.id === "home" && !clashStats.dailyWinClaimed
                           ? "bg-emerald-500 text-black"
                           : "bg-zinc-800 text-zinc-300"
                     }`}
@@ -298,6 +318,8 @@ export function TcgApp({
         </nav>
       </header>
 
+      <GameBottomNav items={navItems} active={tab} onSelect={(id) => setTab(id as TcgTab)} />
+
       {checkoutConfirmed && (
         <div
           role="status"
@@ -308,47 +330,45 @@ export function TcgApp({
       )}
 
       {/* Active Tab Content */}
+      {tab === "home" && (
+        <TcgHome
+          showShowcase={lobbyTab === "quick"}
+          challenges={initialChallenges}
+          completedIds={initialCompletedChallengeIds}
+          packs={initialCustomPacks}
+          standardPackPrice={initialStandardPackPrice}
+          standardPackSalePrice={initialStandardPackSalePrice}
+          rareCards={initialRareCards}
+          comingSoon={initialComingSoon}
+          packCredits={packCredits}
+          onOpenChallenges={() => {
+            setLobbyTab("challenges");
+            document.getElementById("tcg-home")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+          onOpenStore={() => setTab("store")}
+        >
+
+          <DriftClashArena
+            cards={cards}
+            initialOpponent={initialClashOpponent}
+            initialStats={clashStats}
+            hasEarlyAccess={hasEarlyAccess}
+            isAdmin={isAdmin}
+            userId={userId}
+            pCredits={pCredits}
+            onPCreditsChange={setPCredits}
+            onStatsChange={setClashStats}
+            onCardsChange={setCards}
+            onOpenStoreTab={() => setTab("store")}
+            lobbyTab={lobbyTab}
+            onLobbyTabChange={setLobbyTab}
+          />
+
+        </TcgHome>
+      )}
+
       {tab === "collection" && (
         <div className="space-y-4">
-          {/* Quick Battle Arena CTA for Desktop/Tablet */}
-          <section className="relative overflow-hidden rounded-2xl border border-amber-500/40 bg-gradient-to-r from-zinc-950 via-zinc-900 to-black p-4 shadow-lg sm:rounded-3xl sm:p-5">
-            <div
-              className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-amber-500/15 blur-2xl"
-              aria-hidden
-            />
-            <div className="relative z-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-amber-500 px-2.5 py-0.5 text-[10px] font-black uppercase text-black">
-                    ⚡ Live Arena Ready
-                  </span>
-                  <span className="text-[11px] font-bold text-amber-400">
-                    ⚔️ Tandem Clash · {clashStats.wins}W / {clashStats.losses}L
-                  </span>
-                  {!clashStats.dailyWinClaimed && (
-                    <span className="rounded-full border border-emerald-500/40 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-black text-emerald-300">
-                      +{DAILY_CLASH_WIN_REWARD_PCREDITS}P Win Bonus
-                    </span>
-                  )}
-                </div>
-                <h3 className="text-base font-black text-white sm:text-lg">
-                  Penthouse Tandem Clash Arena
-                </h3>
-                <p className="max-w-xl text-xs text-zinc-300">
-                  Deploy 3 of your Car Cards and 3 Crew Advantage Cards. Spin for a randomised UK Drift venue and conquer Corners 1, 2 &amp; 3!
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setTab("clash")}
-                className="relative z-10 inline-flex min-h-12 shrink-0 items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-6 py-2.5 text-xs font-black uppercase tracking-wider text-black shadow-lg shadow-amber-500/30 transition-all hover:scale-[1.02] active:scale-[0.98] sm:text-sm"
-              >
-                <span className="text-base">🎮</span>
-                <span>Play Tandem Clash →</span>
-              </button>
-            </div>
-          </section>
-
           <CardCollection
             initialCards={cards}
             credits={packCredits}
@@ -369,22 +389,6 @@ export function TcgApp({
             }}
           />
         </div>
-      )}
-
-      {tab === "clash" && (
-        <DriftClashArena
-          cards={cards}
-          initialOpponent={initialClashOpponent}
-          initialStats={clashStats}
-          hasEarlyAccess={hasEarlyAccess}
-          isAdmin={isAdmin}
-          userId={userId}
-          pCredits={pCredits}
-          onPCreditsChange={setPCredits}
-          onStatsChange={setClashStats}
-          onCardsChange={setCards}
-          onOpenStoreTab={() => setTab("store")}
-        />
       )}
 
       {tab === "store" && (

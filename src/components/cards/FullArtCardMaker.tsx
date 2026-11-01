@@ -12,6 +12,7 @@ import {
   emptyFullArtCard,
   tierArtPrompt,
   tierInfo,
+  type FrameEffect,
   type FullArtCardData,
   type FullArtStats,
 } from "@/lib/full-art-card";
@@ -684,7 +685,9 @@ export function FullArtCardMaker({
               card.customStatLabelColor ||
               card.customStatValueColor ||
               card.customBottomBarBgColor ||
-              card.customBottomBarBorderColor) && (
+              card.customBottomBarBorderColor ||
+              card.customFrameEffect ||
+              card.customFlameColor) && (
               <button
                 type="button"
                 onClick={() =>
@@ -695,6 +698,9 @@ export function FullArtCardMaker({
                     customStatValueColor: undefined,
                     customBottomBarBgColor: undefined,
                     customBottomBarBorderColor: undefined,
+                    customFrameEffect: undefined,
+                    customFrameShine: undefined,
+                    customFlameColor: undefined,
                   }))
                 }
                 className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400 dark:hover:bg-red-900/60"
@@ -749,6 +755,54 @@ export function FullArtCardMaker({
               presets={BOTTOM_BORDER_PRESETS}
               onChange={(val) => set("customBottomBarBorderColor", val)}
             />
+
+            {/* Frame effect: show the Mythic flames or the Legend rainbow on any rarity, optionally in your own flame colour. */}
+            <div className="space-y-2 rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
+              <div>
+                <label htmlFor="fa-frame-effect" className="mb-1 block text-xs font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  Frame effect
+                </label>
+                <select
+                  id="fa-frame-effect"
+                  value={card.customFrameEffect ?? ""}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setCard((c) => ({
+                      ...c,
+                      customFrameEffect: value === "" ? undefined : (value as FrameEffect),
+                      customFrameShine: value === "" ? undefined : c.customFrameShine,
+                      customFlameColor: value === "flames" ? c.customFlameColor : undefined,
+                    }));
+                  }}
+                  className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                >
+                  <option value="">This rarity&apos;s own (default)</option>
+                  <option value="none">No effect</option>
+                  <option value="flames">Flames (Mythic fire)</option>
+                  <option value="prismatic">Prismatic (Legend rainbow)</option>
+                </select>
+              </div>
+              {card.customFrameEffect === "flames" && (
+                <ColorSettingRow
+                  label="Flame colour"
+                  value={card.customFlameColor}
+                  placeholder="e.g. #000000 for black fire (blank keeps the fire colours)"
+                  fallbackColor="#000000"
+                  presets={BORDER_PRESETS}
+                  onChange={(val) => set("customFlameColor", val)}
+                />
+              )}
+              {card.customFrameEffect && (
+                <label className="flex items-center gap-2 text-sm font-bold text-zinc-800 dark:text-zinc-100">
+                  <input
+                    type="checkbox"
+                    checked={card.customFrameShine ?? (card.tier === "legend" || card.tier === "mythic")}
+                    onChange={(e) => set("customFrameShine", e.target.checked)}
+                  />
+                  Glint and sparkles over the picture
+                </label>
+              )}
+            </div>
           </div>
         </section>
 

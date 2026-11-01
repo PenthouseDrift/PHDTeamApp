@@ -12,10 +12,17 @@ import {
   MEMBER_CARD_ID_PATTERN,
   memberCardKey,
   memberCardsIndexKey,
+  addToCommunityPool,
   parseStoredCard,
+  pickCommunityCardSource,
   removeFromCommunityPool,
 } from "@/lib/member-card-store";
-import type { MemberCard, StoredMemberCard } from "@/lib/card-roll";
+import { MEMBER_ART_ZOOM, cardTitle, type MemberCard, type StoredMemberCard } from "@/lib/card-roll";
+import { CardArtError } from "@/lib/card-art-generate";
+import { rollPackCard } from "@/lib/pack-config";
+import { deletePackConfig, entryAvailable, loadPackConfig, loadRuntimeFor } from "@/lib/pack-config-store";
+import { rollAndDrawSlot, slotOverrides } from "@/lib/pack-draw";
+import { rollCarInitialDurability } from "@/lib/mechanical-faults";
 import type { ActionResult } from "@/types";
 import {
   DEFAULT_STANDARD_PACK_PRICE,
@@ -523,6 +530,9 @@ export async function buyAndOpenCustomPack(
   }
 
   const [hydrated] = await hydrateCustomPacks([rawPack]);
+  if (hydrated?.needsGeneration) {
+    return { success: false, error: "Choose a car to open this pack." };
+  }
   if (!hydrated || hydrated.setList.length === 0) {
     return { success: false, error: "This pack doesn't have any cards in its set list yet." };
   }
@@ -547,13 +557,24 @@ export async function buyAndOpenCustomPack(
       return hydrated.setList[hydrated.setList.length - 1].card;
     };
 
+    // A pack with a config rolls a rarity, then a set card on it. An old pack keeps its weighted list.
+    const runtime = hydrated.config ? await loadRuntimeFor(hydrated.config) : null;
+    const pickSource = () => {
+      if (runtime) {
+        const roll = rollPackCard(runtime.config, rng, entryAvailable(runtime));
+        const fixed = roll.entry?.kind === "card" ? runtime.cards.get(roll.entry.refId) : undefined;
+        if (fixed) return fixed;
+      }
+      return pickOne();
+    };
+
     const count = Math.max(1, Math.min(3, hydrated.cardsPerPack || 1));
     const pulled: StoredMemberCard[] = [];
     const baseNow = Date.now();
 
     const tx = redis.multi();
     for (let i = 0; i < count; i++) {
-      const source = pickOne();
+      const source = pickSource();
       const createdAt = baseNow + i;
       const stored: StoredMemberCard = {
         id: randomUUID(),
@@ -575,7 +596,20 @@ export async function buyAndOpenCustomPack(
         rerolled: false,
         ownerName: user.name,
         referenceUrl: "",
-        featured: true,
+        // Old packs mark their cards as featured set cards. Config packs keep the card as saved (its rarity and frame).
+        ...(runtime
+          ? {
+              setCardId: source.id,
+              customBorderColor: source.customBorderColor,
+              customStatLabelColor: source.customStatLabelColor,
+              customStatValueColor: source.customStatValueColor,
+              customBottomBarBgColor: source.customBottomBarBgColor,
+              customBottomBarBorderColor: source.customBottomBarBorderColor,
+              customFrameEffect: source.customFrameEffect,
+              customFrameShine: source.customFrameShine,
+              customFlameColor: source.customFlameColor,
+            }
+          : { featured: true }),
         bonusFromCardId: source.id,
         packId: hydrated.id,
         packName: hydrated.name,
@@ -608,6 +642,201 @@ export async function buyAndOpenCustomPack(
       success: false,
       error: error instanceof Error ? error.message : "Failed to open custom pack",
     };
+  }
+}
+
+export interface OpenCustomPackInput {
+  driver: string;
+  team: string;
+  chassis: string;
+  description: string;
+  carName?: string;
+  /** Photo of the member's car. Not needed when `skipPersonalCar` is set. */
+  referenceUrl: string;
+  /** Draw every generated card from community cars instead of the member's own car. */
+  skipPersonalCar?: boolean;
+}
+
+const customPackLockKey = (userId: string) => `cardgen:lock:${userId}`;
+const clampText = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
+
+/**
+ * Buy and open a pack that has styles or normal generated cards in it. Like the Standard Pack, the
+ * member either uses their own car photo or lets the pack draw from community cars. The first card
+ * is drawn from the member's car (unless they chose community cars); the rest come from community cars.
+ * P-Credits are only taken once the cards have been picked, and are refunded if anything fails.
+ */
+export async function openCustomPackWithCar(
+  packId: string,
+  input: OpenCustomPackInput
+): Promise<ActionResult<{ cards: MemberCard[]; pCredits: number; packName: string }>> {
+  const user = await currentUser();
+  if (!user) return { success: false, error: "Please sign in to open a pack." };
+  if (!MEMBER_CARD_ID_PATTERN.test(packId)) return { success: false, error: "Invalid pack." };
+
+  const rawPack = parseCustomPack(await redis.get(tcgCustomPackKey(packId)));
+  if (!rawPack || rawPack.status !== "live") {
+    return { success: false, error: "This pack is not currently available in the store." };
+  }
+  const [hydrated] = await hydrateCustomPacks([rawPack]);
+  if (!hydrated?.config) return { success: false, error: "This pack opens straight from the store." };
+  if (!hydrated.needsGeneration) return { success: false, error: "This pack doesn't need a car. Use Buy & Open." };
+
+  const skipPersonalCar = Boolean(input?.skipPersonalCar);
+  const driver = clampText(input?.driver, 30);
+  const team = clampText(input?.team, 30);
+  const chassis = clampText(input?.chassis, 48);
+  const description = clampText(input?.description, 160);
+  const carName = clampText(input?.carName, 40);
+  if (!skipPersonalCar && !driver) return { success: false, error: "Add your name for the card.", field: "driver" };
+  if (!skipPersonalCar && !isBlobUrl(input?.referenceUrl)) {
+    return { success: false, error: "Choose or upload a photo of your car first.", field: "referenceUrl" };
+  }
+
+  // One pack at a time per member (shared with the Standard Pack), so a double tap can't open two.
+  const locked = await redis.set(customPackLockKey(user.id), "1", { nx: true, ex: 150 });
+  if (!locked) return { success: false, error: "A pack is already being opened. Give it a moment." };
+
+  let spentAmount = 0;
+  try {
+    const count = Math.max(1, Math.min(3, hydrated.cardsPerPack || 1));
+    const title = cardTitle({ carName, chassis, driver });
+
+    // Who each card is built from: the member's own car for the first card, community cars for the rest.
+    type Source = {
+      name: string;
+      ability: string;
+      effect: string;
+      driver: string;
+      team: string;
+      referenceUrl: string;
+      own: boolean;
+      fromCardId?: string;
+    };
+    const own: Source | null = skipPersonalCar
+      ? null
+      : {
+          name: title,
+          ability: chassis.trim() || carName.trim() || title,
+          effect: description,
+          driver,
+          team,
+          referenceUrl: input.referenceUrl,
+          own: true,
+        };
+    const sources: Source[] = [];
+    const used: string[] = [];
+    for (let i = 0; i < count; i++) {
+      if (i === 0 && own) {
+        sources.push(own);
+        continue;
+      }
+      const community = await pickCommunityCardSource(user.id, used, rng);
+      if (community) {
+        used.push(community.id);
+        sources.push({
+          name: community.name,
+          ability: community.ability || community.name,
+          effect: community.effect,
+          driver: community.driver,
+          team: community.team,
+          referenceUrl: community.referenceUrl,
+          own: false,
+          fromCardId: community.id,
+        });
+      } else if (own) {
+        sources.push(own);
+      } else {
+        return { success: false, error: "The community card pool is currently empty. Please try again later." };
+      }
+    }
+
+    const effectivePackPrice = getEffectivePrice(hydrated.price, hydrated.salePrice);
+    const spent = await spendPCredits(user.id, effectivePackPrice);
+    if (!spent.ok) {
+      return {
+        success: false,
+        error: `Not enough P-Credits. "${hydrated.name}" costs ${effectivePackPrice.toLocaleString()} P-Credits (you have ${spent.balance.toLocaleString()}).`,
+      };
+    }
+    spentAmount = effectivePackPrice;
+
+    const runtime = await loadRuntimeFor(hydrated.config);
+    const settled = await Promise.allSettled(
+      sources.map((source) => rollAndDrawSlot({ referenceUrl: source.referenceUrl, rng, runtime }))
+    );
+    const failed = settled.find((r): r is PromiseRejectedResult => r.status === "rejected");
+    if (failed) throw failed.reason;
+    const drawn = settled.map((r) => (r as PromiseFulfilledResult<Awaited<ReturnType<typeof rollAndDrawSlot>>>).value);
+
+    const baseNow = Date.now();
+    const pulled: StoredMemberCard[] = drawn.map((d, i) => {
+      const source = sources[i];
+      const durability = rollCarInitialDurability(rng);
+      return {
+        id: randomUUID(),
+        userId: user.id,
+        createdAt: baseNow + i,
+        name: source.name,
+        ability: source.ability,
+        effect: source.effect,
+        tier: d.tier,
+        stats: d.stats,
+        imageUrl: d.imageUrl,
+        imageZoom: MEMBER_ART_ZOOM,
+        imageX: 50,
+        imageY: 50,
+        driver: source.driver,
+        team: source.team,
+        styleIds: d.styleIds,
+        ...slotOverrides(d),
+        kept: true,
+        rerolled: false,
+        ownerName: user.name,
+        referenceUrl: d.fixed ? "" : source.referenceUrl,
+        ...(source.own ? {} : { bonus: true, bonusFromCardId: source.fromCardId }),
+        maxBattles: durability,
+        battlesRemaining: durability,
+        fault: null,
+        packId: hydrated.id,
+        packName: hydrated.name,
+      };
+    });
+
+    const tx = redis.multi();
+    for (const stored of pulled) {
+      tx.set(memberCardKey(stored.id), JSON.stringify(stored));
+      tx.zadd(memberCardsIndexKey(user.id), { score: stored.createdAt, member: stored.id });
+      tx.zadd(ALL_MEMBER_CARDS_INDEX, { score: stored.createdAt, member: stored.id });
+    }
+    tx.hincrby(`member:${user.id}`, "packsOpened", 1);
+    await tx.exec();
+    spentAmount = 0; // saved: nothing to refund from here on
+
+    // The member's own car stands in the community pool, as it does after a Standard Pack.
+    const ownCard = pulled.find((c, i) => sources[i].own && !c.setCardId);
+    if (ownCard) await addToCommunityPool(ownCard).catch((e) => console.error("[tcg] could not update the pool:", e));
+
+    revalidatePath("/cards");
+    revalidatePath("/admin/member-cards");
+    revalidateTag("admin-members", "max");
+
+    return {
+      success: true,
+      data: { cards: pulled.map(publicCard), pCredits: spent.balance, packName: hydrated.name },
+    };
+  } catch (error) {
+    console.error("[tcg] openCustomPackWithCar failed:", error);
+    return {
+      success: false,
+      error:
+        error instanceof CardArtError
+          ? error.message
+          : "We couldn't make your cards this time. You haven't been charged. Please try again in a moment.",
+    };
+  } finally {
+    if (spentAmount > 0) await grantPCredits(user.id, spentAmount).catch(() => {});
+    await redis.del(customPackLockKey(user.id)).catch(() => {});
   }
 }
 
@@ -840,6 +1069,7 @@ export async function deleteCustomPackAction(packId: string): Promise<ActionResu
       .del(tcgCustomPackKey(packId))
       .zrem(TCG_CUSTOM_PACKS_INDEX_KEY, packId)
       .exec();
+    await deletePackConfig(packId).catch(() => {});
 
     revalidatePath("/cards");
     revalidatePath("/admin/card-maker");

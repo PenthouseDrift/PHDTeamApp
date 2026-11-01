@@ -7,6 +7,7 @@ import { FullArtCard } from "@/components/cards/FullArtCard";
 import { PackOpening } from "@/components/member-cards/PackOpening";
 import { rarityLabel, type MemberCard } from "@/lib/card-roll";
 import { buyAndOpenCustomPack, buyStandardPackWithPCredits } from "@/tcg/actions";
+import { PackArt } from "@/tcg/components/PackArt";
 import { getEffectivePrice, getSaleDiscountPct, isOnSale } from "@/tcg/config";
 import type { TcgCustomPackWithCards } from "@/tcg/types";
 
@@ -101,7 +102,7 @@ export function TcgPackStore({
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {isAdmin && (
-            <Link href="/admin/card-maker?tab=packs" className={secondaryBtn}>
+            <Link href="/admin/driftclash/packs" className={secondaryBtn}>
               ⚙️ Manage Packs &amp; Sale Prices
             </Link>
           )}
@@ -147,26 +148,15 @@ export function TcgPackStore({
         )}
         <div className="grid items-center gap-6 md:grid-cols-[auto_1fr_auto]">
           {/* Visual Pack Representation */}
-          <div
-            className={`relative mx-auto flex h-44 w-32 flex-col items-center justify-center gap-2 rounded-2xl border-2 bg-gradient-to-b p-3 ${
-              standardOnSale
-                ? "border-rose-400 from-rose-500/25 via-zinc-900 to-black shadow-[0_0_30px_rgba(244,63,94,0.35)]"
-                : "border-amber-400 from-amber-500/20 via-zinc-900 to-black shadow-[0_0_30px_rgba(245,158,11,0.25)]"
-            }`}
-          >
-            {standardOnSale && (
-              <span className="absolute -right-2 -top-2 rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-black text-white shadow">
-                -{standardDiscountPct}%
-              </span>
-            )}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="PHD" className="w-20" />
-            <span className="text-[10px] font-black tracking-[0.25em] text-amber-400">STANDARD</span>
-            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-200">
-              3 Cards + Bonus
-            </span>
+          <div className="mx-auto w-36">
+            <PackArt
+              name="Standard Pack"
+              variant="standard"
+              cardsLabel="4 CARDS"
+              extraLabel="+ RARE CHANCE"
+              discountPct={standardOnSale ? standardDiscountPct : 0}
+            />
           </div>
-
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full bg-amber-500 px-2.5 py-0.5 text-[11px] font-black uppercase text-black">
@@ -178,7 +168,7 @@ export function TcgPackStore({
             </div>
             <h3 className="text-2xl font-black text-white">Penthouse Standard Pack</h3>
             <p className="max-w-xl text-xs leading-relaxed text-zinc-300">
-              Contains <strong>1 Custom AI Card of your car</strong> (stats rolled 1–10 each, graded by /40 total), <strong>1 Community Car Card</strong>, and <strong>1 Tactical Crew Card</strong> (from the 30-card Crew Set for Clash Arena), plus a 1-in-30 chance at a rare Bonus Set Card!
+              Contains <strong>1 Custom AI Card of your car</strong>, <strong>1 Community Car Card</strong>, <strong>1 Tactical Crew Card</strong> for Clash Arena and <strong>1 Repair Kit</strong>, plus a chance at a rare Bonus Set Card!
             </p>
             <div className="flex flex-wrap items-baseline gap-2.5 pt-1">
               {standardOnSale ? (
@@ -264,7 +254,7 @@ export function TcgPackStore({
             </p>
             {isAdmin && (
               <div className="pt-2">
-                <Link href="/admin/card-maker?tab=packs" className={secondaryBtn}>
+                <Link href="/admin/driftclash/packs" className={secondaryBtn}>
                   + Create a Custom Pack in Card Maker
                 </Link>
               </div>
@@ -298,6 +288,11 @@ export function TcgPackStore({
                       }`}
                     >
                       <div className="flex items-center justify-center -space-x-8">
+                        {previewCards.length === 0 && (
+                          <span className="rounded-xl border border-amber-400/40 bg-black/60 px-4 py-3 text-center text-sm font-black text-amber-300">
+                            Cards drawn from a car
+                          </span>
+                        )}
                         {previewCards.map((c, idx) => (
                           <div
                             key={c.id ?? idx}
@@ -315,7 +310,9 @@ export function TcgPackStore({
                         ))}
                       </div>
                       <span className="absolute left-3 top-3 rounded-full border border-amber-400/40 bg-black/75 px-2.5 py-0.5 text-[11px] font-black text-amber-300 backdrop-blur-sm">
-                        {pack.setList.length} Card{pack.setList.length === 1 ? "" : "s"} in Set
+                        {pack.needsGeneration
+                          ? `${pack.setList.length} Set Card${pack.setList.length === 1 ? "" : "s"} + drawn cards`
+                          : `${pack.setList.length} Card${pack.setList.length === 1 ? "" : "s"} in Set`}
                       </span>
                       <div className="absolute right-3 top-3 flex items-center gap-1.5">
                         {packOnSale && (
@@ -375,6 +372,20 @@ export function TcgPackStore({
                     >
                       View Set List ({pack.setList.length})
                     </button>
+                    {pack.needsGeneration ? (
+                      canAfford ? (
+                        <Link
+                          href={`/cards/new?pack=${pack.id}`}
+                          className={`${primaryBtn} flex-1 text-xs`}
+                        >
+                          Choose car &amp; open · {effectivePrice.toLocaleString()} P
+                        </Link>
+                      ) : (
+                        <button type="button" disabled className={`${primaryBtn} flex-1 text-xs`}>
+                          Need {effectivePrice.toLocaleString()} P
+                        </button>
+                      )
+                    ) : (
                     <button
                       type="button"
                       onClick={() => handleBuyCustomPack(pack)}
@@ -397,6 +408,7 @@ export function TcgPackStore({
                         `Need ${effectivePrice.toLocaleString()} P`
                       )}
                     </button>
+                    )}
                   </div>
                 </div>
               );
@@ -457,6 +469,7 @@ export function TcgPackStore({
                   <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-zinc-400">
                     Cards in this Set ({inspectPack.setList.length})
                   </h4>
+                  <PackOddsNote pack={inspectPack} />
                   <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
                     {inspectPack.setList.map(({ card, chancePct }) => (
                       <li key={card.id} className="space-y-1.5">
@@ -491,6 +504,11 @@ export function TcgPackStore({
                     )}
                   </div>
                   {pCredits >= inspectEffectivePrice ? (
+                    inspectPack.needsGeneration ? (
+                    <Link href={`/cards/new?pack=${inspectPack.id}`} className={primaryBtn}>
+                      Choose car &amp; open ({inspectEffectivePrice.toLocaleString()} P-Credits)
+                    </Link>
+                  ) : (
                     <button
                       type="button"
                       onClick={() => handleBuyCustomPack(inspectPack)}
@@ -501,6 +519,7 @@ export function TcgPackStore({
                         ? "Opening Pack…"
                         : `Buy & Open Pack (${inspectEffectivePrice.toLocaleString()} P-Credits)`}
                     </button>
+                  )
                   ) : (
                     <button
                       type="button"
@@ -555,6 +574,8 @@ export function TcgPackStore({
 
               <PackOpening
                 ready={true}
+                packName={openingState.packName}
+                packVariant="custom"
                 card={openingState.cards[0] ?? null}
                 bonus={openingState.cards[1] ?? null}
                 featured={openingState.cards[2] ?? null}
@@ -589,5 +610,15 @@ export function TcgPackStore({
           document.body
         )}
     </div>
+  );
+}
+
+/** For packs that draw some cards from a car: a short note that a car is chosen when opening. */
+function PackOddsNote({ pack }: { pack: TcgCustomPackWithCards }) {
+  if (!pack.needsGeneration) return null;
+  return (
+    <p className="mb-3 rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-xs text-zinc-300">
+      Some cards are drawn from a car (yours, or community cars), so you pick a car when you open this pack.
+    </p>
   );
 }

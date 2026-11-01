@@ -86,7 +86,7 @@ export const RARITY_RANK: Record<FullArtTier, number> = { bronze: 0, silver: 1, 
 // ── Art styles ──────────────────────────────────────────────────────────────
 
 /** How many art styles a pack picks: one 50%, two 33%, three 17%. Every card gets at least one. */
-const STYLE_COUNT_WEIGHTS = [0, 0.5, 0.33, 0.17];
+export const STYLE_COUNT_WEIGHTS = [0, 0.5, 0.33, 0.17];
 
 /** A random set of 1 to MAX_ART_STYLES different art styles from every style the card maker has. */
 export function rollStyleIds(rng: Rng): string[] {
@@ -118,6 +118,12 @@ export interface MemberCard extends Omit<FullArtCardData, "id" | "updatedAt"> {
   createdAt: number;
   /** The art styles the pack picked, for display. */
   styleIds: string[];
+  /** Set when a fixed set card (saved in the card maker) took this card's place in a pack, with that card's id. Its rarity and stats stay as saved. */
+  setCardId?: string;
+  /** Set when a custom pack style (admin managed, see the DriftClash Card packs page) replaced the normal art style roll. */
+  packStyleId?: string;
+  /** Display name of that custom pack style. */
+  packStyleName?: string;
   /** The member chose to keep it, so it can no longer be re-rolled. */
   kept: boolean;
   /** The one re-roll has been used. */

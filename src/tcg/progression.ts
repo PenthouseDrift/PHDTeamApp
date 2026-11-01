@@ -1,3 +1,4 @@
+import { CLASH_SECTOR_POOL, computeSectorStatScore, type ClashSectorId, type ClashSectorSpec } from "./clash-corners";
 import type { MemberCard } from "@/lib/card-roll";
 import type { FullArtTier } from "@/lib/full-art-card";
 import {
@@ -301,100 +302,19 @@ export function getCollectorProgress(
 
 // ── Track Sectors & Randomised Match Corners ───────────────────────────────
 
-export type ClashSectorId =
-  | "entry"
-  | "chase"
-  | "wallride"
-  | "hairpin"
-  | "sweeper"
-  | "infield";
-
-export interface ClashSectorSpec {
-  id: ClashSectorId;
-  category?: "entry" | "chase" | "wallride";
-  number: 1 | 2 | 3;
-  name: string;
-  subtitle: string;
-  eventDescription: string;
-  formulaBadge: string;
-  formulaLabel: string;
-  icon: string;
-}
-
-export const CLASH_SECTOR_POOL: Array<Omit<ClashSectorSpec, "number">> = [
-  {
-    id: "entry",
-    category: "entry",
-    name: "Flick Entry & Angle",
-    subtitle: "High-Commitment Sweeper Initiation",
-    eventDescription:
-      "Throw the car sideways at full lock into the first outside clipping point! Judges heavily reward big Drift angle, snappy Steering lock, and initiation Accel.",
-    formulaBadge: "DRIFT × 2 + ACCEL × 1.5 + STEER + Tier Bonus",
-    formulaLabel: "DRIFT × 2 + ACCEL × 1.5 + STEER + Tier",
-    icon: "📐",
-  },
-  {
-    id: "chase",
-    category: "chase",
-    name: "Door-to-Door Tandem Chase",
-    subtitle: "Mid-Track Switchback Proximity",
-    eventDescription:
-      "Dive onto the lead driver's door through the tight inner switchback! Judges score Transition Acceleration, Deep Drift proximity, and Grip drive.",
-    formulaBadge: "STEER × 2 + GRIP × 1.5 + DRIFT + Tier Bonus",
-    formulaLabel: "STEER × 2 + GRIP × 1.5 + DRIFT + Tier",
-    icon: "🔥",
-  },
-  {
-    id: "wallride",
-    category: "wallride",
-    name: "Outside Wall Ride",
-    subtitle: "Concrete Finish Bank",
-    eventDescription:
-      "Hold the rear bumper millimetres off the outside wall all the way to the finish line! Judges score rear Grip stability, precision Steer, and Drift hold.",
-    formulaBadge: "DRIFT × 2 + GRIP × 1.5 + ACCEL + Tier Bonus",
-    formulaLabel: "DRIFT × 2 + GRIP × 1.5 + ACCEL + Tier",
-    icon: "🧱",
-  },
-  {
-    id: "hairpin",
-    category: "chase",
-    name: "Tight Hairpin Switchback",
-    subtitle: "Technical Front-Lock Clipping Point",
-    eventDescription:
-      "Snappy weight transfer into an ultra-tight hairpin! Judges reward precision Steering lock, controllable Drift rotation, and rapid exit Accel.",
-    formulaBadge: "STEER × 2 + DRIFT × 1.5 + ACCEL + Tier Bonus",
-    formulaLabel: "STEER × 2 + DRIFT × 1.5 + ACCEL + Tier",
-    icon: "⛰️",
-  },
-  {
-    id: "sweeper",
-    category: "entry",
-    name: "High-Speed Power Sweeper",
-    subtitle: "Full-Throttle Parabolic Arc",
-    eventDescription:
-      "High-momentum parabolic arc requiring relentless throttle commit! Judges reward explosive Accel drive, sustained Drift angle, and Grip balance.",
-    formulaBadge: "ACCEL × 2 + DRIFT × 1.5 + GRIP + Tier Bonus",
-    formulaLabel: "ACCEL × 2 + DRIFT × 1.5 + GRIP + Tier",
-    icon: "⚡",
-  },
-  {
-    id: "infield",
-    category: "wallride",
-    name: "Technical Infield Transition",
-    subtitle: "Chicane S-Bend & Snap Counter",
-    eventDescription:
-      "Violent chicane switchback through the infield! Judges score quick Grip hook-up, responsive Accel recovery, and surgical Steer precision.",
-    formulaBadge: "GRIP × 2 + ACCEL × 1.5 + STEER + Tier Bonus",
-    formulaLabel: "GRIP × 2 + ACCEL × 1.5 + STEER + Tier",
-    icon: "🎯",
-  },
-];
+// The corner types, and how each scores a car, live in clash-corners.ts.
+export { CLASH_SECTOR_POOL };
+export type { ClashSectorId, ClashSectorSpec };
 
 /**
  * Randomises 3 distinct corner sectors for a fresh Drift Clash match so corner 1 isn't always predictable.
  */
-export function rollThreeClashSectors(): [ClashSectorSpec, ClashSectorSpec, ClashSectorSpec] {
-  const shuffled = [...CLASH_SECTOR_POOL].sort(() => Math.random() - 0.5);
+export function rollThreeClashSectors(rng: () => number = Math.random): [ClashSectorSpec, ClashSectorSpec, ClashSectorSpec] {
+  const shuffled = [...CLASH_SECTOR_POOL];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
   const picked = shuffled.slice(0, 3);
   return [
     { ...picked[0], number: 1, name: `Corner 1 · ${picked[0].name}` },
@@ -583,28 +503,9 @@ export function scoreCardForSector(
     }
   }
 
-  let statScore = 0;
-  let breakdown = "";
-
-  if (sectorId === "entry") {
-    statScore = Math.round(drift * 2 + accel * 1.5 + steer);
-    breakdown = `DRIFT ${drift}×2 + ACCEL ${accel}×1.5 + STEER ${steer}`;
-  } else if (sectorId === "chase") {
-    statScore = Math.round(steer * 2 + grip * 1.5 + drift);
-    breakdown = `STEER ${steer}×2 + GRIP ${grip}×1.5 + DRIFT ${drift}`;
-  } else if (sectorId === "hairpin") {
-    statScore = Math.round(steer * 2 + drift * 1.5 + accel);
-    breakdown = `STEER ${steer}×2 + DRIFT ${drift}×1.5 + ACCEL ${accel}`;
-  } else if (sectorId === "sweeper") {
-    statScore = Math.round(accel * 2 + drift * 1.5 + grip);
-    breakdown = `ACCEL ${accel}×2 + DRIFT ${drift}×1.5 + GRIP ${grip}`;
-  } else if (sectorId === "infield") {
-    statScore = Math.round(grip * 2 + accel * 1.5 + steer);
-    breakdown = `GRIP ${grip}×2 + ACCEL ${accel}×1.5 + STEER ${steer}`;
-  } else {
-    statScore = Math.round(drift * 2 + grip * 1.5 + accel);
-    breakdown = `DRIFT ${drift}×2 + GRIP ${grip}×1.5 + ACCEL ${accel}`;
-  }
+  const sectorCalc = computeSectorStatScore(sectorId, { drift, accel, grip, steer });
+  const statScore = sectorCalc.score;
+  const breakdown = sectorCalc.breakdown;
 
   const tierBonus =
     crewId === "crew-11-tech-scrutineer" ? 0 : TIER_CLASH_BONUS[card.tier] ?? 0;
@@ -854,27 +755,9 @@ function evaluateOneSideInSector(params: {
   }
 
   // 4. Base Sector Stat Score
-  let statScore = 0;
-  let breakdown = "";
-  if (sector.id === "entry") {
-    statScore = Math.round(drift * 2 + accel * 1.5 + steer);
-    breakdown = `DRIFT ${drift}×2 + ACCEL ${accel}×1.5 + STEER ${steer}`;
-  } else if (sector.id === "chase") {
-    statScore = Math.round(steer * 2 + grip * 1.5 + drift);
-    breakdown = `STEER ${steer}×2 + GRIP ${grip}×1.5 + DRIFT ${drift}`;
-  } else if (sector.id === "hairpin") {
-    statScore = Math.round(steer * 2 + drift * 1.5 + accel);
-    breakdown = `STEER ${steer}×2 + DRIFT ${drift}×1.5 + ACCEL ${accel}`;
-  } else if (sector.id === "sweeper") {
-    statScore = Math.round(accel * 2 + drift * 1.5 + grip);
-    breakdown = `ACCEL ${accel}×2 + DRIFT ${drift}×1.5 + GRIP ${grip}`;
-  } else if (sector.id === "infield") {
-    statScore = Math.round(grip * 2 + accel * 1.5 + steer);
-    breakdown = `GRIP ${grip}×2 + ACCEL ${accel}×1.5 + STEER ${steer}`;
-  } else {
-    statScore = Math.round(drift * 2 + grip * 1.5 + accel);
-    breakdown = `DRIFT ${drift}×2 + GRIP ${grip}×1.5 + ACCEL ${accel}`;
-  }
+  const sectorCalc = computeSectorStatScore(sector.id, { drift, accel, grip, steer });
+  const statScore = sectorCalc.score;
+  const breakdown = sectorCalc.breakdown;
 
   // 5. Tier Bonus
   const nullifyTier =
@@ -1102,16 +985,17 @@ export function evaluateClashMatchup(params: {
  * and a random Track Hazard from the dynamic presets pool, so every match gets a fresh randomised combo.
  */
 export function rollUkTrackCard(
-  pool: TrackCardDefinition[] = UK_TRACK_CARD_SET
+  pool: TrackCardDefinition[] = UK_TRACK_CARD_SET,
+  rng: () => number = Math.random
 ): TrackCardDefinition {
   const list = pool.length > 0 ? pool : UK_TRACK_CARD_SET;
-  const venue = list[Math.floor(Math.random() * list.length)] ?? UK_TRACK_CARD_SET[0];
+  const venue = list[Math.floor(rng() * list.length)] ?? UK_TRACK_CARD_SET[0];
 
   const buffPreset =
-    DYNAMIC_TRACK_BUFF_PRESETS[Math.floor(Math.random() * DYNAMIC_TRACK_BUFF_PRESETS.length)] ??
+    DYNAMIC_TRACK_BUFF_PRESETS[Math.floor(rng() * DYNAMIC_TRACK_BUFF_PRESETS.length)] ??
     DYNAMIC_TRACK_BUFF_PRESETS[0];
   const hazardPreset =
-    DYNAMIC_TRACK_HAZARD_PRESETS[Math.floor(Math.random() * DYNAMIC_TRACK_HAZARD_PRESETS.length)] ??
+    DYNAMIC_TRACK_HAZARD_PRESETS[Math.floor(rng() * DYNAMIC_TRACK_HAZARD_PRESETS.length)] ??
     DYNAMIC_TRACK_HAZARD_PRESETS[0];
 
   const b = buffPreset.rules ?? {};
@@ -1136,18 +1020,19 @@ export function rollUkTrackCard(
 }
 
 export function rollThreeDebuffCards(
-  pool: DebuffCardDefinition[] = DEBUFF_CARD_SET
+  pool: DebuffCardDefinition[] = DEBUFF_CARD_SET,
+  rng: () => number = Math.random
 ): [DebuffCardDefinition, DebuffCardDefinition, DebuffCardDefinition] {
   const list = (pool.length >= 3 ? pool : DEBUFF_CARD_SET).slice();
   for (let i = list.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rng() * (i + 1));
     [list[i], list[j]] = [list[j], list[i]];
   }
   // Odds spin on Debuff rarities: Bronze (Standard 72.5%), Silver (1 in 5, 20%), Gold (1 in 20, 5%), Legend (1 in 40, 2.5%)
   return [
-    scaleDebuffCardDefinition(list[0], rollClashRarityTier()),
-    scaleDebuffCardDefinition(list[1] ?? list[0], rollClashRarityTier()),
-    scaleDebuffCardDefinition(list[2] ?? list[0], rollClashRarityTier()),
+    scaleDebuffCardDefinition(list[0], rollClashRarityTier(rng)),
+    scaleDebuffCardDefinition(list[1] ?? list[0], rollClashRarityTier(rng)),
+    scaleDebuffCardDefinition(list[2] ?? list[0], rollClashRarityTier(rng)),
   ];
 }
 
@@ -1643,27 +1528,9 @@ function evaluateDriverOnCorner(params: {
   steer = Math.max(1, steer - debuffBreakdown.effectiveSteerPenalty);
 
   // 5. Compute Corner Formula Stat Score
-  let statScore = 0;
-  let formulaStr = "";
-  if (sector.id === "entry") {
-    statScore = Math.round(drift * 2 + accel * 1.5 + steer);
-    formulaStr = `DRIFT ${drift}×2 + ACCEL ${accel}×1.5 + STEER ${steer}`;
-  } else if (sector.id === "chase") {
-    statScore = Math.round(steer * 2 + grip * 1.5 + drift);
-    formulaStr = `STEER ${steer}×2 + GRIP ${grip}×1.5 + DRIFT ${drift}`;
-  } else if (sector.id === "hairpin") {
-    statScore = Math.round(steer * 2 + drift * 1.5 + accel);
-    formulaStr = `STEER ${steer}×2 + DRIFT ${drift}×1.5 + ACCEL ${accel}`;
-  } else if (sector.id === "sweeper") {
-    statScore = Math.round(accel * 2 + drift * 1.5 + grip);
-    formulaStr = `ACCEL ${accel}×2 + DRIFT ${drift}×1.5 + GRIP ${grip}`;
-  } else if (sector.id === "infield") {
-    statScore = Math.round(grip * 2 + accel * 1.5 + steer);
-    formulaStr = `GRIP ${grip}×2 + ACCEL ${accel}×1.5 + STEER ${steer}`;
-  } else {
-    statScore = Math.round(drift * 2 + grip * 1.5 + accel);
-    formulaStr = `DRIFT ${drift}×2 + GRIP ${grip}×1.5 + ACCEL ${accel}`;
-  }
+  const sectorCalc = computeSectorStatScore(sector.id, { drift, accel, grip, steer });
+  const statScore = sectorCalc.score;
+  const formulaStr = sectorCalc.breakdown;
 
   const tierBonus = TIER_CLASH_BONUS[myCard.tier] ?? 0;
 

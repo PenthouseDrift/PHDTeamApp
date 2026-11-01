@@ -66,6 +66,8 @@ const BACK_RULES: Array<[RegExp, string]> = [
   [/^\/admin\/activity\/.+$/, "/admin/activity"],
   [/^\/admin\/(history|facilitated-sales|asbo-rc)$/, "/admin/activity"],
   [/^\/admin\/users$/, "/admin/members"],
+  [/^\/admin\/driftclash\/.+$/, "/admin/driftclash"],
+  [/^\/admin\/(card-maker|challenges|member-cards)$/, "/admin/driftclash"],
 ];
 
 export function adminBackFor(pathname: string): string {
@@ -90,6 +92,9 @@ const TITLES: Array<[string, string]> = [
   ["/admin/click-collect", "Click & Collect"],
   ["/admin/events", "Events"],
   ["/admin/notes", "Notes"],
+  ["/admin/driftclash/packs", "Card packs"],
+  ["/admin/driftclash", "DriftClash"],
+  ["/admin/pack-styles", "Card packs"],
   ["/admin/card-maker", "Card maker"],
   ["/admin/member-cards", "Member cards"],
   ["/admin/challenges", "Clash challenges"],

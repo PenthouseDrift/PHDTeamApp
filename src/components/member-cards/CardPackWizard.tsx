@@ -6,6 +6,7 @@ import ImageUploader from "@/components/ui/ImageUploader";
 import { PackOpening } from "@/components/member-cards/PackOpening";
 import { ChassisSelector } from "@/components/cars/ChassisSelector";
 import { keepCard, openCardPack, rerollCard } from "@/actions/member-cards";
+import { openCustomPackWithCar } from "@/tcg/actions";
 import { deleteSpecSheet, getMemberSpecSheets, saveSpecSheet } from "@/actions/spec-sheets";
 import { PartSelector } from "@/components/member-cards/PartSelector";
 import { REROLL_ENABLED, rarityLabel, type MemberCard } from "@/lib/card-roll";
@@ -102,6 +103,11 @@ interface WizardProps {
   initialCredits: number;
   initialSpecSheets?: CarSpecSheet[];
   partCategories?: PartCategory[];
+  /**
+   * Opening a store pack that needs a car (instead of a Standard Pack). It costs P-Credits rather than
+   * a card credit, and is opened with the same car photo or community cars choice.
+   */
+  customPack?: { id: string; name: string; price: number; pCredits: number };
 }
 
 /** What the form starts with: the garage defaults, replaced by the last pack's answers when there are any. */
@@ -214,6 +220,7 @@ function CardPackWizardForm({
   initialCredits,
   initialSpecSheets = [],
   partCategories,
+  customPack,
   remembered,
 }: WizardProps & { remembered: RememberedPack | null }) {
   const [credits, setCredits] = useState(initialCredits);
@@ -375,17 +382,37 @@ function CardPackWizardForm({
     setRun((r) => r + 1);
     setMode("pack");
     startTransition(async () => {
-      const res = await openCardPack({
+      const answers = {
         driver: skipPersonalCar ? (driver.trim() || defaultName || "Driver") : driver,
         team: skipPersonalCar ? "" : team,
         chassis: skipPersonalCar ? "" : chassis,
         description: skipPersonalCar ? "" : description,
         carName: skipPersonalCar ? undefined : car?.name,
-        carId: skipPersonalCar ? null : carId,
-        parts: skipPersonalCar ? undefined : parts,
         referenceUrl: skipPersonalCar ? "" : photoUrl,
         skipPersonalCar,
-      });
+      };
+      const res = customPack
+        ? await openCustomPackWithCar(customPack.id, answers).then((r) =>
+            r.success
+              ? {
+                  success: true as const,
+                  data: {
+                    card: r.data.cards[0],
+                    bonus: r.data.cards[1] ?? null,
+                    crew: null,
+                    featured: r.data.cards[2] ?? null,
+                    maintenance: null,
+                    // A store pack is bought one at a time, so there is nothing left to open afterwards.
+                    credits: 0,
+                  },
+                }
+              : r
+          )
+        : await openCardPack({
+            ...answers,
+            carId: skipPersonalCar ? null : carId,
+            parts: skipPersonalCar ? undefined : parts,
+          });
       if (res.success) {
         // Remember these answers so the next pack starts filled in if car was configured.
         if (!skipPersonalCar) {
@@ -480,6 +507,8 @@ function CardPackWizardForm({
           crew={crew}
           featured={featured}
           maintenance={maintenance}
+          packName={customPack?.name ?? "Standard Pack"}
+          packVariant={customPack ? "custom" : "standard"}
           onRevealed={onRevealed}
         />
 
@@ -989,7 +1018,15 @@ function CardPackWizardForm({
             <div>
               <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Ready to open your pack?</h2>
               <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                It costs 1 card credit (you have {credits}). Every Standard Pack contains{" "}
+                {customPack ? (
+                  <>
+                    <strong>{customPack.name}</strong> costs {customPack.price.toLocaleString()} P-Credits (you have{" "}
+                    {customPack.pCredits.toLocaleString()}). You are only charged once your cards are ready. Its cards are drawn from{" "}
+                    {skipPersonalCar ? "community cars" : "your car and community cars"}, and some may be fixed set cards.
+                  </>
+                ) : (
+                  <>
+                    It costs 1 card credit (you have {credits}). Every Standard Pack contains{" "}
                 {skipPersonalCar ? (
                   <>
                     <strong>2 Community Car cards</strong>
@@ -1000,6 +1037,8 @@ function CardPackWizardForm({
                   </>
                 )}
                 , <strong>1 Tactical Crew card</strong> (for Clash Arena), and <strong>1 Maintenance Repair Kit</strong>, plus a chance to pull a rare <strong>Bonus Set card</strong>!
+                  </>
+                )}
               </p>
             </div>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">

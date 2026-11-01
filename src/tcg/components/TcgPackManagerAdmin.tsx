@@ -32,12 +32,15 @@ export function TcgPackManagerAdmin({
   initialStandardPackSalePrice = null,
   initialPCreditBundles = P_CREDIT_BUNDLES,
   initialCustomPacks,
+  storeOnly = false,
 }: {
   savedFullArtCards: FullArtCardData[];
   initialStandardPackPrice: number;
   initialStandardPackSalePrice?: number | null;
   initialPCreditBundles?: PCreditBundle[];
   initialCustomPacks: TcgCustomPackWithCards[];
+  /** Only show the P-Credit bundle prices and the Standard Pack price. Custom packs are managed on the DriftClash Card packs page. */
+  storeOnly?: boolean;
 }) {
   // Standard Pack Pricing State
   const [standardPrice, setStandardPrice] = useState(String(initialStandardPackPrice));
@@ -505,6 +508,8 @@ export function TcgPackManagerAdmin({
         </div>
       </section>
 
+      {!storeOnly && (
+      <>
       {/* 3. Existing Custom Packs List with Inline Sale Controls */}
       <section className={panel}>
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -952,6 +957,8 @@ export function TcgPackManagerAdmin({
           </button>
         </div>
       </section>
+      </>
+      )}
     </div>
   );
 }

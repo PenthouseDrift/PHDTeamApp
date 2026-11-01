@@ -7,7 +7,7 @@ import {
   crewDefinitionToCardData,
 } from "@/lib/crew-cards";
 
-export type ChallengeRarityFilter = "any" | "bronze" | "silver" | "gold" | "legend";
+export type ChallengeRarityFilter = "any" | "bronze" | "silver" | "gold" | "legend" | "mythic";
 export type ChallengeThemeStyle =
   | "bronze"
   | "silver"
@@ -52,6 +52,11 @@ export interface TandemClashChallenge {
   createdAt: number;
   /** Optional custom-picked opponent rival team for admin challenges. */
   customRival?: CustomRivalConfig | null;
+  /**
+   * How often a typical player should win this challenge, as a percentage. The rival is made as strong or weak as
+   * it takes to get there. Leave out for the standard difficulty (about 30%). Players never see this.
+   */
+  targetWinRatePct?: number | null;
 }
 
 export interface AdminChallengeInput {
@@ -66,6 +71,7 @@ export interface AdminChallengeInput {
   entryCostPCredits: number;
   rewardPCredits: number;
   customRival?: CustomRivalConfig | null;
+  targetWinRatePct?: number | null;
 }
 
 /** Theme visual styling presets for Challenge Cards and headers. */

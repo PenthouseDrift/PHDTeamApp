@@ -9,7 +9,7 @@ import { NotificationsPopover } from "@/components/NotificationsPopover";
 import { QRPopover } from "@/components/QRPopover";
 import { ThemeAppIcon } from "@/components/ThemeAppIcon";
 import { PullToRefresh } from "@/components/PullToRefresh";
-import { NEW_TABS, backFor, chipsFor, isRootPath, tabForPath, titleFor } from "@/lib/new-nav";
+import { GAME_TAB, NEW_TABS, backFor, chipsFor, isRootPath, tabForPath, titleFor } from "@/lib/new-nav";
 import { ShellIcon, TabIcon, type ShellIconName } from "./shell-icons";
 
 /**
@@ -17,7 +17,8 @@ import { ShellIcon, TabIcon, type ShellIconName } from "./shell-icons";
  * (cars, marketplace, calculator, showcase, profile, ...) so they all share one
  * navigation model:
  *   - 5 tabs (Home / Garage / Passes / Market / Menu), bottom bar on mobile and
- *     sidebar on desktop
+ *     sidebar on desktop, with the DriftClash game as a raised round button in the
+ *     middle of the mobile bar
  *   - a top bar with a deterministic Back button on deeper pages, the page
  *     title, and the always-needed actions (basket, notifications, QR, profile)
  *   - section chips on Garage and Market top-level pages
@@ -44,7 +45,7 @@ interface NewAppShellProps {
 }
 
 const EXPLORE_LINKS: { href: string; label: string; icon: ShellIconName }[] = [
-  { href: "/cards", label: "My cards", icon: "cards" },
+  { href: "/cards?tab=collection", label: "My cards", icon: "cards" },
   { href: "/showcase", label: "Shell showcase", icon: "showcase" },
   { href: "/dashboard2/events", label: "Track events", icon: "events" },
   { href: "/dashboard2/guest", label: "Guest check-in", icon: "guest" },
@@ -188,6 +189,27 @@ export function NewAppShell({
         : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
     }`;
 
+  const renderTab = (tab: (typeof NEW_TABS)[number]) => {
+    const active = activeTab === tab.key;
+    return (
+      <Link
+        key={tab.key}
+        href={tab.href}
+        aria-current={active ? "page" : undefined}
+        className={`relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-semibold transition-colors ${
+          active ? "text-amber-600 dark:text-amber-400" : "text-zinc-500 dark:text-zinc-400"
+        }`}
+      >
+        {active && <span className="absolute left-1/2 top-0 h-0.5 w-8 -translate-x-1/2 rounded-full bg-amber-500" />}
+        <TabIcon tab={tab.key} className="h-6 w-6" />
+        {tab.label}
+        {tab.key === "menu" && isStaff && winnerSelectionPending && (
+          <span className="absolute right-1/4 top-1.5 h-2 w-2 rounded-full bg-amber-500" />
+        )}
+      </Link>
+    );
+  };
+
   return (
     <div className="new-shell flex h-screen bg-zinc-50 dark:bg-zinc-950">
       {/* ── Desktop sidebar ─────────────────────────────────────────────── */}
@@ -209,6 +231,19 @@ export function NewAppShell({
               {tab.label}
             </Link>
           ))}
+
+          <Link
+            href={GAME_TAB.href}
+            aria-current={activeTab === "game" ? "page" : undefined}
+            className={`mt-2 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-black transition-colors ${
+              activeTab === "game"
+                ? "bg-amber-500 text-black shadow-sm"
+                : "bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:text-amber-300"
+            }`}
+          >
+            <TabIcon tab="game" className="h-5 w-5" />
+            {GAME_TAB.label}
+          </Link>
 
           <p className="px-3 pb-1 pt-4 text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
             Explore
@@ -283,30 +318,42 @@ export function NewAppShell({
         </main>
 
         {/* ── Bottom tabs (mobile) ─────────────────────────────────────────── */}
+        {/* Two tabs, a raised round DriftClash button exactly in the middle, then three tabs. Each side takes
+            equal width, so the button stays centred. */}
         <nav
           aria-label="Main"
-          className="pwa-bottom-nav fixed bottom-0 left-0 right-0 z-40 flex border-t border-zinc-200 bg-white/95 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/95 md:hidden"
+          className="pwa-bottom-nav fixed bottom-0 left-0 right-0 z-40 flex items-stretch border-t border-zinc-200 bg-white/95 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/95 md:hidden"
         >
-          {NEW_TABS.map((tab) => {
-            const active = activeTab === tab.key;
-            return (
-              <Link
-                key={tab.key}
-                href={tab.href}
-                aria-current={active ? "page" : undefined}
-                className={`relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-semibold transition-colors ${
-                  active ? "text-amber-600 dark:text-amber-400" : "text-zinc-500 dark:text-zinc-400"
-                }`}
-              >
-                {active && <span className="absolute left-1/2 top-0 h-0.5 w-8 -translate-x-1/2 rounded-full bg-amber-500" />}
-                <TabIcon tab={tab.key} className="h-6 w-6" />
-                {tab.label}
-                {tab.key === "menu" && isStaff && winnerSelectionPending && (
-                  <span className="absolute right-1/4 top-1.5 h-2 w-2 rounded-full bg-amber-500" />
-                )}
-              </Link>
-            );
-          })}
+          <div className="flex min-w-0 flex-1">{NEW_TABS.slice(0, 2).map(renderTab)}</div>
+
+          <div className="relative w-[76px] shrink-0">
+            {/* On every page except the game it is raised above the bar. Inside the game the game bar sits above the
+                tabs, so the button sits level with the other tabs instead. The label lines up with the other tabs' labels. */}
+            <Link
+              href={GAME_TAB.href}
+              aria-label={GAME_TAB.label}
+              aria-current={activeTab === "game" ? "page" : undefined}
+              className={`absolute left-1/2 flex -translate-x-1/2 items-center justify-center rounded-full bg-gradient-to-b from-amber-300 to-amber-500 text-black ring-[3px] ring-white transition-all active:scale-95 dark:ring-zinc-900 ${
+                activeTab === "game"
+                  ? "top-1.5 h-8 w-8 shadow-[0_0_0_2px_rgba(245,158,11,0.85),0_3px_10px_rgba(245,158,11,0.5)]"
+                  : "top-0 h-[52px] w-[52px] -translate-y-[22px] shadow-[0_5px_14px_rgba(245,158,11,0.45)]"
+              }`}
+            >
+              <TabIcon
+                tab="game"
+                className={`fill-current ${activeTab === "game" ? "h-4 w-4 translate-x-px" : "h-7 w-7 translate-x-0.5"}`}
+              />
+            </Link>
+            <span
+              className={`absolute inset-x-0 bottom-2 text-center text-[10px] font-semibold leading-3 ${
+                activeTab === "game" ? "text-amber-600 dark:text-amber-400" : "text-zinc-500 dark:text-zinc-400"
+              }`}
+            >
+              {GAME_TAB.label}
+            </span>
+          </div>
+
+          <div className="flex min-w-0 flex-1">{NEW_TABS.slice(2).map(renderTab)}</div>
         </nav>
       </div>
     </div>

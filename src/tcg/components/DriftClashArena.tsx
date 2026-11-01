@@ -63,6 +63,16 @@ import type { ClashGameCardsConfig } from "@/tcg/storage";
 import type { ClashOpponent, ClashPlayerStats } from "@/tcg/types";
 import { ClashHowToPlayModal, type HowToPlayTab } from "./ClashHowToPlayModal";
 import { ClashChallengesView } from "./ClashChallengesView";
+import {
+  CASUAL_AI_SKILL,
+  arrangeRival,
+  chooseRivalCrew,
+  crewCardsFromSpecs,
+  type RivalContext,
+  type Trio,
+} from "../rival-ai";
+import { carInsight, pickBestCarIds, pickBestCrewIds, type LineupContext } from "../lineup-insight";
+import { CarTrackEffects } from "./CarTrackEffects";
 import { useUtcMidnightCountdown } from "../hooks/useUtcCountdown";
 import {
   CHALLENGE_THEME_CONFIGS,
@@ -800,6 +810,8 @@ export function DriftClashArena({
   onRewardEarned,
   onCardsChange,
   onOpenStoreTab,
+  lobbyTab,
+  onLobbyTabChange,
 }: {
   cards: MemberCard[];
   initialOpponent: ClashOpponent;
@@ -814,6 +826,9 @@ export function DriftClashArena({
   onRewardEarned?: (newPCredits: number, nextClashStats: ClashPlayerStats) => void;
   onCardsChange?: (updatedCards: MemberCard[]) => void;
   onOpenStoreTab: () => void;
+  /** Which lobby view shows. Leave it out and the arena keeps this itself. */
+  lobbyTab?: "quick" | "challenges";
+  onLobbyTabChange?: (tab: "quick" | "challenges") => void;
 }) {
   const startingStats = initialStats ?? initialClashStats ?? {
     wins: 0,
@@ -824,7 +839,12 @@ export function DriftClashArena({
   };
 
   // Mode switcher: "quick" for standard match, "challenges" for cups & tournaments
-  const [arenaLobbyTab, setArenaLobbyTab] = useState<"quick" | "challenges">("quick");
+  const [internalLobbyTab, setInternalLobbyTab] = useState<"quick" | "challenges">("quick");
+  const arenaLobbyTab = lobbyTab ?? internalLobbyTab;
+  const setArenaLobbyTab = (next: "quick" | "challenges") => {
+    setInternalLobbyTab(next);
+    onLobbyTabChange?.(next);
+  };
   const [activeChallenge, setActiveChallenge] = useState<TandemClashChallenge | null>(null);
   const [completedChallengeIds, setCompletedChallengeIds] = useState<string[]>([]);
   const [challengeLoading, setChallengeLoading] = useState(false);
@@ -1275,6 +1295,16 @@ export function DriftClashArena({
     return [resolved[0], resolved[1], resolved[2]];
   }, [selectedCrewIds, usableCrewCards]);
 
+  // What the track, the corner types and this match's debuffs mean for the lineup.
+  const lineupContext = useMemo<LineupContext>(
+    () => ({ track: activeTrackDef, crewDefs: crewCatalogDefs }),
+    [activeTrackDef, crewCatalogDefs]
+  );
+  const carInsights = useMemo(
+    () => selectedCarCards.map((car) => carInsight(car, lineupContext)),
+    [selectedCarCards, lineupContext]
+  );
+
   // Resolve Rival's 3 Crew Advantage Cards (uses opponent.crewCards or Starter Loaner Crew Cards)
   const rivalCrewCards = useMemo<[MemberCard, MemberCard, MemberCard]>(() => {
     if (opponent.crewCards && opponent.crewCards.length === 3) {
@@ -1486,6 +1516,18 @@ export function DriftClashArena({
         }
       }
       setActiveTrackDef(chosenTrack);
+      // Now the track is known, start the lineup with the best cars and Crew for it. The corners and debuffs stay hidden, so the pick doesn't use them.
+      const matchContext: LineupContext = { track: chosenTrack, crewDefs: crewCatalogDefs };
+      const carPool = effectiveChallenge
+        ? usableCarCards.filter((c) => isCarEligibleForChallenge(c, effectiveChallenge).eligible)
+        : usableCarCards;
+      const bestCarIds = pickBestCarIds(carPool, matchContext);
+      if (bestCarIds) {
+        setSelectedCarIds(bestCarIds);
+        const bestCars = bestCarIds.map((id) => carPool.find((c) => c.id === id)).filter((c): c is MemberCard => Boolean(c));
+        const bestCrewIds = pickBestCrewIds(usableCrewCards, bestCars, matchContext);
+        if (bestCrewIds) setSelectedCrewIds(bestCrewIds);
+      }
       setTrackLockedIn(true);
     });
   }
@@ -1503,7 +1545,30 @@ export function DriftClashArena({
         return;
       }
     }
+    // The rival studies the track, the corner types, its own debuffs and your lineup, then brings the cars
+    // and Crew cards that suit them and decides which goes on which corner.
+    const pool = opponent.carPool && opponent.carPool.length >= 3 ? opponent.carPool : opponent.cards;
+    const crewPool =
+      opponent.crewPoolSpecs && opponent.crewPoolSpecs.length >= 3
+        ? crewCardsFromSpecs(opponent.crewPoolSpecs, crewCatalogDefs)
+        : [...rivalCrewCards];
+    if (pool.length >= 3 && crewPool.length >= 3) {
+      const arranged = arrangeRival({
+        cars: pool,
+        crew: crewPool,
+        ctx: rivalContext(),
+        playerCars: selectedCarCards,
+        skill: opponent.aiSkill ?? CASUAL_AI_SKILL,
+        rng: Math.random,
+      });
+      setOpponent((prev) => ({ ...prev, cards: arranged.cars, crewCards: arranged.crew, crewCard: arranged.crew[0] }));
+    }
     startCornerBattle(0);
+  }
+
+  /** What the rival knows about this battle: the track, the corner types, and its own debuffs. */
+  function rivalContext(): RivalContext {
+    return { track: activeTrackDef, sectors: activeSectors, rivalDebuffs: rivalMatchDebuffs, crewDefs: crewCatalogDefs };
   }
 
   // ── STEP 3: ARCADE GAME VIEW CORNER BATTLE ANIMATION ────────────────────────
@@ -1648,8 +1713,23 @@ export function DriftClashArena({
     setPlayerCrewAssignments(nextPlayerAssignments);
 
     // 2. Auto-pick rival crew from unused rival crew cards
-    const remainingRival = ([0, 1, 2] as const).filter((idx) => !rivalCrewAssignments.includes(idx));
-    const rivalChosenIdx = remainingRival[0] ?? rivalCrewOrder[cornerIdx] ?? 0;
+    const usedRivalCrew = rivalCrewAssignments.filter((x): x is number => x !== null);
+    const playerCarForCorner = selectedCarCards[playerCarAssignments[cornerIdx] ?? playerCarOrder[cornerIdx] ?? 0];
+    const rivalCarsInOrder = [0, 1, 2].map(
+      (k) => opponent.cards[rivalCarAssignments[k] ?? k] ?? opponent.cards[k] ?? opponent.cards[0]
+    ) as Trio<MemberCard>;
+    const rivalChosenIdx = chooseRivalCrew({
+      cornerIdx,
+      ctx: rivalContext(),
+      cars: rivalCarsInOrder,
+      crew: rivalCrewCards,
+      usedCrew: usedRivalCrew,
+      playerCar: playerCarForCorner,
+      playerDebuff: playerMatchDebuffs[cornerIdx],
+      playerCars: selectedCarCards,
+      skill: opponent.aiSkill ?? CASUAL_AI_SKILL,
+      rng: Math.random,
+    });
     const nextRivalAssignments = [...rivalCrewAssignments];
     nextRivalAssignments[cornerIdx] = rivalChosenIdx;
     setRivalCrewAssignments(nextRivalAssignments);
@@ -1930,453 +2010,125 @@ export function DriftClashArena({
   // ── LOBBY VIEW ─────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4">
-      {/* Mode Switcher Tabs */}
-      <div className="grid grid-cols-2 gap-2 rounded-3xl border border-zinc-800 bg-zinc-950 p-1.5 shadow-xl">
-        <button
-          type="button"
-          onClick={() => setArenaLobbyTab("quick")}
-          className={`flex items-center justify-center gap-2 rounded-2xl py-3 px-4 text-xs sm:text-sm font-black uppercase tracking-wider transition-all ${
-            arenaLobbyTab === "quick"
-              ? "bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 text-black shadow-lg"
-              : "text-zinc-400 hover:text-white hover:bg-zinc-900"
-          }`}
-        >
-          <span>⚡</span> Quick Match Arena
-        </button>
-        <button
-          type="button"
-          onClick={() => setArenaLobbyTab("challenges")}
-          className={`flex items-center justify-center gap-2 rounded-2xl py-3 px-4 text-xs sm:text-sm font-black uppercase tracking-wider transition-all ${
-            arenaLobbyTab === "challenges"
-              ? "bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500 text-white shadow-lg"
-              : "text-zinc-400 hover:text-white hover:bg-zinc-900"
-          }`}
-        >
-          <span>🏆</span> Challenges &amp; Tournaments
-          <span
-            className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
-              arenaLobbyTab === "challenges"
-                ? "bg-white/20 text-white"
-                : "bg-purple-500/20 text-purple-300"
-            }`}
-          >
-            NEW
-          </span>
-        </button>
-      </div>
-
       {arenaLobbyTab === "challenges" ? (
-        <ClashChallengesView
-          userCards={localCards}
-          pCredits={internalPCredits}
-          userId={userId}
-          isAdmin={isAdmin}
-          completedChallengeIds={completedChallengeIds}
-          onSelectChallenge={handleLaunchChallenge}
-          onPCreditsChange={(bal) => {
-            setInternalPCredits(bal);
-            onPCreditsChange?.(bal);
-          }}
-        />
-      ) : (
-        <>
-          {/* Challenger Tournament Feature Banner */}
-          <button
-            type="button"
-            onClick={() => setArenaLobbyTab("challenges")}
-            className="group relative w-full overflow-hidden rounded-3xl border border-purple-500/40 bg-gradient-to-br from-zinc-900 via-purple-950/30 to-zinc-950 p-5 sm:p-6 text-left shadow-2xl transition-all duration-300 hover:border-purple-400 hover:shadow-purple-500/20 hover:scale-[1.008]"
-          >
-            {/* Ambient Background Glows */}
-            <div
-              className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-gradient-to-br from-purple-600/20 to-pink-600/20 blur-3xl transition-opacity group-hover:opacity-100 opacity-60"
-              aria-hidden
-            />
-            <div
-              className="pointer-events-none absolute -left-20 -bottom-20 h-48 w-48 rounded-full bg-purple-900/20 blur-2xl"
-              aria-hidden
-            />
-
-            <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-4 sm:gap-5">
-                {/* Glowing Trophy Medallion */}
-                <div className="relative flex h-14 w-14 sm:h-16 sm:w-16 shrink-0 items-center justify-center rounded-2xl border border-purple-400/40 bg-gradient-to-br from-purple-500/25 via-fuchsia-600/20 to-black shadow-inner shadow-purple-500/30 transition-transform duration-300 group-hover:scale-105 group-hover:rotate-3">
-                  <span className="text-2xl sm:text-3xl drop-shadow-[0_2px_8px_rgba(236,72,153,0.5)]">
-                    🏆
-                  </span>
-                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-fuchsia-400 opacity-75" />
-                    <span className="relative inline-flex h-3 w-3 rounded-full bg-fuchsia-500" />
-                  </span>
-                </div>
-
-                <div className="space-y-1.5 max-w-xl">
-                  {/* Eyebrow & Badges */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-gradient-to-r from-purple-500 to-pink-500 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-white shadow-sm">
-                      Challenger Series
-                    </span>
-                    <span className="rounded-full border border-purple-400/40 bg-purple-500/15 px-2.5 py-0.5 text-[10px] font-black text-purple-200">
-                      ⚡ Daily P-Credit Cups
-                    </span>
-                    <span className="rounded-full border border-zinc-700 bg-zinc-800/80 px-2 py-0.5 text-[10px] font-bold text-zinc-400">
-                      Rarity &amp; Custom Bosses
-                    </span>
-                  </div>
-
-                  {/* Title */}
-                  <h3 className="text-lg sm:text-xl font-black tracking-tight text-white group-hover:text-purple-200 transition-colors">
-                    Tandem Clash Challenges &amp; Tournaments
-                  </h3>
-
-                  {/* Description */}
-                  <p className="text-xs sm:text-sm leading-relaxed text-zinc-300">
-                    Test your garage in Bronze, Silver, Gold, and Legend spec cups or take on custom rival crews to win daily P-Credit purses!
-                  </p>
-
-                  {/* Quick Cup Tiers Strip */}
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                    <span className="inline-flex items-center gap-1 rounded-lg border border-amber-800/50 bg-amber-950/40 px-2 py-0.5 text-[10px] font-bold text-amber-300">
-                      🥉 Bronze Cup
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded-lg border border-slate-600/50 bg-slate-900/60 px-2 py-0.5 text-[10px] font-bold text-slate-200">
-                      🥈 Silver Cup
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded-lg border border-yellow-600/50 bg-yellow-950/40 px-2 py-0.5 text-[10px] font-bold text-yellow-300">
-                      🥇 Gold Cup
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded-lg border border-purple-600/50 bg-purple-950/40 px-2 py-0.5 text-[10px] font-bold text-purple-200">
-                      👑 Legend Cup
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Button */}
-              <div className="flex sm:flex-col sm:items-end justify-between items-center gap-2 pt-2 sm:pt-0 shrink-0">
-                <span className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500 px-5 py-2.5 text-xs sm:text-sm font-black uppercase tracking-wider text-white shadow-lg shadow-purple-500/25 transition-all duration-300 group-hover:shadow-purple-500/50 group-hover:scale-105">
-                  Enter Arena
-                  <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
-                </span>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300/80 tabular-nums">
-                  ⏳ Resets in {utcCountdown}
-                </span>
-              </div>
-            </div>
-          </button>
-
-          <section className="relative overflow-hidden rounded-3xl border border-amber-500/40 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-5 text-white shadow-xl sm:p-7">
-        <div
-          className="pointer-events-none absolute -right-12 -top-12 h-56 w-56 rounded-full bg-amber-500/15 blur-3xl"
-          aria-hidden
-        />
-        <div className="relative z-10 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-amber-500 px-3 py-0.5 text-[11px] font-black uppercase tracking-wider text-black">
-                3 Cars · 3 Crew Advantages · UK Track &amp; Debuffs
-              </span>
-              {!clashStats.dailyWinClaimed ? (
-                <span className="rounded-full border border-emerald-400/50 bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-black text-emerald-300">
-                  🎁 +{DAILY_CLASH_WIN_REWARD_PCREDITS} P-Credits First Win Today
-                </span>
-              ) : (
-                <span className="rounded-full border border-zinc-700 bg-zinc-800/90 px-2.5 py-0.5 text-[11px] font-bold text-zinc-400 tabular-nums">
-                  ✓ Daily Win Claimed (+{STREAK_MILESTONE_REWARD_PCREDITS} P every 3-streak) · ⏳ Resets in {utcCountdown}
-                </span>
-              )}
-            </div>
-
-            <h2 className="text-2xl font-black tracking-tight sm:text-3xl">
-              Penthouse Tandem Clash
-            </h2>
-            <p className="max-w-xl text-xs leading-relaxed text-zinc-300 sm:text-sm">
-              Lock in <strong>3 Car Cards</strong> and <strong>3 Crew Advantage Cards</strong>, spin for a random <strong>UK Drift Track Card</strong>, and battle through <strong>Corners 1, 2 &amp; 3</strong> with randomised car draws, tactical Crew plays, and sudden Debuff hazards!
-            </p>
-
-            {/* Player Record Strip */}
-            <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900/90 px-3 py-1.5">
-                <span className="text-[10px] font-bold uppercase text-zinc-400">Record </span>
-                <span className="font-black text-emerald-400">{clashStats.wins}W</span>
-                <span className="text-zinc-600"> / </span>
-                <span className="font-black text-zinc-300">{clashStats.losses}L</span>
-              </div>
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900/90 px-3 py-1.5">
-                <span className="text-[10px] font-bold uppercase text-zinc-400">Streak </span>
-                <span className="font-black text-amber-400">🔥 {clashStats.streak}</span>
-              </div>
-              <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5">
-                <span className="text-[10px] font-bold uppercase text-cyan-300">Crew Owned </span>
-                <span className="font-black text-cyan-200">
-                  ⚡ {ownedCrewCards.length}/{crewCatalogDefs.length}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col items-stretch gap-2 sm:min-w-[16rem]">
-            {hasEarlyAccess ? (
-              <button
-                type="button"
-                onClick={handleLaunchGame}
-                className="group relative inline-flex min-h-14 items-center justify-center gap-2.5 overflow-hidden rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-6 py-3.5 text-base font-black uppercase tracking-wider text-black shadow-[0_0_30px_rgba(245,158,11,0.4)] transition-all hover:scale-[1.02] active:scale-[0.99]"
-              >
-                <span className="text-xl transition-transform group-hover:scale-110">🎮</span>
-                <span>Play Tandem Clash</span>
-                <span className="rounded-full bg-black/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-black/80">
-                  {isAdmin ? "Admin" : "Live"}
-                </span>
-              </button>
-            ) : (
-              <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-b from-amber-500/15 via-zinc-900/90 to-zinc-950 p-4 text-center shadow-lg">
-                <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/20 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-amber-400">
-                  <span>🔒</span> Early Access Beta
-                </div>
-                <h4 className="mt-2 text-sm font-black text-white">Closed Beta Access Required</h4>
-                <p className="mt-1 text-xs text-zinc-300 leading-relaxed">
-                  Tandem Clash is currently in private preview. Only players with granted Early Access permissions can launch battles.
-                </p>
-                {userId && (
-                  <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-900/95 px-3 py-2 text-center">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">
-                      Your Driver ID
-                    </span>
-                    <span className="font-mono text-xs font-black text-amber-400 select-all">
-                      {userId}
-                    </span>
-                    <span className="mt-0.5 block text-[10px] text-zinc-400">
-                      Share this ID with a Track Admin to receive early access clearance.
-                    </span>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  disabled
-                  className="mt-3 inline-flex w-full min-h-11 items-center justify-center gap-2 rounded-xl bg-zinc-800 px-4 text-xs font-black uppercase tracking-wider text-zinc-500 cursor-not-allowed"
-                >
-                  <span>🔒</span> Early Access Required
-                </button>
-              </div>
-            )}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 p-2">
             <button
               type="button"
-              onClick={() => openHowToPlay("quickstart")}
-              className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-2xl border border-amber-500/50 bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-amber-500/15 px-3 py-2 text-xs font-black uppercase tracking-wider text-amber-300 shadow-sm transition-all hover:border-amber-400 hover:bg-amber-500/25 active:scale-[0.99]"
+              onClick={() => setArenaLobbyTab("quick")}
+              className="inline-flex min-h-10 items-center gap-1.5 rounded-xl px-3 text-xs font-black uppercase tracking-wider text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-white"
             >
-              <span>📖</span> How to Play &amp; Driver Manual
+              <span aria-hidden>←</span> Back
             </button>
-            <div className="grid grid-cols-3 gap-1.5">
+            <span className="pr-2 text-xs font-black uppercase tracking-wider text-purple-300">🏆 Challenges</span>
+          </div>
+          <ClashChallengesView
+            userCards={localCards}
+            pCredits={internalPCredits}
+            userId={userId}
+            isAdmin={isAdmin}
+            completedChallengeIds={completedChallengeIds}
+            onSelectChallenge={handleLaunchChallenge}
+            onPCreditsChange={(bal) => {
+              setInternalPCredits(bal);
+              onPCreditsChange?.(bal);
+            }}
+          />
+        </div>
+      ) : (
+        <section
+          aria-label="Play Tandem Clash"
+          className="relative overflow-hidden rounded-2xl border border-amber-500/40 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-3 text-white shadow-xl sm:rounded-3xl sm:p-4"
+        >
+          <div className="pointer-events-none absolute -right-12 -top-12 h-52 w-52 rounded-full bg-amber-500/15 blur-3xl" aria-hidden />
+          <div className="relative z-10 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-base font-black tracking-tight sm:text-lg">Tandem Clash</h2>
+              <div className="flex items-center gap-2 text-xs font-black tabular-nums">
+                <span className="rounded-lg bg-zinc-900 px-2.5 py-1">
+                  <span className="text-emerald-400">{clashStats.wins}W</span>
+                  <span className="text-zinc-600"> / </span>
+                  <span className="text-zinc-300">{clashStats.losses}L</span>
+                </span>
+                {clashStats.streak > 0 && <span className="rounded-lg bg-zinc-900 px-2.5 py-1 text-amber-400">🔥 {clashStats.streak}</span>}
+              </div>
+            </div>
+
+            {!clashStats.dailyWinClaimed ? (
+              <p className="text-xs font-bold text-emerald-300">🎁 +{DAILY_CLASH_WIN_REWARD_PCREDITS} P-Credits for your first win today</p>
+            ) : (
+              <p className="text-xs font-bold text-zinc-400 tabular-nums">
+                ✓ Daily win claimed · +{STREAK_MILESTONE_REWARD_PCREDITS} P every 3-win streak · resets in {utcCountdown}
+              </p>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
+              {hasEarlyAccess ? (
+                <button
+                  type="button"
+                  onClick={handleLaunchGame}
+                  className="group flex min-h-16 flex-col items-start justify-center gap-0.5 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-3 py-2.5 text-left text-black shadow-[0_0_18px_rgba(245,158,11,0.3)] transition-all hover:scale-[1.01] active:scale-[0.99]"
+                >
+                  <span className="flex items-center gap-1.5 text-sm font-black uppercase tracking-wide sm:text-base">
+                    <span aria-hidden>🎮</span> Normal game
+                  </span>
+                  <span className="text-[11px] font-bold leading-tight text-black/70">Pick 3 cars, battle a rival</span>
+                </button>
+              ) : (
+                <div className="flex min-h-16 flex-col items-start justify-center gap-0.5 rounded-xl border border-amber-500/40 bg-zinc-900/90 px-3 py-2.5">
+                  <span className="flex items-center gap-1.5 text-sm font-black uppercase tracking-wide text-zinc-400 sm:text-base">
+                    <span aria-hidden>🔒</span> Normal game
+                  </span>
+                  <span className="text-[11px] font-bold leading-tight text-zinc-400">Early access needed</span>
+                  {userId && (
+                    <span className="break-all text-[10px] leading-tight text-zinc-400">
+                      Driver ID: <span className="select-all font-mono font-black text-amber-400">{userId}</span>
+                    </span>
+                  )}
+                </div>
+              )}
+
               <button
                 type="button"
-                onClick={() => setShowCatalogModal("crew")}
-                className="inline-flex min-h-9 items-center justify-center rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-2 py-1.5 text-[11px] font-black text-cyan-300 hover:bg-cyan-500/20"
+                onClick={() => setArenaLobbyTab("challenges")}
+                className="group flex min-h-16 flex-col items-start justify-center gap-0.5 rounded-xl bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500 px-3 py-2.5 text-left text-white shadow-[0_0_18px_rgba(168,85,247,0.3)] transition-all hover:scale-[1.01] active:scale-[0.99]"
               >
-                ⚡ Crew ({crewCatalogDefs.length})
+                <span className="flex items-center gap-1.5 text-sm font-black uppercase tracking-wide sm:text-base">
+                  <span aria-hidden>🏆</span> Challenge
+                </span>
+                <span className="text-[11px] font-bold leading-tight tabular-nums text-white/80">Cups · resets {utcCountdown}</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setShowCatalogModal("debuff")}
-                className="inline-flex min-h-9 items-center justify-center rounded-xl border border-rose-500/40 bg-rose-500/10 px-2 py-1.5 text-[11px] font-black text-rose-300 hover:bg-rose-500/20"
-              >
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-zinc-800 pt-2 text-[11px] font-bold text-zinc-400">
+              <button type="button" onClick={() => openHowToPlay("quickstart")} className="hover:text-amber-300">
+                📖 How to play
+              </button>
+              <button type="button" onClick={() => setShowCatalogModal("crew")} className="hover:text-cyan-300">
+                ⚡ Crew cards ({crewCatalogDefs.length})
+              </button>
+              <button type="button" onClick={() => setShowCatalogModal("debuff")} className="hover:text-rose-300">
                 ⚠️ Debuffs ({debuffCatalogDefs.length})
               </button>
-              <button
-                type="button"
-                onClick={() => setShowCatalogModal("track")}
-                className="inline-flex min-h-9 items-center justify-center rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-2 py-1.5 text-[11px] font-black text-emerald-300 hover:bg-emerald-500/20"
-              >
+              <button type="button" onClick={() => setShowCatalogModal("track")} className="hover:text-emerald-300">
                 🇬🇧 Tracks ({trackCatalogDefs.length})
               </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEarlyAccessModal(true);
+                    if (earlyAccessRoster.length === 0) loadEarlyAccessRoster();
+                  }}
+                  className="hover:text-purple-300"
+                >
+                  🔒 Early access roster
+                </button>
+              )}
             </div>
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={() => {
-                  setShowEarlyAccessModal(true);
-                  if (earlyAccessRoster.length === 0) loadEarlyAccessRoster();
-                }}
-                className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-purple-500/40 bg-purple-500/10 px-3 py-1.5 text-xs font-black text-purple-300 hover:bg-purple-500/20"
-              >
-                <span>🔒</span> Manage Early Access Beta Roster
-              </button>
-            )}
           </div>
-        </div>
-      </section>
-
-      {/* How It Works Structure */}
-      <section className="rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5">
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-zinc-100 sm:text-sm">
-                🏁 How Tandem Clash Works
-              </h3>
-              <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-black text-amber-600 dark:text-amber-400">
-                New Engine &amp; Pit Rules
-              </span>
-            </div>
-            <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-              Tap any card to open the interactive rules overlay with full diagrams and details.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => openHowToPlay("quickstart")}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-black text-amber-600 transition-colors hover:bg-amber-500/20 dark:text-amber-300"
-          >
-            <span>📖</span> Open Driver Manual
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {/* 1. 3 Cars & 3 Corners */}
-          <button
-            type="button"
-            onClick={() => openHowToPlay("quickstart")}
-            className="group rounded-2xl border border-zinc-200/80 bg-zinc-50/70 p-3.5 text-left transition-all hover:border-amber-500/50 hover:bg-zinc-100/90 dark:border-zinc-800 dark:bg-zinc-950/60 dark:hover:bg-zinc-900"
-          >
-            <div className="mb-2 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-xs font-black text-black">
-                  1
-                </span>
-                <span className="text-xs font-black text-zinc-900 dark:text-zinc-100">
-                  3 Cars &amp; 3 Corners
-                </span>
-              </div>
-              <span className="text-[10px] font-bold text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                Read Guide →
-              </span>
-            </div>
-            <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
-              Choose 3 Cars &amp; 3 Crew Cards (Loaner cards backfill if needed). You decide which car to send each corner. Win <strong>2 of 3 corners</strong> to win!
-            </p>
-          </button>
-
-          {/* 2. Durability & Faults */}
-          <button
-            type="button"
-            onClick={() => openHowToPlay("durability")}
-            className="group rounded-2xl border border-amber-500/30 bg-amber-500/5 p-3.5 text-left transition-all hover:border-amber-500/60 hover:bg-amber-500/10 dark:border-amber-500/20 dark:bg-amber-950/20 dark:hover:bg-amber-950/40"
-          >
-            <div className="mb-2 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-xs font-black text-black">
-                  2
-                </span>
-                <span className="text-xs font-black text-zinc-900 dark:text-zinc-100">
-                  Durability &amp; Breakdowns
-                </span>
-              </div>
-              <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-black text-amber-400">
-                NEW
-              </span>
-            </div>
-            <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
-              Cars have <strong>2–10 battles</strong> of durability. At 0, they suffer 1 of 4 faults (⚙️ Engine, 🕹️ Gearbox, 🔧 Steer, ⚡ ESC) and sit out 2–5 battles.
-            </p>
-          </button>
-
-          {/* 3. Maintenance Kits */}
-          <button
-            type="button"
-            onClick={() => openHowToPlay("maintenance")}
-            className="group rounded-2xl border border-cyan-500/30 bg-cyan-500/5 p-3.5 text-left transition-all hover:border-cyan-500/60 hover:bg-cyan-500/10 dark:border-cyan-500/20 dark:bg-cyan-950/20 dark:hover:bg-cyan-950/40"
-          >
-            <div className="mb-2 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500 text-xs font-black text-black">
-                  3
-                </span>
-                <span className="text-xs font-black text-zinc-900 dark:text-zinc-100">
-                  Pit Repairs Consumables
-                </span>
-              </div>
-              <span className="rounded-full bg-cyan-500/20 px-1.5 py-0.5 text-[9px] font-black text-cyan-400">
-                NEW
-              </span>
-            </div>
-            <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
-              Standard packs drop repair kits (Bronze -1 to Legend -5 full fix). Use <strong>🛠️ Quick Fix</strong> in the car picker to repair instantly!
-            </p>
-          </button>
-
-          {/* 4. Crew Advantages */}
-          <button
-            type="button"
-            onClick={() => openHowToPlay("crew")}
-            className="group rounded-2xl border border-purple-500/30 bg-purple-500/5 p-3.5 text-left transition-all hover:border-purple-500/60 hover:bg-purple-500/10 dark:border-purple-500/20 dark:bg-purple-950/20 dark:hover:bg-purple-950/40"
-          >
-            <div className="mb-2 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-500 text-xs font-black text-white">
-                  4
-                </span>
-                <span className="text-xs font-black text-zinc-900 dark:text-zinc-100">
-                  Crew Cards &amp; Rarity
-                </span>
-              </div>
-              <span className="rounded-full bg-purple-500/20 px-1.5 py-0.5 text-[9px] font-black text-purple-400">
-                SCALED
-              </span>
-            </div>
-            <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
-              100% positive buffs scaling from Bronze to Legend. Higher tiers deliver massive stat boosts, flat point spikes, and <strong>Debuff Shields</strong>!
-            </p>
-          </button>
-
-          {/* 5. UK Tracks & Hazards */}
-          <button
-            type="button"
-            onClick={() => openHowToPlay("tracks")}
-            className="group rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-3.5 text-left transition-all hover:border-emerald-500/60 hover:bg-emerald-500/10 dark:border-emerald-500/20 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/40"
-          >
-            <div className="mb-2 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-xs font-black text-black">
-                  5
-                </span>
-                <span className="text-xs font-black text-zinc-900 dark:text-zinc-100">
-                  UK Tracks &amp; Hazards
-                </span>
-              </div>
-              <span className="text-[10px] font-bold text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                Read Guide →
-              </span>
-            </div>
-            <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
-              Iconic UK venues roll with bespoke track rules. Random shared corner debuffs hit both cars—shield your score with crew synergy.
-            </p>
-          </button>
-
-          {/* 6. Scoring & Rewards */}
-          <button
-            type="button"
-            onClick={() => openHowToPlay("scoring")}
-            className="group rounded-2xl border border-rose-500/30 bg-rose-500/5 p-3.5 text-left transition-all hover:border-rose-500/60 hover:bg-rose-500/10 dark:border-rose-500/20 dark:bg-rose-950/20 dark:hover:bg-rose-950/40"
-          >
-            <div className="mb-2 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-rose-500 text-xs font-black text-white">
-                  6
-                </span>
-                <span className="text-xs font-black text-zinc-900 dark:text-zinc-100">
-                  Scoring &amp; P-Credits
-                </span>
-              </div>
-              <span className="text-[10px] font-bold text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                Read Guide →
-              </span>
-            </div>
-            <p className="text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
-              Clear corner telemetry. Win daily to earn <strong>+25 P-Credits</strong> and build win streaks for +10 P-Credits milestone bonuses!
-            </p>
-          </button>
-        </div>
-      </section>
-    </>
-  )}
+        </section>
+      )}
 
       {/* Catalog Modal for Crew, Debuff, or UK Track Cards */}
       {showCatalogModal &&
@@ -3151,14 +2903,14 @@ export function DriftClashArena({
                                     (c) => isCarEligibleForChallenge(c, activeChallenge).eligible
                                   );
                                   if (eligible.length >= 3) {
-                                    setSelectedCarIds(pickTopThreeIds(eligible));
+                                    setSelectedCarIds(pickBestCarIds(eligible, lineupContext) ?? pickTopThreeIds(eligible));
                                   } else {
                                     alert(
                                       `Only ${eligible.length} qualifying cars found in your garage for this challenge.`
                                     );
                                   }
                                 } else {
-                                  setSelectedCarIds(pickTopThreeIds(usableCarCards));
+                                  setSelectedCarIds(pickBestCarIds(usableCarCards, lineupContext) ?? pickTopThreeIds(usableCarCards));
                                 }
                               }}
                               className="rounded-xl border border-amber-500/50 bg-amber-500/15 px-3 py-1.5 text-xs font-black text-amber-300 hover:bg-amber-500/25 cursor-pointer"
@@ -3238,6 +2990,9 @@ export function DriftClashArena({
                                       {carEligibility.reason}
                                     </p>
                                   )}
+                                  {carInsights[idx] && (
+                                    <CarTrackEffects carName={car.name} insight={carInsights[idx]} track={activeTrackDef} />
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() =>
@@ -3270,7 +3025,11 @@ export function DriftClashArena({
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={() => setSelectedCrewIds(pickTopThreeIds(usableCrewCards))}
+                              onClick={() =>
+                                setSelectedCrewIds(
+                                  pickBestCrewIds(usableCrewCards, selectedCarCards, lineupContext) ?? pickTopThreeIds(usableCrewCards)
+                                )
+                              }
                               className="rounded-xl border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-xs font-black text-cyan-300 hover:bg-cyan-500/25 cursor-pointer"
                             >
                               ⚡ Auto-Pick Best 3

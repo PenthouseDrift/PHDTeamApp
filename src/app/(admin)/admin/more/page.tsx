@@ -18,9 +18,7 @@ const EVENT_DAY: MoreLink[] = [
   { href: "/admin/click-collect", title: "Click & Collect", desc: "Orders waiting for collection", icon: "🛍️", adminOnly: true },
   { href: "/admin/events", title: "Events", desc: "Create and edit track days", icon: "📅" },
   { href: "/admin/notes", title: "Notes", desc: "Staff notes", icon: "📝" },
-  { href: "/admin/card-maker", title: "Card maker", desc: "Design and print PHD trading cards", icon: "🃏", adminOnly: true },
-  { href: "/admin/member-cards", title: "Member cards", desc: "Every card members have opened", icon: "🎴", adminOnly: true },
-  { href: "/admin/challenges", title: "Clash challenges", desc: "Create & manage Tandem Clash cups, rarity restrictions & rewards", icon: "🏆", adminOnly: true },
+  { href: "/admin/driftclash", title: "DriftClash", desc: "Card packs, card maker, clash cards, challenges and member cards", icon: "🎴", adminOnly: true },
 ];
 
 const MANAGE: MoreLink[] = [

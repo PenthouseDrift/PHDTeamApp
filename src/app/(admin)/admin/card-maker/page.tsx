@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { listSavedCards } from "@/actions/admin/cards";
 import { listFeaturedCards, listFullArtCards } from "@/actions/admin/full-art-cards";
 import { CardMakerTabs, type CardMakerTabKind } from "@/components/cards/CardMakerTabs";
-import { getClashGameCardsConfig, getTcgStoreConfig, listCustomPacks } from "@/tcg/storage";
+import { getClashGameCardsConfig } from "@/tcg/storage";
 
 export const dynamic = "force-dynamic";
 // The AI art server action runs under this route, and image generation can take a while.
@@ -18,13 +18,11 @@ export default async function CardMakerPage({ searchParams }: CardMakerPageProps
   const session = await auth();
   if (!session?.user || session.user.role !== "admin") redirect("/admin");
 
-  const [params, originalSaved, fullArtSaved, featured, storeConfig, customPacks, clashCardsConfig] = await Promise.all([
+  const [params, originalSaved, fullArtSaved, featured, clashCardsConfig] = await Promise.all([
     searchParams,
     listSavedCards(),
     listFullArtCards(),
     listFeaturedCards(),
-    getTcgStoreConfig(),
-    listCustomPacks({ onlyLive: false }),
     getClashGameCardsConfig(),
   ]);
 
@@ -44,10 +42,10 @@ export default async function CardMakerPage({ searchParams }: CardMakerPageProps
       <div className="space-y-1">
         <Link
           data-page-back
-          href="/cards"
+          href="/admin/driftclash"
           className="inline-flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-amber-500"
         >
-          ← Back to DriftClash Hub
+          ← Back to DriftClash
         </Link>
         <h1 className="text-2xl font-black text-zinc-900 dark:text-zinc-100">
           Card maker &amp; TCG Pack Store
@@ -61,10 +59,6 @@ export default async function CardMakerPage({ searchParams }: CardMakerPageProps
         initialFullArtSaved={fullArtSaved}
         initialOriginalSaved={originalSaved}
         initialFeatured={featured}
-        initialStandardPackPrice={storeConfig.standardPackPrice}
-        initialStandardPackSalePrice={storeConfig.standardPackSalePrice ?? null}
-        initialPCreditBundles={storeConfig.pCreditBundles}
-        initialCustomPacks={customPacks}
         initialClashCardsConfig={clashCardsConfig}
       />
     </div>

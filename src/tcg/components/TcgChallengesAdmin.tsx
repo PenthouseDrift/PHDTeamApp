@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useTransition } from "react";
 import Link from "next/link";
 import type { FullArtTier } from "@/lib/full-art-card";
+import { ChallengeDifficultyField } from "./ChallengeDifficultyField";
 import { CREW_CARD_SET } from "@/lib/crew-cards";
 import {
   CHALLENGE_THEME_CONFIGS,
@@ -54,6 +55,7 @@ export function TcgChallengesAdmin({
   const [formMaxScore, setFormMaxScore] = useState<string>("");
   const [formEntryFee, setFormEntryFee] = useState<string>("0");
   const [formReward, setFormReward] = useState<string>("50");
+  const [formTargetWinRate, setFormTargetWinRate] = useState<string>("");
   const [formRivalMode, setFormRivalMode] = useState<"auto" | "custom">("auto");
   const [formDriverName, setFormDriverName] = useState("Phantom Rival");
   const [formTeamName, setFormTeamName] = useState("Midnight Syndicate");
@@ -107,6 +109,7 @@ export function TcgChallengesAdmin({
       setFormMaxScore(ch.maxTotalScore ? String(ch.maxTotalScore) : "");
       setFormEntryFee(String(ch.entryCostPCredits || 0));
       setFormReward(String(ch.rewardPCredits || 0));
+      setFormTargetWinRate(ch.targetWinRatePct ? String(ch.targetWinRatePct) : "");
       if (ch.customRival) {
         setFormRivalMode("custom");
         setFormDriverName(ch.customRival.driverName || "Phantom Rival");
@@ -148,6 +151,7 @@ export function TcgChallengesAdmin({
       setFormMaxScore("");
       setFormEntryFee("0");
       setFormReward("50");
+      setFormTargetWinRate("");
       setFormRivalMode("auto");
       setFormDriverName("Phantom Rival");
       setFormTeamName("Midnight Syndicate");
@@ -162,14 +166,8 @@ export function TcgChallengesAdmin({
     setShowModal(true);
   };
 
-  const handleSave = () => {
-    if (!formTitle.trim()) {
-      alert("Please enter a title for the challenge.");
-      return;
-    }
-
-    startTransition(async () => {
-      const input: AdminChallengeInput = {
+  /** The challenge as it is filled in now. Used to save it and to test its difficulty. */
+  const buildInput = (): AdminChallengeInput => ({
         id: editingChallenge?.id,
         title: formTitle.trim(),
         subtitle: formSubtitle.trim() || `${formRarity.toUpperCase()} Spec Challenge`,
@@ -190,7 +188,17 @@ export function TcgChallengesAdmin({
                 crewCards: formRivalCrew,
               }
             : null,
-      };
+    targetWinRatePct: formTargetWinRate.trim() ? Number(formTargetWinRate) : null,
+  });
+
+  const handleSave = () => {
+    if (!formTitle.trim()) {
+      alert("Please enter a title for the challenge.");
+      return;
+    }
+
+    startTransition(async () => {
+      const input = buildInput();
 
       const res = await saveAdminChallengeAction(input);
       if (res.success) {
@@ -590,6 +598,7 @@ export function TcgChallengesAdmin({
                       <option value="silver">Silver Only</option>
                       <option value="gold">Gold Only</option>
                       <option value="legend">Legend Only</option>
+                      <option value="mythic">Mythic Only</option>
                     </select>
                   </div>
                   <div>
@@ -649,6 +658,15 @@ export function TcgChallengesAdmin({
                   </div>
                 </div>
               </div>
+
+              {/* Difficulty: the win rate players should have */}
+              <ChallengeDifficultyField
+                value={formTargetWinRate}
+                onChange={setFormTargetWinRate}
+                rarity={formRarity}
+                handPicked={formRivalMode === "custom" && formSelectedCardIds.length === 3}
+                buildInput={buildInput}
+              />
 
               {/* Rival Selection Mode */}
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3 space-y-3">

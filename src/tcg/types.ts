@@ -1,5 +1,6 @@
 import type { FullArtCardData, FullArtTier } from "@/lib/full-art-card";
 import type { MemberCard } from "@/lib/card-roll";
+import type { PackConfig } from "@/lib/pack-config";
 
 /**
  * DriftClash — Penthouse TCG Types
@@ -10,8 +11,8 @@ import type { MemberCard } from "@/lib/card-roll";
  */
 
 export type TcgTab =
+  | "home"
   | "collection"
-  | "clash"
   | "store"
   | "marketplace"
   | "p-credits"
@@ -78,8 +79,16 @@ export interface TcgCustomPackWithCards extends TcgCustomPack {
   setList: Array<{
     card: FullArtCardData;
     weight: number;
+    /** Chance that a card from this pack is this card (percent of all cards). */
     chancePct: number;
   }>;
+  /**
+   * Set on packs that open by the per-rarity rules (see lib/pack-config.ts). Old packs have none and
+   * open exactly as before. For these, `setList` holds the fixed cards with their overall chance.
+   */
+  config?: PackConfig;
+  /** True when some cards in the pack are drawn from a car, so opening it needs a car photo or community cars. */
+  needsGeneration?: boolean;
 }
 
 /** Global store configuration for the TCG Pack Store & P-Credit Bundles. */
@@ -112,6 +121,15 @@ export interface ClashOpponent {
   cards: MemberCard[];
   crewCard: MemberCard;
   crewCards?: [MemberCard, MemberCard, MemberCard];
+  /**
+   * Extra cars the rival may choose its three from once the track and debuffs are known. Challenge rivals
+   * have these; the first three of `cards` are used if the AI can't run.
+   */
+  carPool?: MemberCard[];
+  /** The Crew cards the rival owns (definition id and rarity), to choose its three from. */
+  crewPoolSpecs?: Array<{ cardId: string; tier: FullArtTier }>;
+  /** How well the rival plays, 0 to 1. Leave out for the default. */
+  aiSkill?: number;
 }
 
 /** Hall of Fame Leaderboard entry computed from shared Redis member & card data. */

@@ -90,14 +90,30 @@ export function tierArtPrompt(tier: FullArtTier, styleIds: string[] = []): strin
     .map((id) => ART_STYLES.find((st) => st.id === id))
     .filter((st): st is (typeof ART_STYLES)[number] => Boolean(st))
     .slice(0, MAX_ART_STYLES);
+  return styledTierPrompt(
+    tier,
+    styles.map((st) => st.text)
+  );
+}
+
+/**
+ * The tier's prompt with an admin-written art style description (a custom pack style) leading it,
+ * in place of the built-in art styles. Used when a custom pack style is set to "style" mode.
+ */
+export function customStyleArtPrompt(tier: FullArtTier, styleText: string): string {
+  const text = styleText.replace(/\s+/g, " ").trim();
+  return styledTierPrompt(tier, text ? [text] : []);
+}
+
+function styledTierPrompt(tier: FullArtTier, styleTexts: string[]): string {
   const look = TIER_LOOKS[tier] ?? TIER_LOOKS.bronze;
-  if (styles.length === 0) return `${BASE} ${look} ${ENDING}`;
+  if (styleTexts.length === 0) return `${BASE} ${look} ${ENDING}`;
 
   const label = tierInfo(tier).label;
   const lead =
-    styles.length === 1
-      ? `ART STYLE (the most important instruction): render the entire image as ${styles[0].text}`
-      : `ART STYLE (the most important instruction): render the entire image in one cohesive look that blends these styles: ${styles.map((st, i) => `(${i + 1}) ${st.text}`).join(" ")}`;
+    styleTexts.length === 1
+      ? `ART STYLE (the most important instruction): render the entire image as ${styleTexts[0]}`
+      : `ART STYLE (the most important instruction): render the entire image in one cohesive look that blends these styles: ${styleTexts.map((text, i) => `(${i + 1}) ${text}`).join(" ")}`;
   const rule = `The art style decides how everything is drawn, including the car, the background, the lighting, and the smoke. The ${label} tier below decides what is shown: its scene, time of day, colours, and effects, drawn in that art style.`;
   const check = "Final check: the whole image, including the car, must clearly look like the art style described at the start.";
   return `${lead} ${rule} ${BASE_STYLED} ${look} ${check} ${ENDING}`;
@@ -152,7 +168,20 @@ export interface FullArtCardData {
   customStatValueColor?: string;
   customBottomBarBgColor?: string;
   customBottomBarBorderColor?: string;
+  /**
+   * Frame effect override. Left unset, the card shows its tier's own effect (Legend rainbow, Mythic
+   * flames) exactly as before. "flames" is the Mythic fire, "prismatic" the Legend rainbow, "none" no effect.
+   */
+  customFrameEffect?: FrameEffect;
+  /** With an effect override: show the glint and sparkles (true) or not (false). Unset follows the tier. */
+  customFrameShine?: boolean;
+  /** Tints the Mythic flames this colour (hex), e.g. "#000000" for black fire. Unset keeps the fire colours. */
+  customFlameColor?: string;
 }
+
+/** Frame effects a card can be set to show, whatever its tier. */
+export type FrameEffect = "none" | "flames" | "prismatic";
+export const FRAME_EFFECTS: FrameEffect[] = ["none", "flames", "prismatic"];
 
 export function emptyFullArtCard(): FullArtCardData {
   return {
@@ -200,12 +229,21 @@ const clampNum = (v: unknown, min: number, max: number, fallback: number) => {
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 };
 
-const clampColor = (v: unknown): string | undefined => {
+export const clampColor = (v: unknown): string | undefined => {
   if (typeof v !== "string") return undefined;
   const s = v.trim();
   if (!s) return undefined;
   if (/^[#a-zA-Z0-9(),.%\s-]{3,40}$/.test(s)) return s;
   return undefined;
+};
+
+/** A "#rrggbb" colour (3-digit hex is expanded), or undefined. The flame shader can only be tinted with a hex colour. */
+export const clampHexColor = (v: unknown): string | undefined => {
+  if (typeof v !== "string") return undefined;
+  const s = v.trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/.test(s)) return s;
+  const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(s);
+  return short ? `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}` : undefined;
 };
 
 /** Coerce anything the client sends into a safe, well-formed full art card. */
@@ -254,5 +292,8 @@ export function sanitizeFullArtCard(input: Partial<FullArtCardData> | null | und
     ...(clampColor(i.customStatValueColor) ? { customStatValueColor: clampColor(i.customStatValueColor) } : {}),
     ...(clampColor(i.customBottomBarBgColor) ? { customBottomBarBgColor: clampColor(i.customBottomBarBgColor) } : {}),
     ...(clampColor(i.customBottomBarBorderColor) ? { customBottomBarBorderColor: clampColor(i.customBottomBarBorderColor) } : {}),
+    ...(FRAME_EFFECTS.includes(i.customFrameEffect as FrameEffect) ? { customFrameEffect: i.customFrameEffect } : {}),
+    ...(typeof i.customFrameShine === "boolean" ? { customFrameShine: i.customFrameShine } : {}),
+    ...(clampHexColor(i.customFlameColor) ? { customFlameColor: clampHexColor(i.customFlameColor) } : {}),
   };
 }

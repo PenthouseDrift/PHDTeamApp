@@ -8,8 +8,11 @@ import {
   type DebuffCardDefinition,
   type TrackCardDefinition,
 } from "@/lib/crew-cards";
-import { fullArtCardKey } from "@/lib/member-card-store";
-import type { MemberCard } from "@/lib/card-roll";
+import { FEATURED_CARDS_KEY, MEMBER_CARD_ID_PATTERN, fullArtCardKey } from "@/lib/member-card-store";
+import { entryOverallPct, effectivePcts, packNeedsGeneration } from "@/lib/pack-config";
+import { entryRefs, loadAllPackConfigs } from "@/lib/pack-config-store";
+import { ALL_TIERS } from "@/lib/pack-styles";
+import { RARITY_RANK, type MemberCard } from "@/lib/card-roll";
 import { DEFAULT_STANDARD_PACK_PRICE, P_CREDIT_BUNDLES, isOnSale } from "./config";
 import type {
   PCreditBundle,
@@ -345,7 +348,14 @@ export function parseCustomPack(raw: unknown): TcgCustomPack | null {
 /** Hydrate a list of custom packs with their actual `FullArtCardData` set list records. */
 export async function hydrateCustomPacks(packs: TcgCustomPack[]): Promise<TcgCustomPackWithCards[]> {
   if (packs.length === 0) return [];
-  const allCardIds = [...new Set(packs.flatMap((p) => p.cards.map((c) => c.cardId)))];
+  // Packs with a config open by the per-rarity rules; the rest are old packs and are read exactly as before.
+  const configs = await loadAllPackConfigs();
+  const allCardIds = [
+    ...new Set([
+      ...packs.flatMap((p) => p.cards.map((c) => c.cardId)),
+      ...packs.flatMap((p) => (configs[p.id] ? entryRefs(configs[p.id]).cardIds : [])),
+    ]),
+  ];
   const cardMap = new Map<string, FullArtCardData>();
 
   if (allCardIds.length > 0) {
@@ -368,6 +378,33 @@ export async function hydrateCustomPacks(packs: TcgCustomPack[]): Promise<TcgCus
   }
 
   return packs.map((pack) => {
+    const config = configs[pack.id];
+    if (config) {
+      // New style pack: the set list is its fixed cards, each with its overall chance across the whole pack.
+      const pcts = effectivePcts(config);
+      const setList: TcgCustomPackWithCards["setList"] = [];
+      for (const tier of [...ALL_TIERS].reverse()) {
+        for (const entry of config.rarities[tier]) {
+          if (entry.kind !== "card") continue;
+          const card = cardMap.get(entry.refId);
+          const overall = entryOverallPct(pcts, tier, entry);
+          if (!card || overall <= 0) continue;
+          setList.push({
+            card,
+            weight: Math.max(1, Math.min(100, Math.round(overall))),
+            chancePct: Math.round(overall * 100) / 100,
+          });
+        }
+      }
+      return {
+        ...pack,
+        cards: setList.map((e) => ({ cardId: e.card.id!, weight: e.weight })),
+        setList,
+        config,
+        needsGeneration: packNeedsGeneration(config),
+      };
+    }
+
     const validEntries = pack.cards
       .map((entry) => {
         const card = cardMap.get(entry.cardId);
@@ -398,7 +435,7 @@ export async function listCustomPacks(options?: { onlyLive?: boolean }): Promise
   const packs = rows.map(parseCustomPack).filter((p): p is TcgCustomPack => p !== null);
   const hydrated = await hydrateCustomPacks(packs);
   if (options?.onlyLive) {
-    return hydrated.filter((p) => p.status === "live" && p.setList.length > 0);
+    return hydrated.filter((p) => p.status === "live" && (p.setList.length > 0 || p.needsGeneration));
   }
   return hydrated;
 }
@@ -475,3 +512,46 @@ export async function saveClashGameCardsConfig(
 }
 
 
+
+// ── Rare pullable cards (Home showcase) ─────────────────────────────────────
+
+export interface ShowcaseRareCard {
+  card: FullArtCardData & { id: string };
+}
+
+/**
+ * The rare set cards that can drop as a Standard Pack's bonus card, rarest first, for the game's Home
+ * page. These are public (members see them in their packs), so no admin check. A failed read gives
+ * an empty list so the page still loads.
+ */
+export async function getFeaturedShowcaseCards(limit = 8): Promise<ShowcaseRareCard[]> {
+  try {
+    const raw = (await redis.hgetall(FEATURED_CARDS_KEY)) ?? {};
+    const entries = Object.entries(raw)
+      .map(([id, w]) => ({ id, weight: Number(w) }))
+      .filter((e) => MEMBER_CARD_ID_PATTERN.test(e.id) && Number.isFinite(e.weight) && e.weight > 0);
+    if (entries.length === 0) return [];
+
+    const rows = await redis.mget(...entries.map((e) => fullArtCardKey(e.id)));
+    const out: Array<ShowcaseRareCard & { weight: number }> = [];
+    entries.forEach((e, i) => {
+      try {
+        const value = typeof rows[i] === "string" ? JSON.parse(rows[i] as string) : rows[i];
+        if (!value || typeof value !== "object") return;
+        const card = sanitizeFullArtCard(value as Partial<FullArtCardData>);
+        if (!card.imageUrl) return;
+        out.push({ card: { ...card, id: e.id }, weight: e.weight });
+      } catch {
+        /* a card that can't be read is simply not shown */
+      }
+    });
+    // Rarest first. The odds weight only decides the order; it is not sent to the browser.
+    return out
+      .sort((a, b) => RARITY_RANK[b.card.tier] - RARITY_RANK[a.card.tier] || a.weight - b.weight)
+      .slice(0, limit)
+      .map(({ card }) => ({ card }));
+  } catch (error) {
+    console.error("[tcg] could not load the rare cards showcase:", error);
+    return [];
+  }
+}

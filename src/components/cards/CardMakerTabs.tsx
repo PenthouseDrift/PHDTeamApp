@@ -3,15 +3,13 @@
 import { useState } from "react";
 import { CardMaker } from "@/components/cards/CardMaker";
 import { FullArtCardMaker } from "@/components/cards/FullArtCardMaker";
-import { TcgPackManagerAdmin } from "@/tcg/components/TcgPackManagerAdmin";
+import Link from "next/link";
 import { TcgClashCardsAdmin } from "@/tcg/components/TcgClashCardsAdmin";
 import { TcgChallengesAdmin } from "@/tcg/components/TcgChallengesAdmin";
 import type { CardData } from "@/lib/card-maker";
 import type { FullArtCardData } from "@/lib/full-art-card";
 import { CREW_CARD_SET, DEBUFF_CARD_SET, UK_TRACK_CARD_SET } from "@/lib/crew-cards";
-import { P_CREDIT_BUNDLES } from "@/tcg/config";
 import type { ClashGameCardsConfig } from "@/tcg/storage";
-import type { PCreditBundle, TcgCustomPackWithCards } from "@/tcg/types";
 
 export type CardMakerTabKind = "full-art" | "packs" | "clash-cards" | "challenges" | "original";
 
@@ -24,7 +22,7 @@ const TABS: Array<{ id: CardMakerTabKind; label: string; hint: string }> = [
   {
     id: "packs",
     label: "Packs & Store",
-    hint: "Configure Standard Pack price & build custom set packs (Draft / Live) for P-Credits",
+    hint: "Card packs now live in DriftClash > Card packs",
   },
   {
     id: "clash-cards",
@@ -52,10 +50,6 @@ export function CardMakerTabs({
   initialFullArtSaved,
   initialOriginalSaved,
   initialFeatured = {},
-  initialStandardPackPrice = 100,
-  initialStandardPackSalePrice = null,
-  initialPCreditBundles = P_CREDIT_BUNDLES,
-  initialCustomPacks = [],
   initialClashCardsConfig = {
     crewCards: CREW_CARD_SET,
     debuffCards: DEBUFF_CARD_SET,
@@ -67,10 +61,6 @@ export function CardMakerTabs({
   initialOriginalSaved: CardData[];
   /** Saved full art card id -> odds weight, for the cards that can be pulled from packs. */
   initialFeatured?: Record<string, number>;
-  initialStandardPackPrice?: number;
-  initialStandardPackSalePrice?: number | null;
-  initialPCreditBundles?: PCreditBundle[];
-  initialCustomPacks?: TcgCustomPackWithCards[];
   initialClashCardsConfig?: ClashGameCardsConfig;
 }) {
   const [kind, setKind] = useState<CardMakerTabKind>(initialTab);
@@ -134,13 +124,18 @@ export function CardMakerTabs({
         aria-labelledby="card-kind-tab-packs"
         hidden={kind !== "packs"}
       >
-        <TcgPackManagerAdmin
-          savedFullArtCards={fullArtSaved}
-          initialStandardPackPrice={initialStandardPackPrice}
-          initialStandardPackSalePrice={initialStandardPackSalePrice}
-          initialPCreditBundles={initialPCreditBundles}
-          initialCustomPacks={initialCustomPacks}
-        />
+        <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
+          <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Card packs have moved</h2>
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            Pack contents, rarity odds, custom styles, new packs, store prices and P-Credit bundles are all on the DriftClash Card packs page now.
+          </p>
+          <Link
+            href="/admin/driftclash/packs"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-amber-500 px-4 text-sm font-black text-black hover:bg-amber-400"
+          >
+            Open Card packs →
+          </Link>
+        </div>
       </div>
 
       <div

@@ -166,7 +166,7 @@ export function TcgPCreditsShop({
           </div>
           {isAdmin && (
             <Link
-              href="/admin/card-maker?tab=packs"
+              href="/admin/driftclash/packs"
               className="inline-flex min-h-10 items-center justify-center rounded-xl border border-zinc-300 px-3.5 text-xs font-bold text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
             >
               ⚙️ Edit P-Credit Prices &amp; Sales

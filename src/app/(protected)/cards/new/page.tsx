@@ -8,15 +8,34 @@ import { listMyCards } from "@/actions/member-cards";
 import { getMemberSpecSheets } from "@/actions/spec-sheets";
 import { getMergedPartCategories } from "@/actions/custom-parts";
 import { CardPackWizard } from "@/components/member-cards/CardPackWizard";
+import { redis } from "@/lib/redis";
+import { MEMBER_CARD_ID_PATTERN } from "@/lib/member-card-store";
+import { getPCredits, hydrateCustomPacks, parseCustomPack, tcgCustomPackKey } from "@/tcg/storage";
+import { getEffectivePrice } from "@/tcg/config";
 
 export const dynamic = "force-dynamic";
 // Drawing the card with AI runs under this route and can take a while.
 export const maxDuration = 60;
 
-export default async function NewCardPage() {
+export default async function NewCardPage({ searchParams }: { searchParams: Promise<{ pack?: string }> }) {
   const session = await auth();
   if (!session?.user) redirect("/auth/signin");
   const userId = session.user.id;
+
+  // /cards/new?pack=<id> opens a store pack that needs a car, instead of a Standard Pack.
+  const { pack: packParam } = await searchParams;
+  let customPack: { id: string; name: string; price: number; pCredits: number } | undefined;
+  if (packParam) {
+    const raw = MEMBER_CARD_ID_PATTERN.test(packParam) ? parseCustomPack(await redis.get(tcgCustomPackKey(packParam))) : null;
+    const [pack] = raw && raw.status === "live" ? await hydrateCustomPacks([raw]) : [];
+    if (!pack?.config || !pack.needsGeneration) redirect("/cards");
+    customPack = {
+      id: pack.id,
+      name: pack.name,
+      price: getEffectivePrice(pack.price, pack.salePrice),
+      pCredits: await getPCredits(userId),
+    };
+  }
 
   const [hash, carsResult, credits, myCards, initialSpecSheets, partCategories] = await Promise.all([
     getMemberHash(userId),
@@ -48,10 +67,19 @@ export default async function NewCardPage() {
           <Link data-page-back href="/cards" className="inline-flex items-center gap-1 text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
             ← My cards
           </Link>
-          <h1 className="text-2xl font-black text-zinc-900 dark:text-zinc-100">Open a card pack</h1>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            You have {credits} card credit{credits === 1 ? "" : "s"}. Earn 1 each time you check in at the track, or 2 with a membership.
-          </p>
+          <h1 className="text-2xl font-black text-zinc-900 dark:text-zinc-100">
+            {customPack ? `Open ${customPack.name}` : "Open a card pack"}
+          </h1>
+          {customPack ? (
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              This pack costs {customPack.price.toLocaleString()} P-Credits. You have {customPack.pCredits.toLocaleString()}.
+              Choose your car, or let the pack use community cars.
+            </p>
+          ) : (
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              You have {credits} card credit{credits === 1 ? "" : "s"}. Earn 1 each time you check in at the track, or 2 with a membership.
+            </p>
+          )}
         </div>
         <CardPackWizard
           userId={userId}
@@ -59,7 +87,9 @@ export default async function NewCardPage() {
           nameOptions={nameOptions}
           recentTeams={recentTeams}
           cars={cars}
-          initialCredits={credits}
+          // A store pack is paid for with P-Credits when it is opened, so it never needs a card credit.
+          initialCredits={customPack ? 1 : credits}
+          customPack={customPack}
           initialSpecSheets={initialSpecSheets}
           partCategories={partCategories}
         />

@@ -120,7 +120,7 @@ export default async function MenuPage() {
         </Group>
 
         <Group title="Garage & Game">
-          <MenuRow href="/cards?tab=clash" icon="cards" title="Tandem Clash Arena" subtitle="Play RC card battles, conquer UK venues & win P-Credits" badge="Play" tone="amber" />
+          <MenuRow href="/cards" icon="cards" title="Tandem Clash" subtitle="Play RC card battles, conquer UK venues & win P-Credits" badge="Play" tone="amber" />
           <MenuRow href="/cars" icon="garage" title="My cars" subtitle="Your cars and saved setups" />
           <MenuRow href="/cards" icon="cards" title="My cards & packs" subtitle="Collect cards of your car. Earn credits by checking in" />
           <MenuRow href="/tuning-advisor" icon="tools" title="Tuning advisor" subtitle="Get setup suggestions" />

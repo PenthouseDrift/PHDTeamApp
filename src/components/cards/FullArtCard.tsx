@@ -83,6 +83,9 @@ const MYTHIC_FRAGMENT_SHADER = `
   precision highp float;
   uniform vec2 resolution;
   uniform float time;
+  // Optional tint: when useTint is 1.0 the flames and sparks are drawn in this colour instead of fire colours.
+  uniform vec3 tint;
+  uniform float useTint;
 
   // Ashima 3D Simplex Noise (Ian McEwan, Ashima Arts)
   vec3 mod289(vec3 x) {
@@ -295,6 +298,11 @@ const MYTHIC_FRAGMENT_SHADER = `
     float fireAlpha = clamp(smoothstep(0.015, 0.58, f) * 0.96, 0.0, 1.0);
 
     vec3 sparkHue = vec3(1.0, 0.48, 0.08);
+    if (useTint > 0.5) {
+      // Tinted fire: the chosen colour, with only the hottest core lifted a little so the flames keep their shape.
+      fireHue = mix(tint, mix(tint, vec3(1.0), 0.25), clamp(heat * heat, 0.0, 1.0));
+      sparkHue = mix(tint, vec3(1.0), 0.35);
+    }
     float finalAlpha = max(fireAlpha, sparkMask);
     vec3 finalHue = mix(fireHue, sparkHue, clamp(sparkMask * (1.0 - fireAlpha * 0.7), 0.0, 1.0));
 
@@ -305,7 +313,13 @@ const MYTHIC_FRAGMENT_SHADER = `
 /**
  * Renders the Simplex Noise Fire & Sparks WebGL shader directly in front of the Mythic card border.
  */
-function MythicFlameCanvases({ seed, animated }: { seed: string; animated: boolean }) {
+/** "#rrggbb" to 0-1 red, green, blue, or null when it is not a hex colour. */
+function hexToRgb01(hex?: string): [number, number, number] | null {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex?.trim() ?? "");
+  return m ? [parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255, parseInt(m[3], 16) / 255] : null;
+}
+
+function MythicFlameCanvases({ seed, animated, tint }: { seed: string; animated: boolean; tint?: string }) {
   const glCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -360,6 +374,13 @@ function MythicFlameCanvases({ seed, animated }: { seed: string; animated: boole
 
     const timeLoc = gl.getUniformLocation(program, "time");
     const resLoc = gl.getUniformLocation(program, "resolution");
+    const tintLoc = gl.getUniformLocation(program, "tint");
+    const useTintLoc = gl.getUniformLocation(program, "useTint");
+    const tintRgb = hexToRgb01(tint);
+    if (tintLoc && useTintLoc) {
+      gl.uniform3f(tintLoc, tintRgb?.[0] ?? 0, tintRgb?.[1] ?? 0, tintRgb?.[2] ?? 0);
+      gl.uniform1f(useTintLoc, tintRgb ? 1 : 0);
+    }
 
     const updateSize = () => {
       const rect = glCanvas.getBoundingClientRect();
@@ -404,7 +425,7 @@ function MythicFlameCanvases({ seed, animated }: { seed: string; animated: boole
       if (posBuffer) gl.deleteBuffer(posBuffer);
       gl.deleteProgram(program);
     };
-  }, [seed, animated]);
+  }, [seed, animated, tint]);
 
   const overlayStyle: React.CSSProperties = abs({
     left: `${(-PAD).toFixed(2)}%`,
@@ -425,7 +446,18 @@ function MythicFlameCanvases({ seed, animated }: { seed: string; animated: boole
  *    directly in front of the card's border rim.
  * When `animated` is false (printing) or the member prefers reduced motion, it renders as a still border.
  */
-function BorderEffects({ variant, seed, animated }: { variant: "legend" | "mythic"; seed: string; animated: boolean }) {
+function BorderEffects({
+  variant,
+  seed,
+  animated,
+  tint,
+}: {
+  variant: "legend" | "mythic";
+  seed: string;
+  animated: boolean;
+  /** Mythic only: draws the flames in this hex colour. */
+  tint?: string;
+}) {
   const rand = seededRandom(`${seed}|border|${variant}`);
   const cls = animated ? "" : " fa-still";
   const phaseDelay = `-${(rand() * 5).toFixed(2)}s`;
@@ -455,7 +487,7 @@ function BorderEffects({ variant, seed, animated }: { variant: "legend" | "mythi
         ["--fa-delay" as string]: phaseDelay,
       }}
     >
-      <MythicFlameCanvases seed={seed} animated={animated} />
+      <MythicFlameCanvases seed={seed} animated={animated} tint={tint} />
     </div>
   );
 }
@@ -508,6 +540,14 @@ export function FullArtCard({
     }
   };
 
+  // Which frame effects show. With no override this is exactly the tier's own behaviour: Legend shows its
+  // rainbow ring and Mythic its flames (both off when a custom border colour is set), and both shine.
+  // A card with customFrameEffect set shows that effect whatever its tier.
+  const frameEffect = card.customFrameEffect;
+  const showPrismatic = frameEffect ? frameEffect === "prismatic" : isLegend && !borderCustom;
+  const showFlames = frameEffect ? frameEffect === "flames" : isMythic && !borderCustom;
+  const showShine = frameEffect ? (card.customFrameShine ?? (isLegend || isMythic)) : isLegend || isMythic;
+
   const customBorderPale = safeLighten(borderCustom, 0.45, "#ffffff");
   const customBorderDark = safeDarken(borderCustom, 0.35, "#000000");
 
@@ -521,7 +561,7 @@ export function FullArtCard({
     gloss: 0.4 + rand() * 0.25,
     hue: Math.round(rand() * 360),
   };
-  const sparkleCount = isMythic ? 9 : isLegend ? 4 : 0;
+  const sparkleCount = showShine ? (isMythic ? 9 : 4) : 0;
   const sparkles = Array.from({ length: sparkleCount }, () => ({
     x: 6 + rand() * 88,
     y: 5 + rand() * 62,
@@ -640,7 +680,7 @@ export function FullArtCard({
         aspectRatio: "63 / 88",
         containerType: "inline-size",
         // Prevent parent drop-shadow filters from casting grey/black shadows behind the semi-transparent Mythic flames
-        filter: isMythic ? "none" : undefined,
+        filter: isMythic || showFlames ? "none" : undefined,
         // Text inherits text-align, and a <button> parent (card grids) would centre it. The design is left aligned.
         textAlign: "left",
         WebkitPrintColorAdjust: "exact",
@@ -648,7 +688,7 @@ export function FullArtCard({
       }}
     >
       {/* Legend: spinning rainbow glow behind the card edge. */}
-      {isLegend && !borderCustom && (
+      {showPrismatic && (
         <BorderEffects variant="legend" seed={`${card.id ?? ""}|${card.name}|${card.imageUrl.slice(-24)}`} animated={!flat} />
       )}
       <div
@@ -724,7 +764,7 @@ export function FullArtCard({
         {/* Foil: a soft diagonal sheen, plus a rainbow wash on Legend cards */}
         <div style={{ ...abs({ inset: 0 }), background: "linear-gradient(115deg, rgba(255,255,255,0) 30%, rgba(255,255,255,0.16) 48%, rgba(255,255,255,0) 66%)", mixBlendMode: "screen", pointerEvents: "none" }} />
         {/* Legend and Mythic: a bright glint sweeps across, with twinkling sparkles. */}
-        {(isLegend || isMythic) && (
+        {showShine && (
           <div aria-hidden style={{ ...abs({ inset: 0 }), overflow: "hidden", pointerEvents: "none" }}>
             <div
               className={flat ? undefined : "fa-crystal-glint"}
@@ -1089,7 +1129,8 @@ export function FullArtCard({
                 <span
                   key={statLabel}
                   style={{
-                    fontSize: "4.8cqw",
+                    // Hidden stats ("???") are a character wider than a score, so step down to keep all four on one line.
+                    fontSize: value.trim().length > 2 ? "4.1cqw" : "4.8cqw",
                     fontWeight: 800,
                     textTransform: "uppercase",
                     letterSpacing: "0.02em",
@@ -1106,8 +1147,13 @@ export function FullArtCard({
         </div>
       </div>
       {/* Mythic: molten lava border rendered in front of the card so the rim, drips and sparks sit on top of the frame. */}
-      {isMythic && !borderCustom && (
-        <BorderEffects variant="mythic" seed={`${card.id ?? ""}|${card.name}|${card.imageUrl.slice(-24)}`} animated={!flat} />
+      {showFlames && (
+        <BorderEffects
+          variant="mythic"
+          seed={`${card.id ?? ""}|${card.name}|${card.imageUrl.slice(-24)}`}
+          animated={!flat}
+          tint={card.customFlameColor}
+        />
       )}
     </div>
   );

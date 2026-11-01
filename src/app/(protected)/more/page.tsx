@@ -23,7 +23,7 @@ export default async function MorePage() {
     {
       title: "Tandem Clash Arena",
       description: "Play 3v3 RC drift card battles, roll real UK tracks, defeat rivals and win P-Credits",
-      href: "/cards?tab=clash",
+      href: "/cards",
       icon: CardsIcon,
       badge: "Game",
       iconColor: "text-amber-500 bg-amber-500/10 border-amber-500/20",

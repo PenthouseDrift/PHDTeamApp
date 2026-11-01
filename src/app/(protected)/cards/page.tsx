@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { getCardCredits } from "@/lib/card-credits";
 import { listMyCards } from "@/actions/member-cards";
 import { redis } from "@/lib/redis";
+import { getComingSoonCards } from "@/lib/coming-soon-store";
 import { getCheckoutStatus } from "@/lib/sumup";
 import { processSuccessfulPaymentReference } from "@/lib/membership-activation";
 import {
@@ -12,12 +13,14 @@ import {
   pickClashOpponent,
 } from "@/tcg/clash";
 import {
+  getFeaturedShowcaseCards,
   getPCredits,
   getTcgStoreConfig,
   listActiveMarketListings,
   listCustomPacks,
 } from "@/tcg/storage";
 import { TcgApp } from "@/tcg/components/TcgApp";
+import { listTandemClashChallengesAction } from "@/tcg/challenges-actions";
 import type { TcgTab } from "@/tcg/types";
 
 export const dynamic = "force-dynamic";
@@ -29,8 +32,8 @@ interface CardsPageProps {
 }
 
 const VALID_TABS: TcgTab[] = [
+  "home",
   "collection",
-  "clash",
   "store",
   "marketplace",
   "p-credits",
@@ -83,6 +86,9 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
     clashStats,
     leaderboard,
     hasEarlyAccess,
+    challengeData,
+    rareCards,
+    comingSoon,
   ] = await Promise.all([
     listMyCards(),
     getCardCredits(userId),
@@ -94,15 +100,19 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
     getPlayerClashStats(userId),
     getDriftClashLeaderboard(25),
     hasClashEarlyAccess(userId, session.user.role),
+    listTandemClashChallengesAction(),
+    getFeaturedShowcaseCards(8),
+    getComingSoonCards(),
   ]);
 
-  const requestedTab = params.tab as TcgTab | undefined;
+  // The Clash tab is gone: Tandem Clash is on the game's Home page now, so old ?tab=clash links land there.
+  const requestedTab = (params.tab === "clash" ? "home" : params.tab) as TcgTab | undefined;
   const initialTab: TcgTab =
     requestedTab && VALID_TABS.includes(requestedTab)
       ? requestedTab
       : checkoutConfirmed
         ? "p-credits"
-        : "collection";
+        : "home";
 
   return (
     <div className="min-h-full bg-zinc-100 px-2.5 py-2.5 dark:bg-zinc-950 sm:px-6 sm:py-5 lg:px-8">
@@ -123,6 +133,10 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
           initialClashStats={clashStats}
           initialLeaderboard={leaderboard}
           hasEarlyAccess={hasEarlyAccess}
+          initialChallenges={challengeData.success ? challengeData.data.challenges : []}
+          initialCompletedChallengeIds={challengeData.success ? challengeData.data.completedIds : []}
+          initialRareCards={rareCards}
+          initialComingSoon={comingSoon}
           checkoutConfirmed={checkoutConfirmed}
         />
       </div>

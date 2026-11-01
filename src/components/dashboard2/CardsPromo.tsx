@@ -44,6 +44,14 @@ export function CardsPromo({ credits }: { credits: number }) {
         >
           {has ? "Open a card pack" : "See my cards"}
         </Link>
+        {/* Straight to the Deck, where Tandem Clash starts. */}
+        <Link
+          href="/cards"
+          className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-amber-400/60 bg-amber-500/15 px-5 text-sm font-black text-amber-300 transition-colors hover:bg-amber-500/25"
+        >
+          <span aria-hidden="true">▶</span>
+          Play now
+        </Link>
         {has && (
           <Link
             href="/cards"
