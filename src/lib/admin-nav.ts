@@ -93,6 +93,7 @@ const TITLES: Array<[string, string]> = [
   ["/admin/events", "Events"],
   ["/admin/notes", "Notes"],
   ["/admin/driftclash/packs", "Card packs"],
+  ["/admin/driftclash/registrations", "Registrations"],
   ["/admin/driftclash", "DriftClash"],
   ["/admin/pack-styles", "Card packs"],
   ["/admin/card-maker", "Card maker"],

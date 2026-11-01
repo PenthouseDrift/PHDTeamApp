@@ -1,10 +1,17 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { countNewRegistrations } from "@/lib/driftclash-registrations";
 
 export const dynamic = "force-dynamic";
 
 const SETTINGS: Array<{ href: string; title: string; desc: string; icon: string }> = [
+  {
+    href: "/admin/driftclash/registrations",
+    title: "Registrations",
+    desc: "Clubs, drivers and cars sent in from the DriftClash sign up site",
+    icon: "📝",
+  },
   {
     href: "/admin/driftclash/packs",
     title: "Card packs",
@@ -41,6 +48,13 @@ export default async function DriftClashAdminPage() {
   const session = await auth();
   if (!session?.user || session.user.role !== "admin") redirect("/admin");
 
+  let newRegistrations = 0;
+  try {
+    newRegistrations = await countNewRegistrations();
+  } catch (error) {
+    console.error("[driftclash] registration count failed:", error);
+  }
+
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
       <div className="space-y-1">
@@ -65,7 +79,14 @@ export default async function DriftClashAdminPage() {
                 {item.icon}
               </span>
               <span>
-                <span className="block text-base font-black text-zinc-900 dark:text-zinc-100">{item.title}</span>
+                <span className="flex items-center gap-2 text-base font-black text-zinc-900 dark:text-zinc-100">
+                  {item.title}
+                  {item.href === "/admin/driftclash/registrations" && newRegistrations > 0 && (
+                    <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-black text-black">
+                      {newRegistrations} new
+                    </span>
+                  )}
+                </span>
                 <span className="block text-sm text-zinc-500 dark:text-zinc-400">{item.desc}</span>
               </span>
             </Link>
