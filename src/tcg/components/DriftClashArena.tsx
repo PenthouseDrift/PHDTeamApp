@@ -4867,7 +4867,12 @@ export function DriftClashArena({
                               then the totals. It stays up while the winner is announced. */}
                           {(battleAnimStep === "reveal_stats" || battleAnimStep === "knockout_and_winner" || battleAnimStep === "corner_finished") &&
                             currentResult && (
-                              <ClashRevealPanel result={currentResult} cornerNumber={sector.number} level={revealLevel} />
+                              <ClashRevealPanel
+                      result={currentResult}
+                      cornerNumber={sector.number}
+                      level={revealLevel}
+                      winnerStage={battleAnimStep !== "reveal_stats"}
+                    />
                             )}
 
                           {/* Knockout & Winner Celebratory Banner */}
