@@ -4,7 +4,9 @@
  * One of three games is picked at random each corner:
  *  - Stat Duel:   both sides pick a stat. Your points are your car's value in that stat minus the rival car's value in
  *                 the same stat (it can be negative). The rival does the same against you.
- *  - Timing:      a skill game. Your timing becomes points, scaled by how well the car handles (grip + steer).
+ *  - Timing:      a skill game. Your timing becomes points, scaled by how well the car handles (grip + steer). Every
+ *                 full pass of the marker from one side of the bar to the other takes 1 point off what is available.
+ *                 At 0 the run ends by itself and scores nothing.
  *  - Allocation:  a level playing field: both sides start with 10 in every stat (not the car they are driving) and spend
  *                 a pool of 15 points across the four stats in secret. Each stat is a judge. Win the judge (higher
  *                 stat after allocation) and you score a fixed award. Ties score for nobody.
@@ -13,7 +15,7 @@
  * Math.random unless the caller passes it as `rng`) so it can be tested on its own.
  */
 
-import type { CornerFinalStats, EvaluatedCornerResult } from "./progression";
+import type { CornerFinalStats, CornerScoreParts, EvaluatedCornerResult } from "./progression";
 import { pickIndex, type Rng } from "./rival-ai";
 
 export type FinaleMode = "stat_duel" | "timing" | "allocation";
@@ -53,7 +55,7 @@ export const FINALE_MODE_INFO: Record<FinaleMode, { icon: string; title: string;
     icon: "⏱️",
     title: "Perfect Drift",
     blurb:
-      "Stop the marker in the green zone. The closer you land, the more points you score. Better grip and steer turn good timing into more points.",
+      "Stop the marker in the green zone. The closer you land, the more points you score, and better grip and steer are worth more. Every full pass of the marker takes 1 point off, and at 0 the run ends by itself with nothing.",
   },
   allocation: {
     icon: "🎛️",
@@ -66,7 +68,8 @@ export type FinaleAllocation = Record<FinaleStat, number>;
 
 export type FinaleChoice =
   | { mode: "stat_duel"; stat: FinaleStat }
-  | { mode: "timing"; accuracy: number }
+  /** `passes` = full passes the marker made before it was stopped. Each one took 1 point off what was available. */
+  | { mode: "timing"; accuracy: number; passes: number }
   | { mode: "allocation"; allocation: FinaleAllocation };
 
 export interface FinaleOutcome {
@@ -127,10 +130,18 @@ export function timingAccuracy(position: number): number {
   return clamp(1 - Math.max(0, dist - GREEN_HALF_WIDTH) / (0.5 - GREEN_HALF_WIDTH), 0, 1);
 }
 
-/** What a perfect timing run is worth for this car. */
+/**
+ * What a perfect timing run is worth for this car, if it is stopped in the first pass. Every full pass the marker
+ * makes from one side of the bar to the other takes 1 off this.
+ */
 export function timingMaxPoints(stats: CornerFinalStats): number {
   const handling = clamp(stats.grip + stats.steer, 2, 50);
   return TIMING_MIN_MAX_POINTS + Math.round(((handling - 2) / 48) * (TIMING_MAX_MAX_POINTS - TIMING_MIN_MAX_POINTS));
+}
+
+/** The points a timing run can still earn after the marker has made `passes` full passes (never below 0). */
+export function timingPointsAvailable(stats: CornerFinalStats, passes: number): number {
+  return Math.max(0, timingMaxPoints(stats) - Math.max(0, Math.floor(passes)));
 }
 
 /** The choice the player gets if they skip the finale. */
@@ -140,7 +151,7 @@ export function defaultPlayerChoice(mode: FinaleMode, playerStats: CornerFinalSt
     return { mode, stat: best };
   }
   if (mode === "allocation") return { mode, allocation: evenAllocation() };
-  return { mode, accuracy: 0.5 };
+  return { mode, accuracy: 0.5, passes: 0 };
 }
 
 // ── The rival's side ──────────────────────────────────────────────────────
@@ -152,13 +163,21 @@ function gaussian(rng: Rng): number {
 
 /**
  * The rival is not told the player's stats either. It sees them with some error, which shrinks as its skill rises
- * (about 1.5 points at skill 1, about 5.5 at skill 0).
+ * (about 3.5 points at skill 1, about 7.5 at skill 0).
  */
 function estimateStats(real: CornerFinalStats, skill: number, rng: Rng): CornerFinalStats {
-  const spread = 1.5 + (1 - clamp(skill, 0, 1)) * 4;
+  const spread = 3.5 + (1 - clamp(skill, 0, 1)) * 4;
   const out = { ...real };
   for (const s of FINALE_STATS) out[s] = clamp(real[s] + gaussian(rng) * spread, 1, 25);
   return out;
+}
+
+/**
+ * How many full passes the rival lets the marker make before it stops it. A strong rival stops it in the first pass or
+ * two (0 or 1); a weak one waits longer (up to 4 at skill 0), so it has fewer points left.
+ */
+export function rivalTimingPasses(skill: number, rng: Rng): number {
+  return Math.floor(rng() * (2 + (1 - clamp(skill, 0, 1)) * 3));
 }
 
 /** How well the rival times its run, 0 to 1. Averages 0.8 at skill 1 and 0.45 at skill 0. */
@@ -208,7 +227,7 @@ export function chooseRivalFinale(input: {
 }): FinaleChoice {
   const { mode, rivalStats, playerStats, skill } = input;
   const rng = input.rng ?? Math.random;
-  if (mode === "timing") return { mode, accuracy: rivalTimingAccuracy(skill, rng) };
+  if (mode === "timing") return { mode, accuracy: rivalTimingAccuracy(skill, rng), passes: rivalTimingPasses(skill, rng) };
   // The setup game ignores the cars' stats: everyone starts from the same base.
   if (mode === "allocation") return { mode, allocation: rivalAllocation(skill, rng) };
   const estimate = estimateStats(playerStats, skill, rng);
@@ -275,17 +294,19 @@ export function resolveFinale(input: {
   if (playerChoice.mode === "timing" && rivalChoice.mode === "timing") {
     const pAcc = clamp(playerChoice.accuracy, 0, 1);
     const rAcc = clamp(rivalChoice.accuracy, 0, 1);
-    const playerPoints = capPoints(pAcc * timingMaxPoints(playerStats));
-    const rivalPoints = capPoints(rAcc * timingMaxPoints(rivalStats));
+    const pPasses = Math.max(0, Math.floor(playerChoice.passes));
+    const rPasses = Math.max(0, Math.floor(rivalChoice.passes));
+    const playerPoints = capPoints(pAcc * timingPointsAvailable(playerStats, pPasses));
+    const rivalPoints = capPoints(rAcc * timingPointsAvailable(rivalStats, rPasses));
     return {
       mode: "timing",
       playerPoints,
       rivalPoints,
-      playerChoice: { mode: "timing", accuracy: pAcc },
-      rivalChoice: { mode: "timing", accuracy: rAcc },
-      summary: `Perfect Drift: you landed ${Math.round(pAcc * 100)}% (${signed(playerPoints)}), the rival landed ${Math.round(
-        rAcc * 100
-      )}% (${signed(rivalPoints)})`,
+      playerChoice: { mode: "timing", accuracy: pAcc, passes: pPasses },
+      rivalChoice: { mode: "timing", accuracy: rAcc, passes: rPasses },
+      summary: `Perfect Drift: you landed ${Math.round(pAcc * 100)}% after ${pPasses} ${
+        pPasses === 1 ? "pass" : "passes"
+      } (${signed(playerPoints)}), the rival landed ${Math.round(rAcc * 100)}% after ${rPasses} (${signed(rivalPoints)})`,
     };
   }
 
@@ -296,10 +317,21 @@ export function resolveFinale(input: {
 export function applyFinaleToResult(base: EvaluatedCornerResult, outcome: FinaleOutcome): EvaluatedCornerResult {
   const playerScore = Math.max(5, base.playerScore + outcome.playerPoints);
   const rivalScore = Math.max(5, base.rivalScore + outcome.rivalPoints);
+  // Keep every number inspectable: the parts still add up to the score, and the breakdown text names the finale.
+  const withFinale = (parts: CornerScoreParts | undefined, points: number, score: number, before: number) =>
+    parts ? { ...parts, finalePts: points, floorAdjust: parts.floorAdjust + (score - (before + points)) } : parts;
+  const text = (breakdown: string, points: number, score: number, before: number) => {
+    const floor = score - (before + points);
+    return `${breakdown}${points !== 0 ? ` ${points > 0 ? "+" : "-"} ${Math.abs(points)} Finale` : ""}${floor > 0 ? ` + ${floor} Min score` : ""}`;
+  };
   return {
     ...base,
     playerScore,
     rivalScore,
+    playerBreakdown: text(base.playerBreakdown, outcome.playerPoints, playerScore, base.playerScore),
+    rivalBreakdown: text(base.rivalBreakdown, outcome.rivalPoints, rivalScore, base.rivalScore),
+    playerScoreParts: withFinale(base.playerScoreParts, outcome.playerPoints, playerScore, base.playerScore),
+    rivalScoreParts: withFinale(base.rivalScoreParts, outcome.rivalPoints, rivalScore, base.rivalScore),
     playerScoreBeforeFinale: base.playerScore,
     rivalScoreBeforeFinale: base.rivalScore,
     playerFinalePoints: outcome.playerPoints,

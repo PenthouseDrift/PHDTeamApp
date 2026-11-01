@@ -155,7 +155,7 @@ export interface SimConfig {
    * Play the finale (see finale.ts) on every corner, after both Crew cards are down. Off by default, because the
    * stored difficulty curves (difficulty-curves.ts) were measured without it; turn it on and re-run
    * scripts/calibrate-difficulty.ts to measure the game as it now plays. A "good" player picks their best stat, an
-   * even setup and times a run at 80%; a "casual" one times a run at 50%.
+   * even setup and times a run at 80% in the first pass; a "casual" one times a run at 50% after one pass.
    */
   finale?: boolean;
 }
@@ -371,7 +371,7 @@ export function simulateBattle(cfg: SimConfig, rng: Rng): SimResult {
       const mode = rollFinaleMode(rng);
       const playerChoice: FinaleChoice =
         mode === "timing"
-          ? { mode, accuracy: cfg.player === "good" ? 0.8 : 0.5 }
+          ? { mode, accuracy: cfg.player === "good" ? 0.8 : 0.5, passes: cfg.player === "good" ? 0 : 1 }
           : defaultPlayerChoice(mode, result.playerFinalStats);
       const rivalChoice = chooseRivalFinale({
         mode,

@@ -15,6 +15,7 @@ import {
   scaleCrewCardDefinition,
   scaleDebuffCardDefinition,
   type CrewCardDefinition,
+  type CrewCardModifiers,
   type DebuffCardDefinition,
   type TrackCardDefinition,
 } from "@/lib/crew-cards";
@@ -1068,6 +1069,19 @@ export interface DebuffBreakdown {
   totalSummary: string;
 }
 
+/**
+ * What is left of a penalty after a Crew shield. The shield blocks `shield` (0 to 1) of the penalty, rounded to the
+ * nearest whole point, with halves going to the shielded player. So a 100% shield blocks everything, a 50% shield
+ * blocks half (a 3-point penalty becomes 1), and no shield above 0% ever blocks nothing from a penalty it could
+ * reasonably stop. Every shielded penalty in the game goes through this one rule.
+ */
+export function shieldedPenalty(penalty: number, shield: number): number {
+  if (!(penalty > 0)) return 0;
+  const s = Math.min(1, Math.max(0, shield));
+  const blocked = Math.floor(penalty * s + 0.5);
+  return Math.max(0, penalty - blocked);
+}
+
 export function computeDebuffBreakdown(params: {
   card: MemberCard;
   debuffCard?: DebuffCardDefinition | null;
@@ -1087,10 +1101,10 @@ export function computeDebuffBreakdown(params: {
   const gripPenalty = pen.gripPenalty ?? 0;
   const steerPenalty = pen.steerPenalty ?? 0;
 
-  const effectiveDriftPenalty = Math.round(driftPenalty * (1 - shield));
-  const effectiveAccelPenalty = Math.round(accelPenalty * (1 - shield));
-  const effectiveGripPenalty = Math.round(gripPenalty * (1 - shield));
-  const effectiveSteerPenalty = Math.round(steerPenalty * (1 - shield));
+  const effectiveDriftPenalty = shieldedPenalty(driftPenalty, shield);
+  const effectiveAccelPenalty = shieldedPenalty(accelPenalty, shield);
+  const effectiveGripPenalty = shieldedPenalty(gripPenalty, shield);
+  const effectiveSteerPenalty = shieldedPenalty(steerPenalty, shield);
 
   // Condition
   const hasCondition = Boolean(pen.condition);
@@ -1112,15 +1126,17 @@ export function computeDebuffBreakdown(params: {
       pen.condition.op === ">="
         ? statVal >= conditionThreshold
         : statVal <= conditionThreshold;
-    if (conditionMet) {
-      effectiveConditionPenalty = Math.round(conditionExtraPenalty * (1 - shield));
-      conditionLabel = `${pen.condition.stat.toUpperCase()} ${pen.condition.op} ${conditionThreshold} (-${effectiveConditionPenalty} PTS)`;
-    }
   }
 
-  // Flat penalty
+  // Flat penalty. The flat and conditional point penalties are shielded together and rounded once, so the shield
+  // takes off the right share of the total and the two lines always add up to it.
   const flatPenalty = pen.flatPenalty ?? 0;
-  const effectiveFlatPenalty = Math.round(flatPenalty * (1 - shield));
+  const pointPenaltyAfterShield = shieldedPenalty(flatPenalty + (conditionMet ? conditionExtraPenalty : 0), shield);
+  const effectiveFlatPenalty = Math.min(pointPenaltyAfterShield, shieldedPenalty(flatPenalty, shield));
+  effectiveConditionPenalty = pointPenaltyAfterShield - effectiveFlatPenalty;
+  if (pen.condition && conditionMet) {
+    conditionLabel = `${pen.condition.stat.toUpperCase()} ${pen.condition.op} ${conditionThreshold} (-${effectiveConditionPenalty} PTS)`;
+  }
 
   // Track Hazard
   const tRules = trackCard?.rules ?? {};
@@ -1145,7 +1161,7 @@ export function computeDebuffBreakdown(params: {
     }
     if (trackHazardMet) {
       trackHazardPenalty = dc.penaltyPoints;
-      effectiveTrackHazardPenalty = Math.round(dc.penaltyPoints * (1 - shield));
+      effectiveTrackHazardPenalty = shieldedPenalty(dc.penaltyPoints, shield);
       trackHazardLabel = `Track Hazard (-${effectiveTrackHazardPenalty} PTS)`;
     }
   }
@@ -1344,7 +1360,7 @@ export function computeTrackBreakdown(params: {
 
     if (hazardTriggered) {
       hazardPenalty = dc.penaltyPoints;
-      effectiveHazardPenalty = Math.round(dc.penaltyPoints * (1 - shield));
+      effectiveHazardPenalty = shieldedPenalty(dc.penaltyPoints, shield);
       if (shield > 0 && effectiveHazardPenalty < hazardPenalty) {
         hazardLabel = `${hazardLabel} (🛡️ -${effectiveHazardPenalty} PTS)`;
       }
@@ -1414,6 +1430,37 @@ export interface CornerFinalStats {
   steer: number;
 }
 
+/**
+ * A car's stats at each step of a corner, so the reveal can show every buff and debuff: the card's own stats, then
+ * with the Crew card (stat floor, weakest-stat boost and bonuses), then with the track's buffs, then with the debuff.
+ */
+export interface CornerStatStages {
+  base: CornerFinalStats;
+  afterCrew: CornerFinalStats;
+  afterTrack: CornerFinalStats;
+  final: CornerFinalStats;
+}
+
+/**
+ * What the corner score is made of. Always: score = statScore + tierBonus + crewPts + trackPts + debuffPts
+ * + finalePts + floorAdjust.
+ */
+export interface CornerScoreParts {
+  /** Points from the corner's formula applied to the final stats. */
+  statScore: number;
+  tierBonus: number;
+  /** Flat and conditional points from the Crew card. */
+  crewPts: number;
+  /** The track's bonus points minus its hazard penalty (can be negative). */
+  trackPts: number;
+  /** Debuff points (0 or negative). */
+  debuffPts: number;
+  /** Points added to lift a score up to the engine's floor of 5 (usually 0). */
+  floorAdjust: number;
+  /** Points the finale added or took off (0 until the finale is settled). */
+  finalePts: number;
+}
+
 export interface EvaluatedCornerResult {
   cornerIdx: 0 | 1 | 2;
   sector: ClashSectorSpec;
@@ -1441,6 +1488,11 @@ export interface EvaluatedCornerResult {
   /** Each car's stats at the end of the corner (after Crew, track and debuffs). Used by the finale. */
   playerFinalStats?: CornerFinalStats;
   rivalFinalStats?: CornerFinalStats;
+  /** Every step of each car's stats (see `CornerStatStages`) and what each score is made of. */
+  playerStatStages?: CornerStatStages;
+  rivalStatStages?: CornerStatStages;
+  playerScoreParts?: CornerScoreParts;
+  rivalScoreParts?: CornerScoreParts;
   /** Points the finale added to (or took from) each side. 0 until the finale has been resolved. */
   playerFinalePoints?: number;
   rivalFinalePoints?: number;
@@ -1451,6 +1503,40 @@ export interface EvaluatedCornerResult {
   rivalScoreBeforeFinale?: number;
   won: boolean;
   tied: boolean;
+}
+
+/**
+ * A car's stats after a Crew card's stat effects: the stat floor, the boost to the weakest stat, then the per-stat
+ * bonuses (each stat is capped at 25). The arena shows exactly these numbers, so it uses this same function.
+ */
+export function applyCrewModsToStats(
+  base: CornerFinalStats,
+  mods?: CrewCardModifiers | null
+): CornerFinalStats {
+  if (!mods) return { ...base };
+  let { drift, accel, grip, steer } = base;
+
+  // 1. Stat floor (only lifts stats up, never lowers them)
+  if (mods.minStatFloor && mods.minStatFloor > 0) {
+    drift = Math.max(drift, mods.minStatFloor);
+    accel = Math.max(accel, mods.minStatFloor);
+    grip = Math.max(grip, mods.minStatFloor);
+    steer = Math.max(steer, mods.minStatFloor);
+  }
+  // 2. Boost the weakest stat
+  if (mods.boostWeakestStat && mods.boostWeakestStat > 0) {
+    const minVal = Math.min(drift, accel, grip, steer);
+    if (drift === minVal) drift = Math.min(25, drift + mods.boostWeakestStat);
+    else if (accel === minVal) accel = Math.min(25, accel + mods.boostWeakestStat);
+    else if (grip === minVal) grip = Math.min(25, grip + mods.boostWeakestStat);
+    else steer = Math.min(25, steer + mods.boostWeakestStat);
+  }
+  // 3. Stat bonuses
+  if (mods.driftBonus && mods.driftBonus > 0) drift = Math.min(25, drift + mods.driftBonus);
+  if (mods.accelBonus && mods.accelBonus > 0) accel = Math.min(25, accel + mods.accelBonus);
+  if (mods.gripBonus && mods.gripBonus > 0) grip = Math.min(25, grip + mods.gripBonus);
+  if (mods.steerBonus && mods.steerBonus > 0) steer = Math.min(25, steer + mods.steerBonus);
+  return { drift, accel, grip, steer };
 }
 
 function evaluateDriverOnCorner(params: {
@@ -1470,6 +1556,8 @@ function evaluateDriverOnCorner(params: {
   debuffBreakdown: DebuffBreakdown;
   trackBreakdown: TrackBreakdown;
   finalStats: CornerFinalStats;
+  statStages: CornerStatStages;
+  scoreParts: CornerScoreParts;
 } {
   const {
     myCard,
@@ -1507,26 +1595,11 @@ function evaluateDriverOnCorner(params: {
   let grip = rawGrip;
   let steer = rawSteer;
 
-  // 1. Crew Card Stat Floor & Weakest Stat Boost (Advantage!)
-  if (mods.minStatFloor && mods.minStatFloor > 0) {
-    drift = Math.max(drift, mods.minStatFloor);
-    accel = Math.max(accel, mods.minStatFloor);
-    grip = Math.max(grip, mods.minStatFloor);
-    steer = Math.max(steer, mods.minStatFloor);
-  }
-  if (mods.boostWeakestStat && mods.boostWeakestStat > 0) {
-    const minVal = Math.min(drift, accel, grip, steer);
-    if (drift === minVal) drift = Math.min(25, drift + mods.boostWeakestStat);
-    else if (accel === minVal) accel = Math.min(25, accel + mods.boostWeakestStat);
-    else if (grip === minVal) grip = Math.min(25, grip + mods.boostWeakestStat);
-    else steer = Math.min(25, steer + mods.boostWeakestStat);
-  }
+  // 1 & 2. Crew Card stat floor, weakest-stat boost and stat bonuses (Advantage!)
+  ({ drift, accel, grip, steer } = applyCrewModsToStats({ drift, accel, grip, steer }, mods));
 
-  // 2. Crew Card Stat Bonuses (Advantage!)
-  if (mods.driftBonus) drift = Math.min(25, drift + mods.driftBonus);
-  if (mods.accelBonus) accel = Math.min(25, accel + mods.accelBonus);
-  if (mods.gripBonus) grip = Math.min(25, grip + mods.gripBonus);
-  if (mods.steerBonus) steer = Math.min(25, steer + mods.steerBonus);
+  // The stats after Crew, kept for the reveal's breakdown (base -> Crew -> track -> debuff -> final).
+  const afterCrew: CornerFinalStats = { drift, accel, grip, steer };
 
   // 3. UK Track Card Stat Buffs
   const tRules = trackCard.rules ?? {};
@@ -1534,6 +1607,7 @@ function evaluateDriverOnCorner(params: {
   if (tRules.accelBuff) accel = Math.min(25, accel + tRules.accelBuff);
   if (tRules.gripBuff) grip = Math.min(25, grip + tRules.gripBuff);
   if (tRules.steerBuff) steer = Math.min(25, steer + tRules.steerBuff);
+  const afterTrack: CornerFinalStats = { drift, accel, grip, steer };
 
   // 4. Random Corner Debuff Stat Penalties (Applied to both, reduced by Crew debuffShield!)
   const debuffBreakdown = computeDebuffBreakdown({
@@ -1594,7 +1668,17 @@ function evaluateDriverOnCorner(params: {
   }
 
   const totalExtra = crewPts + trackPts + debuffPts;
-  const score = Math.max(5, statScore + tierBonus + totalExtra);
+  const unfloored = statScore + tierBonus + totalExtra;
+  const score = Math.max(5, unfloored);
+  const scoreParts: CornerScoreParts = {
+    statScore,
+    tierBonus,
+    crewPts,
+    trackPts,
+    debuffPts,
+    floorAdjust: score - unfloored,
+    finalePts: 0,
+  };
 
   const crewSummaryParts: string[] = [];
   if (mods.driftBonus) crewSummaryParts.push(`+${mods.driftBonus} DRIFT`);
@@ -1614,11 +1698,18 @@ function evaluateDriverOnCorner(params: {
 
   return {
     score,
-    breakdown: `${formulaStr}${tierBonus ? ` + ${tierBonus} Tier` : ""}${crewPts > 0 ? ` + ${crewPts} Crew` : ""}${trackPts !== 0 ? ` ${trackPts > 0 ? `+ ${trackPts}` : `- ${Math.abs(trackPts)}`} Track` : ""}${debuffBreakdownText}`,
+    breakdown: `${formulaStr}${tierBonus ? ` + ${tierBonus} Tier` : ""}${crewPts > 0 ? ` + ${crewPts} Crew` : ""}${trackPts !== 0 ? ` ${trackPts > 0 ? `+ ${trackPts}` : `- ${Math.abs(trackPts)}`} Track` : ""}${debuffBreakdownText}${scoreParts.floorAdjust > 0 ? ` + ${scoreParts.floorAdjust} Min score` : ""}`,
     crewBonusLabel: `${crewDef.icon} ${crewDef.name} (${crewSummaryParts.join(" · ") || "Active"})`,
     debuffBreakdown,
     trackBreakdown,
     finalStats: { drift, accel, grip, steer },
+    statStages: {
+      base: { drift: rawDrift, accel: rawAccel, grip: rawGrip, steer: rawSteer },
+      afterCrew,
+      afterTrack,
+      final: { drift, accel, grip, steer },
+    },
+    scoreParts,
   };
 }
 
@@ -1717,6 +1808,10 @@ export function evaluateCornerMatchup(params: {
     effectsTriggered,
     playerFinalStats: pRes.finalStats,
     rivalFinalStats: rRes.finalStats,
+    playerStatStages: pRes.statStages,
+    rivalStatStages: rRes.statStages,
+    playerScoreParts: pRes.scoreParts,
+    rivalScoreParts: rRes.scoreParts,
     won: pRes.score > rRes.score,
     tied: pRes.score === rRes.score,
   };

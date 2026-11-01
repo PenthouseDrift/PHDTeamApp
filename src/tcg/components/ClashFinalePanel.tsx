@@ -209,38 +209,67 @@ function Timing({ playerStats, onSubmit }: { playerStats: CornerFinalStats; onSu
   const reducedMotion = usePrefersReducedMotion();
   const [state, setState] = useState<"ready" | "running" | "done">("ready");
   const [pos, setPos] = useState(0);
-  const [accuracy, setAccuracy] = useState<number | null>(null);
+  // Full passes the marker has made from one side of the bar to the other. Each takes 1 point off.
+  const [passes, setPasses] = useState(0);
+  const [result, setResult] = useState<{ accuracy: number; passes: number; timedOut: boolean } | null>(null);
   const posRef = useRef(0);
+  const passesRef = useRef(0);
   const stoppedRef = useRef(false);
   const submitTimerRef = useRef<number | null>(null);
   const stopButtonRef = useRef<HTMLButtonElement>(null);
   const maxPoints = timingMaxPoints(playerStats);
+  const available = Math.max(0, maxPoints - passes);
   const sweep = reducedMotion ? SWEEP_SECONDS_REDUCED : SWEEP_SECONDS;
 
-  // The marker sweeps left to right and back until the player stops it.
+  /** Lock in the run and, after a moment to see the result, hand it to the finale. */
+  const finishRun = useCallback(
+    (accuracy: number, madePasses: number, timedOut: boolean) => {
+      if (stoppedRef.current) return;
+      stoppedRef.current = true;
+      setResult({ accuracy, passes: madePasses, timedOut });
+      setState("done");
+      submitTimerRef.current = window.setTimeout(
+        () => onSubmit({ mode: "timing", accuracy, passes: madePasses }),
+        TIMING_RESULT_MS
+      );
+    },
+    [onSubmit]
+  );
+
+  const stop = useCallback(() => finishRun(timingAccuracy(posRef.current), passesRef.current, false), [finishRun]);
+
+  // When every point has been taken off, the run carries on by itself and scores nothing.
+  const timeOut = useCallback(() => finishRun(0, maxPoints, true), [finishRun, maxPoints]);
+  const timeOutRef = useRef(timeOut);
+  useEffect(() => {
+    timeOutRef.current = timeOut;
+  }, [timeOut]);
+
+  // The marker sweeps left to right and back. Each full sweep takes a point off, until none are left.
   useEffect(() => {
     if (state !== "running") return;
     let frame = 0;
     const startedAt = performance.now();
     const tick = (now: number) => {
-      const phase = (((now - startedAt) / 1000) / sweep) % 2;
+      const sweeps = (now - startedAt) / 1000 / sweep;
+      const phase = sweeps % 2;
       const next = phase < 1 ? phase : 2 - phase;
       posRef.current = next;
       setPos(next);
+      const made = Math.floor(sweeps);
+      if (made !== passesRef.current) {
+        passesRef.current = made;
+        setPasses(made);
+      }
+      if (made >= maxPoints) {
+        timeOutRef.current();
+        return;
+      }
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [state, sweep]);
-
-  const stop = useCallback(() => {
-    if (stoppedRef.current) return;
-    stoppedRef.current = true;
-    const acc = timingAccuracy(posRef.current);
-    setAccuracy(acc);
-    setState("done");
-    submitTimerRef.current = window.setTimeout(() => onSubmit({ mode: "timing", accuracy: acc }), TIMING_RESULT_MS);
-  }, [onSubmit]);
+  }, [state, sweep, maxPoints]);
 
   // If the panel goes away first (the player skipped), the pending submit must not fire.
   useEffect(
@@ -264,6 +293,8 @@ function Timing({ playerStats, onSubmit }: { playerStats: CornerFinalStats; onSu
     return () => window.removeEventListener("keydown", onKey);
   }, [state, stop]);
 
+  const earned = result ? Math.round(result.accuracy * Math.max(0, maxPoints - result.passes)) : 0;
+
   return (
     <div>
       <div className="relative mx-auto h-10 w-full overflow-hidden rounded-full border-2 border-zinc-700 bg-zinc-900" aria-hidden>
@@ -275,12 +306,27 @@ function Timing({ playerStats, onSubmit }: { playerStats: CornerFinalStats; onSu
           style={{ left: `${pos * 100}%` }}
         />
       </div>
-      <p className="mt-2 text-[11px] font-bold text-zinc-400">
-        A perfect run is worth {maxPoints} pts with this car.
+      <div className="mt-3 flex items-center justify-center gap-2">
+        <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400">Points available</span>
+        <span
+          key={available}
+          className={`min-w-8 rounded-xl border-2 px-2 py-0.5 text-lg font-black motion-safe:animate-in motion-safe:zoom-in-125 motion-safe:duration-200 ${
+            available <= 2 ? "border-rose-500/70 bg-rose-500/15 text-rose-300" : "border-amber-400/60 bg-amber-500/10 text-amber-300"
+          }`}
+        >
+          {available}
+        </span>
+      </div>
+      <p className="mt-1 text-[11px] font-bold text-zinc-400">
+        Every full pass of the marker takes 1 point off. At 0 the run ends by itself and scores 0.
         {reducedMotion ? " Reduced motion is on, so the marker moves slowly." : ""}
       </p>
       <p className="mt-1 min-h-5 text-sm font-black text-amber-300" aria-live="assertive">
-        {accuracy !== null ? `${Math.round(accuracy * 100)}% · +${Math.round(accuracy * maxPoints)} pts` : ""}
+        {result
+          ? result.timedOut
+            ? "Out of points · +0 pts"
+            : `${Math.round(result.accuracy * 100)}% · +${earned} pts`
+          : ""}
       </p>
       {state === "ready" && (
         <button type="button" onClick={() => setState("running")} className={confirmClass} autoFocus>
