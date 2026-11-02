@@ -257,6 +257,8 @@ function CardPackWizardForm({
   const [featured, setFeatured] = useState<MemberCard | null>(null);
   /** The Maintenance Consumable card for repairing mechanical faults. */
   const [maintenance, setMaintenance] = useState<MemberCard | null>(null);
+  /** Cards after the third in a custom pack, such as its bonus pull. */
+  const [extras, setExtras] = useState<MemberCard[]>([]);
   const [ready, setReady] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [confirmReroll, setConfirmReroll] = useState(false);
@@ -375,6 +377,7 @@ function CardPackWizardForm({
     setCrew(null);
     setFeatured(null);
     setMaintenance(null);
+    setExtras([]);
     setReady(false);
     setRevealed(false);
     setConfirmReroll(false);
@@ -402,6 +405,8 @@ function CardPackWizardForm({
                     crew: null,
                     featured: r.data.cards[2] ?? null,
                     maintenance: null,
+                    // Any card after the third, such as the pack's bonus pull.
+                    extras: r.data.cards.slice(3),
                     // A store pack is bought one at a time, so there is nothing left to open afterwards.
                     credits: 0,
                   },
@@ -424,6 +429,7 @@ function CardPackWizardForm({
         setCrew(res.data.crew);
         setFeatured(res.data.featured);
         setMaintenance(res.data.maintenance);
+        setExtras((res.data as { extras?: MemberCard[] }).extras ?? []);
         setCredits(res.data.credits);
         setReady(true);
       } else {
@@ -507,6 +513,7 @@ function CardPackWizardForm({
           crew={crew}
           featured={featured}
           maintenance={maintenance}
+          extras={extras}
           packName={customPack?.name ?? "Standard Pack"}
           packVariant={customPack ? "custom" : "standard"}
           onRevealed={onRevealed}

@@ -12,13 +12,59 @@
  */
 
 import { RARITY_ODDS, RARITY_STAT_BRACKETS, rollStats, rollStatsAndRarity, statTotal, type Rng } from "@/lib/card-roll";
-import type { FullArtCardData, FullArtTier } from "@/lib/full-art-card";
-import { ALL_TIERS, ID_PATTERN } from "@/lib/pack-styles";
+import { FRAME_EFFECTS, clampColor, clampHexColor, type FrameEffect, type FullArtCardData, type FullArtTier } from "@/lib/full-art-card";
+import { ALL_TIERS, ID_PATTERN, frameFieldsFor, type PackStyle } from "@/lib/pack-styles";
 
 /** The id of the always-present Standard Pack's config. Custom packs use their own pack id. */
 export const STANDARD_PACK_ID = "standard";
 
 export type PackEntryKind = "style" | "card";
+
+/**
+ * How one pack uses a saved set card differently from how it was saved. The saved card itself is never changed, so the same
+ * card can be used in many packs, each with its own rolled stats or restyle, and picking a card never makes a new saved card.
+ */
+/**
+ * Small edits to how a set card looks in one pack: the words on it, where its picture sits, its colours and its frame effect.
+ * Only the fields that were changed are present. They win over the card's own values and over the style's frame.
+ */
+export interface CardEdits {
+  name?: string;
+  ability?: string;
+  effect?: string;
+  driver?: string;
+  team?: string;
+  imageZoom?: number;
+  imageX?: number;
+  imageY?: number;
+  customBorderColor?: string;
+  customStatLabelColor?: string;
+  customStatValueColor?: string;
+  customBottomBarBgColor?: string;
+  customBottomBarBorderColor?: string;
+  customFrameEffect?: FrameEffect;
+  customFrameShine?: boolean;
+  customFlameColor?: string;
+}
+
+export interface EntryVariant {
+  /** This pack's edits to the card's words, picture position, colours and frame effect. */
+  edits?: CardEdits;
+  /**
+   * Stats the admin set for this card on this rarity. The card is given out on that rarity with exactly these stats,
+   * whatever it was saved as. (Left out, with `rerollOnPull` also left out, the card keeps the stats it was saved with.)
+   */
+  stats?: FullArtCardData["stats"];
+  /**
+   * Roll the four stats fresh, to fit the rarity, each time a member pulls this card. The card is given out on that
+   * rarity. Cannot be used together with `stats`.
+   */
+  rerollOnPull?: boolean;
+  /** A style from the style library whose frame (colours, effect, shine) is put on the card. */
+  styleId?: string;
+  /** A redrawn picture (see restyleCardArtAction) used instead of the card's own. */
+  artUrl?: string;
+}
 
 export interface PackEntry {
   kind: PackEntryKind;
@@ -26,6 +72,8 @@ export interface PackEntry {
   refId: string;
   /** Percent (0 to 100) of cards on this rarity that use this entry. */
   chancePct: number;
+  /** Only for set cards (kind "card"): this pack's changes to the card. */
+  variant?: EntryVariant;
 }
 
 /** Rarities that have their own odds. Bronze is whatever is left. */
@@ -46,8 +94,39 @@ export interface PackConfig {
   /** Percent chance of each rarity (bronze is the remainder). Used only with `oddsOverride`. */
   oddsPct: OddsPct;
   rarities: Record<FullArtTier, PackEntry[]>;
+  /**
+   * The bonus pull. Left out, a custom pack has none and the Standard Pack keeps using the old pullable list at 1 in 100.
+   * Once it is set (even to a chance of 0) it is the only thing that decides the bonus pull.
+   */
+  bonus?: PackBonus;
   updatedAt: number;
 }
+
+/** A set card in a pack's bonus pull. `weight` (1 to 100) is its share of the bonus pulls: higher is pulled more often. */
+export interface BonusEntry {
+  /** A saved full art card id. */
+  refId: string;
+  weight: number;
+  /** This pack's changes to the card. Only the style and redrawn picture count: a bonus card's rarity and stats are set when it is given out. */
+  variant?: EntryVariant;
+}
+
+/**
+ * The bonus pull: an extra card that sometimes comes in a pack on top of its normal cards. Each pack has its own chance
+ * of it (`chancePct`, a percent of packs; 1 means 1 in 100) and its own list of set cards to pull it from. The picture
+ * is fixed, so a bonus pull never costs an AI image. It does not depend on a rarity roll, and (for the Standard Pack)
+ * it works whether or not the master switch for styles and set cards is on.
+ */
+export interface PackBonus {
+  chancePct: number;
+  entries: BonusEntry[];
+}
+
+export const MAX_BONUS_ENTRIES = 60;
+export const MIN_BONUS_WEIGHT = 1;
+export const MAX_BONUS_WEIGHT = 100;
+/** The Standard Pack's bonus pull has always been 1 in 100. */
+export const DEFAULT_BONUS_CHANCE_PCT = 1;
 
 export const MAX_ENTRIES_PER_RARITY = 30;
 /** A rounding allowance when comparing percentages that should add up to 100. */
@@ -87,6 +166,115 @@ export function emptyPackConfig(packId: string): PackConfig {
   };
 }
 
+/** Redrawn set card pictures live under set-cards/ in our own file store, so nothing else can be pointed at. */
+const SET_CARD_ART_URL = /^https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\/set-cards\/\S+$/i;
+
+const TEXT_LIMITS = { name: 40, ability: 48, effect: 160, driver: 30, team: 30 } as const;
+const COLOUR_FIELDS = [
+  "customBorderColor",
+  "customStatLabelColor",
+  "customStatValueColor",
+  "customBottomBarBgColor",
+  "customBottomBarBorderColor",
+] as const;
+
+/** Edits cleaned: text trimmed to the card's limits (the name can't be blank), colours and numbers checked. Undefined when nothing is left. */
+export function cleanEdits(v: unknown): CardEdits | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const src = v as Record<string, unknown>;
+  const out: CardEdits = {};
+
+  for (const key of ["name", "ability", "effect", "driver", "team"] as const) {
+    if (typeof src[key] !== "string") continue;
+    const text = (src[key] as string).replace(/\s+/g, " ").trim().slice(0, TEXT_LIMITS[key]);
+    if (key === "name" && !text) continue;
+    out[key] = text;
+  }
+  const num = (k: string, min: number, max: number) => {
+    const n = Number(src[k]);
+    return src[k] !== undefined && src[k] !== null && src[k] !== "" && Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : undefined;
+  };
+  const zoom = num("imageZoom", 100, 300);
+  const x = num("imageX", 0, 100);
+  const y = num("imageY", 0, 100);
+  if (zoom !== undefined) out.imageZoom = zoom;
+  if (x !== undefined) out.imageX = x;
+  if (y !== undefined) out.imageY = y;
+
+  for (const key of COLOUR_FIELDS) {
+    const colour = clampColor(src[key]);
+    if (colour) out[key] = colour;
+  }
+  if (FRAME_EFFECTS.includes(src.customFrameEffect as FrameEffect)) out.customFrameEffect = src.customFrameEffect as FrameEffect;
+  if (typeof src.customFrameShine === "boolean") out.customFrameShine = src.customFrameShine;
+  const flame = clampHexColor(src.customFlameColor);
+  if (flame) out.customFlameColor = flame;
+
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** A variant cleaned: all four stats from 1 to 25, a known style id, a picture from our own file store. Undefined when nothing is left. */
+export function cleanVariant(v: unknown): EntryVariant | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const src = v as Record<string, unknown>;
+  const out: EntryVariant = {};
+
+  const s = src.stats && typeof src.stats === "object" ? (src.stats as Record<string, unknown>) : null;
+  if (s) {
+    const read = (k: string) => Math.round(Number(s[k]));
+    const [drift, accel, grip, steer] = [read("drift"), read("accel"), read("grip"), read("steer")];
+    if ([drift, accel, grip, steer].every((n) => Number.isFinite(n))) {
+      const clamp = (n: number) => String(Math.min(25, Math.max(1, n)));
+      out.stats = { drift: clamp(drift), accel: clamp(accel), grip: clamp(grip), steer: clamp(steer) };
+    }
+  }
+  // Stats are either set by hand or rolled at the pull, never both. Set stats win if both somehow arrive.
+  if (src.rerollOnPull === true && !out.stats) out.rerollOnPull = true;
+  const styleId = typeof src.styleId === "string" ? src.styleId.trim() : "";
+  if (ID_PATTERN.test(styleId)) out.styleId = styleId;
+  const artUrl = typeof src.artUrl === "string" ? src.artUrl.trim() : "";
+  if (artUrl.length <= 600 && SET_CARD_ART_URL.test(artUrl)) out.artUrl = artUrl;
+  const edits = cleanEdits(src.edits);
+  if (edits) out.edits = edits;
+
+  return out.stats || out.rerollOnPull || out.styleId || out.artUrl || out.edits ? out : undefined;
+}
+
+/** What happens to a set card's stats in a pack: kept as saved, rolled fresh at each pull, or set by hand. */
+export type StatsMode = "keep" | "reroll" | "custom";
+export function variantStatsMode(variant: EntryVariant | undefined): StatsMode {
+  return variant?.stats ? "custom" : variant?.rerollOnPull ? "reroll" : "keep";
+}
+
+/**
+ * A saved set card as one pack uses it: with the entry's stats (set by hand, or rolled when `rng` is given and the entry
+ * rerolls at the pull), the rarity it is on, the style's frame, and the redrawn picture. A style that no longer exists is
+ * ignored. Nothing is saved; the card passed in is not changed.
+ *
+ * Pass `rng` only where a card is actually being given out. Without it a "reroll at the pull" card keeps its saved stats
+ * (on the entry's rarity), which is what the editor and the store's set list show.
+ */
+export function applyVariant<T extends FullArtCardData>(
+  card: T,
+  variant: EntryVariant | undefined,
+  styles: ReadonlyMap<string, PackStyle> | undefined,
+  tier?: FullArtTier,
+  rng?: Rng
+): T {
+  if (!variant) return card;
+  const style = variant.styleId ? styles?.get(variant.styleId) : undefined;
+  const rolled = variant.rerollOnPull && tier && rng ? rollStatsForTier(tier, rng) : undefined;
+  return {
+    ...card,
+    ...(variant.stats ? { stats: variant.stats, ...(tier ? { tier } : {}) } : {}),
+    ...(variant.rerollOnPull && tier ? { tier, ...(rolled ? { stats: rolled } : {}) } : {}),
+    ...(style ? frameFieldsFor(style.frame) : {}),
+    // This pack's own edits win over the card and over the style's frame.
+    ...(variant.edits ?? {}),
+    ...(variant.artUrl ? { imageUrl: variant.artUrl } : {}),
+  };
+}
+
 /** Entries cleaned: known kinds and ids, no duplicates, capped in number, and trimmed to add up to at most 100. */
 export function cleanEntries(v: unknown): PackEntry[] {
   const list = Array.isArray(v) ? v : [];
@@ -102,9 +290,42 @@ export function cleanEntries(v: unknown): PackEntry[] {
     seen.add(`${kind}:${refId}`);
     const chancePct = Math.min(clampPct(e.chancePct), round(Math.max(0, 100 - used), 4));
     used += chancePct;
-    out.push({ kind, refId, chancePct });
+    const variant = kind === "card" ? cleanVariant(e.variant) : undefined;
+    out.push({ kind, refId, chancePct, ...(variant ? { variant } : {}) });
   }
   return out;
+}
+
+/** A bonus pull cleaned: a chance from 0 to 100, and known card ids with no duplicates, weights in range, capped in number. */
+export function cleanBonus(v: unknown): PackBonus | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const src = v as Record<string, unknown>;
+  const seen = new Set<string>();
+  const entries: BonusEntry[] = [];
+  for (const raw of Array.isArray(src.entries) ? src.entries : []) {
+    if (entries.length >= MAX_BONUS_ENTRIES) break;
+    const e = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+    const refId = typeof e.refId === "string" ? e.refId.trim() : "";
+    if (!ID_PATTERN.test(refId) || seen.has(refId)) continue;
+    seen.add(refId);
+    const weight = Math.round(Number(e.weight));
+    // A bonus card's stats are set when it is given out, so only the style, picture and edits of a variant are kept.
+    const variantRaw = cleanVariant(e.variant);
+    const variant =
+      variantRaw?.styleId || variantRaw?.artUrl || variantRaw?.edits
+        ? {
+            ...(variantRaw.styleId ? { styleId: variantRaw.styleId } : {}),
+            ...(variantRaw.artUrl ? { artUrl: variantRaw.artUrl } : {}),
+            ...(variantRaw.edits ? { edits: variantRaw.edits } : {}),
+          }
+        : undefined;
+    entries.push({
+      refId,
+      weight: Number.isFinite(weight) ? Math.min(MAX_BONUS_WEIGHT, Math.max(MIN_BONUS_WEIGHT, weight)) : MIN_BONUS_WEIGHT,
+      ...(variant ? { variant } : {}),
+    });
+  }
+  return { chancePct: clampPct(src.chancePct, 6), entries };
 }
 
 /** Coerce anything read from Redis or sent by the browser into a well-formed config, or null if it is not one. */
@@ -128,12 +349,14 @@ export function sanitizePackConfig(input: unknown): PackConfig | null {
     const rarities = emptyRarities();
     for (const tier of ALL_TIERS) rarities[tier] = cleanEntries(rawRarities[tier]);
 
+    const bonus = cleanBonus(v.bonus);
     return {
       packId,
       enabled: isStandard ? v.enabled === true : true,
       oddsOverride: isStandard ? v.oddsOverride === true : true,
       oddsPct,
       rarities,
+      ...(bonus ? { bonus } : {}),
       updatedAt: Number(v.updatedAt) || 0,
     };
   } catch {
@@ -143,6 +366,9 @@ export function sanitizePackConfig(input: unknown): PackConfig | null {
 
 /** A message describing the first problem with a config, or null when it is fine to save. */
 export function validatePackConfig(config: PackConfig): string | null {
+  if (config.bonus && config.bonus.chancePct > 0 && config.bonus.entries.length === 0) {
+    return "The bonus pull has a chance but no cards. Add a card to it, or set its chance to never.";
+  }
   const total = ODDS_TIERS.reduce((sum, t) => sum + config.oddsPct[t], 0);
   if (config.oddsOverride && total > 100 + EPSILON) {
     return "The rarity odds add up to more than 100%. Lower one of them.";
@@ -242,6 +468,54 @@ export function rollPackCard(config: PackConfig, rng: Rng, isAvailable: (entry: 
     ({ tier, stats } = rollStatsAndRarity(rng));
   }
   return { tier, stats, entry: pickEntry(config.rarities[tier] ?? [], rng, isAvailable) };
+}
+
+// ── The bonus pull ──────────────────────────────────────────────────────────
+
+/** True when a pack's bonus pull is set up and switched on (a chance above 0 and at least one card). */
+export function bonusIsActive(bonus: PackBonus | undefined): bonus is PackBonus {
+  return Boolean(bonus && bonus.chancePct > 0 && bonus.entries.length > 0);
+}
+
+/** Does this pack open include its bonus pull? One roll against the pack's chance. */
+export function rollBonusHit(bonus: PackBonus, rng: Rng): boolean {
+  return rng() * 100 < bonus.chancePct;
+}
+
+/** Pick one card of the bonus pull in proportion to the weights. Cards that are no longer available are skipped. */
+export function pickBonusEntry(entries: BonusEntry[], rng: Rng, isAvailable: (entry: BonusEntry) => boolean): BonusEntry | null {
+  const usable = entries.filter(isAvailable);
+  const total = usable.reduce((sum, e) => sum + e.weight, 0);
+  if (usable.length === 0 || total <= 0) return null;
+  let r = rng() * total;
+  for (const entry of usable) {
+    if (r < entry.weight) return entry;
+    r -= entry.weight;
+  }
+  return usable[usable.length - 1];
+}
+
+/** The percent of all pack opens that pull this card as the bonus: the pack's bonus chance times the card's share. */
+export function bonusEntryOverallPct(bonus: PackBonus, entry: BonusEntry): number {
+  const total = bonus.entries.reduce((sum, e) => sum + e.weight, 0);
+  return total > 0 ? round((bonus.chancePct * entry.weight) / total, 6) : 0;
+}
+
+/**
+ * How a set card is given out as a bonus pull: always as a Legend card, with each stat lifted into 23 to 25, whatever
+ * rarity and stats it was saved with. This is how the Standard Pack's bonus card has always been given out. (Stats saved
+ * on the old out-of-10 scale are converted first.)
+ */
+export function bonusPullCard(source: Pick<FullArtCardData, "stats">): { tier: FullArtTier; stats: FullArtCardData["stats"] } {
+  const raw = source.stats || { drift: "24", accel: "23", grip: "23", steer: "24" };
+  const lift = (value: string | undefined, fallback: number) => {
+    const n = Number(value || fallback) > 10 ? Number(value) : Number(value || 9) * 2.5;
+    return String(Math.max(23, Math.min(25, Math.round(n))));
+  };
+  return {
+    tier: "legend",
+    stats: { drift: lift(raw.drift, 24), accel: lift(raw.accel, 23), grip: lift(raw.grip, 23), steer: lift(raw.steer, 24) },
+  };
 }
 
 // ── Reading a config ────────────────────────────────────────────────────────

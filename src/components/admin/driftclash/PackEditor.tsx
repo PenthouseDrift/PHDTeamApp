@@ -1,11 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { FullArtCard } from "@/components/cards/FullArtCard";
+import { MemberCarPicker } from "@/components/admin/driftclash/MemberCarPicker";
+import { SavedSetCardPicker, describeVariant } from "@/components/admin/driftclash/SavedSetCardPicker";
+import { EntryStatsDialog } from "@/components/admin/driftclash/StatsModeControl";
+import { StyleCardWizard } from "@/components/admin/driftclash/StyleCardWizard";
+import { EntryEditorDialog } from "@/components/admin/driftclash/EntryEditorDialog";
+import { BonusPullEditor } from "@/components/admin/driftclash/BonusPullEditor";
 import { tierFromStats } from "@/lib/card-roll";
 import type { FullArtCardData, FullArtTier } from "@/lib/full-art-card";
 import {
   ODDS_TIERS,
+  applyVariant,
   configFromLegacyPack,
   effectivePcts,
   emptyPackConfig,
@@ -14,12 +21,15 @@ import {
   oneInFromPct,
   packNeedsGeneration,
   pctFromOneIn,
+  variantStatsMode,
+  type EntryVariant,
   type OddsTier,
   type PackConfig,
   type PackEntry,
 } from "@/lib/pack-config";
 import { ALL_TIERS, type PackStyle } from "@/lib/pack-styles";
 import {
+  createFinishedSetCardAction,
   convertLegacyPackAction,
   deletePackAction,
   savePackAction,
@@ -67,7 +77,9 @@ export function PackEditor({
   standardSalePrice,
   styles,
   cards,
+  legacyPullable,
   onStandardConfig,
+  onCardCreated,
   onPackSaved,
   onPackDeleted,
   onNotify,
@@ -78,7 +90,11 @@ export function PackEditor({
   standardSalePrice: number | null;
   styles: PackStyle[];
   cards: SetCard[];
+  /** The old pullable list (card id -> odds weight), which the Standard Pack can move into its bonus pull. */
+  legacyPullable: Record<string, number>;
   onStandardConfig: (config: PackConfig) => void;
+  /** A set card was just made from a member's car, so the page's list of saved cards needs it. */
+  onCardCreated: (card: SetCard) => void;
   onPackSaved: (pack: TcgCustomPackWithCards) => void;
   onPackDeleted: (id: string) => void;
   onNotify: (notice: Notice) => void;
@@ -110,6 +126,15 @@ export function PackEditor({
   const [status, setStatus] = useState<TcgPackStatus>(pack?.status ?? "draft");
 
   const [adding, setAdding] = useState<FullArtTier | null>(null);
+  const [addTab, setAddTab] = useState<"members" | "styles" | "cards">("cards");
+  const closeAdd = useCallback(() => setAdding(null), []);
+  /** The style chosen on the Styles tab, while the admin decides how to use it. */
+  const [pickedStyle, setPickedStyle] = useState<PackStyle | null>(null);
+  /** The set card being edited in the card editor. */
+  const [editing, setEditing] = useState<{ tier: FullArtTier; index: number } | null>(null);
+  const closeEditing = useCallback(() => setEditing(null), []);
+  const [statsFor, setStatsFor] = useState<{ tier: FullArtTier; index: number } | null>(null);
+  const closeStats = useCallback(() => setStatsFor(null), []);
   const [detail, setDetail] = useState<Detail>(null);
   const [pending, startTransition] = useTransition();
 
@@ -130,11 +155,82 @@ export function PackEditor({
     const n = Number(text);
     setDraft((d) => ({ ...d, oddsPct: { ...d.oddsPct, [tier]: text.trim() === "" ? 0 : pctFromOneIn(n) } }));
   }
-  function addEntry(tier: FullArtTier, kind: PackEntry["kind"], refId: string) {
+  function addEntry(tier: FullArtTier, kind: PackEntry["kind"], refId: string, variant?: EntryVariant) {
     const used = draft.rarities[tier].reduce((s, e) => s + e.chancePct, 0);
     const chancePct = Math.max(0, Math.min(5, Math.round((100 - used) * 100) / 100));
-    setEntries(tier, [...draft.rarities[tier], { kind, refId, chancePct }]);
+    setEntries(tier, [...draft.rarities[tier], { kind, refId, chancePct, ...(variant ? { variant } : {}) }]);
     setAdding(null);
+  }
+  /** True when the card as this pack uses it is not the card as saved: another rarity, a restyle, a redraw, or stats set by hand. */
+  function differsFromSaved(saved: SetCard, entry: PackEntry, tier: FullArtTier): boolean {
+    const v = entry.variant;
+    return saved.tier !== tier || Boolean(v?.styleId || v?.artUrl || v?.stats || v?.edits);
+  }
+  /**
+   * Turn a card as this pack would use it (the entry's changes, or changes just made in the editor) into a real saved set
+   * card, so it is in Saved set cards and the Card maker, and point the entry at it. Only "reroll at the pull" stays on the
+   * entry. The card it was made from is left as it is. Resolves to an error message, or null when it worked.
+   */
+  async function saveEntryAsCardWith(tier: FullArtTier, index: number, variant: EntryVariant | undefined): Promise<string | null> {
+    const entry = draft.rarities[tier][index];
+    if (!entry || entry.kind !== "card") return "That card is no longer in the pack.";
+    const res = await createFinishedSetCardAction({ source: { kind: "saved", id: entry.refId }, tier, variant });
+    if (!res.success) return res.error;
+    const created = res.data.card as SetCard;
+    onCardCreated(created);
+    setDraft((d) => ({
+      ...d,
+      rarities: {
+        ...d.rarities,
+        [tier]: d.rarities[tier].map((e, i) => {
+          if (i !== index || e.refId !== entry.refId) return e;
+          const { variant: _old, ...rest } = e;
+          void _old;
+          return { ...rest, refId: created.id, ...(res.data.entryVariant ? { variant: res.data.entryVariant } : {}) };
+        }),
+      },
+    }));
+    onNotify({
+      text: `Saved "${created.name}" as a new ${tierLabel(tier)} set card and pointed this pack at it. The card it was made from is unchanged. Save the pack to keep your changes.`,
+    });
+    return null;
+  }
+  function saveEntryAsCard(tier: FullArtTier, index: number) {
+    const entry = draft.rarities[tier][index];
+    if (!entry || entry.kind !== "card") return;
+    startTransition(async () => {
+      const error = await saveEntryAsCardWith(tier, index, entry.variant);
+      if (error) onNotify({ text: error, error: true });
+    });
+  }
+  /** Replace everything this pack changes about a set card in a rarity. The saved card is not changed. */
+  function setEntryVariant(tier: FullArtTier, index: number, variant: EntryVariant | undefined) {
+    setEntries(
+      tier,
+      draft.rarities[tier].map((e, i) => {
+        if (i !== index) return e;
+        const { variant: _old, ...rest } = e;
+        void _old;
+        return variant ? { ...rest, variant } : rest;
+      })
+    );
+  }
+  /** Change what happens to a set card's stats in a rarity. Kept on the entry only; the saved card is not changed. */
+  function setEntryStats(tier: FullArtTier, index: number, fields: Pick<EntryVariant, "stats" | "rerollOnPull">) {
+    setEntries(
+      tier,
+      draft.rarities[tier].map((e, i) => {
+        if (i !== index) return e;
+        // Take out the old stats choice, put the new one in, and drop the variant if nothing is left in it.
+        const { stats: _stats, rerollOnPull: _reroll, ...rest } = e.variant ?? {};
+        void _stats;
+        void _reroll;
+        const variant: EntryVariant = { ...rest, ...fields };
+        const { variant: _old, ...entry } = e;
+        void _old;
+        return Object.keys(variant).length > 0 ? { ...entry, variant } : entry;
+      })
+    );
   }
   function setChance(tier: FullArtTier, index: number, value: string) {
     const n = Math.max(0, Math.min(100, Number(value) || 0));
@@ -151,6 +247,9 @@ export function PackEditor({
   }
 
   function problem(): string | null {
+    if (draft.bonus && draft.bonus.chancePct > 0 && draft.bonus.entries.length === 0) {
+      return "The bonus pull has a chance but no cards. Add a card to it, or clear its chance.";
+    }
     if (oddsEditable && oddsTotal > 100.0001) return "The rarity odds add up to more than 100%.";
     for (const tier of ALL_TIERS) {
       const sum = draft.rarities[tier].reduce((s, e) => s + e.chancePct, 0);
@@ -462,10 +561,14 @@ export function PackEditor({
 
               {entries.map((entry, index) => {
                 const style = entry.kind === "style" ? styleById.get(entry.refId) : undefined;
-                const card = entry.kind === "card" ? cardById.get(entry.refId) : undefined;
+                const saved = entry.kind === "card" ? cardById.get(entry.refId) : undefined;
+                // The card as this pack uses it: with its rolled stats, restyled frame and redrawn picture, if any.
+                const card = saved ? applyVariant(saved, entry.variant, styleById, tier) : undefined;
                 const overall = entryOverallPct(pcts, tier, entry);
-                const mismatch = card ? tierFromStats(card.stats) !== card.tier : false;
+                // Stats rolled at the pull always fit the rarity, so only kept or hand-set stats can be a mismatch.
+                const mismatch = card ? !entry.variant?.rerollOnPull && tierFromStats(card.stats) !== card.tier : false;
                 const missing = !style && !card;
+                const changes = entry.kind === "card" && entry.variant ? describeVariant(entry.variant) : "";
                 return (
                   <PreviewTile
                     key={`${entry.kind}-${entry.refId}`}
@@ -475,10 +578,18 @@ export function PackEditor({
                         : card ?? { ...generatedPreviewCard(tier), name: "Missing", ability: "Deleted" }
                     }
                     title={style?.name ?? card?.name ?? "Missing"}
-                    subtitle={missing ? "Remove this entry" : `${entry.kind === "style" ? "Style" : "Set card"} · ${fmtPct(overall)} of all`}
+                    subtitle={
+                      missing
+                        ? "Remove this entry"
+                        : `${entry.kind === "style" ? "Style" : changes ? `Set card (${changes})` : "Set card"} · ${fmtPct(overall)} of all`
+                    }
                     onOpen={() => {
                       if (style) setDetail({ kind: "style", style, tier });
-                      else if (card) setDetail({ kind: "card", card });
+                      // A set card opens the editor. A pack still on the old layout can't be edited, so it just shows the card.
+                      else if (card && saved) {
+                        if (readOnly) setDetail({ kind: "card", card });
+                        else setEditing({ tier, index });
+                      }
                     }}
                   >
                     <div className="flex items-center gap-1">
@@ -500,6 +611,26 @@ export function PackEditor({
                       <span className="text-xs font-bold text-zinc-500">%</span>
                     </div>
                     {mismatch && <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">Stats don&apos;t match its rarity</p>}
+                    {entry.kind === "card" && card && (
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        {{ keep: "Keeps its stats", reroll: "Rerolled at each pull", custom: "Your own stats" }[variantStatsMode(entry.variant)]}
+                      </p>
+                    )}
+                    {!readOnly && card && (
+                      <button type="button" className={`${secondaryBtn} !min-h-8 !px-2`} onClick={() => setStatsFor({ tier, index })}>
+                        Stats…
+                      </button>
+                    )}
+                    {!readOnly && saved && card && entry.kind === "card" && differsFromSaved(saved, entry, tier) && (
+                      <button
+                        type="button"
+                        className={`${secondaryBtn} !min-h-8 !px-2`}
+                        disabled={pending}
+                        onClick={() => saveEntryAsCard(tier, index)}
+                      >
+                        Save as new card
+                      </button>
+                    )}
                     {!readOnly && (
                       <button type="button" className={`${dangerBtn} !min-h-8 !px-2`} onClick={() => removeEntry(tier, index)}>
                         Remove
@@ -512,19 +643,37 @@ export function PackEditor({
               {!readOnly && (
                 <button
                   type="button"
-                  onClick={() => setAdding(tier)}
+                  onClick={() => {
+                    setAddTab("cards");
+                    setPickedStyle(null);
+                    setAdding(tier);
+                  }}
                   disabled={used >= 100 - 1e-4}
                   className="flex w-32 shrink-0 flex-col items-center justify-center gap-1 self-start rounded-xl border-2 border-dashed border-zinc-300 text-zinc-500 hover:border-amber-500 hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700"
                   style={{ aspectRatio: "63 / 88" }}
                 >
                   <span aria-hidden="true" className="text-3xl font-black">+</span>
-                  <span className="text-xs font-bold">{used >= 100 - 1e-4 ? "Full" : "Add style or card"}</span>
+                  <span className="text-xs font-bold">{used >= 100 - 1e-4 ? "Full" : "Add card or style"}</span>
                 </button>
               )}
             </div>
           </section>
         );
       })}
+
+      {/* ── Bonus pull ───────────────────────────────────────────────── */}
+      <BonusPullEditor
+        bonus={draft.bonus}
+        cards={cards}
+        isStandard={isStandard}
+        legacyPullable={legacyPullable}
+        styles={styles}
+        readOnly={readOnly}
+        onChange={(bonus) => setDraft((d) => ({ ...d, bonus }))}
+        onCardCreated={onCardCreated}
+        onNotify={onNotify}
+        onOpenCard={(card) => setDetail({ kind: "card", card })}
+      />
 
       {/* ── Save ─────────────────────────────────────────────────────── */}
       {!readOnly && (
@@ -538,57 +687,180 @@ export function PackEditor({
             </button>
           )}
           {isStandard && !standardConfig.enabled && (
-            <span className="text-xs text-zinc-500 dark:text-zinc-400">Saved, but not used until the switch above is on.</span>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              The rarity setup is saved but not used until the switch above is on. The bonus pull works either way.
+            </span>
           )}
         </div>
       )}
 
       {/* ── Add dialog ───────────────────────────────────────────────── */}
       {adding && (
-        <Modal title={`Add to ${tierLabel(adding)}`} onClose={() => setAdding(null)}>
-          {(() => {
-            const taken = new Set(draft.rarities[adding].map((e) => `${e.kind}:${e.refId}`));
-            const availableStyles = styles.filter((s) => !taken.has(`style:${s.id}`));
-            const availableCards = cards.filter((c) => c.tier === adding && !taken.has(`card:${c.id}`));
-            return (
-              <div className="space-y-5">
+        <Modal title={`Add to ${tierLabel(adding)}`} onClose={closeAdd}>
+          <div role="tablist" aria-label="What to add" className="inline-flex gap-1 self-start rounded-2xl bg-zinc-100 p-1.5 dark:bg-zinc-800">
+            {(
+              [
+                ["cards", "Saved set cards"],
+                ["members", "Members' cars"],
+                ["styles", "Styles"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={addTab === id}
+                onClick={() => {
+                  setAddTab(id);
+                  setPickedStyle(null);
+                }}
+                className={`min-h-10 rounded-xl px-3.5 text-sm font-black transition-colors ${
+                  addTab === id ? "bg-white shadow-sm dark:bg-zinc-700" : "text-zinc-600 hover:bg-white/60 dark:text-zinc-300 dark:hover:bg-zinc-700/50"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {addTab === "members" && (
+            <MemberCarPicker
+              tier={adding}
+              styles={styles}
+              onImported={(card, variant) => {
+                onCardCreated(card);
+                addEntry(adding, "card", card.id, variant);
+                onNotify({
+                  text: `Added "${card.name}" to ${tierLabel(adding)} with ${describeVariant(variant)}. The member's car is saved as a set card once and reused if you pick it again. Save the pack to keep your changes.`,
+                });
+              }}
+            />
+          )}
+
+          {addTab === "cards" && (
+            <SavedSetCardPicker
+              tier={adding}
+              styles={styles}
+              cards={cards.filter((c) => !draft.rarities[adding].some((e) => e.kind === "card" && e.refId === c.id))}
+              onAdd={(card, variant, created) => {
+                if (created) onCardCreated(card);
+                addEntry(adding, "card", card.id, variant);
+                onNotify({
+                  text: created
+                    ? `Saved "${card.name}" as a new ${tierLabel(adding)} set card and added it. Your original card is unchanged. Save the pack to keep your changes.`
+                    : `Added "${card.name}" to ${tierLabel(adding)}${variant ? ` with ${describeVariant(variant)}` : ""}. The saved card is unchanged and no new card was saved. Save the pack to keep your changes.`,
+                });
+              }}
+            />
+          )}
+
+          {addTab === "styles" &&
+            (() => {
+              const inRarity = new Set(draft.rarities[adding].filter((e) => e.kind === "style").map((e) => e.refId));
+              if (pickedStyle) {
+                return (
+                  <StyleCardWizard
+                    tier={adding}
+                    style={pickedStyle}
+                    styles={styles}
+                    alreadyInRarity={inRarity.has(pickedStyle.id)}
+                    onBack={() => setPickedStyle(null)}
+                    onUseStyle={() => {
+                      addEntry(adding, "style", pickedStyle.id);
+                      onNotify({
+                        text: `Added the style "${pickedStyle.name}" to ${tierLabel(adding)}. Set its chance below, then save the pack.`,
+                      });
+                    }}
+                    onCardAdded={(card, variant) => {
+                      onCardCreated(card);
+                      addEntry(adding, "card", card.id, variant);
+                      onNotify({
+                        text: `Saved "${card.name}" as a new ${tierLabel(adding)} set card in the style "${pickedStyle.name}" and added it. Save the pack to keep your changes.`,
+                      });
+                    }}
+                  />
+                );
+              }
+              return (
                 <div>
                   <p className={labelCls}>Styles</p>
-                  {availableStyles.length === 0 ? (
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">No styles to add. Create one on the Styles tab.</p>
+                  <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
+                    Choose a style to use it on this rarity, or to make a card in it from a member&apos;s car or your own picture. To restyle a
+                    card you already have, use the other two tabs.
+                  </p>
+                  {styles.length === 0 ? (
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400">No styles yet. Create one on the Styles tab.</p>
                   ) : (
                     <div className="flex flex-wrap gap-3">
-                      {availableStyles.map((s) => (
-                        <button key={s.id} type="button" onClick={() => addEntry(adding, "style", s.id)} aria-label={`Add style ${s.name}`} className="w-28 text-left">
+                      {styles.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => setPickedStyle(s)}
+                          aria-label={`Choose style ${s.name}${inRarity.has(s.id) ? " (already on this rarity)" : ""}`}
+                          className="w-28 text-left"
+                        >
                           <FullArtCard card={stylePreviewCard(s, adding)} />
                           <span className="mt-1 block truncate text-xs font-bold">{s.name}</span>
+                          {inRarity.has(s.id) && <span className="block text-[11px] text-zinc-500 dark:text-zinc-400">On this rarity</span>}
                         </button>
                       ))}
                     </div>
                   )}
                 </div>
-                <div>
-                  <p className={labelCls}>{tierLabel(adding)} set cards</p>
-                  {availableCards.length === 0 ? (
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                      No saved {tierLabel(adding)} cards to add. Make one in the Card maker; a set card can only go on its own rarity.
-                    </p>
-                  ) : (
-                    <div className="flex flex-wrap gap-3">
-                      {availableCards.map((c) => (
-                        <button key={c.id} type="button" onClick={() => addEntry(adding, "card", c.id)} aria-label={`Add set card ${c.name}`} className="w-28 text-left">
-                          <FullArtCard card={c} />
-                          <span className="mt-1 block truncate text-xs font-bold">{c.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })()}
+              );
+            })()}
         </Modal>
       )}
+
+      {/* ── Card editor ──────────────────────────────────────────────── */}
+      {editing &&
+        (() => {
+          const entry = draft.rarities[editing.tier][editing.index];
+          const saved = entry ? cardById.get(entry.refId) : undefined;
+          if (!entry || !saved) return null;
+          return (
+            <EntryEditorDialog
+              mode="rarity"
+              tier={editing.tier}
+              saved={saved}
+              variant={entry.variant}
+              styles={styles}
+              onApply={(variant) => {
+                setEntryVariant(editing.tier, editing.index, variant);
+                setEditing(null);
+                onNotify({ text: `Updated "${saved.name}" on ${tierLabel(editing.tier)}. The saved card is unchanged. Save the pack to keep your changes.` });
+              }}
+              onSaveAsNew={async (variant) => {
+                const error = await saveEntryAsCardWith(editing.tier, editing.index, variant);
+                if (!error) setEditing(null);
+                return error;
+              }}
+              onClose={closeEditing}
+            />
+          );
+        })()}
+
+      {/* ── Stats dialog ─────────────────────────────────────────────── */}
+      {statsFor &&
+        (() => {
+          const entry = draft.rarities[statsFor.tier][statsFor.index];
+          const saved = entry ? cardById.get(entry.refId) : undefined;
+          if (!entry || !saved) return null;
+          return (
+            <EntryStatsDialog
+              title={`Stats for ${saved.name} on ${tierLabel(statsFor.tier)}`}
+              tier={statsFor.tier}
+              saved={saved}
+              variant={entry.variant}
+              onApply={(fields) => {
+                setEntryStats(statsFor.tier, statsFor.index, fields);
+                setStatsFor(null);
+              }}
+              onClose={closeStats}
+            />
+          );
+        })()}
 
       {/* ── Detail dialog ────────────────────────────────────────────── */}
       {detail && (

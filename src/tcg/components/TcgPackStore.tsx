@@ -579,6 +579,7 @@ export function TcgPackStore({
                 card={openingState.cards[0] ?? null}
                 bonus={openingState.cards[1] ?? null}
                 featured={openingState.cards[2] ?? null}
+                extras={openingState.cards.slice(3)}
                 onRevealed={() =>
                   setOpeningState((prev) => (prev ? { ...prev, revealed: true } : null))
                 }

@@ -19,8 +19,9 @@ import {
 } from "@/lib/member-card-store";
 import { MEMBER_ART_ZOOM, cardTitle, type MemberCard, type StoredMemberCard } from "@/lib/card-roll";
 import { CardArtError } from "@/lib/card-art-generate";
-import { rollPackCard } from "@/lib/pack-config";
-import { deletePackConfig, entryAvailable, loadPackConfig, loadRuntimeFor } from "@/lib/pack-config-store";
+import { applyVariant, rollPackCard } from "@/lib/pack-config";
+import { deletePackConfig, entryAvailable, loadPackConfig, loadRuntimeFor, rollPackBonus } from "@/lib/pack-config-store";
+import { buildBonusCard } from "@/lib/pack-bonus";
 import { rollAndDrawSlot, slotOverrides } from "@/lib/pack-draw";
 import { rollCarInitialDurability } from "@/lib/mechanical-faults";
 import type { ActionResult } from "@/types";
@@ -562,8 +563,9 @@ export async function buyAndOpenCustomPack(
     const pickSource = () => {
       if (runtime) {
         const roll = rollPackCard(runtime.config, rng, entryAvailable(runtime));
-        const fixed = roll.entry?.kind === "card" ? runtime.cards.get(roll.entry.refId) : undefined;
-        if (fixed) return fixed;
+        const saved = roll.entry?.kind === "card" ? runtime.cards.get(roll.entry.refId) : undefined;
+        // This pack's changes to the set card (rolled stats for the rarity, a style's frame, a redrawn picture).
+        if (saved) return applyVariant(saved, roll.entry?.variant, runtime.styles, roll.tier, rng);
       }
       return pickOne();
     };
@@ -619,6 +621,30 @@ export async function buyAndOpenCustomPack(
       tx.zadd(memberCardsIndexKey(user.id), { score: createdAt, member: stored.id });
       tx.zadd(ALL_MEMBER_CARDS_INDEX, { score: createdAt, member: stored.id });
     }
+
+    // The pack's bonus pull, if it has one set up: an extra card, last in the pack. Its picture is fixed. If it can't
+    // be rolled the pack just opens without it.
+    if (runtime) {
+      const bonusSource = await rollPackBonus(runtime.config, rng, runtime).catch((error) => {
+        console.error("[tcg] bonus pull failed, skipping it:", error);
+        return null;
+      });
+      if (bonusSource) {
+        const bonusAt = baseNow + count;
+        const bonusCard = buildBonusCard({
+          source: bonusSource,
+          userId: user.id,
+          ownerName: user.name,
+          createdAt: bonusAt,
+          pack: { id: hydrated.id, name: hydrated.name },
+        });
+        pulled.push(bonusCard);
+        tx.set(memberCardKey(bonusCard.id), JSON.stringify(bonusCard));
+        tx.zadd(memberCardsIndexKey(user.id), { score: bonusAt, member: bonusCard.id });
+        tx.zadd(ALL_MEMBER_CARDS_INDEX, { score: bonusAt, member: bonusCard.id });
+      }
+    }
+
     tx.hincrby(`member:${user.id}`, "packsOpened", 1);
     await tx.exec();
 
@@ -803,8 +829,25 @@ export async function openCustomPackWithCar(
       };
     });
 
+    // The pack's bonus pull, if it has one set up: an extra card, last in the pack. Its picture is fixed (never drawn).
+    // If it can't be rolled the pack just opens without it.
+    const bonusSource = await rollPackBonus(runtime.config, rng, runtime).catch((error) => {
+      console.error("[tcg] bonus pull failed, skipping it:", error);
+      return null;
+    });
+    const bonusCard = bonusSource
+      ? buildBonusCard({
+          source: bonusSource,
+          userId: user.id,
+          ownerName: user.name,
+          createdAt: baseNow + pulled.length,
+          pack: { id: hydrated.id, name: hydrated.name },
+        })
+      : null;
+    const allCards = bonusCard ? [...pulled, bonusCard] : pulled;
+
     const tx = redis.multi();
-    for (const stored of pulled) {
+    for (const stored of allCards) {
       tx.set(memberCardKey(stored.id), JSON.stringify(stored));
       tx.zadd(memberCardsIndexKey(user.id), { score: stored.createdAt, member: stored.id });
       tx.zadd(ALL_MEMBER_CARDS_INDEX, { score: stored.createdAt, member: stored.id });
@@ -823,7 +866,7 @@ export async function openCustomPackWithCar(
 
     return {
       success: true,
-      data: { cards: pulled.map(publicCard), pCredits: spent.balance, packName: hydrated.name },
+      data: { cards: allCards.map(publicCard), pCredits: spent.balance, packName: hydrated.name },
     };
   } catch (error) {
     console.error("[tcg] openCustomPackWithCar failed:", error);

@@ -18,7 +18,9 @@ import {
 } from "@/lib/card-roll";
 import { sanitizeFullArtCard } from "@/lib/full-art-card";
 import { rollAndDrawSlot, slotOverrides, type DrawnSlot } from "@/lib/pack-draw";
-import { loadStandardPackRuntime } from "@/lib/pack-config-store";
+import { STANDARD_PACK_ID } from "@/lib/pack-config";
+import { loadPackConfig, loadStandardPackRuntime, rollPackBonus } from "@/lib/pack-config-store";
+import { buildBonusCard } from "@/lib/pack-bonus";
 import { crewDefinitionToCardData, rollCrewCardDefinition } from "@/lib/crew-cards";
 import {
   rollCarInitialDurability,
@@ -132,6 +134,17 @@ async function pickFeaturedCard(): Promise<(ReturnType<typeof sanitizeFullArtCar
     console.error("[member-cards] could not pick a pullable card:", error);
     return null;
   }
+}
+
+/**
+ * The Standard Pack's bonus pull, or null when there is none this time. Once the bonus has been set up in the pack maker
+ * (the Standard Pack's saved setup has a `bonus`) that decides everything: its chance and its cards. Until then it works
+ * as it always has: 1 in 100, from the admin's pullable list. This does not depend on the Standard Pack's master switch.
+ */
+async function pickStandardBonusCard(): Promise<(ReturnType<typeof sanitizeFullArtCard> & { id: string }) | null> {
+  const config = await loadPackConfig(STANDARD_PACK_ID).catch(() => null);
+  if (config?.bonus) return rollPackBonus(config, rng);
+  return rng() < FEATURED_CARD_CHANCE ? pickFeaturedCard() : null;
 }
 
 /**
@@ -459,53 +472,21 @@ export async function openCardPack(
       crew = null;
     }
 
-    // 4. A 1 in 100 chance of a fourth bonus card: one of the admin's set cards. Its picture is fixed (not drawn), so
+    // 4. The bonus pull: sometimes a fourth card, one of the admin's set cards. Its picture is fixed (not drawn), so
     // this is instant. Anything going wrong here leaves the rest of the pack untouched.
     let featured: StoredMemberCard | null = null;
-    if (rng() < FEATURED_CARD_CHANCE) {
-      try {
-        const source = await pickFeaturedCard();
-        if (source) {
-          const featuredNow = Date.now() + 2;
-          const rawStats = source.stats || { drift: "24", accel: "23", grip: "23", steer: "24" };
-          const stats = {
-            drift: String(Math.max(23, Math.min(25, Math.round(Number(rawStats.drift || 24) > 10 ? Number(rawStats.drift) : Number(rawStats.drift || 9) * 2.5)))),
-            accel: String(Math.max(23, Math.min(25, Math.round(Number(rawStats.accel || 23) > 10 ? Number(rawStats.accel) : Number(rawStats.accel || 9) * 2.5)))),
-            grip: String(Math.max(23, Math.min(25, Math.round(Number(rawStats.grip || 23) > 10 ? Number(rawStats.grip) : Number(rawStats.grip || 9) * 2.5)))),
-            steer: String(Math.max(23, Math.min(25, Math.round(Number(rawStats.steer || 24) > 10 ? Number(rawStats.steer) : Number(rawStats.steer || 9) * 2.5)))),
-          };
-          featured = {
-            id: randomUUID(),
-            userId: user.id,
-            createdAt: featuredNow,
-            name: source.name,
-            ability: source.ability,
-            effect: source.effect,
-            tier: "legend",
-            stats,
-            imageUrl: source.imageUrl,
-            imageZoom: source.imageZoom,
-            imageX: source.imageX,
-            imageY: source.imageY,
-            driver: source.driver,
-            team: source.team,
-            styleIds: [],
-            kept: true,
-            rerolled: false,
-            ownerName: user.name,
-            referenceUrl: "",
-            bonus: true,
-            featured: true,
-            bonusFromCardId: source.id,
-          };
-          await redis.set(cardKey(featured.id), JSON.stringify(featured));
-          await redis.zadd(indexKey(user.id), { score: featuredNow, member: featured.id });
-          await redis.zadd(ALL_MEMBER_CARDS_INDEX, { score: featuredNow, member: featured.id });
-        }
-      } catch (error) {
-        console.error("[member-cards] could not save the pullable card:", error);
-        featured = null;
+    try {
+      const source = await pickStandardBonusCard();
+      if (source) {
+        const featuredNow = Date.now() + 2;
+        featured = buildBonusCard({ source, userId: user.id, ownerName: user.name, createdAt: featuredNow });
+        await redis.set(cardKey(featured.id), JSON.stringify(featured));
+        await redis.zadd(indexKey(user.id), { score: featuredNow, member: featured.id });
+        await redis.zadd(ALL_MEMBER_CARDS_INDEX, { score: featuredNow, member: featured.id });
       }
+    } catch (error) {
+      console.error("[member-cards] could not save the bonus card:", error);
+      featured = null;
     }
 
     // 5. Every Standard Pack includes 1 Maintenance Consumable Card for repairing Mechanical Faults!

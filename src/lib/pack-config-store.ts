@@ -1,9 +1,19 @@
 import { redis } from "@/lib/redis";
 import { sanitizeFullArtCard, type FullArtCardData } from "@/lib/full-art-card";
 import { fullArtCardKey } from "@/lib/member-card-store";
-import { sanitizePackConfig, STANDARD_PACK_ID, type PackConfig, type PackEntry } from "@/lib/pack-config";
+import type { Rng } from "@/lib/card-roll";
+import {
+  applyVariant,
+  bonusIsActive,
+  pickBonusEntry,
+  rollBonusHit,
+  sanitizePackConfig,
+  STANDARD_PACK_ID,
+  type PackConfig,
+  type PackEntry,
+} from "@/lib/pack-config";
 import { sanitizePackStyle, type PackStyle } from "@/lib/pack-styles";
-import { packStyleKey } from "@/lib/pack-styles-store";
+import { loadPackStyle, packStyleKey } from "@/lib/pack-styles-store";
 
 /**
  * Where pack configs live in Redis:
@@ -57,28 +67,24 @@ export function entryRefs(config: PackConfig): { styleIds: string[]; cardIds: st
   const styleIds = new Set<string>();
   const cardIds = new Set<string>();
   for (const entries of Object.values(config.rarities)) {
-    for (const e of entries) (e.kind === "style" ? styleIds : cardIds).add(e.refId);
+    for (const e of entries) {
+      (e.kind === "style" ? styleIds : cardIds).add(e.refId);
+      // A set card can carry a style of its own (its frame), which has to be loaded too.
+      if (e.variant?.styleId) styleIds.add(e.variant.styleId);
+    }
   }
+  for (const e of config.bonus?.entries ?? []) if (e.variant?.styleId) styleIds.add(e.variant.styleId);
   return { styleIds: [...styleIds], cardIds: [...cardIds] };
 }
 
-/** Load the styles and cards a config refers to. Things that no longer exist or have no picture are left out. */
-export async function loadRuntimeFor(config: PackConfig): Promise<PackRuntime> {
-  const { styleIds, cardIds } = entryRefs(config);
-  const styles = new Map<string, PackStyle>();
+/** Saved set cards that exist and have a picture, by id. Anything missing or unreadable is simply left out. */
+export async function loadSetCards(ids: string[]): Promise<Map<string, FullArtCardData & { id: string }>> {
   const cards = new Map<string, FullArtCardData & { id: string }>();
-
-  const [styleRows, cardRows] = await Promise.all([
-    styleIds.length > 0 ? redis.mget(...styleIds.map(packStyleKey)) : Promise.resolve([]),
-    cardIds.length > 0 ? redis.mget(...cardIds.map(fullArtCardKey)) : Promise.resolve([]),
-  ]);
-  styleIds.forEach((id, i) => {
-    const style = sanitizePackStyle(styleRows[i]);
-    if (style) styles.set(id, style);
-  });
-  cardIds.forEach((id, i) => {
+  if (ids.length === 0) return cards;
+  const rows = await redis.mget(...ids.map(fullArtCardKey));
+  ids.forEach((id, i) => {
     try {
-      const raw = cardRows[i];
+      const raw = rows[i];
       const value = typeof raw === "string" ? JSON.parse(raw) : raw;
       if (!value || typeof value !== "object") return;
       const card = sanitizeFullArtCard(value as Partial<FullArtCardData>);
@@ -87,7 +93,55 @@ export async function loadRuntimeFor(config: PackConfig): Promise<PackRuntime> {
       /* a card that can't be read is simply not available */
     }
   });
+  return cards;
+}
+
+/**
+ * Load the styles and cards a config refers to, including the cards of its bonus pull. Things that no longer exist or
+ * have no picture are left out.
+ */
+export async function loadRuntimeFor(config: PackConfig): Promise<PackRuntime> {
+  const { styleIds, cardIds } = entryRefs(config);
+  const styles = new Map<string, PackStyle>();
+  const allCardIds = [...new Set([...cardIds, ...(config.bonus?.entries.map((e) => e.refId) ?? [])])];
+
+  const [styleRows, cards] = await Promise.all([
+    styleIds.length > 0 ? redis.mget(...styleIds.map(packStyleKey)) : Promise.resolve([]),
+    loadSetCards(allCardIds),
+  ]);
+  styleIds.forEach((id, i) => {
+    const style = sanitizePackStyle(styleRows[i]);
+    if (style) styles.set(id, style);
+  });
   return { config, styles, cards };
+}
+
+/**
+ * Roll a pack's bonus pull: one roll against the pack's chance, then one card from its list by weight. Returns the set card
+ * (picture and details as saved) or null when there is no bonus this time, or the pack has none set up. Pass the pack's
+ * `runtime` when it is already loaded to save a read. The card is not changed here; give it out with `bonusPullCard`.
+ */
+export async function rollPackBonus(
+  config: PackConfig,
+  rng: Rng,
+  runtime?: PackRuntime | null
+): Promise<(FullArtCardData & { id: string }) | null> {
+  const bonus = config.bonus;
+  if (!bonusIsActive(bonus) || !rollBonusHit(bonus, rng)) return null;
+  const cards = runtime?.cards ?? (await loadSetCards(bonus.entries.map((e) => e.refId)));
+  const picked = pickBonusEntry(bonus.entries, rng, (e) => cards.has(e.refId));
+  const card = picked ? cards.get(picked.refId) : undefined;
+  if (!picked || !card) return null;
+  if (!picked.variant) return card;
+
+  // This pack's restyle of the card: its style's frame and redrawn picture.
+  let styles: ReadonlyMap<string, PackStyle> | undefined = runtime?.styles;
+  const styleId = picked.variant.styleId;
+  if (styleId && !styles?.has(styleId)) {
+    const style = await loadPackStyle(styleId).catch(() => null);
+    styles = style ? new Map([[styleId, style]]) : styles;
+  }
+  return applyVariant(card, picked.variant, styles);
 }
 
 /** Whether an entry can be used right now (its style or card still exists). */

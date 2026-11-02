@@ -94,6 +94,7 @@ export function PackOpening({
   crew = null,
   featured = null,
   maintenance = null,
+  extras = [],
   packName = "Standard Pack",
   packVariant = "standard",
   onRevealed,
@@ -110,6 +111,8 @@ export function PackOpening({
   featured?: MemberCard | null;
   /** The Maintenance Consumable card for repairing mechanical faults. */
   maintenance?: MemberCard | null;
+  /** Any further cards in the pack (a custom pack's fourth card, such as its bonus pull), shown last. */
+  extras?: MemberCard[];
   /** The name printed on the pack. */
   packName?: string;
   packVariant?: "standard" | "custom";
@@ -135,6 +138,7 @@ export function PackOpening({
         ...(crew ? [crew] : []),
         ...(featured ? [featured] : []),
         ...(maintenance ? [maintenance] : []),
+        ...extras,
       ]
     : [];
   const scroller = useRef<HTMLDivElement>(null);
@@ -392,6 +396,7 @@ export function PackOpening({
             {crew ? ` Plus a ${tierInfo(crew.tier).label} Crew Modifier card: ${crew.name}.` : ""}
             {featured ? ` A rare ${tierInfo(featured.tier).label} bonus card also dropped: ${featured.name}.` : ""}
             {maintenance ? ` Plus a ${tierInfo(maintenance.tier).label} Maintenance Consumable: ${maintenance.name}.` : ""}
+            {extras.map((extra) => ` Plus a ${tierInfo(extra.tier).label} card: ${extra.name}.`).join("")}
           </span>
           <div className={`pc-rays ${isLegend ? "pc-rays-rainbow" : ""}`} aria-hidden style={card.tier === "bronze" ? { display: "none" } : undefined} />
           <div className="pc-burst" aria-hidden />

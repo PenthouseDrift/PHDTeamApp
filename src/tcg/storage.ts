@@ -9,9 +9,17 @@ import {
   type TrackCardDefinition,
 } from "@/lib/crew-cards";
 import { FEATURED_CARDS_KEY, MEMBER_CARD_ID_PATTERN, fullArtCardKey } from "@/lib/member-card-store";
-import { entryOverallPct, effectivePcts, packNeedsGeneration } from "@/lib/pack-config";
-import { entryRefs, loadAllPackConfigs } from "@/lib/pack-config-store";
-import { ALL_TIERS } from "@/lib/pack-styles";
+import {
+  STANDARD_PACK_ID,
+  applyVariant,
+  bonusIsActive,
+  entryOverallPct,
+  effectivePcts,
+  packNeedsGeneration,
+} from "@/lib/pack-config";
+import { entryRefs, loadAllPackConfigs, loadPackConfig } from "@/lib/pack-config-store";
+import { ALL_TIERS, type PackStyle } from "@/lib/pack-styles";
+import { loadPackStyles } from "@/lib/pack-styles-store";
 import { RARITY_RANK, type MemberCard } from "@/lib/card-roll";
 import { DEFAULT_STANDARD_PACK_PRICE, P_CREDIT_BUNDLES, isOnSale } from "./config";
 import type {
@@ -377,6 +385,20 @@ export async function hydrateCustomPacks(packs: TcgCustomPack[]): Promise<TcgCus
     }
   }
 
+  // A set card can carry a style of its own in a pack (its frame). Load the style library only when one is used.
+  const usesVariantStyle = packs.some((p) => {
+    const c = configs[p.id];
+    return c && Object.values(c.rarities).some((entries) => entries.some((e) => e.variant?.styleId));
+  });
+  const styleMap = new Map<string, PackStyle>();
+  if (usesVariantStyle) {
+    try {
+      for (const style of await loadPackStyles()) styleMap.set(style.id, style);
+    } catch {
+      /* the cards are shown without the style's frame */
+    }
+  }
+
   return packs.map((pack) => {
     const config = configs[pack.id];
     if (config) {
@@ -386,7 +408,8 @@ export async function hydrateCustomPacks(packs: TcgCustomPack[]): Promise<TcgCus
       for (const tier of [...ALL_TIERS].reverse()) {
         for (const entry of config.rarities[tier]) {
           if (entry.kind !== "card") continue;
-          const card = cardMap.get(entry.refId);
+          const saved = cardMap.get(entry.refId);
+          const card = saved ? applyVariant(saved, entry.variant, styleMap, tier) : undefined;
           const overall = entryOverallPct(pcts, tier, entry);
           if (!card || overall <= 0) continue;
           setList.push({
@@ -526,7 +549,14 @@ export interface ShowcaseRareCard {
  */
 export async function getFeaturedShowcaseCards(limit = 8): Promise<ShowcaseRareCard[]> {
   try {
-    const raw = (await redis.hgetall(FEATURED_CARDS_KEY)) ?? {};
+    // Once the Standard Pack's bonus pull has been set up in the pack maker, its cards are the ones that can drop.
+    // Until then it is still the admin's pullable list.
+    const standard = await loadPackConfig(STANDARD_PACK_ID).catch(() => null);
+    const raw: Record<string, unknown> = standard?.bonus
+      ? bonusIsActive(standard.bonus)
+        ? Object.fromEntries(standard.bonus.entries.map((e) => [e.refId, e.weight]))
+        : {}
+      : ((await redis.hgetall(FEATURED_CARDS_KEY)) ?? {});
     const entries = Object.entries(raw)
       .map(([id, w]) => ({ id, weight: Number(w) }))
       .filter((e) => MEMBER_CARD_ID_PATTERN.test(e.id) && Number.isFinite(e.weight) && e.weight > 0);

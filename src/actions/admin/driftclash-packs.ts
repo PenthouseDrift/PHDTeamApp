@@ -1,22 +1,39 @@
 "use server";
 
-import { randomUUID } from "crypto";
+import { randomInt, randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
+import { put } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
-import { MEMBER_CARD_ID_PATTERN } from "@/lib/member-card-store";
+import { deleteImage } from "@/lib/blob";
+import { CardArtError, generateArtImage, isBlobUrl } from "@/lib/card-art-generate";
+import { tierFromStats } from "@/lib/card-roll";
+import { FULL_ART_TIERS, sanitizeFullArtCard, type FullArtCardData, type FullArtTier } from "@/lib/full-art-card";
+import {
+  ALL_MEMBER_CARDS_INDEX,
+  MEMBER_CARD_ID_PATTERN,
+  fullArtCardKey,
+  isCommunityCard,
+  memberCardKey,
+  parseStoredCard,
+} from "@/lib/member-card-store";
 import {
   STANDARD_PACK_ID,
   configFromLegacyPack,
   effectivePcts,
   emptyPackConfig,
+  cleanVariant,
   entryOverallPct,
+  rollStatsForTier,
   sanitizePackConfig,
   validatePackConfig,
+  variantStatsMode,
+  type EntryVariant,
   type PackConfig,
 } from "@/lib/pack-config";
 import { loadPackConfig, loadRuntimeFor, savePackConfig, deletePackConfig } from "@/lib/pack-config-store";
-import { ALL_TIERS } from "@/lib/pack-styles";
+import { ALL_TIERS, ID_PATTERN, frameFieldsFor, stylePrompt, type PackStyle } from "@/lib/pack-styles";
+import { loadPackStyle } from "@/lib/pack-styles-store";
 import {
   TCG_CUSTOM_PACKS_INDEX_KEY,
   hydrateCustomPacks,
@@ -26,6 +43,7 @@ import {
 import { DEFAULT_STANDARD_PACK_PRICE, isOnSale } from "@/tcg/config";
 import type { TcgCustomPack, TcgCustomPackWithCards, TcgPackStatus } from "@/tcg/types";
 import type { ActionResult } from "@/types";
+import { saveFullArtCard } from "@/actions/admin/full-art-cards";
 
 /**
  * Admin actions for the DriftClash Card packs page: each pack's per-rarity setup (rarity odds, and the
@@ -56,11 +74,22 @@ async function checkReferences(config: PackConfig): Promise<string | null> {
       } else {
         const card = runtime.cards.get(entry.refId);
         if (!card) return "One of the set cards no longer exists or has no picture. Remove it and try again.";
-        if (card.tier !== tier) {
-          return `"${card.name}" is a ${card.tier} card, so it can only go on the ${card.tier} rarity.`;
+        const mode = variantStatsMode(entry.variant);
+        if (mode === "custom") {
+          // Stats set by hand: they have to make a card of this rarity.
+          if (entry.variant?.stats && tierFromStats(entry.variant.stats) !== tier) {
+            return `The stats set for "${card.name}" make a ${tierFromStats(entry.variant.stats)} card, not ${tier}. Change them and try again.`;
+          }
+        } else if (mode === "keep" && card.tier !== tier) {
+          // Rerolled at the pull always fits the rarity; kept stats only fit the rarity the card was saved on.
+          return `"${card.name}" is a ${card.tier} card, so it can only keep its stats on the ${card.tier} rarity. Reroll them at the pull or set new stats.`;
         }
       }
     }
+  }
+  // A bonus pull's cards can be any rarity (they are given out as Legend cards), but each must exist and have a picture.
+  for (const entry of config.bonus?.entries ?? []) {
+    if (!runtime.cards.has(entry.refId)) return "One of the bonus pull's cards no longer exists or has no picture. Remove it and try again.";
   }
   return null;
 }
@@ -286,5 +315,498 @@ export async function deletePackAction(packId: string): Promise<ActionResult<{ i
   } catch (error) {
     console.error("[driftclash-packs] delete failed:", error);
     return { success: false, error: error instanceof Error ? error.message : "Could not delete the pack" };
+  }
+}
+
+// ── Member cars as set cards ────────────────────────────────────────────────
+
+/** A member's car card, as the pack editor's picker shows it. No ids of the owner, no email, no car-photo address. */
+export interface MemberCarOption extends FullArtCardData {
+  id: string;
+  /** Whose card it is, from when they opened it. */
+  owner: string;
+}
+
+export interface MemberCarPage {
+  cards: MemberCarOption[];
+  /** Pass back as `cursor` for the next page, or null when there are no more. */
+  nextCursor: number | null;
+}
+
+const PICKER_PAGE = 24;
+const PICKER_CHUNK = 150;
+/** Most cards looked at in one request, so a search that matches little can't read the whole collection. */
+const PICKER_MAX_SCAN = 1500;
+const MAX_COPY_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Members' car cards, newest first, for picking a set card from. Includes every car card members hold
+ * (a member can hold several of the same car, each with its own art). Left out: Crew, Repair, Hazard and
+ * Track cards, bonus cards (they are copies of someone else's car), cards that came from a set list, and
+ * cards a member re-rolled away. Admin only.
+ */
+export async function listMemberCarCardsAction(input: {
+  cursor?: number;
+  search?: string;
+  tier?: FullArtTier | null;
+}): Promise<ActionResult<MemberCarPage>> {
+  try {
+    if (!(await requireAdmin())) return { success: false, error: "Only admins can browse member cards" };
+
+    const search = String(input?.search ?? "").trim().toLowerCase().slice(0, 60);
+    const tier = ALL_TIERS.includes(input?.tier as FullArtTier) ? (input.tier as FullArtTier) : null;
+    let cursor = Math.max(0, Math.floor(Number(input?.cursor) || 0));
+    const total = Number(await redis.zcard(ALL_MEMBER_CARDS_INDEX)) || 0;
+
+    const cards: MemberCarOption[] = [];
+    let scanned = 0;
+    while (cursor < total && cards.length < PICKER_PAGE && scanned < PICKER_MAX_SCAN) {
+      const ids = (await redis.zrange(ALL_MEMBER_CARDS_INDEX, cursor, cursor + PICKER_CHUNK - 1, { rev: true })) as string[];
+      if (!ids || ids.length === 0) {
+        cursor = total;
+        break;
+      }
+      const rows = await redis.mget(...ids.map((id) => memberCardKey(String(id))));
+      for (const row of rows) {
+        cursor++;
+        scanned++;
+        const card = parseStoredCard(row);
+        if (!card || !isCommunityCard(card)) continue;
+        if (card.cardType && card.cardType !== "car") continue;
+        if (!card.imageUrl || card.featured) continue;
+        if (tier && card.tier !== tier) continue;
+        const owner = (card.ownerName ?? "").trim() || card.driver;
+        if (search && ![card.name, card.driver, card.team, card.ability, owner].some((v) => v.toLowerCase().includes(search))) continue;
+
+        const base = sanitizeFullArtCard(card);
+        cards.push({ ...base, id: card.id, owner });
+        if (cards.length >= PICKER_PAGE) break;
+      }
+    }
+    return { success: true, data: { cards, nextCursor: cursor < total ? cursor : null } };
+  } catch (error) {
+    console.error("[driftclash-packs] listing member cars failed:", error);
+    return { success: false, error: "Could not load the members' cars" };
+  }
+}
+
+/** A picture made for a set card lives under set-cards/ in our own file store (see generateArtImage and copyCardImage). */
+function isSetCardArtUrl(value: string): boolean {
+  if (!isBlobUrl(value)) return false;
+  try {
+    return new URL(value).pathname.startsWith("/set-cards/");
+  } catch {
+    return false;
+  }
+}
+
+type StyleChoice = { ok: true; style: PackStyle | null; artUrl: string } | { ok: false; error: string };
+
+/** Check the style (and redrawn picture) an admin chose. No style means the card keeps the look it has. */
+async function resolveStyleChoice(styleId?: string, artUrl?: string): Promise<StyleChoice> {
+  const id = String(styleId ?? "").trim();
+  const url = String(artUrl ?? "").trim();
+  if (!id) {
+    return url ? { ok: false, error: "Choose a style before using redrawn artwork" } : { ok: true, style: null, artUrl: "" };
+  }
+  if (!ID_PATTERN.test(id)) return { ok: false, error: "Invalid style" };
+  const style = await loadPackStyle(id);
+  if (!style) return { ok: false, error: "That style no longer exists" };
+  if (url && !isSetCardArtUrl(url)) return { ok: false, error: "That artwork can't be used. Redraw it and try again." };
+  return { ok: true, style, artUrl: url };
+}
+
+/** A saved set card (from the Card maker) that has a picture, or null. */
+async function loadSavedSetCard(id: string): Promise<FullArtCardData | null> {
+  if (!MEMBER_CARD_ID_PATTERN.test(id)) return null;
+  try {
+    const raw = await redis.get(fullArtCardKey(id));
+    const value = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!value || typeof value !== "object") return null;
+    const card = sanitizeFullArtCard(value as Partial<FullArtCardData>);
+    return card.imageUrl ? { ...card, id } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Copy a card's picture into its own file. A member's card can be deleted later, and that deletes its picture. */
+async function copyCardImage(url: string): Promise<string> {
+  if (!isBlobUrl(url)) throw new Error("This card's picture isn't stored in the app, so it can't be copied");
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error("Could not load the card's picture");
+  const mime = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+  if (!["image/jpeg", "image/png", "image/webp"].includes(mime)) throw new Error("The card's picture must be a JPEG, PNG or WebP");
+  const bytes = Buffer.from(await res.arrayBuffer());
+  if (bytes.length > MAX_COPY_BYTES) throw new Error("The card's picture is too large to copy");
+  const ext = mime === "image/jpeg" ? "jpg" : mime === "image/png" ? "png" : "webp";
+  const blob = await put(`set-cards/${randomUUID()}.${ext}`, bytes, {
+    access: "public",
+    contentType: mime,
+    addRandomSuffix: true,
+    token: process.env.BLOB_READ_WRITE_TOKEN,
+  });
+  return blob.url;
+}
+
+/** Which saved set card each member card was imported as, so choosing the same member card again reuses it. */
+const IMPORTED_MEMBER_CARDS_KEY = "driftclash:setcards:from-member";
+
+/**
+ * Turn a member's car card into a saved set card, once. The set card is its own copy: the same name, car details, picture,
+ * position, frame, rarity and stats as the member's card, with the picture copied so it survives the member's card being
+ * deleted. Nothing about the member's card changes.
+ *
+ * Choosing the same member card again does NOT make another copy: the set card made the first time is returned (unless
+ * it has since been deleted in the Card maker). Rerolled stats, a style and a redrawn picture are not part of this. They
+ * belong to the pack entry that uses the card (see `EntryVariant`), so trying them out never adds cards. Admin only.
+ */
+export async function importMemberCardToPackAction(input: { memberCardId: string }): Promise<ActionResult<FullArtCardData>> {
+  let copiedUrl = "";
+  try {
+    if (!(await requireAdmin())) return { success: false, error: "Only admins can create set cards" };
+
+    const memberCardId = String(input?.memberCardId ?? "").trim();
+    if (!MEMBER_CARD_ID_PATTERN.test(memberCardId)) return { success: false, error: "Invalid card" };
+
+    // Already imported: use that one.
+    const earlier = await redis.hget<string>(IMPORTED_MEMBER_CARDS_KEY, memberCardId);
+    if (earlier) {
+      const existing = await loadSavedSetCard(String(earlier));
+      if (existing) return { success: true, data: existing };
+    }
+
+    const source = parseStoredCard(await redis.get(memberCardKey(memberCardId)));
+    if (!source || !isCommunityCard(source) || (source.cardType && source.cardType !== "car") || !source.imageUrl) {
+      return { success: false, error: "That card is no longer available" };
+    }
+
+    copiedUrl = await copyCardImage(source.imageUrl);
+
+    // The card keeps its name exactly as it is. Two saved cards can share a name; nothing is added to it.
+    const base = sanitizeFullArtCard(source);
+    const card: FullArtCardData = { ...base, id: undefined, updatedAt: undefined, imageUrl: copiedUrl };
+
+    const saved = await saveFullArtCard(card);
+    if (!saved.success) {
+      await deleteImage(copiedUrl).catch(() => {});
+      return saved;
+    }
+    if (saved.data.id) await redis.hset(IMPORTED_MEMBER_CARDS_KEY, { [memberCardId]: saved.data.id }).catch(() => {});
+    return { success: true, data: saved.data };
+  } catch (error) {
+    if (copiedUrl) await deleteImage(copiedUrl).catch(() => {});
+    console.error("[driftclash-packs] importing a member card failed:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Could not create the set card" };
+  }
+}
+
+// ── Restyling a card with a style from the style library ────────────────────
+
+/**
+ * Redraw a card's artwork in a style's art prompt, for the admin to look at before adding the card. This is the only
+ * step that calls the image model: ONE image (the same cost as one generated card in a pack). The new picture is
+ * saved on its own and its address returned; nothing about the card changes until it is added with that address.
+ *
+ * The rarity's scene is used the way packs use it (a "style" prompt goes on top of the rarity's scene, a "full" prompt
+ * is sent as written). A member's card is redrawn from its original car photo, like a pack card; a saved set card is
+ * redrawn from its current picture. A style with no prompt only changes the frame, so there is nothing to redraw.
+ */
+export async function restyleCardArtAction(input: {
+  /** A member's card, a saved set card, or a picture the admin uploaded (an address in our own file store). */
+  source: { kind: "member" | "saved"; id: string } | { kind: "upload"; url: string };
+  styleId: string;
+  tier: FullArtTier;
+}): Promise<ActionResult<{ imageUrl: string }>> {
+  let lockKey = "";
+  try {
+    const session = await auth();
+    if (session?.user?.role !== "admin" || !session.user.id) {
+      return { success: false, error: "Only admins can redraw cards" };
+    }
+    const tier = input?.tier;
+    if (!ALL_TIERS.includes(tier)) return { success: false, error: "Invalid rarity" };
+
+    const styled = await resolveStyleChoice(input?.styleId);
+    if (!styled.ok) return { success: false, error: styled.error };
+    const { style } = styled;
+    if (!style) return { success: false, error: "Choose a style first" };
+    if (!style.prompt.trim()) return { success: false, error: "This style only changes the frame, so there is no artwork to redraw." };
+
+    let referenceUrl = "";
+    if (input.source?.kind === "upload") {
+      referenceUrl = String(input.source.url ?? "").trim();
+      if (!isBlobUrl(referenceUrl)) return { success: false, error: "Upload the picture in the app first." };
+    } else {
+      const sourceId = String(input?.source?.id ?? "").trim();
+      if (!MEMBER_CARD_ID_PATTERN.test(sourceId)) return { success: false, error: "Invalid card" };
+      if (input.source.kind === "member") {
+        const card = parseStoredCard(await redis.get(memberCardKey(sourceId)));
+        if (!card || !isCommunityCard(card) || (card.cardType && card.cardType !== "car")) {
+          return { success: false, error: "That card is no longer available" };
+        }
+        referenceUrl = isBlobUrl(card.referenceUrl) ? card.referenceUrl : card.imageUrl;
+      } else if (input.source.kind === "saved") {
+        const card = await loadSavedSetCard(sourceId);
+        if (!card) return { success: false, error: "That card is no longer available" };
+        referenceUrl = card.imageUrl;
+      } else {
+        return { success: false, error: "Invalid card" };
+      }
+      if (!isBlobUrl(referenceUrl)) return { success: false, error: "This card's picture isn't stored in the app, so it can't be redrawn." };
+    }
+
+    // One redraw at a time per admin, so a double click can't pay for two images.
+    lockKey = `driftclash:restyle:lock:${session.user.id}`;
+    const locked = await redis.set(lockKey, "1", { nx: true, ex: 120 });
+    if (!locked) {
+      lockKey = "";
+      return { success: false, error: "A redraw is already running. Give it a moment." };
+    }
+
+    const { imageUrl } = await generateArtImage({
+      referenceUrl,
+      prompt: stylePrompt(style, tier),
+      aspectRatio: "3:4",
+      folder: "set-cards",
+    });
+    return { success: true, data: { imageUrl } };
+  } catch (error) {
+    console.error("[driftclash-packs] restyle redraw failed:", error);
+    return {
+      success: false,
+      error: error instanceof CardArtError ? error.message : "The redraw didn't work this time. Please try again.",
+    };
+  } finally {
+    if (lockKey) await redis.del(lockKey).catch(() => {});
+  }
+}
+
+
+// ── Saving the finished card ────────────────────────────────────────────────
+
+/**
+ * Save the card as it will look in the pack as a NEW set card, so it shows in Saved set cards and the Card maker. This is
+ * what to use when a member's car (or a saved card) has been redrawn, restyled or moved to another rarity and the result is
+ * a card in its own right. Choosing a card in the pack editor never does this by itself; this is the explicit step.
+ *
+ * The new card is built from the source with the variant already applied: the style's frame, the redrawn picture (or the
+ * source's own, copied for a member's car so it outlives their card), and the stats for `tier` (kept when the source is
+ * already on `tier`, set by hand, or rolled once here). The source is not changed. For a member's car the member's own card
+ * is NOT imported as well, so the library only gets the finished card.
+ *
+ * `entryVariant` is what the pack entry should keep after pointing at the new card: only "reroll at the pull" survives,
+ * because everything else is now part of the card. Admin only.
+ */
+export async function createFinishedSetCardAction(input: {
+  source: { kind: "member" | "saved"; id: string };
+  tier: FullArtTier;
+  variant?: EntryVariant;
+}): Promise<ActionResult<{ card: FullArtCardData; entryVariant: EntryVariant | undefined }>> {
+  let copiedUrl = "";
+  try {
+    if (!(await requireAdmin())) return { success: false, error: "Only admins can create set cards" };
+
+    const tier = input?.tier;
+    if (!ALL_TIERS.includes(tier)) return { success: false, error: "Invalid rarity" };
+    const tierName = FULL_ART_TIERS.find((t) => t.id === tier)?.label ?? tier;
+
+    const variant = cleanVariant(input?.variant);
+    const styled = await resolveStyleChoice(variant?.styleId, variant?.artUrl);
+    if (!styled.ok) return { success: false, error: styled.error };
+    const { style, artUrl } = styled;
+
+    const sourceId = String(input?.source?.id ?? "").trim();
+    if (!MEMBER_CARD_ID_PATTERN.test(sourceId)) return { success: false, error: "Invalid card" };
+
+    let base: FullArtCardData;
+    let sourcePicture: string;
+    if (input.source.kind === "member") {
+      const member = parseStoredCard(await redis.get(memberCardKey(sourceId)));
+      if (!member || !isCommunityCard(member) || (member.cardType && member.cardType !== "car") || !member.imageUrl) {
+        return { success: false, error: "That card is no longer available" };
+      }
+      base = sanitizeFullArtCard(member);
+      sourcePicture = member.imageUrl;
+    } else if (input.source.kind === "saved") {
+      const saved = await loadSavedSetCard(sourceId);
+      if (!saved) return { success: false, error: "That card is no longer available" };
+      base = saved;
+      sourcePicture = saved.imageUrl;
+    } else {
+      return { success: false, error: "Invalid card" };
+    }
+
+    // Stats on the new rarity.
+    const mode = variantStatsMode(variant);
+    let stats = base.stats;
+    if (mode === "custom" && variant?.stats) {
+      stats = variant.stats;
+      if (tierFromStats(stats) !== tier) return { success: false, error: `Those stats make a ${tierFromStats(stats)} card, not ${tierName}.` };
+    } else if (mode === "reroll") {
+      stats = rollStatsForTier(tier, () => randomInt(0, 2 ** 32) / 2 ** 32);
+    } else if (base.tier !== tier) {
+      return { success: false, error: `This is a ${base.tier} card, so it can't keep its stats on ${tierName}. Reroll them or set your own.` };
+    }
+
+    // The picture: the redrawn one, or the source's own (copied for a member's car so it outlives their card).
+    let imageUrl = artUrl;
+    if (!imageUrl) {
+      if (input.source.kind === "member") {
+        copiedUrl = await copyCardImage(sourcePicture);
+        imageUrl = copiedUrl;
+      } else {
+        imageUrl = sourcePicture;
+      }
+    }
+
+    const card: FullArtCardData = {
+      // The name is left exactly as it was. No style or rarity is added to it.
+      name: base.name,
+      ability: base.ability,
+      effect: base.effect,
+      tier,
+      stats,
+      imageUrl,
+      imageZoom: base.imageZoom,
+      imageX: base.imageX,
+      imageY: base.imageY,
+      driver: base.driver,
+      team: base.team,
+      ...(style
+        ? frameFieldsFor(style.frame)
+        : {
+            customBorderColor: base.customBorderColor,
+            customStatLabelColor: base.customStatLabelColor,
+            customStatValueColor: base.customStatValueColor,
+            customBottomBarBgColor: base.customBottomBarBgColor,
+            customBottomBarBorderColor: base.customBottomBarBorderColor,
+            customFrameEffect: base.customFrameEffect,
+            customFrameShine: base.customFrameShine,
+            customFlameColor: base.customFlameColor,
+          }),
+    };
+
+    // The pack's own edits (words, picture position, colours, frame effect) become part of the new card. saveFullArtCard
+    // cleans them to the card's limits like any other field.
+    const saved = await saveFullArtCard({ ...card, ...(variant?.edits ?? {}) });
+    if (!saved.success) {
+      if (copiedUrl) await deleteImage(copiedUrl).catch(() => {});
+      return saved;
+    }
+    return { success: true, data: { card: saved.data, entryVariant: mode === "reroll" ? { rerollOnPull: true } : undefined } };
+  } catch (error) {
+    if (copiedUrl) await deleteImage(copiedUrl).catch(() => {});
+    console.error("[driftclash-packs] saving the finished card failed:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Could not create the set card" };
+  }
+}
+
+/** The words printed on a card made from an uploaded picture. */
+export interface PictureCardDetails {
+  name: string;
+  /** The chassis / ability line. */
+  ability: string;
+  /** The effect / description text. */
+  effect: string;
+  driver: string;
+  team: string;
+}
+
+/**
+ * Make a set card from a picture the admin uploaded, in a style from the style library. The card has the style's frame and
+ * either the uploaded picture as it is, or the redrawn picture (`variant.artUrl`, from `restyleCardArtAction`). Its name and
+ * words are exactly what was typed. Stats for `tier`: set by hand (`variant.stats`) or rolled once here (reroll at the pull
+ * keeps rolling at each pull; see `entryVariant`). There is no "keep" because a new card has no stats yet. Admin only.
+ */
+export async function createCardFromPictureAction(input: {
+  /** The uploaded picture (an address in our own file store). */
+  pictureUrl: string;
+  details: PictureCardDetails;
+  tier: FullArtTier;
+  variant?: EntryVariant;
+}): Promise<ActionResult<{ card: FullArtCardData; entryVariant: EntryVariant | undefined }>> {
+  let copiedUrl = "";
+  try {
+    if (!(await requireAdmin())) return { success: false, error: "Only admins can create set cards" };
+
+    const tier = input?.tier;
+    if (!ALL_TIERS.includes(tier)) return { success: false, error: "Invalid rarity" };
+    const tierName = FULL_ART_TIERS.find((t) => t.id === tier)?.label ?? tier;
+
+    const variant = cleanVariant(input?.variant);
+    const styled = await resolveStyleChoice(variant?.styleId, variant?.artUrl);
+    if (!styled.ok) return { success: false, error: styled.error };
+    const { style, artUrl } = styled;
+
+    const details = sanitizeFullArtCard({
+      name: input?.details?.name,
+      ability: input?.details?.ability,
+      effect: input?.details?.effect,
+      driver: input?.details?.driver,
+      team: input?.details?.team,
+    });
+    if (!details.name) return { success: false, error: "Give the card a name" };
+
+    const pictureUrl = String(input?.pictureUrl ?? "").trim();
+    if (!isBlobUrl(pictureUrl)) return { success: false, error: "Upload the picture in the app first." };
+
+    const mode = variantStatsMode(variant);
+    let stats;
+    if (mode === "custom" && variant?.stats) {
+      stats = variant.stats;
+      if (tierFromStats(stats) !== tier) return { success: false, error: `Those stats make a ${tierFromStats(stats)} card, not ${tierName}.` };
+    } else {
+      // Rolled once for the saved card. With "reroll at the pull" they are rolled again at every pull.
+      stats = rollStatsForTier(tier, () => randomInt(0, 2 ** 32) / 2 ** 32);
+    }
+
+    let imageUrl = artUrl;
+    if (!imageUrl) {
+      copiedUrl = await copyCardImage(pictureUrl);
+      imageUrl = copiedUrl;
+    }
+
+    const card: FullArtCardData = {
+      name: details.name,
+      ability: details.ability,
+      effect: details.effect,
+      tier,
+      stats,
+      imageUrl,
+      imageZoom: 100,
+      imageX: 50,
+      imageY: 50,
+      driver: details.driver,
+      team: details.team,
+      ...(style ? frameFieldsFor(style.frame) : {}),
+    };
+    const saved = await saveFullArtCard(card);
+    if (!saved.success) {
+      if (copiedUrl) await deleteImage(copiedUrl).catch(() => {});
+      return saved;
+    }
+    return { success: true, data: { card: saved.data, entryVariant: mode === "reroll" ? { rerollOnPull: true } : undefined } };
+  } catch (error) {
+    if (copiedUrl) await deleteImage(copiedUrl).catch(() => {});
+    console.error("[driftclash-packs] creating a card from a picture failed:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Could not create the set card" };
+  }
+}
+
+/**
+ * Take a picture the admin uploaded, or a member card's picture, into the set cards' own file area so it can be used as a
+ * card's artwork in a pack. (A pack only accepts pictures from there, so nothing else can be pointed at, and a member
+ * deleting their card can't take the picture away.) Returns the new address. Admin only.
+ */
+export async function adoptPictureAction(input: { url: string }): Promise<ActionResult<{ imageUrl: string }>> {
+  try {
+    if (!(await requireAdmin())) return { success: false, error: "Only admins can change cards" };
+    const url = String(input?.url ?? "").trim();
+    if (!isBlobUrl(url)) return { success: false, error: "That picture isn't stored in the app." };
+    return { success: true, data: { imageUrl: await copyCardImage(url) } };
+  } catch (error) {
+    console.error("[driftclash-packs] adopting a picture failed:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Could not use that picture" };
   }
 }

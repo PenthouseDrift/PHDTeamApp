@@ -7,7 +7,7 @@ import {
   type StoredMemberCard,
 } from "@/lib/card-roll";
 import { tierArtPrompt, type FullArtCardData, type FullArtTier } from "@/lib/full-art-card";
-import { rollPackCard } from "@/lib/pack-config";
+import { applyVariant, rollPackCard } from "@/lib/pack-config";
 import { entryAvailable, type PackRuntime } from "@/lib/pack-config-store";
 import { frameFieldsFor, stylePrompt, type PackStyle } from "@/lib/pack-styles";
 
@@ -70,7 +70,9 @@ export async function rollAndDrawSlot(input: {
   const entry = roll.entry;
 
   if (entry?.kind === "card") {
-    const fixed = runtime.cards.get(entry.refId);
+    const saved = runtime.cards.get(entry.refId);
+    // This pack's changes to the set card (rolled stats for the rarity, a style's frame, a redrawn picture).
+    const fixed = saved ? applyVariant(saved, entry.variant, runtime.styles, roll.tier, rng) : undefined;
     if (fixed) {
       return {
         tier: fixed.tier,

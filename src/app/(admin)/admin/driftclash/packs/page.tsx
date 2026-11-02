@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { listAdminCustomPrompts } from "@/actions/admin/custom-prompts";
-import { listFullArtCards } from "@/actions/admin/full-art-cards";
+import { listFeaturedCards, listFullArtCards } from "@/actions/admin/full-art-cards";
 import { getStandardPackConfig } from "@/actions/admin/driftclash-packs";
 import { listPackStyles } from "@/actions/admin/pack-styles";
 import { listComingSoonItems } from "@/actions/admin/coming-soon";
@@ -17,12 +17,13 @@ export default async function DriftClashPacksPage() {
   const session = await auth();
   if (!session?.user || session.user.role !== "admin") redirect("/admin");
 
-  const [standardConfig, styles, packs, savedPrompts, fullArtCards, storeConfig, comingSoon] = await Promise.all([
+  const [standardConfig, styles, packs, savedPrompts, fullArtCards, legacyPullable, storeConfig, comingSoon] = await Promise.all([
     getStandardPackConfig(),
     listPackStyles(),
     listCustomPacks({ onlyLive: false }),
     listAdminCustomPrompts(),
     listFullArtCards(300),
+    listFeaturedCards(),
     getTcgStoreConfig(),
     listComingSoonItems(),
   ]);
@@ -50,6 +51,7 @@ export default async function DriftClashPacksPage() {
         initialComingSoon={comingSoon}
         savedPrompts={savedPrompts}
         fullArtCards={fullArtCards}
+        legacyPullable={legacyPullable}
         standardPackPrice={storeConfig.standardPackPrice}
         standardPackSalePrice={storeConfig.standardPackSalePrice ?? null}
         pCreditBundles={storeConfig.pCreditBundles}

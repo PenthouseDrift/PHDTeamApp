@@ -22,7 +22,8 @@ export function DriftClashPacksAdmin({
   initialPacks,
   initialComingSoon,
   savedPrompts,
-  fullArtCards,
+  fullArtCards: initialFullArtCards,
+  legacyPullable,
   standardPackPrice,
   standardPackSalePrice,
   pCreditBundles,
@@ -33,6 +34,8 @@ export function DriftClashPacksAdmin({
   initialComingSoon: ComingSoonItem[];
   savedPrompts: AdminCustomPrompt[];
   fullArtCards: FullArtCardData[];
+  /** The old pullable list (card id -> odds weight). */
+  legacyPullable: Record<string, number>;
   standardPackPrice: number;
   standardPackSalePrice: number | null;
   pCreditBundles: PCreditBundle[];
@@ -40,6 +43,7 @@ export function DriftClashPacksAdmin({
   const [tab, setTab] = useState<Tab>("packs");
   const [selected, setSelected] = useState<Selection>("standard");
   const [standardConfig, setStandardConfig] = useState(initialStandardConfig);
+  const [fullArtCards, setFullArtCards] = useState(initialFullArtCards);
   const [styles, setStyles] = useState(initialStyles);
   const [packs, setPacks] = useState(initialPacks);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -156,7 +160,9 @@ export function DriftClashPacksAdmin({
             standardSalePrice={standardPackSalePrice}
             styles={styles}
             cards={setCards}
+            legacyPullable={legacyPullable}
             onStandardConfig={setStandardConfig}
+            onCardCreated={(card) => setFullArtCards((list) => [card, ...list.filter((c) => c.id !== card.id)])}
             onPackSaved={onPackSaved}
             onPackDeleted={(id) => {
               setPacks((list) => list.filter((p) => p.id !== id));
