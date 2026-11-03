@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { upload } from "@vercel/blob/client";
+import { uploadOptimizedImage } from "@/lib/upload-client";
 import { updateProfileAvatar } from "@/actions/profile";
 
 interface ProfileAvatarUploadProps {
@@ -38,10 +38,8 @@ export function ProfileAvatarUpload({ currentAvatar, userId, initials }: Profile
     setUploading(true);
 
     try {
-      const blob = await upload(file.name, file, {
-        access: "public",
-        handleUploadUrl: "/api/upload",
-      });
+      // A profile picture is shown small, so it is stored at 512 pixels at most.
+      const blob = await uploadOptimizedImage(file, { maxWidth: 512 });
 
       // Run AI image safety moderation check
       const modRes = await fetch("/api/moderate-image", {

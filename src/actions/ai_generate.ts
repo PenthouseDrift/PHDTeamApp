@@ -1,13 +1,15 @@
 "use server";
 
 import Replicate from "replicate";
-import { put } from "@vercel/blob";
+import { del, put } from "@vercel/blob";
 import { redis } from "@/lib/redis";
 
 export async function removeWheelBackground(imageUrl: string): Promise<string | null> {
   const token = process.env.REPLICATE_API_TOKEN;
   if (!token) return null;
 
+  // A copy of the wheel picture the background remover can reach. It is only needed during the call, so it is deleted after.
+  let tmpUrl = "";
   try {
     const cacheKey = `rembg-v2:${imageUrl}`;
     const cached = await redis.get<string>(cacheKey);
@@ -27,6 +29,7 @@ export async function removeWheelBackground(imageUrl: string): Promise<string | 
       access: 'public',
       token: process.env.BLOB_READ_WRITE_TOKEN
     });
+    tmpUrl = blob.url;
     
     const output: any = await replicate.run(
       "cjwbw/rembg:fb8af171cfa1616ddcf1242c093f9c46bcada5ad4cf6f2fbe8b81b330ec5c003",
@@ -72,6 +75,8 @@ export async function removeWheelBackground(imageUrl: string): Promise<string | 
   } catch (error) {
     console.error("Rembg Error:", error);
     return null;
+  } finally {
+    if (tmpUrl) await del(tmpUrl, { token: process.env.BLOB_READ_WRITE_TOKEN }).catch(() => {});
   }
 }
 

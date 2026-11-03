@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { upload } from "@vercel/blob/client";
+import { uploadOptimizedImage } from "@/lib/upload-client";
 
 interface UploadedFile {
   id: string;
@@ -35,59 +35,14 @@ interface ImageUploaderProps {
 
 const DEFAULT_ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
-// Compress image client-side before upload
-async function compressImage(file: File, maxWidth: number, quality: number): Promise<File> {
-  // Skip if already small enough (under 500KB)
-  if (file.size < 500 * 1024) return file;
-
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      let { width, height } = img;
-
-      // Scale down if too wide
-      if (width > maxWidth) {
-        height = Math.round((height * maxWidth) / width);
-        width = maxWidth;
-      }
-
-      canvas.width = width;
-      canvas.height = height;
-
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        resolve(file);
-        return;
-      }
-
-      ctx.drawImage(img, 0, 0, width, height);
-
-      canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            resolve(new File([blob], file.name.replace(/\.[^/.]+$/, ".webp"), { type: "image/webp" }));
-          } else {
-            resolve(file);
-          }
-        },
-        "image/webp",
-        quality
-      );
-    };
-    img.onerror = () => resolve(file);
-    img.src = URL.createObjectURL(file);
-  });
-}
-
 export default function ImageUploader({
   maxFiles = 1,
   maxSizeMB = 5,
   acceptedTypes = DEFAULT_ACCEPTED_TYPES,
   initialUrls = [],
   onUploadComplete,
-  maxWidth = 1920,
-  quality = 0.82,
+  maxWidth = 1600,
+  quality = 0.8,
   label = "Image Upload",
 }: ImageUploaderProps) {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>(() =>
@@ -196,12 +151,8 @@ export default function ImageUploader({
         });
 
         try {
-          // Compress image before uploading
-          const optimizedFile = await compressImage(file, maxWidth, quality);
-          const blob = await upload(optimizedFile.name, optimizedFile, {
-            access: "public",
-            handleUploadUrl: "/api/upload",
-          });
+          // The picture is shrunk and saved as a WebP on the server before it is stored.
+          const blob = await uploadOptimizedImage(file, { maxWidth, quality });
 
           // Run AI image safety moderation check
           try {

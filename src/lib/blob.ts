@@ -1,15 +1,7 @@
-import { put, del } from "@vercel/blob";
+import { del } from "@vercel/blob";
 
-export async function uploadImage(
-  file: File,
-  folder: string
-): Promise<string> {
-  const blob = await put(`${folder}/${file.name}`, file, {
-    access: "public",
-    addRandomSuffix: true,
-  });
-  return blob.url;
-}
+// Uploads no longer go through here. Every picture a person uploads goes through /api/upload-image, which shrinks it and
+// saves it as a WebP before it is stored (see src/lib/upload-client.ts). Only deleting is left.
 
 export async function deleteImage(url: string): Promise<void> {
   await del(url);
