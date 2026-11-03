@@ -8,7 +8,7 @@ import { slotOverrides } from "@/lib/pack-draw";
  * The member's copy of a bonus pull, built from the set card that was pulled. Shared by the Standard Pack and custom
  * packs so the bonus card is given out the same way everywhere:
  *  - the picture, name, car details and frame come from the set card as saved, and are never drawn again;
- *  - it is given out as a Legend card with stats lifted into 23 to 25 (see `bonusPullCard`);
+ *  - it is given out as a Legend card with stats lifted into 23 to 25, or as Mythic if it is a Mythic card (see `bonusPullCard`);
  *  - it is marked `featured` and `bonus`, which keeps it out of the community pool and stops its shared picture being
  *    deleted along with a member's card.
  * It is not saved here; the caller writes it to Redis.

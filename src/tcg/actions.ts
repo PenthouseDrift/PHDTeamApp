@@ -57,6 +57,7 @@ import {
   transferPCredits,
   type ClashGameCardsConfig,
 } from "./storage";
+import { buildPackContents, type PackContents } from "./pack-contents";
 import type {
   PCreditBundle,
   TcgCustomPack,
@@ -529,6 +530,9 @@ export async function buyAndOpenCustomPack(
   if (!rawPack || rawPack.status !== "live") {
     return { success: false, error: "This pack is not currently available in the store." };
   }
+  if (rawPack.purchasable === false) {
+    return { success: false, error: "This pack can't be bought right now. Have a look at what's in it, and check back soon." };
+  }
 
   const [hydrated] = await hydrateCustomPacks([rawPack]);
   if (hydrated?.needsGeneration) {
@@ -703,6 +707,9 @@ export async function openCustomPackWithCar(
   const rawPack = parseCustomPack(await redis.get(tcgCustomPackKey(packId)));
   if (!rawPack || rawPack.status !== "live") {
     return { success: false, error: "This pack is not currently available in the store." };
+  }
+  if (rawPack.purchasable === false) {
+    return { success: false, error: "This pack can't be bought right now. Have a look at what's in it, and check back soon." };
   }
   const [hydrated] = await hydrateCustomPacks([rawPack]);
   if (!hydrated?.config) return { success: false, error: "This pack opens straight from the store." };
@@ -962,6 +969,23 @@ export async function updatePCreditBundlesAction(
   }
 }
 
+/**
+ * What is in a pack, for the "What's in this pack" window: "standard" for the Standard Pack, otherwise a store pack's id.
+ * Any signed-in member can look at a live pack, including one that can't be bought right now. Drafts are for admins only.
+ */
+export async function getPackContentsAction(packId: string): Promise<ActionResult<PackContents>> {
+  try {
+    const user = await currentUser();
+    if (!user) return { success: false, error: "Please sign in to see what's in a pack." };
+    const contents = await buildPackContents(String(packId ?? ""), { isAdmin: user.role === "admin" });
+    if (!contents) return { success: false, error: "That pack isn't available." };
+    return { success: true, data: contents };
+  } catch (error) {
+    console.error("[tcg] could not load a pack's contents:", error);
+    return { success: false, error: "Could not load what's in this pack. Please try again." };
+  }
+}
+
 export interface SaveCustomPackInput {
   id?: string;
   name: string;
@@ -969,6 +993,7 @@ export interface SaveCustomPackInput {
   price: number;
   salePrice?: number | null;
   status: TcgPackStatus;
+  purchasable?: boolean;
   cardsPerPack?: number;
   cards: TcgCustomPackCardEntry[];
 }
@@ -1029,6 +1054,7 @@ export async function saveCustomPackAction(
       price,
       salePrice,
       status,
+      purchasable: input.purchasable ?? existing?.purchasable ?? true,
       cardsPerPack,
       cards: cleanCards,
       createdAt: existing?.createdAt ?? now,

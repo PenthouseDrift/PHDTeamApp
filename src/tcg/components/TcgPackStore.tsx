@@ -8,6 +8,7 @@ import { PackOpening } from "@/components/member-cards/PackOpening";
 import { rarityLabel, type MemberCard } from "@/lib/card-roll";
 import { buyAndOpenCustomPack, buyStandardPackWithPCredits } from "@/tcg/actions";
 import { PackArt } from "@/tcg/components/PackArt";
+import { PackContentsModal, PackContentsView } from "@/tcg/components/PackContentsView";
 import { getEffectivePrice, getSaleDiscountPct, isOnSale } from "@/tcg/config";
 import type { TcgCustomPackWithCards } from "@/tcg/types";
 
@@ -44,6 +45,8 @@ export function TcgPackStore({
   const [pending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<{ text: string; error?: boolean } | null>(null);
   const [inspectPack, setInspectPack] = useState<TcgCustomPackWithCards | null>(null);
+  /** The Standard Pack's "What's in the pack" window. */
+  const [showStandardContents, setShowStandardContents] = useState(false);
   const [openingState, setOpeningState] = useState<{
     packName: string;
     cards: MemberCard[];
@@ -227,6 +230,13 @@ export function TcgPackStore({
                 Need {(effectiveStandardPrice - pCredits).toLocaleString()} more P-Credits
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => setShowStandardContents(true)}
+              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-zinc-600 px-4 text-xs font-bold text-zinc-100 hover:bg-zinc-800"
+            >
+              What&apos;s in the pack?
+            </button>
           </div>
         </div>
       </section>
@@ -267,6 +277,8 @@ export function TcgPackStore({
               const effectivePrice = getEffectivePrice(pack.price, pack.salePrice);
               const discountPct = getSaleDiscountPct(pack.price, pack.salePrice);
               const canAfford = pCredits >= effectivePrice;
+              // A live pack can be shown without being for sale: members can look inside but not buy.
+              const forSale = pack.purchasable !== false;
               const previewCards = pack.setList.slice(0, 3).map((s) => s.card);
 
               return (
@@ -309,6 +321,11 @@ export function TcgPackStore({
                           </div>
                         ))}
                       </div>
+                      {!forSale && (
+                        <span className="absolute bottom-3 left-3 rounded-full border border-zinc-500/60 bg-black/80 px-2.5 py-0.5 text-[11px] font-black text-zinc-200 backdrop-blur-sm">
+                          Not available right now
+                        </span>
+                      )}
                       <span className="absolute left-3 top-3 rounded-full border border-amber-400/40 bg-black/75 px-2.5 py-0.5 text-[11px] font-black text-amber-300 backdrop-blur-sm">
                         {pack.needsGeneration
                           ? `${pack.setList.length} Set Card${pack.setList.length === 1 ? "" : "s"} + drawn cards`
@@ -370,9 +387,13 @@ export function TcgPackStore({
                       onClick={() => setInspectPack(pack)}
                       className={`${secondaryBtn} flex-1 text-xs`}
                     >
-                      View Set List ({pack.setList.length})
+                      What&apos;s in the pack?
                     </button>
-                    {pack.needsGeneration ? (
+                    {!forSale ? (
+                      <button type="button" disabled className={`${primaryBtn} flex-1 text-xs`}>
+                        Not available right now
+                      </button>
+                    ) : pack.needsGeneration ? (
                       canAfford ? (
                         <Link
                           href={`/cards/new?pack=${pack.id}`}
@@ -417,6 +438,45 @@ export function TcgPackStore({
         )}
       </section>
 
+      {/* What's in the Standard Pack */}
+      {showStandardContents && (
+        <PackContentsModal
+          packId="standard"
+          title="Penthouse Standard Pack"
+          eyebrow="Core Pack"
+          onClose={() => setShowStandardContents(false)}
+          footer={
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-xl font-black text-amber-400">{effectiveStandardPrice.toLocaleString()} P-Credits</span>
+              {pCredits >= effectiveStandardPrice ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowStandardContents(false);
+                    handleBuyStandardPack();
+                  }}
+                  disabled={pending}
+                  className={primaryBtn}
+                >
+                  Buy Pack · {effectiveStandardPrice.toLocaleString()} P
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowStandardContents(false);
+                    onOpenPCreditsTab();
+                  }}
+                  className={primaryBtn}
+                >
+                  Top Up P-Credits to Buy
+                </button>
+              )}
+            </div>
+          }
+        />
+      )}
+
       {/* Set List Preview Modal */}
       {inspectPack &&
         typeof document !== "undefined" &&
@@ -429,7 +489,7 @@ export function TcgPackStore({
               className="fixed inset-0 z-[9999] flex h-[100dvh] w-screen items-stretch justify-center overscroll-contain sm:items-center sm:p-6"
               role="dialog"
               aria-modal="true"
-              aria-label={`${inspectPack.name} set list`}
+              aria-label={`What's in ${inspectPack.name}`}
             >
               <div
                 className="fixed inset-0 bg-black/80 backdrop-blur-sm"
@@ -466,23 +526,25 @@ export function TcgPackStore({
                 </div>
 
                 <div className="flex-1">
-                  <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-zinc-400">
-                    Cards in this Set ({inspectPack.setList.length})
-                  </h4>
                   <PackOddsNote pack={inspectPack} />
-                  <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-                    {inspectPack.setList.map(({ card, chancePct }) => (
-                      <li key={card.id} className="space-y-1.5">
-                        <FullArtCard card={card} className="drop-shadow-lg" />
-                        <div className="flex items-center justify-between px-1 text-xs">
-                          <span className="font-bold text-zinc-200">{rarityLabel(card.tier)}</span>
-                          <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-black text-amber-300">
-                            {chancePct}% odds
-                          </span>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+                  <PackContentsView
+                    packId={inspectPack.id}
+                    fallback={
+                      <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+                        {inspectPack.setList.map(({ card, chancePct }) => (
+                          <li key={card.id} className="space-y-1.5">
+                            <FullArtCard card={card} className="drop-shadow-lg" />
+                            <div className="flex items-center justify-between px-1 text-xs">
+                              <span className="font-bold text-zinc-200">{rarityLabel(card.tier)}</span>
+                              <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-black text-amber-300">
+                                {chancePct}% odds
+                              </span>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    }
+                  />
                 </div>
 
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800 pt-4">
@@ -503,7 +565,11 @@ export function TcgPackStore({
                       </span>
                     )}
                   </div>
-                  {pCredits >= inspectEffectivePrice ? (
+                  {inspectPack.purchasable === false ? (
+                    <span className="rounded-xl border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-300">
+                      Not available to buy right now
+                    </span>
+                  ) : pCredits >= inspectEffectivePrice ? (
                     inspectPack.needsGeneration ? (
                     <Link href={`/cards/new?pack=${inspectPack.id}`} className={primaryBtn}>
                       Choose car &amp; open ({inspectEffectivePrice.toLocaleString()} P-Credits)

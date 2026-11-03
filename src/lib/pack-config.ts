@@ -502,11 +502,16 @@ export function bonusEntryOverallPct(bonus: PackBonus, entry: BonusEntry): numbe
 }
 
 /**
- * How a set card is given out as a bonus pull: always as a Legend card, with each stat lifted into 23 to 25, whatever
- * rarity and stats it was saved with. This is how the Standard Pack's bonus card has always been given out. (Stats saved
- * on the old out-of-10 scale are converted first.)
+ * How a set card is given out as a bonus pull: as a Legend card, with each stat lifted into 23 to 25, whatever rarity and
+ * stats it was saved with. This is how the Standard Pack's bonus card has always been given out. (Stats saved on the old
+ * out-of-10 scale are converted first.) The one exception is a Mythic card: it stays Mythic with 25 in every stat, because
+ * Legend stops short of that and a Mythic card shown as Legend would carry Mythic's stats under the wrong rarity.
  */
-export function bonusPullCard(source: Pick<FullArtCardData, "stats">): { tier: FullArtTier; stats: FullArtCardData["stats"] } {
+export function bonusPullCard(source: Pick<FullArtCardData, "stats"> & { tier?: FullArtTier }): {
+  tier: FullArtTier;
+  stats: FullArtCardData["stats"];
+} {
+  if (source.tier === "mythic") return { tier: "mythic", stats: { drift: "25", accel: "25", grip: "25", steer: "25" } };
   const raw = source.stats || { drift: "24", accel: "23", grip: "23", steer: "24" };
   const lift = (value: string | undefined, fallback: number) => {
     const n = Number(value || fallback) > 10 ? Number(value) : Number(value || 9) * 2.5;

@@ -66,6 +66,11 @@ export interface TcgCustomPack {
   /** Optional discounted sale price in P-Credits (active when > 0 and < price). */
   salePrice?: number | null;
   status: TcgPackStatus;
+  /**
+   * Whether a live pack can be bought and opened right now. A live pack that is not purchasable still shows in the store
+   * (members can look at what is in it) but its buy button is off. Missing means yes, so existing packs are unchanged.
+   */
+  purchasable?: boolean;
   /** Number of cards pulled per pack opening (default 1). */
   cardsPerPack: number;
   /** Set list of saved Full-Art cards assigned to this pack. */

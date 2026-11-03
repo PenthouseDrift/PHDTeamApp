@@ -203,7 +203,7 @@ export function EntryEditorDialog({
         <div className="w-44 shrink-0 self-center sm:sticky sm:top-0 sm:self-start">
           <FullArtCard card={preview} showDurability={false} />
           <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-            {bonus ? "Shown as saved. Bonus cards are given out as Legend." : variant?.rerollOnPull || statsChoice?.mode === "reroll" ? "Stats are rolled at each pull." : ""}
+            {bonus ? "Shown as saved. Bonus cards are given out as Legend, or Mythic if the card is Mythic." : variant?.rerollOnPull || statsChoice?.mode === "reroll" ? "Stats are rolled at each pull." : ""}
           </p>
         </div>
 

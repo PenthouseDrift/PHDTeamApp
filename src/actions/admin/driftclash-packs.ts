@@ -153,6 +153,8 @@ export interface SavePackInput {
   price: number;
   salePrice?: number | null;
   status: TcgPackStatus;
+  /** Whether a live pack can be bought. Defaults to the pack's current setting, or yes for a new pack. */
+  purchasable?: boolean;
   cardsPerPack?: number;
   config: PackConfig;
 }
@@ -213,6 +215,7 @@ export async function savePackAction(input: SavePackInput): Promise<ActionResult
       price,
       salePrice,
       status,
+      purchasable: input.purchasable ?? existing?.purchasable ?? true,
       cardsPerPack,
       cards: mirror,
       createdAt: existing?.createdAt ?? now,
@@ -301,6 +304,31 @@ export async function setPackStatusAction(packId: string, status: TcgPackStatus)
   } catch (error) {
     console.error("[driftclash-packs] status change failed:", error);
     return { success: false, error: error instanceof Error ? error.message : "Could not change the pack's status" };
+  }
+}
+
+/**
+ * Turn buying on or off for a pack, without changing whether it is live. A live pack that is not purchasable stays in the
+ * store so members can see what is in it, but it can't be bought or opened. Changes nothing else about the pack.
+ */
+export async function setPackPurchasableAction(packId: string, purchasable: boolean): Promise<ActionResult<TcgCustomPackWithCards>> {
+  try {
+    if (!(await requireAdmin())) return { success: false, error: "Only admins can change packs" };
+    if (!MEMBER_CARD_ID_PATTERN.test(packId)) return { success: false, error: "Invalid pack" };
+
+    const pack = parseCustomPack(await redis.get(tcgCustomPackKey(packId)));
+    if (!pack) return { success: false, error: "That pack no longer exists" };
+
+    // The edit time is left alone so the editor isn't reset mid-edit.
+    const updated: TcgCustomPack = { ...pack, purchasable: purchasable !== false };
+    await redis.set(tcgCustomPackKey(packId), JSON.stringify(updated));
+
+    const [hydrated] = await hydrateCustomPacks([updated]);
+    revalidate();
+    return { success: true, data: hydrated };
+  } catch (error) {
+    console.error("[driftclash-packs] purchasable change failed:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Could not change whether the pack can be bought" };
   }
 }
 

@@ -154,7 +154,7 @@ export function SavedSetCardPicker({
 
             {bonus ? (
               <p className="rounded-xl bg-zinc-100 p-3 text-xs text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
-                In a bonus pull this card is given out as a Legend card with stats of at least 23, so there is no need to reroll its stats.
+                In a bonus pull this card is given out as a Legend card with stats of at least 23 (a Mythic card stays Mythic), so there is no need to reroll its stats.
               </p>
             ) : (
               statsChoice && (

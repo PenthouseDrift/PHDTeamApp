@@ -34,6 +34,7 @@ import {
   deletePackAction,
   savePackAction,
   savePackConfigAction,
+  setPackPurchasableAction,
   setPackStatusAction,
   setStandardPackEnabledAction,
 } from "@/actions/admin/driftclash-packs";
@@ -124,6 +125,8 @@ export function PackEditor({
   const [salePrice, setSalePrice] = useState(pack?.salePrice ? String(pack.salePrice) : "");
   const [cardsPerPack, setCardsPerPack] = useState(String(pack?.cardsPerPack ?? 1));
   const [status, setStatus] = useState<TcgPackStatus>(pack?.status ?? "draft");
+  /** Whether a live pack can be bought. Off means members can see the pack and what is in it, but not buy it. */
+  const [purchasable, setPurchasable] = useState(pack?.purchasable !== false);
 
   const [adding, setAdding] = useState<FullArtTier | null>(null);
   const [addTab, setAddTab] = useState<"members" | "styles" | "cards">("cards");
@@ -160,6 +163,30 @@ export function PackEditor({
     const chancePct = Math.max(0, Math.min(5, Math.round((100 - used) * 100) / 100));
     setEntries(tier, [...draft.rarities[tier], { kind, refId, chancePct, ...(variant ? { variant } : {}) }]);
     setAdding(null);
+  }
+  /**
+   * Add several set cards to a rarity in one go. A card already in the rarity is skipped. Each new entry starts with a share of
+   * what is left (up to 5%), the same as adding one at a time, and the chances can be set afterwards. Returns how many were
+   * added and how many were skipped as already there.
+   */
+  function addCardEntries(tier: FullArtTier, items: { refId: string; variant?: EntryVariant }[]): { added: number; skipped: number } {
+    const entries = [...draft.rarities[tier]];
+    let used = entries.reduce((s, e) => s + e.chancePct, 0);
+    let added = 0;
+    let skipped = 0;
+    for (const item of items) {
+      if (entries.some((e) => e.kind === "card" && e.refId === item.refId)) {
+        skipped++;
+        continue;
+      }
+      const chancePct = Math.max(0, Math.min(5, Math.round((100 - used) * 100) / 100));
+      used += chancePct;
+      entries.push({ kind: "card", refId: item.refId, chancePct, ...(item.variant ? { variant: item.variant } : {}) });
+      added++;
+    }
+    setEntries(tier, entries);
+    setAdding(null);
+    return { added, skipped };
   }
   /** True when the card as this pack uses it is not the card as saved: another rarity, a restyle, a redraw, or stats set by hand. */
   function differsFromSaved(saved: SetCard, entry: PackEntry, tier: FullArtTier): boolean {
@@ -278,6 +305,7 @@ export function PackEditor({
         price: Number(price),
         salePrice: salePrice.trim() ? Number(salePrice) : null,
         status,
+        purchasable,
         cardsPerPack: Number(cardsPerPack),
         config: draft,
       });
@@ -339,6 +367,28 @@ export function PackEditor({
         onPackSaved(res.data);
         onNotify({
           text: res.data.status === "live" ? `"${res.data.name}" is now live in the store.` : `"${res.data.name}" is now a draft and hidden from the store.`,
+        });
+      } else onNotify({ text: res.error, error: true });
+    });
+  }
+
+  /** Whether members can buy this live pack. For a pack that exists this takes effect straight away; for a new pack it applies when created. */
+  function togglePurchasable() {
+    const next = !purchasable;
+    if (!pack) {
+      setPurchasable(next);
+      return;
+    }
+    startTransition(async () => {
+      const res = await setPackPurchasableAction(pack.id, next);
+      if (res.success) {
+        setPurchasable(res.data.purchasable !== false);
+        onPackSaved(res.data);
+        onNotify({
+          text:
+            res.data.purchasable === false
+              ? `"${res.data.name}" can't be bought right now. ${res.data.status === "live" ? "Members can still see it and what is in it." : "It is still a draft, so members can't see it."}`
+              : `"${res.data.name}" can be bought again.`,
         });
       } else onNotify({ text: res.error, error: true });
     });
@@ -421,6 +471,31 @@ export function PackEditor({
               className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-50 ${status === "live" ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-700"}`}
             >
               <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${status === "live" ? "left-[22px]" : "left-0.5"}`} />
+            </button>
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-800/60">
+            <span>
+              <span className="block text-sm font-black text-zinc-900 dark:text-zinc-100">
+                {purchasable ? "Members can buy this pack" : "Not available to buy right now"}
+              </span>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+                {purchasable
+                  ? "Turn this off to keep the pack in the store for members to look at, without letting them buy or open it."
+                  : status === "live"
+                    ? "Members can still see the pack and everything in it, but the buy button is off."
+                    : "Takes effect once the pack is live. While it is a draft, members can't see it at all."}
+              </span>
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={purchasable}
+              aria-label="Members can buy this pack"
+              disabled={pending}
+              onClick={togglePurchasable}
+              className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-50 ${purchasable ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-700"}`}
+            >
+              <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${purchasable ? "left-[22px]" : "left-0.5"}`} />
             </button>
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -733,6 +808,20 @@ export function PackEditor({
                 onNotify({
                   text: `Added "${card.name}" to ${tierLabel(adding)} with ${describeVariant(variant)}. The member's car is saved as a set card once and reused if you pick it again. Save the pack to keep your changes.`,
                 });
+              }}
+              onImportedMany={(items, failed) => {
+                items.forEach((i) => onCardCreated(i.card));
+                const { added, skipped } = addCardEntries(
+                  adding,
+                  items.map((i) => ({ refId: i.card.id, variant: i.variant }))
+                );
+                const parts = [
+                  `Added ${added} member car${added === 1 ? "" : "s"} to ${tierLabel(adding)}.`,
+                  skipped > 0 ? `${skipped} ${skipped === 1 ? "was" : "were"} already there and skipped.` : "",
+                  failed.length > 0 ? `Could not add: ${failed.join("; ")}.` : "",
+                  "Each car is saved as a set card once. Set their chances below, then save the pack to keep your changes.",
+                ].filter(Boolean);
+                onNotify({ text: parts.join(" "), error: failed.length > 0 && added === 0 });
               }}
             />
           )}

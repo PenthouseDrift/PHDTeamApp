@@ -137,7 +137,7 @@ export function DriftClashPacksAdmin({
             {packs.map((p) => (
               <button key={p.id} type="button" className={packBtn(selected === p.id)} aria-pressed={selected === p.id} onClick={() => setSelected(p.id)}>
                 {p.name}
-                <span className={chip}>{p.status === "live" ? "Live" : "Draft"}</span>
+                <span className={chip}>{p.status === "live" ? (p.purchasable === false ? "Live · not for sale" : "Live") : "Draft"}</span>
                 {!p.config && <span className={chip}>Old layout</span>}
               </button>
             ))}

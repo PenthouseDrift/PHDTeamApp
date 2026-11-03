@@ -27,7 +27,7 @@ export default async function NewCardPage({ searchParams }: { searchParams: Prom
   let customPack: { id: string; name: string; price: number; pCredits: number } | undefined;
   if (packParam) {
     const raw = MEMBER_CARD_ID_PATTERN.test(packParam) ? parseCustomPack(await redis.get(tcgCustomPackKey(packParam))) : null;
-    const [pack] = raw && raw.status === "live" ? await hydrateCustomPacks([raw]) : [];
+    const [pack] = raw && raw.status === "live" && raw.purchasable !== false ? await hydrateCustomPacks([raw]) : [];
     if (!pack?.config || !pack.needsGeneration) redirect("/cards");
     customPack = {
       id: pack.id,

@@ -33,7 +33,7 @@ import {
   generatedPreviewCard,
 } from "@/components/admin/driftclash/preview";
 
-/** The card as a member would be given it from the bonus pull: Legend, with stats lifted to 23 to 25. */
+/** The card as a member would be given it from the bonus pull: Legend with stats lifted to 23 to 25, or Mythic if it is a Mythic card. */
 const asPulled = (card: SetCard): SetCard => ({ ...card, ...bonusPullCard(card) });
 
 /**
@@ -190,8 +190,8 @@ export function BonusPullEditor({
           </div>
         </div>
         <p className="text-xs text-zinc-600 dark:text-zinc-400">
-          When a pack gets a bonus card it is picked from the cards below by their share. Bonus cards are given out as Legend cards with stats
-          of at least 23, whatever rarity they were saved with, and their picture is never redrawn, so they cost no AI images.
+          When a pack gets a bonus card it is picked from the cards below by their share. Bonus cards are given out as Legend cards with stats of at least 23, whatever
+          rarity they were saved with, except Mythic cards, which stay Mythic. Their picture is never redrawn, so they cost no AI images.
         </p>
       </div>
 
