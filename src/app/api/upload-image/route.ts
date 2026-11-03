@@ -21,6 +21,8 @@ export async function POST(request: Request): Promise<NextResponse> {
   const userId = session?.user?.id;
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Which step was running, so a failure in the logs (and the message) says where it went wrong.
+  let stage = "limit";
   try {
     // A simple cap per person so the picture shrinker can't be used to run up the bill.
     const key = `upload:count:${userId}`;
@@ -30,6 +32,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.json({ error: "You've uploaded a lot of pictures in the last hour. Please try again later." }, { status: 429 });
     }
 
+    stage = "read";
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof File)) return NextResponse.json({ error: "No picture was sent." }, { status: 400 });
@@ -42,7 +45,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     const requested = Number(form.get("maxWidth"));
     const maxWidth = Number.isFinite(requested) && requested > 0 ? Math.min(2400, Math.max(128, Math.round(requested))) : 1600;
 
+    stage = "optimise";
     const { buffer } = await optimizeUpload(Buffer.from(await file.arrayBuffer()), { maxWidth });
+    stage = "store";
     const blob = await put(`uploads/${randomUUID()}.webp`, buffer, {
       access: "public",
       contentType: "image/webp",
@@ -52,7 +57,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ url: blob.url, bytes: buffer.length });
   } catch (error) {
     if (error instanceof ImageUploadError) return NextResponse.json({ error: error.message }, { status: 400 });
-    console.error("[upload-image] failed:", error);
-    return NextResponse.json({ error: "The upload didn't work. Please try again." }, { status: 500 });
+    console.error(`[upload-image] failed at "${stage}":`, error);
+    return NextResponse.json({ error: `The upload didn't work (${stage}). Please try again.` }, { status: 500 });
   }
 }

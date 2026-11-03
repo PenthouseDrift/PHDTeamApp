@@ -15,6 +15,8 @@ export async function optimizeUpload(
   options: { maxWidth?: number; quality?: number } = {}
 ): Promise<{ buffer: Buffer; width: number; height: number }> {
   const { maxWidth = 1600, quality = 80 } = options;
+  // Outside the try on purpose: if sharp itself can't load, that is a server problem (reported as a failed upload and
+  // logged), not "that image couldn't be read".
   const sharp = (await import("sharp")).default;
   try {
     const meta = await sharp(input, { limitInputPixels: MAX_INPUT_PIXELS }).metadata();
