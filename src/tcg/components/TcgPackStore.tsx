@@ -196,21 +196,21 @@ export function TcgPackStore({
                         ))}
                       </div>
                       {pack.bonus && (
-                        <span className="absolute bottom-3 right-3 rounded-full border border-fuchsia-400/50 bg-black/80 px-2.5 py-0.5 text-[11px] font-black text-fuchsia-300 backdrop-blur-sm">
+                        <span className="z-20 absolute bottom-3 right-3 rounded-full border border-fuchsia-400/50 bg-black/80 px-2.5 py-0.5 text-[11px] font-black text-fuchsia-300 backdrop-blur-sm">
                           ★ Bonus card
                         </span>
                       )}
                       {!forSale && (
-                        <span className="absolute bottom-3 left-3 rounded-full border border-zinc-500/60 bg-black/80 px-2.5 py-0.5 text-[11px] font-black text-zinc-200 backdrop-blur-sm">
+                        <span className="z-20 absolute bottom-3 left-3 rounded-full border border-zinc-500/60 bg-black/80 px-2.5 py-0.5 text-[11px] font-black text-zinc-200 backdrop-blur-sm">
                           Not available right now
                         </span>
                       )}
-                      <span className="absolute left-3 top-3 rounded-full border border-amber-400/40 bg-black/75 px-2.5 py-0.5 text-[11px] font-black text-amber-300 backdrop-blur-sm">
+                      <span className="z-20 absolute left-3 top-3 rounded-full border border-amber-400/40 bg-black/75 px-2.5 py-0.5 text-[11px] font-black text-amber-300 backdrop-blur-sm">
                         {pack.needsGeneration
                           ? `${pack.setList.length} Set Card${pack.setList.length === 1 ? "" : "s"} + drawn cards`
                           : `${pack.setList.length} Card${pack.setList.length === 1 ? "" : "s"} in Set`}
                       </span>
-                      <div className="absolute right-3 top-3 flex items-center gap-1.5">
+                      <div className="z-20 absolute right-3 top-3 flex items-center gap-1.5">
                         {packOnSale && (
                           <span className="rounded-full bg-gradient-to-r from-rose-600 to-amber-500 px-2.5 py-0.5 text-[11px] font-black uppercase text-white shadow">
                             🔥 -{discountPct}% SALE
@@ -339,10 +339,10 @@ export function TcgPackStore({
                       discountPct={standardOnSale ? standardDiscountPct : 0}
                     />
                   </div>
-                  <span className="absolute left-3 top-3 rounded-full border border-amber-400/40 bg-black/75 px-2.5 py-0.5 text-[11px] font-black text-amber-300 backdrop-blur-sm">
+                  <span className="z-20 absolute left-3 top-3 rounded-full border border-amber-400/40 bg-black/75 px-2.5 py-0.5 text-[11px] font-black text-amber-300 backdrop-blur-sm">
                     You have {packCredits} unopened
                   </span>
-                  <div className="absolute right-3 top-3 flex items-center gap-1.5">
+                  <div className="z-20 absolute right-3 top-3 flex items-center gap-1.5">
                     {standardOnSale && (
                       <span className="rounded-full bg-gradient-to-r from-rose-600 to-amber-500 px-2.5 py-0.5 text-[11px] font-black uppercase text-white shadow">
                         🔥 -{standardDiscountPct}% SALE
