@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { Barlow_Condensed } from "next/font/google";
 import { darken, lighten } from "@/lib/card-maker";
-import { tierInfo, type FullArtCardData } from "@/lib/full-art-card";
+import { ROLLED_STAT, tierInfo, type FullArtCardData } from "@/lib/full-art-card";
 import { getCrewCardDefinition } from "@/lib/crew-cards";
 import { HEADER_LOGO_SRC, headerLogoStyle, headerTagLayout } from "@/components/cards/card-header";
 
@@ -787,9 +787,13 @@ export function FullArtCard({
   // The four stats added up, each counted as 0 to 25, so the most a card can score is 100.
   // Nothing is shown while the stats are empty (a blank "__/100" only in the editor preview).
   const statNumbers = stats.map(([, value]) => Number.parseInt(value, 10)).filter((n) => Number.isFinite(n));
-  const score: number | "placeholder" | null = isSpecialClashCard
+  // Stats rolled fresh at each pull are shown as "??", and so is their total.
+  const statsHidden = !isSpecialClashCard && stats.every(([, value]) => value.trim() === ROLLED_STAT);
+  const score: number | "placeholder" | "hidden" | null = isSpecialClashCard
     ? null
-    : statNumbers.length > 0
+    : statsHidden
+      ? "hidden"
+      : statNumbers.length > 0
       ? statNumbers.reduce((sum, n) => sum + Math.min(MAX_STAT, Math.max(0, n)), 0)
       : placeholders
         ? "placeholder"
@@ -1020,7 +1024,7 @@ export function FullArtCard({
               score !== null && (
                 <span
                   role="img"
-                  aria-label={score === "placeholder" ? `Total score out of ${MAX_TOTAL_SCORE}` : `Total score ${score} out of ${MAX_TOTAL_SCORE}`}
+                  aria-label={score === "placeholder" ? `Total score out of ${MAX_TOTAL_SCORE}` : score === "hidden" ? `Total score not known until pulled, out of ${MAX_TOTAL_SCORE}` : `Total score ${score} out of ${MAX_TOTAL_SCORE}`}
                   style={{
                     padding: "0.9cqw 2.4cqw",
                     borderRadius: "1.2cqw",
@@ -1035,7 +1039,7 @@ export function FullArtCard({
                     textShadow: "0 0.2cqw 0.6cqw rgba(0,0,0,0.9)",
                   }}
                 >
-                  {score === "placeholder" ? "__" : score}/{MAX_TOTAL_SCORE}
+                  {score === "placeholder" ? "__" : score === "hidden" ? ROLLED_STAT : score}/{MAX_TOTAL_SCORE}
                 </span>
               )
             )}

@@ -121,6 +121,9 @@ function styledTierPrompt(tier: FullArtTier, styleTexts: string[]): string {
 
 // ── Card data ───────────────────────────────────────────────────────────────
 
+/** Shown in place of a stat that is rolled fresh each time the card is pulled, so it has no fixed value to show. */
+export const ROLLED_STAT = "??";
+
 export interface FullArtStats {
   drift: string;
   accel: string;

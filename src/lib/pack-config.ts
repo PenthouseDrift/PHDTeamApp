@@ -12,7 +12,7 @@
  */
 
 import { RARITY_ODDS, RARITY_STAT_BRACKETS, rollStats, rollStatsAndRarity, statTotal, type Rng } from "@/lib/card-roll";
-import { FRAME_EFFECTS, clampColor, clampHexColor, type FrameEffect, type FullArtCardData, type FullArtTier } from "@/lib/full-art-card";
+import { FRAME_EFFECTS, ROLLED_STAT, clampColor, clampHexColor, type FrameEffect, type FullArtCardData, type FullArtTier } from "@/lib/full-art-card";
 import { ALL_TIERS, ID_PATTERN, frameFieldsFor, type PackStyle } from "@/lib/pack-styles";
 
 /** The id of the always-present Standard Pack's config. Custom packs use their own pack id. */
@@ -278,8 +278,9 @@ export function variantStatsMode(variant: EntryVariant | undefined): StatsMode {
  * rerolls at the pull), the rarity it is on, the style's frame, and the redrawn picture. A style that no longer exists is
  * ignored. Nothing is saved; the card passed in is not changed.
  *
- * Pass `rng` only where a card is actually being given out. Without it a "reroll at the pull" card keeps its saved stats
- * (on the entry's rarity), which is what the editor and the store's set list show.
+ * Pass `rng` only where a card is actually being given out. Without it a "reroll at the pull" card shows "??" for its
+ * stats (on the entry's rarity), since they aren't known until it is pulled. This is what the editor and the store's set
+ * list show. Nothing reads the stats back from a card shown this way.
  */
 export function applyVariant<T extends FullArtCardData>(
   card: T,
@@ -291,10 +292,11 @@ export function applyVariant<T extends FullArtCardData>(
   if (!variant) return card;
   const style = variant.styleId ? styles?.get(variant.styleId) : undefined;
   const rolled = variant.rerollOnPull && tier && rng ? rollStatsForTier(tier, rng) : undefined;
+  const unknown = variant.rerollOnPull && tier && !rng && !variant.stats ? { drift: ROLLED_STAT, accel: ROLLED_STAT, grip: ROLLED_STAT, steer: ROLLED_STAT } : undefined;
   return {
     ...card,
     ...(variant.stats ? { stats: variant.stats, ...(tier ? { tier } : {}) } : {}),
-    ...(variant.rerollOnPull && tier ? { tier, ...(rolled ? { stats: rolled } : {}) } : {}),
+    ...(variant.rerollOnPull && tier ? { tier, ...(rolled ? { stats: rolled } : unknown ? { stats: unknown } : {}) } : {}),
     ...(style ? frameFieldsFor(style.frame) : {}),
     // This pack's own edits win over the card and over the style's frame.
     ...(variant.edits ?? {}),
