@@ -8,6 +8,7 @@ import { redis } from "@/lib/redis";
 import { deleteImage } from "@/lib/blob";
 import { CardArtError, generateArtImage, isBlobUrl } from "@/lib/card-art-generate";
 import { tierFromStats } from "@/lib/card-roll";
+import { compressToWebp } from "@/lib/image-compress";
 import { FULL_ART_TIERS, sanitizeFullArtCard, type FullArtCardData, type FullArtTier } from "@/lib/full-art-card";
 import {
   ALL_MEMBER_CARDS_INDEX,
@@ -437,12 +438,19 @@ async function copyCardImage(url: string): Promise<string> {
   if (!res.ok) throw new Error("Could not load the card's picture");
   const mime = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
   if (!["image/jpeg", "image/png", "image/webp"].includes(mime)) throw new Error("The card's picture must be a JPEG, PNG or WebP");
-  const bytes = Buffer.from(await res.arrayBuffer());
+  let bytes: Buffer = Buffer.from(await res.arrayBuffer());
   if (bytes.length > MAX_COPY_BYTES) throw new Error("The card's picture is too large to copy");
-  const ext = mime === "image/jpeg" ? "jpg" : mime === "image/png" ? "png" : "webp";
+  // Keep the copy small: a card is shown at about 900 pixels wide, so a larger PNG or JPEG is stored as a WebP of that size.
+  let outMime = mime;
+  const compressed = await compressToWebp(bytes);
+  if (compressed && compressed.buffer.length < bytes.length) {
+    bytes = compressed.buffer;
+    outMime = compressed.mime;
+  }
+  const ext = outMime === "image/jpeg" ? "jpg" : outMime === "image/png" ? "png" : "webp";
   const blob = await put(`set-cards/${randomUUID()}.${ext}`, bytes, {
     access: "public",
-    contentType: mime,
+    contentType: outMime,
     addRandomSuffix: true,
     token: process.env.BLOB_READ_WRITE_TOKEN,
   });

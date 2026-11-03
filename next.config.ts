@@ -40,6 +40,8 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // sharp is a native module (it shrinks card pictures to WebP). Keep it out of the bundle and load it from node_modules.
+  serverExternalPackages: ["sharp"],
   experimental: {
     // Reuse a page's data for 30s when someone revisits it (tab hopping, Back).
     // Every action that changes data revalidates its paths, which clears this,
