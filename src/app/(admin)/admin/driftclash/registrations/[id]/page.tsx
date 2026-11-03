@@ -76,10 +76,17 @@ export default async function RegistrationDetailPage({ params }: { params: Promi
               {r.driver.nickname ? ` "${r.driver.nickname}"` : ""}
             </h1>
             <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              <a href={`mailto:${r.email}`} className="underline">
-                {r.email}
-              </a>{" "}
-              · signed up {dateFmt.format(new Date(r.createdAt))}
+              {r.email ? (
+                <>
+                  <a href={`mailto:${r.email}`} className="underline">
+                    {r.email}
+                  </a>{" "}
+                  · signed up
+                </>
+              ) : (
+                "No email (registered without signing up) · sent"
+              )}{" "}
+              {dateFmt.format(new Date(r.createdAt))}
               {r.updatedAt > r.createdAt + 1000 ? ` · updated ${dateFmt.format(new Date(r.updatedAt))}` : ""}
             </p>
             <p className="flex flex-wrap gap-2 pt-1 text-[11px] font-black uppercase">

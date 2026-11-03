@@ -102,6 +102,11 @@ export default async function DriftClashRegistrationsPage({
                         {r.driver.driverName}
                         {r.driver.nickname ? ` "${r.driver.nickname}"` : ""}
                       </span>
+                      {r.source === "guest" && (
+                        <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-[10px] font-black uppercase text-zinc-600 dark:bg-zinc-700 dark:text-zinc-200">
+                          No sign-up
+                        </span>
+                      )}
                       {r.status === "new" && (
                         <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-black uppercase text-black">New</span>
                       )}

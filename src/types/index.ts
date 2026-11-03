@@ -16,6 +16,8 @@ export interface Member {
   lastCheckIn?: number;
   /** Card pack credits the member can spend (1 earned per track check-in). */
   cardCredits?: number;
+  /** P-Credits balance: the Penthouse TCG currency (bought, earned in Clash, or given by an admin). */
+  pCredits?: number;
   /** Total number of card packs opened by this member. */
   packsOpened?: number;
   /** Whether member has early access permission to play Tandem Clash */

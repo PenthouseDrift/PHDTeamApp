@@ -17,6 +17,7 @@ import { quickCheckIn, checkInWithDayPass, checkInWithRental } from "@/actions/a
 import { setUserRole } from "@/actions/admin/users";
 import { grantClashEarlyAccessAction, revokeClashEarlyAccessAction } from "@/tcg/actions";
 import { adminAdjustCardCredits } from "@/actions/admin/card-credits";
+import { adminGrantPCredits } from "@/actions/admin/p-credits";
 import { getOrCreateQRCode } from "@/actions/qr";
 import type { MemberWithMembership } from "@/actions/admin/members";
 
@@ -46,6 +47,8 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate, ch
   const [isPending, startTransition] = useTransition();
   const [localWallet, setLocalWallet] = useState(initialMember.wallet);
   const [localCardCredits, setLocalCardCredits] = useState(initialMember.member.cardCredits ?? 0);
+  const [localPCredits, setLocalPCredits] = useState(initialMember.member.pCredits ?? 0);
+  const [pCreditsAmount, setPCreditsAmount] = useState("");
   const [localMembership, setLocalMembership] = useState(initialMember.membership);
   const [localRole, setLocalRole] = useState<"admin" | "moderator" | "member" | "asbo-rc">(initialMember.member.role);
   const [overrideDate, setOverrideDate] = useState("");
@@ -121,6 +124,22 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate, ch
       if (res.success) {
         setLocalCardCredits(res.data.cardCredits);
         onUpdate({ type: "success", message: `Card pack credits updated for ${m.name}: now ${res.data.cardCredits}` });
+      } else {
+        onUpdate({ type: "error", message: res.error });
+      }
+    });
+  }
+
+  function handleGivePCredits(amount: number) {
+    startTransition(async () => {
+      const res = await adminGrantPCredits(m.id, amount);
+      if (res.success) {
+        setLocalPCredits(res.data.pCredits);
+        setPCreditsAmount("");
+        onUpdate({
+          type: "success",
+          message: `Gave ${amount.toLocaleString()} P-Credits to ${m.name}: total now ${res.data.pCredits.toLocaleString()}`,
+        });
       } else {
         onUpdate({ type: "error", message: res.error });
       }
@@ -649,6 +668,60 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate, ch
                     +5
                   </button>
                 </div>
+              </div>
+
+              {/* P-Credits: the Penthouse TCG currency. Admins can give more; the total shows the member's balance. */}
+              <div className="rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">P-Credits total</span>
+                  <p className="text-2xl font-black text-zinc-900 dark:text-zinc-100" aria-live="polite">
+                    {localPCredits.toLocaleString()}
+                  </p>
+                </div>
+                <div className="flex gap-1.5">
+                  {[10, 50, 100].map((quick) => (
+                    <button
+                      key={quick}
+                      onClick={() => handleGivePCredits(quick)}
+                      disabled={isPending}
+                      aria-label={`Give ${quick} P-Credits`}
+                      className="flex-1 py-1.5 text-sm font-bold rounded-md bg-white dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300 hover:bg-green-50 hover:text-green-600 hover:border-green-200 disabled:opacity-40 transition-colors"
+                    >
+                      +{quick}
+                    </button>
+                  ))}
+                </div>
+                <form
+                  className="flex gap-1.5"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const amount = Math.trunc(Number(pCreditsAmount));
+                    if (Number.isFinite(amount) && amount > 0) handleGivePCredits(amount);
+                  }}
+                >
+                  <label htmlFor={`p-credits-amount-${m.id}`} className="sr-only">
+                    Amount of P-Credits to give
+                  </label>
+                  <input
+                    id={`p-credits-amount-${m.id}`}
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={10000}
+                    step={1}
+                    value={pCreditsAmount}
+                    onChange={(e) => setPCreditsAmount(e.target.value)}
+                    placeholder="Custom amount"
+                    className="min-w-0 flex-1 rounded-md border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 px-2 py-1.5 text-sm text-zinc-900 dark:text-zinc-100"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isPending || !(Math.trunc(Number(pCreditsAmount)) > 0)}
+                    className="rounded-md bg-amber-500 px-3 py-1.5 text-sm font-bold text-zinc-900 hover:bg-amber-400 disabled:opacity-40 transition-colors"
+                  >
+                    Give
+                  </button>
+                </form>
               </div>
             </div>
           )}

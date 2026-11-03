@@ -32,6 +32,8 @@ export interface DriftClashRegistration {
   email: string;
   googleName: string;
   googleImage: string;
+  /** "guest" when they registered without signing in (their id is then "guest-<uuid>" and the Google fields are blank). Older records have none. */
+  source?: "google" | "guest";
   driver: {
     driverName: string;
     nickname: string;
