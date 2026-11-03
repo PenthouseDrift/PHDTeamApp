@@ -427,6 +427,7 @@ export async function hydrateCustomPacks(packs: TcgCustomPack[]): Promise<TcgCus
         setList,
         config,
         needsGeneration: packNeedsGeneration(config),
+        ...(bonusIsActive(config.bonus) ? { bonus: { chancePct: config.bonus.chancePct, count: config.bonus.entries.length } } : {}),
       };
     }
 
@@ -450,6 +451,21 @@ export async function hydrateCustomPacks(packs: TcgCustomPack[]): Promise<TcgCus
       setList,
     };
   });
+}
+
+/**
+ * A pack as members get it: the same pack with every chance and weight taken out (and the pack's setup, which holds them),
+ * so odds are never sent to a member's browser. Prices, cards and whether a car is needed are kept.
+ */
+export function withoutOdds(pack: TcgCustomPackWithCards): TcgCustomPackWithCards {
+  const { config, ...rest } = pack;
+  void config;
+  return {
+    ...rest,
+    cards: pack.cards.map((c) => ({ cardId: c.cardId, weight: 1 })),
+    setList: pack.setList.map((s) => ({ card: s.card, weight: 1, chancePct: 0 })),
+    ...(pack.bonus ? { bonus: { chancePct: 0, count: pack.bonus.count } } : {}),
+  };
 }
 
 /** List custom packs (either all for admin, or only `live` packs with at least 1 card for members). */

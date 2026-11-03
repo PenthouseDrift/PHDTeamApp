@@ -18,6 +18,7 @@ import {
   getTcgStoreConfig,
   listActiveMarketListings,
   listCustomPacks,
+  withoutOdds,
 } from "@/tcg/storage";
 import { TcgApp } from "@/tcg/components/TcgApp";
 import { listTandemClashChallengesAction } from "@/tcg/challenges-actions";
@@ -127,7 +128,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
           initialStandardPackPrice={storeConfig.standardPackPrice}
           initialStandardPackSalePrice={storeConfig.standardPackSalePrice ?? null}
           initialPCreditBundles={storeConfig.pCreditBundles}
-          initialCustomPacks={customPacks}
+          initialCustomPacks={customPacks.map(withoutOdds)}
           initialListings={listings}
           initialClashOpponent={clashOpponent}
           initialClashStats={clashStats}

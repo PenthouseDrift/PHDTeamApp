@@ -94,6 +94,8 @@ export interface TcgCustomPackWithCards extends TcgCustomPack {
   config?: PackConfig;
   /** True when some cards in the pack are drawn from a car, so opening it needs a car photo or community cars. */
   needsGeneration?: boolean;
+  /** Set when the pack's bonus pull is on: the chance of a bonus card per pack, and how many cards it can be. */
+  bonus?: { chancePct: number; count: number };
 }
 
 /** Global store configuration for the TCG Pack Store & P-Credit Bundles. */

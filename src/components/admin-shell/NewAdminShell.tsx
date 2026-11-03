@@ -133,7 +133,7 @@ export function NewAdminShell({
     }`;
 
   return (
-    <div className="new-shell flex h-screen bg-zinc-50 dark:bg-zinc-950">
+    <div className="new-shell fixed inset-0 flex bg-zinc-50 dark:bg-zinc-950">
       {/* ── Desktop / tablet sidebar ─────────────────────────────────────── */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900 md:flex">
         <div className="flex items-center gap-2.5 border-b border-zinc-200 p-4 dark:border-zinc-800">

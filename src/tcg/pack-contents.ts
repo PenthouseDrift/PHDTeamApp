@@ -3,14 +3,11 @@ import type { FullArtCardData, FullArtTier } from "@/lib/full-art-card";
 import { RARITY_RANK } from "@/lib/card-roll";
 import { FEATURED_CARDS_KEY, MEMBER_CARD_ID_PATTERN } from "@/lib/member-card-store";
 import {
-  DEFAULT_BONUS_CHANCE_PCT,
   STANDARD_PACK_ID,
   applyVariant,
-  bonusEntryOverallPct,
   bonusPullCard,
   bonusIsActive,
   effectivePcts,
-  entryOverallPct,
   standardOddsPct,
   variantStatsMode,
   type PackConfig,
@@ -21,25 +18,22 @@ import { hydrateCustomPacks, parseCustomPack, tcgCustomPackKey } from "@/tcg/sto
 
 /**
  * What a member is told about the cards in a pack. Built on the server from the pack's setup and sent to the browser, so it
- * holds only what a member should see: the cards and their odds, never a style's drawing instructions.
+ * holds only what a member should see: which cards can come out, never their odds and never a style's drawing instructions.
+ * Odds are worked out here to decide what to include, and then left out of what is sent.
  */
 
 export interface PackContentsCard {
   card: FullArtCardData;
-  /** The chance that a card from the pack is this one (percent of everything the pack gives out). */
-  overallPct: number;
   /** True when the card's stats are rolled again each time it is pulled, so the stats shown are only an example. */
   rerolled: boolean;
 }
 
 export interface PackContentsTier {
   tier: FullArtTier;
-  /** The chance that a card from the pack is this rarity (percent). */
-  oddsPct: number;
   /** The fixed cards that can be this rarity. */
   cards: PackContentsCard[];
-  /** The share of this rarity (percent) that is a card drawn from a car when the pack is opened. */
-  drawnPct: number;
+  /** True when some cards of this rarity are drawn from a car when the pack is opened. */
+  drawn: boolean;
 }
 
 export interface PackContents {
@@ -49,14 +43,9 @@ export interface PackContents {
   /** Plain-language lines about what every pack always includes. Only the Standard Pack has any. */
   includes: string[];
   tiers: PackContentsTier[];
-  /** The rare extra card, with its chance per pack and the cards it can be. Null when the pack has none. */
-  bonus: { chancePct: number; cards: Array<{ card: FullArtCardData; overallPct: number }> } | null;
+  /** The cards the rare extra card can be. Null when the pack has none. */
+  bonus: { cards: Array<{ card: FullArtCardData }> } | null;
 }
-
-const round = (n: number, places = 4) => {
-  const f = 10 ** places;
-  return Math.round(n * f) / f;
-};
 
 /** Rarest first. */
 const RAREST_FIRST = [...ALL_TIERS].reverse();
@@ -76,25 +65,24 @@ function fromConfig(config: PackConfig, runtime: PackRuntime): Pick<PackContents
       fixedPct += entry.chancePct;
       cards.push({
         card: applyVariant(saved, entry.variant, runtime.styles, tier),
-        overallPct: entryOverallPct(pcts, tier, entry),
         rerolled: variantStatsMode(entry.variant) === "reroll",
       });
     }
-    tiers.push({ tier, oddsPct: round(pcts[tier]), cards, drawnPct: round(Math.max(0, 100 - fixedPct), 2) });
+    tiers.push({ tier, cards, drawn: fixedPct < 100 - 1e-4 });
   }
 
   let bonus: PackContents["bonus"] = null;
   const bonusConfig = config.bonus;
   if (bonusIsActive(bonusConfig)) {
-    const list: Array<{ card: FullArtCardData; overallPct: number }> = [];
+    const list: Array<{ card: FullArtCardData }> = [];
     for (const entry of bonusConfig.entries) {
       const saved = runtime.cards.get(entry.refId);
       if (!saved) continue;
       // Shown as it is given out: Legend with lifted stats, or Mythic for a Mythic card.
       const shown = applyVariant(saved, entry.variant, runtime.styles);
-      list.push({ card: { ...shown, ...bonusPullCard(shown) }, overallPct: bonusEntryOverallPct(bonusConfig, entry) });
+      list.push({ card: { ...shown, ...bonusPullCard(shown) } });
     }
-    if (list.length > 0) bonus = { chancePct: bonusConfig.chancePct, cards: list };
+    if (list.length > 0) bonus = { cards: list };
   }
   return { tiers, bonus };
 }
@@ -107,14 +95,13 @@ async function legacyStandardBonus(): Promise<PackContents["bonus"]> {
     .filter((e) => MEMBER_CARD_ID_PATTERN.test(e.id) && Number.isFinite(e.weight) && e.weight > 0);
   if (entries.length === 0) return null;
   const cards = await loadSetCards(entries.map((e) => e.id));
-  const total = entries.reduce((s, e) => s + e.weight, 0);
   const list = entries
     .filter((e) => cards.has(e.id))
     .map((e) => {
       const saved = cards.get(e.id)!;
-      return { card: { ...saved, ...bonusPullCard(saved) }, overallPct: round((DEFAULT_BONUS_CHANCE_PCT * e.weight) / total, 6) };
+      return { card: { ...saved, ...bonusPullCard(saved) } };
     });
-  return list.length > 0 ? { chancePct: DEFAULT_BONUS_CHANCE_PCT, cards: list } : null;
+  return list.length > 0 ? { cards: list } : null;
 }
 
 async function buildStandard(): Promise<PackContents> {
@@ -137,7 +124,7 @@ async function buildStandard(): Promise<PackContents> {
     ({ tiers, bonus } = fromConfig(config, runtime));
   } else {
     const pcts = effectivePcts({ oddsOverride: false, oddsPct: standardOddsPct() });
-    tiers = RAREST_FIRST.filter((tier) => pcts[tier] > 0).map((tier) => ({ tier, oddsPct: round(pcts[tier]), cards: [], drawnPct: 100 }));
+    tiers = RAREST_FIRST.filter((tier) => pcts[tier] > 0).map((tier) => ({ tier, cards: [], drawn: true }));
   }
 
   // The bonus pull works whether or not the setup above is on. Once it has been set up in the pack maker, that is what counts.
@@ -175,18 +162,13 @@ export async function buildPackContents(packId: string, options: { isAdmin?: boo
 
   // An old pack: one weighted list of cards. Group it by the rarity each card was saved as.
   const byTier = new Map<FullArtTier, PackContentsCard[]>();
-  for (const { card, chancePct } of pack.setList) {
+  for (const { card } of pack.setList) {
     const list = byTier.get(card.tier) ?? [];
-    list.push({ card, overallPct: chancePct, rerolled: false });
+    list.push({ card, rerolled: false });
     byTier.set(card.tier, list);
   }
   const tiers = [...byTier.entries()]
     .sort((a, b) => RARITY_RANK[b[0]] - RARITY_RANK[a[0]])
-    .map(([tier, cards]) => ({
-      tier,
-      oddsPct: round(cards.reduce((s, c) => s + c.overallPct, 0), 2),
-      cards,
-      drawnPct: 0,
-    }));
+    .map(([tier, cards]) => ({ tier, cards, drawn: false }));
   return { ...base, tiers, bonus: null };
 }

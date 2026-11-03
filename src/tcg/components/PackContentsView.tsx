@@ -4,26 +4,11 @@ import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { FullArtCard } from "@/components/cards/FullArtCard";
 import { rarityLabel } from "@/lib/card-roll";
-import { oneInFromPct } from "@/lib/pack-config";
 import { getPackContentsAction } from "@/tcg/actions";
 import type { PackContents, PackContentsTier } from "@/tcg/pack-contents";
 
-/** 12.3456 -> "12.3%", 0.0123 -> "0.012%". Enough digits to tell small chances apart. */
-function fmtPct(n: number): string {
-  if (!Number.isFinite(n) || n <= 0) return "0%";
-  if (n >= 10) return `${Number(n.toFixed(1))}%`;
-  if (n >= 0.1) return `${Number(n.toFixed(2))}%`;
-  return `${Number(n.toPrecision(2))}%`;
-}
-
-function oddsText(pct: number): string {
-  const oneIn = oneInFromPct(pct);
-  if (oneIn === null) return "never";
-  return oneIn <= 1.05 ? "every pull" : `about 1 in ${Number(oneIn.toFixed(oneIn < 10 ? 1 : 0))}`;
-}
-
 /** A stand-in for a card whose picture isn't known until the pack is opened. */
-function MysteryTile({ tier, pct }: { tier: PackContentsTier["tier"]; pct: number }) {
+function MysteryTile({ tier }: { tier: PackContentsTier["tier"] }) {
   return (
     <li className="space-y-1.5">
       <div
@@ -34,9 +19,8 @@ function MysteryTile({ tier, pct }: { tier: PackContentsTier["tier"]; pct: numbe
         <span className="px-2 text-xs font-bold">Drawn from a car</span>
         <span className="px-2 text-[11px] text-zinc-400">when you open the pack</span>
       </div>
-      <div className="flex items-center justify-between px-1 text-xs">
+      <div className="px-1 text-xs">
         <span className="font-bold text-zinc-200">{rarityLabel(tier)}</span>
-        <span className="rounded-full bg-zinc-700/60 px-2 py-0.5 text-[11px] font-black text-zinc-200">{fmtPct(pct)} of {rarityLabel(tier)}</span>
       </div>
     </li>
   );
@@ -44,8 +28,16 @@ function MysteryTile({ tier, pct }: { tier: PackContentsTier["tier"]; pct: numbe
 
 function ContentsBody({ contents }: { contents: PackContents }) {
   const hasSetCards = contents.tiers.some((t) => t.cards.length > 0);
+  const bonus = contents.bonus;
   return (
     <div className="space-y-6">
+      {bonus && (
+        <p className="rounded-xl border border-fuchsia-400/40 bg-fuchsia-500/10 p-3 text-sm text-zinc-100">
+          <span className="font-black text-fuchsia-300">★ Bonus card: </span>
+          Some packs also give a rare bonus card. It is one of the {bonus.cards.length} shown at the bottom of this list.
+        </p>
+      )}
+
       {contents.includes.length > 0 && (
         <section aria-label="Every pack includes">
           <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-zinc-400">Every pack includes</h4>
@@ -58,43 +50,34 @@ function ContentsBody({ contents }: { contents: PackContents }) {
       )}
 
       {contents.tiers.length > 0 && (
-        <section aria-label="Rarity odds" className="space-y-5">
+        <section aria-label="Rarities" className="space-y-5">
           <div>
             <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-              {hasSetCards ? "Cards by rarity" : "Rarity odds"}
+              {hasSetCards ? "Cards by rarity" : "Rarities"}
             </h4>
-            <p className="mt-1 text-xs text-zinc-400">
-              The chance that a card from the pack is each rarity.
-              {hasSetCards ? " Card chances are out of everything the pack gives out." : ""}
-            </p>
+            <p className="mt-1 text-xs text-zinc-400">The rarities a card from this pack can be.</p>
           </div>
 
           {contents.tiers.map((t) => (
             <div key={t.tier} className="space-y-3">
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-zinc-800 pb-1.5">
                 <h5 className="text-base font-black text-zinc-100">{rarityLabel(t.tier)}</h5>
-                <span className="text-xs font-bold text-amber-300">
-                  {fmtPct(t.oddsPct)} · {oddsText(t.oddsPct)}
-                </span>
               </div>
 
               {t.cards.length === 0 ? (
                 <p className="text-xs text-zinc-400">These are drawn from a car when the pack is opened.</p>
               ) : (
                 <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-                  {t.cards.map(({ card, overallPct, rerolled }) => (
+                  {t.cards.map(({ card, rerolled }) => (
                     <li key={card.id ?? card.name} className="space-y-1.5">
                       <FullArtCard card={card} className="drop-shadow-lg" />
-                      <div className="flex items-center justify-between gap-1 px-1 text-xs">
-                        <span className="truncate font-bold text-zinc-200">{card.name}</span>
-                        <span className="shrink-0 rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-black text-amber-300">
-                          {fmtPct(overallPct)}
-                        </span>
+                      <div className="px-1 text-xs">
+                        <span className="block truncate font-bold text-zinc-200">{card.name}</span>
                       </div>
                       {rerolled && <p className="px-1 text-[11px] text-zinc-400">Stats are rolled fresh when you pull it</p>}
                     </li>
                   ))}
-                  {t.drawnPct > 0 && <MysteryTile tier={t.tier} pct={t.drawnPct} />}
+                  {t.drawn && <MysteryTile tier={t.tier} />}
                 </ul>
               )}
             </div>
@@ -107,18 +90,15 @@ function ContentsBody({ contents }: { contents: PackContents }) {
           <div>
             <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Rare bonus card</h4>
             <p className="mt-1 text-xs text-zinc-400">
-              {fmtPct(contents.bonus.chancePct)} of packs ({oddsText(contents.bonus.chancePct)}) also give one of these, as a Legend card (Mythic cards stay Mythic).
+              Some packs also give one of these, as a Legend card (Mythic cards stay Mythic).
             </p>
           </div>
           <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-            {contents.bonus.cards.map(({ card, overallPct }) => (
+            {contents.bonus.cards.map(({ card }) => (
               <li key={card.id ?? card.name} className="space-y-1.5">
                 <FullArtCard card={card} className="drop-shadow-lg" />
-                <div className="flex items-center justify-between gap-1 px-1 text-xs">
-                  <span className="truncate font-bold text-zinc-200">{card.name}</span>
-                  <span className="shrink-0 rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-black text-amber-300">
-                    {fmtPct(overallPct)}
-                  </span>
+                <div className="px-1 text-xs">
+                  <span className="block truncate font-bold text-zinc-200">{card.name}</span>
                 </div>
               </li>
             ))}
@@ -130,8 +110,8 @@ function ContentsBody({ contents }: { contents: PackContents }) {
 }
 
 /**
- * What is in a pack: its rarities with their odds, the fixed cards on each (with their chances), the places where a card is
- * drawn from a car, and the rare bonus card. Loads when it appears. `fallback` is shown if it can't be loaded.
+ * What is in a pack: its rarities, the fixed cards on each, the places where a card is drawn from a car, and the rare bonus
+ * card. No odds are shown. Loads when it appears. `fallback` is shown if it can't be loaded.
  */
 export function PackContentsView({ packId, fallback }: { packId: string; fallback?: ReactNode }) {
   const [state, setState] = useState<{ packId: string; contents: PackContents | null; error: string | null } | null>(null);

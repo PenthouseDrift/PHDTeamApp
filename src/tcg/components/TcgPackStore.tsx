@@ -321,6 +321,11 @@ export function TcgPackStore({
                           </div>
                         ))}
                       </div>
+                      {pack.bonus && (
+                        <span className="absolute bottom-3 right-3 rounded-full border border-fuchsia-400/50 bg-black/80 px-2.5 py-0.5 text-[11px] font-black text-fuchsia-300 backdrop-blur-sm">
+                          ★ Bonus card
+                        </span>
+                      )}
                       {!forSale && (
                         <span className="absolute bottom-3 left-3 rounded-full border border-zinc-500/60 bg-black/80 px-2.5 py-0.5 text-[11px] font-black text-zinc-200 backdrop-blur-sm">
                           Not available right now
@@ -531,14 +536,11 @@ export function TcgPackStore({
                     packId={inspectPack.id}
                     fallback={
                       <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-                        {inspectPack.setList.map(({ card, chancePct }) => (
+                        {inspectPack.setList.map(({ card }) => (
                           <li key={card.id} className="space-y-1.5">
                             <FullArtCard card={card} className="drop-shadow-lg" />
-                            <div className="flex items-center justify-between px-1 text-xs">
+                            <div className="px-1 text-xs">
                               <span className="font-bold text-zinc-200">{rarityLabel(card.tier)}</span>
-                              <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-black text-amber-300">
-                                {chancePct}% odds
-                              </span>
                             </div>
                           </li>
                         ))}

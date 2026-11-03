@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { Barlow_Condensed } from "next/font/google";
 import { darken, lighten } from "@/lib/card-maker";
 import { tierInfo, type FullArtCardData } from "@/lib/full-art-card";
@@ -48,6 +48,54 @@ function getOptimizedCardImageProps(url: string, flat: boolean) {
     srcSet: NEXT_IMAGE_WIDTHS.map((w) => `/_next/image?url=${encoded}&w=${w}&q=75 ${w}w`).join(", "),
     sizes: "(max-width: 640px) 46vw, (max-width: 1024px) 30vw, 320px",
   };
+}
+
+/**
+ * The card's picture. The resized copy comes from /_next/image, which can fail now and then when a lot of pictures are
+ * asked for at once on a cold page (a reload fixes it because the ones that worked are then cached). So a picture that
+ * fails is asked for again, twice, a moment later; if it still fails the original file is used as it is.
+ */
+function CardPicture({
+  url,
+  flat,
+  alt,
+  style,
+}: {
+  url: string;
+  flat: boolean;
+  alt: string;
+  style: CSSProperties;
+}) {
+  const [attempt, setAttempt] = useState(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
+
+  const optimized = getOptimizedCardImageProps(url, flat);
+  // After two retries, stop using the resizer and load the file itself.
+  const useOriginal = attempt >= 2 && optimized.src !== url;
+  const props = useOriginal ? { src: url, srcSet: undefined, sizes: undefined } : optimized;
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      key={attempt}
+      src={props.src}
+      srcSet={props.srcSet}
+      sizes={props.sizes}
+      loading={flat ? "eager" : "lazy"}
+      decoding="async"
+      data-card-image
+      alt={alt}
+      style={style}
+      onError={() => {
+        if (attempt >= 2 || url.startsWith("data:")) return;
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => setAttempt((n) => n + 1), 700 * (attempt + 1));
+      }}
+    />
+  );
 }
 
 /** A small seeded random generator, so each card's shine is different but never changes between renders. */
@@ -319,12 +367,35 @@ function hexToRgb01(hex?: string): [number, number, number] | null {
   return m ? [parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255, parseInt(m[3], 16) / 255] : null;
 }
 
-function MythicFlameCanvases({ seed, animated, tint }: { seed: string; animated: boolean; tint?: string }) {
-  const glCanvasRef = useRef<HTMLCanvasElement | null>(null);
+function MythicFlameGl({ seed, animated, tint }: { seed: string; animated: boolean; tint?: string }) {
+  const holderRef = useRef<HTMLDivElement | null>(null);
+  const [epoch, setEpoch] = useState(0);
 
   useEffect(() => {
-    const glCanvas = glCanvasRef.current;
-    if (!glCanvas) return;
+    const holder = holderRef.current;
+    if (!holder) return;
+
+    // Every run of this effect makes its own canvas. A canvas whose graphics context has been given back can never get a
+    // new one, so reusing the same element (React runs effects twice in development, and again whenever the card's
+    // colours change) left a dead canvas, which the browser paints as a solid broken-picture box over the whole card.
+    const glCanvas = document.createElement("canvas");
+    glCanvas.style.cssText = "position:absolute;left:0;top:0;width:100%;height:100%;";
+    holder.appendChild(glCanvas);
+
+    // If the browser takes the context away (too many in use, or the graphics process resets) the canvas is hidden, and
+    // built again from scratch if the browser gives a context back.
+    const onLost = (event: Event) => {
+      event.preventDefault();
+      glCanvas.style.visibility = "hidden";
+    };
+    const onRestored = () => setEpoch((n) => n + 1);
+    glCanvas.addEventListener("webglcontextlost", onLost);
+    glCanvas.addEventListener("webglcontextrestored", onRestored);
+    const removeCanvas = () => {
+      glCanvas.removeEventListener("webglcontextlost", onLost);
+      glCanvas.removeEventListener("webglcontextrestored", onRestored);
+      glCanvas.remove();
+    };
 
     const prefersReducedMotion =
       typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -332,7 +403,10 @@ function MythicFlameCanvases({ seed, animated, tint }: { seed: string; animated:
 
     const gl = (glCanvas.getContext("webgl", { alpha: true, premultipliedAlpha: true }) ||
       glCanvas.getContext("experimental-webgl", { alpha: true, premultipliedAlpha: true })) as WebGLRenderingContext | null;
-    if (!gl) return;
+    if (!gl) {
+      removeCanvas();
+      return;
+    }
 
     const compile = (type: number, src: string) => {
       const shader = gl.createShader(type);
@@ -348,15 +422,25 @@ function MythicFlameCanvases({ seed, animated, tint }: { seed: string; animated:
 
     const vs = compile(gl.VERTEX_SHADER, MYTHIC_VERTEX_SHADER);
     const fs = compile(gl.FRAGMENT_SHADER, MYTHIC_FRAGMENT_SHADER);
-    if (!vs || !fs) return;
+    if (!vs || !fs) {
+      gl.getExtension("WEBGL_lose_context")?.loseContext();
+      removeCanvas();
+      return;
+    }
 
     const program = gl.createProgram();
-    if (!program) return;
+    if (!program) {
+      gl.getExtension("WEBGL_lose_context")?.loseContext();
+      removeCanvas();
+      return;
+    }
     gl.attachShader(program, vs);
     gl.attachShader(program, fs);
     gl.linkProgram(program);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
       gl.deleteProgram(program);
+      gl.getExtension("WEBGL_lose_context")?.loseContext();
+      removeCanvas();
       return;
     }
 
@@ -424,8 +508,32 @@ function MythicFlameCanvases({ seed, animated, tint }: { seed: string; animated:
       ro?.disconnect();
       if (posBuffer) gl.deleteBuffer(posBuffer);
       gl.deleteProgram(program);
+      // Give the graphics context back. Browsers only allow about 16 at once and quietly drop the oldest, which
+      // blanks a card; every flame canvas used to keep its context for as long as the page was open.
+      removeCanvas();
+      gl.getExtension("WEBGL_lose_context")?.loseContext();
     };
-  }, [seed, animated, tint]);
+  }, [seed, animated, tint, epoch]);
+
+  return <div ref={holderRef} style={abs({ inset: 0, width: "100%", height: "100%" })} />;
+}
+
+/**
+ * The Mythic flames. The shader only runs while the card is on (or just off) the screen: a page with many Mythic cards
+ * (a pack editor, a collection) would otherwise hold one graphics context and one animation loop per card, past the
+ * browser's limit, and cards would blank out until the page was reloaded.
+ */
+function MythicFlameCanvases({ seed, animated, tint }: { seed: string; animated: boolean; tint?: string }) {
+  const holderRef = useRef<HTMLDivElement | null>(null);
+  const [inView, setInView] = useState(false);
+
+  useEffect(() => {
+    const el = holderRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), { rootMargin: "200px" });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const overlayStyle: React.CSSProperties = abs({
     left: `${(-PAD).toFixed(2)}%`,
@@ -435,7 +543,11 @@ function MythicFlameCanvases({ seed, animated, tint }: { seed: string; animated:
     pointerEvents: "none",
   });
 
-  return <canvas ref={glCanvasRef} style={overlayStyle} />;
+  return (
+    <div ref={holderRef} style={overlayStyle}>
+      {inView && <MythicFlameGl seed={seed} animated={animated} tint={tint} />}
+    </div>
+  );
 }
 
 
@@ -509,6 +621,18 @@ export function FullArtCard({
   showDurability?: boolean;
 }) {
   const uid = useId().replace(/:/g, "");
+  // The animated effects (rainbow ring, glints, sparkles, flames) each cost graphics memory. A page with dozens of cards
+  // (a pack editor, a collection) used to run all of them at once and the browser would blank some cards, so they are only
+  // drawn while the card is on or just off the screen. Printing always draws them.
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [near, setNear] = useState(flat);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (flat || !el || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => setNear(entry.isIntersecting), { rootMargin: "300px" });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [flat]);
   const tier = tierInfo(card.tier);
   const { light, accent, dark, glow } = tier.palette;
   const isMythic = card.tier === "mythic";
@@ -673,6 +797,7 @@ export function FullArtCard({
 
   return (
     <div
+      ref={rootRef}
       className={`${cardFont.className} ${className ?? ""}`}
       style={{
         position: "relative",
@@ -688,7 +813,7 @@ export function FullArtCard({
       }}
     >
       {/* Legend: spinning rainbow glow behind the card edge. */}
-      {showPrismatic && (
+      {showPrismatic && near && (
         <BorderEffects variant="legend" seed={`${card.id ?? ""}|${card.name}|${card.imageUrl.slice(-24)}`} animated={!flat} />
       )}
       <div
@@ -702,31 +827,21 @@ export function FullArtCard({
       >
         {/* The picture, edge to edge */}
         {card.imageUrl ? (
-          (() => {
-            const imgProps = getOptimizedCardImageProps(card.imageUrl, flat);
-            return (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={imgProps.src}
-                srcSet={imgProps.srcSet}
-                sizes={imgProps.sizes}
-                loading={flat ? "eager" : "lazy"}
-                decoding="async"
-                data-card-image
-                alt={card.name}
-                style={{
-                  ...abs({ inset: 0 }),
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  objectPosition: `${card.imageX}% ${card.imageY}%`,
-                  transform: `scale(${card.imageZoom / 100})`,
-                  transformOrigin: `${card.imageX}% ${card.imageY}%`,
-                  display: "block",
-                }}
-              />
-            );
-          })()
+          <CardPicture
+            url={card.imageUrl}
+            flat={flat}
+            alt={card.name}
+            style={{
+              ...abs({ inset: 0 }),
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              objectPosition: `${card.imageX}% ${card.imageY}%`,
+              transform: `scale(${card.imageZoom / 100})`,
+              transformOrigin: `${card.imageX}% ${card.imageY}%`,
+              display: "block",
+            }}
+          />
         ) : (
           <div style={{ ...abs({ inset: 0 }), display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.45)", fontSize: "9cqw", fontWeight: 800, textAlign: "center", lineHeight: 1 }}>
             PLACE IMAGE HERE
@@ -764,7 +879,7 @@ export function FullArtCard({
         {/* Foil: a soft diagonal sheen, plus a rainbow wash on Legend cards */}
         <div style={{ ...abs({ inset: 0 }), background: "linear-gradient(115deg, rgba(255,255,255,0) 30%, rgba(255,255,255,0.16) 48%, rgba(255,255,255,0) 66%)", mixBlendMode: "screen", pointerEvents: "none" }} />
         {/* Legend and Mythic: a bright glint sweeps across, with twinkling sparkles. */}
-        {showShine && (
+        {showShine && near && (
           <div aria-hidden style={{ ...abs({ inset: 0 }), overflow: "hidden", pointerEvents: "none" }}>
             <div
               className={flat ? undefined : "fa-crystal-glint"}
@@ -1147,7 +1262,7 @@ export function FullArtCard({
         </div>
       </div>
       {/* Mythic: molten lava border rendered in front of the card so the rim, drips and sparks sit on top of the frame. */}
-      {showFlames && (
+      {showFlames && near && (
         <BorderEffects
           variant="mythic"
           seed={`${card.id ?? ""}|${card.name}|${card.imageUrl.slice(-24)}`}
