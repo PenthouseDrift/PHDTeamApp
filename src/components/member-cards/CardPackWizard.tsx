@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import ImageUploader from "@/components/ui/ImageUploader";
-import { PackOpening } from "@/components/member-cards/PackOpening";
+import { PackOpening, splitStorePackCards } from "@/components/member-cards/PackOpening";
 import { ChassisSelector } from "@/components/cars/ChassisSelector";
 import { keepCard, openCardPack, rerollCard } from "@/actions/member-cards";
 import { openCustomPackWithCar } from "@/tcg/actions";
@@ -400,13 +400,12 @@ function CardPackWizardForm({
               ? {
                   success: true as const,
                   data: {
-                    card: r.data.cards[0],
-                    bonus: r.data.cards[1] ?? null,
+                    ...(() => {
+                      const split = splitStorePackCards(r.data.cards);
+                      return { card: split.card ?? r.data.cards[0], bonus: split.bonus, featured: split.featured, extras: split.extras };
+                    })(),
                     crew: null,
-                    featured: r.data.cards[2] ?? null,
                     maintenance: null,
-                    // Any card after the third, such as the pack's bonus pull.
-                    extras: r.data.cards.slice(3),
                     // A store pack is bought one at a time, so there is nothing left to open afterwards.
                     credits: 0,
                   },

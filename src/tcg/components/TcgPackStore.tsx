@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { FullArtCard } from "@/components/cards/FullArtCard";
-import { PackOpening } from "@/components/member-cards/PackOpening";
+import { PackOpening, splitStorePackCards } from "@/components/member-cards/PackOpening";
 import { rarityLabel, type MemberCard } from "@/lib/card-roll";
 import { buyAndOpenCustomPack, buyStandardPackWithPCredits } from "@/tcg/actions";
 import { PackArt } from "@/tcg/components/PackArt";
@@ -100,7 +100,7 @@ export function TcgPackStore({
         <div>
           <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">TCG Pack Store</h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Spend your P-Credits on Standard Packs or limited-edition Custom Set Packs curated by Penthouse Drift.
+            Spend your P-Credits on packs curated by Penthouse Drift.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -136,142 +136,16 @@ export function TcgPackStore({
         </div>
       )}
 
-      {/* Standard Pack Featured Card */}
-      <section
-        className={`relative overflow-hidden rounded-3xl border p-6 text-zinc-100 shadow-lg ${
-          standardOnSale
-            ? "border-rose-500/60 bg-gradient-to-br from-rose-950/60 via-zinc-950 to-black shadow-[0_0_35px_rgba(244,63,94,0.18)]"
-            : "border-amber-500/40 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black"
-        }`}
-      >
-        {standardOnSale && (
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-rose-400/50 bg-gradient-to-r from-rose-600 to-amber-500 px-3.5 py-1 text-xs font-black uppercase tracking-wider text-white shadow-md">
-            <span>🔥 Limited Sale · Save {standardDiscountPct}%</span>
-          </div>
-        )}
-        <div className="grid items-center gap-6 md:grid-cols-[auto_1fr_auto]">
-          {/* Visual Pack Representation */}
-          <div className="mx-auto w-36">
-            <PackArt
-              name="Standard Pack"
-              variant="standard"
-              cardsLabel="4 CARDS"
-              extraLabel="+ RARE CHANCE"
-              discountPct={standardOnSale ? standardDiscountPct : 0}
-            />
-          </div>
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-amber-500 px-2.5 py-0.5 text-[11px] font-black uppercase text-black">
-                Core Pack
-              </span>
-              <span className="text-xs font-bold text-amber-300">
-                You have {packCredits} unopened Standard Pack{packCredits === 1 ? "" : "s"}
-              </span>
-            </div>
-            <h3 className="text-2xl font-black text-white">Penthouse Standard Pack</h3>
-            <p className="max-w-xl text-xs leading-relaxed text-zinc-300">
-              Contains <strong>1 Custom AI Card of your car</strong>, <strong>1 Community Car Card</strong>, <strong>1 Tactical Crew Card</strong> for Clash Arena and <strong>1 Repair Kit</strong>, plus a chance at a rare Bonus Set Card!
-            </p>
-            <div className="flex flex-wrap items-baseline gap-2.5 pt-1">
-              {standardOnSale ? (
-                <>
-                  <span className="text-sm font-bold text-zinc-400 line-through">
-                    {standardPackPrice.toLocaleString()} P-Credits
-                  </span>
-                  <span className="text-lg font-black text-emerald-400">
-                    {effectiveStandardPrice.toLocaleString()} P-Credits
-                  </span>
-                  <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[11px] font-black text-emerald-300">
-                    You save {(standardPackPrice - effectiveStandardPrice).toLocaleString()} P
-                  </span>
-                </>
-              ) : (
-                <span className="text-sm font-bold text-amber-400">
-                  Price: {effectiveStandardPrice.toLocaleString()} P-Credits
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2 sm:min-w-[14rem]">
-            <button
-              type="button"
-              onClick={handleBuyStandardPack}
-              disabled={pending || pCredits < effectiveStandardPrice}
-              className={primaryBtn}
-            >
-              {pending ? (
-                "Purchasing…"
-              ) : standardOnSale ? (
-                <span>
-                  Buy on Sale ·{" "}
-                  <span className="line-through opacity-60">{standardPackPrice.toLocaleString()}</span>{" "}
-                  {effectiveStandardPrice.toLocaleString()} P
-                </span>
-              ) : (
-                `Buy Pack · ${effectiveStandardPrice.toLocaleString()} P`
-              )}
-            </button>
-            {packCredits > 0 && (
-              <Link
-                href="/cards/new"
-                className="inline-flex min-h-11 items-center justify-center rounded-xl border border-amber-400/50 bg-amber-500/10 px-4 text-xs font-black text-amber-300 hover:bg-amber-500/20"
-              >
-                Open Pack ({packCredits} ready) →
-              </Link>
-            )}
-            {pCredits < effectiveStandardPrice && (
-              <button
-                type="button"
-                onClick={onOpenPCreditsTab}
-                className="text-center text-[11px] font-bold text-amber-400 underline hover:text-amber-300"
-              >
-                Need {(effectiveStandardPrice - pCredits).toLocaleString()} more P-Credits
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setShowStandardContents(true)}
-              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-zinc-600 px-4 text-xs font-bold text-zinc-100 hover:bg-zinc-800"
-            >
-              What&apos;s in the pack?
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Custom Set Packs Section */}
+      {/* Packs: store packs first, the Standard Pack last, all as the same kind of tile */}
       <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-100">
-              Custom Set Packs
-            </h3>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Curated themed packs containing exclusive cards created in the Penthouse Card Maker.
-            </p>
-          </div>
+        <div>
+          <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Packs</h3>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Pick a pack, see what could be inside, and spend your P-Credits.
+          </p>
         </div>
 
-        {customPacks.length === 0 ? (
-          <div className={`${panel} py-10 text-center space-y-2`}>
-            <p className="text-base font-black text-zinc-900 dark:text-zinc-100">
-              No custom set packs live right now
-            </p>
-            <p className="mx-auto max-w-md text-xs text-zinc-500 dark:text-zinc-400">
-              Check back soon for special edition set packs, or grab a Standard Pack above!
-            </p>
-            {isAdmin && (
-              <div className="pt-2">
-                <Link href="/admin/driftclash/packs" className={secondaryBtn}>
-                  + Create a Custom Pack in Card Maker
-                </Link>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {customPacks.map((pack) => {
               const packOnSale = isOnSale(pack.price, pack.salePrice);
               const effectivePrice = getEffectivePrice(pack.price, pack.salePrice);
@@ -439,8 +313,120 @@ export function TcgPackStore({
                 </div>
               );
             })}
+
+            {/* The Standard Pack: last, and the same tile as the others */}
+            <div
+              className={`relative flex flex-col justify-between rounded-3xl border p-5 shadow-sm transition-shadow hover:shadow-md ${
+                standardOnSale
+                  ? "border-rose-500/60 bg-white dark:border-rose-500/50 dark:bg-zinc-900"
+                  : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+              }`}
+            >
+              <div className="space-y-4">
+                <div
+                  className={`relative flex h-48 items-center justify-center overflow-hidden rounded-2xl p-4 ${
+                    standardOnSale
+                      ? "bg-gradient-to-b from-rose-950/80 via-zinc-900 to-zinc-950"
+                      : "bg-gradient-to-b from-zinc-900 to-zinc-950"
+                  }`}
+                >
+                  <div className="w-28">
+                    <PackArt
+                      name="Standard Pack"
+                      variant="standard"
+                      cardsLabel="4 CARDS"
+                      extraLabel="+ RARE CHANCE"
+                      discountPct={standardOnSale ? standardDiscountPct : 0}
+                    />
+                  </div>
+                  <span className="absolute left-3 top-3 rounded-full border border-amber-400/40 bg-black/75 px-2.5 py-0.5 text-[11px] font-black text-amber-300 backdrop-blur-sm">
+                    You have {packCredits} unopened
+                  </span>
+                  <div className="absolute right-3 top-3 flex items-center gap-1.5">
+                    {standardOnSale && (
+                      <span className="rounded-full bg-gradient-to-r from-rose-600 to-amber-500 px-2.5 py-0.5 text-[11px] font-black uppercase text-white shadow">
+                        🔥 -{standardDiscountPct}% SALE
+                      </span>
+                    )}
+                    <span className="rounded-full bg-amber-500 px-2.5 py-0.5 text-[11px] font-black text-black">4 Cards / Pack</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Penthouse Standard Pack</h4>
+                      {standardOnSale && (
+                        <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-black uppercase text-rose-600 dark:text-rose-400">
+                          On Sale
+                        </span>
+                      )}
+                    </div>
+                    {standardOnSale ? (
+                      <div className="shrink-0 text-right">
+                        <span className="mr-1.5 text-xs font-bold text-zinc-400 line-through">
+                          {standardPackPrice.toLocaleString()} P
+                        </span>
+                        <span className="rounded-xl bg-emerald-500/15 px-3 py-1 text-sm font-black text-emerald-600 dark:text-emerald-400">
+                          {effectiveStandardPrice.toLocaleString()} P-Credits
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="shrink-0 rounded-xl bg-amber-500/15 px-3 py-1 text-sm font-black text-amber-600 dark:text-amber-400">
+                        {effectiveStandardPrice.toLocaleString()} P-Credits
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    1 custom AI card of your car, 1 community car card, 1 Tactical Crew Card for Clash Arena and 1 Repair Kit, plus a
+                    chance at a rare Bonus Set Card.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" onClick={() => setShowStandardContents(true)} className={`${secondaryBtn} flex-1 text-xs`}>
+                    What&apos;s in the pack?
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBuyStandardPack}
+                    disabled={pending || pCredits < effectiveStandardPrice}
+                    className={`${primaryBtn} flex-1 text-xs`}
+                  >
+                    {pending ? (
+                      "Purchasing…"
+                    ) : pCredits < effectiveStandardPrice ? (
+                      `Need ${effectiveStandardPrice.toLocaleString()} P`
+                    ) : standardOnSale ? (
+                      <span>
+                        Buy ·{" "}
+                        <span className="line-through opacity-60">{standardPackPrice.toLocaleString()}</span>{" "}
+                        {effectiveStandardPrice.toLocaleString()} P
+                      </span>
+                    ) : (
+                      `Buy Pack · ${effectiveStandardPrice.toLocaleString()} P`
+                    )}
+                  </button>
+                </div>
+                {packCredits > 0 && (
+                  <Link href="/cards/new" className={`${secondaryBtn} w-full text-xs`}>
+                    Open Pack ({packCredits} ready) →
+                  </Link>
+                )}
+                {pCredits < effectiveStandardPrice && (
+                  <button
+                    type="button"
+                    onClick={onOpenPCreditsTab}
+                    className="block w-full text-center text-[11px] font-bold text-amber-600 underline hover:text-amber-500 dark:text-amber-400"
+                  >
+                    Need {(effectiveStandardPrice - pCredits).toLocaleString()} more P-Credits
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
-        )}
       </section>
 
       {/* What's in the Standard Pack */}
@@ -508,7 +494,7 @@ export function TcgPackStore({
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-xs font-bold uppercase tracking-widest text-amber-400">
-                        Custom Set Pack · {inspectPack.cardsPerPack} Card{inspectPack.cardsPerPack === 1 ? "" : "s"} per pack
+                        Pack · {inspectPack.cardsPerPack} Card{inspectPack.cardsPerPack === 1 ? "" : "s"} per pack
                       </span>
                       {inspectOnSale && (
                         <span className="rounded-full bg-gradient-to-r from-rose-600 to-amber-500 px-2.5 py-0.5 text-[10px] font-black uppercase text-white">
@@ -607,7 +593,7 @@ export function TcgPackStore({
           );
         })()}
 
-      {/* Animated Pack Opening Stage for Custom Set Packs */}
+      {/* Animated Pack Opening Stage for store packs */}
       {openingState &&
         openingState.cards.length > 0 &&
         typeof document !== "undefined" &&
@@ -622,7 +608,7 @@ export function TcgPackStore({
               <div className="flex items-center justify-between text-zinc-100">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-widest text-amber-400">
-                    Custom Set Pack
+                    Pack
                   </p>
                   <h3 className="text-lg font-black">{openingState.packName}</h3>
                 </div>
@@ -644,10 +630,7 @@ export function TcgPackStore({
                 ready={true}
                 packName={openingState.packName}
                 packVariant="custom"
-                card={openingState.cards[0] ?? null}
-                bonus={openingState.cards[1] ?? null}
-                featured={openingState.cards[2] ?? null}
-                extras={openingState.cards.slice(3)}
+                {...splitStorePackCards(openingState.cards)}
                 onRevealed={() =>
                   setOpeningState((prev) => (prev ? { ...prev, revealed: true } : null))
                 }

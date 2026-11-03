@@ -99,7 +99,32 @@ export interface PackConfig {
    * Once it is set (even to a chance of 0) it is the only thing that decides the bonus pull.
    */
   bonus?: PackBonus;
+  /**
+   * How many Crew Modifier cards (for Clash Arena) every opening of this pack also gives, from 0 to MAX_EXTRA_CARDS.
+   * Left out means none, so packs saved before this existed are unchanged. The Standard Pack always gives one.
+   */
+  crewCards?: number;
+  /** How many Repair Kit (Maintenance Consumable) cards every opening of this pack also gives. Left out means none. */
+  repairCards?: number;
   updatedAt: number;
+}
+
+/** The most Crew or Repair Kit cards one pack can give. */
+export const MAX_EXTRA_CARDS = 5;
+
+/** A Crew or Repair Kit count cleaned: a whole number from 0 to MAX_EXTRA_CARDS, or undefined when it isn't one. */
+export function cleanExtraCount(v: unknown): number | undefined {
+  if (v === undefined || v === null || v === "") return undefined;
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.min(MAX_EXTRA_CARDS, Math.max(0, n)) : undefined;
+}
+
+/** How many Crew and Repair Kit cards a custom pack gives each time it is opened. */
+export function packExtraCounts(config: Pick<PackConfig, "crewCards" | "repairCards"> | null | undefined): {
+  crew: number;
+  repair: number;
+} {
+  return { crew: cleanExtraCount(config?.crewCards) ?? 0, repair: cleanExtraCount(config?.repairCards) ?? 0 };
 }
 
 /** A set card in a pack's bonus pull. `weight` (1 to 100) is its share of the bonus pulls: higher is pulled more often. */
@@ -162,6 +187,8 @@ export function emptyPackConfig(packId: string): PackConfig {
     oddsOverride: !isStandard,
     oddsPct: standardOddsPct(),
     rarities: emptyRarities(),
+    // A new custom pack gives one Crew card and one Repair Kit, like the Standard Pack. (The Standard Pack ignores these.)
+    ...(isStandard ? {} : { crewCards: 1, repairCards: 1 }),
     updatedAt: 0,
   };
 }
@@ -350,6 +377,8 @@ export function sanitizePackConfig(input: unknown): PackConfig | null {
     for (const tier of ALL_TIERS) rarities[tier] = cleanEntries(rawRarities[tier]);
 
     const bonus = cleanBonus(v.bonus);
+    const crewCards = cleanExtraCount(v.crewCards);
+    const repairCards = cleanExtraCount(v.repairCards);
     return {
       packId,
       enabled: isStandard ? v.enabled === true : true,
@@ -357,6 +386,8 @@ export function sanitizePackConfig(input: unknown): PackConfig | null {
       oddsPct,
       rarities,
       ...(bonus ? { bonus } : {}),
+      ...(!isStandard && crewCards !== undefined ? { crewCards } : {}),
+      ...(!isStandard && repairCards !== undefined ? { repairCards } : {}),
       updatedAt: Number(v.updatedAt) || 0,
     };
   } catch {
@@ -562,6 +593,9 @@ export function configFromLegacyPack(
   cards: Array<{ cardId: string; weight: number; tier: FullArtTier }>
 ): PackConfig {
   const config = emptyPackConfig(packId);
+  // Moving an old pack over must not change what it gives out, so it keeps giving no Crew or Repair Kit cards.
+  config.crewCards = 0;
+  config.repairCards = 0;
   config.oddsPct = { mythic: 0, legend: 0, gold: 0, silver: 0 };
   const total = cards.reduce((sum, c) => sum + Math.max(0, c.weight), 0);
   if (total <= 0) return config;

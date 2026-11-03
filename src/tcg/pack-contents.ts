@@ -8,6 +8,7 @@ import {
   bonusPullCard,
   bonusIsActive,
   effectivePcts,
+  packExtraCounts,
   standardOddsPct,
   variantStatsMode,
   type PackConfig,
@@ -157,7 +158,15 @@ export async function buildPackContents(packId: string, options: { isAdmin?: boo
 
   if (pack.config) {
     const runtime = await loadRuntimeFor(pack.config);
-    return { ...base, ...fromConfig(pack.config, runtime) };
+    const { tiers, bonus } = fromConfig(pack.config, runtime);
+    const { crew, repair } = packExtraCounts(pack.config);
+    const includes = [
+      `${pack.cardsPerPack} card${pack.cardsPerPack === 1 ? "" : "s"} from this pack`,
+      ...(crew > 0 ? [`${crew} Tactical Crew Card${crew === 1 ? "" : "s"} for Clash Arena`] : []),
+      ...(repair > 0 ? [`${repair} Repair Kit${repair === 1 ? "" : "s"}`] : []),
+      ...(bonus ? ["A chance at a rare Bonus Set Card"] : []),
+    ];
+    return { ...base, includes, tiers, bonus };
   }
 
   // An old pack: one weighted list of cards. Group it by the rarity each card was saved as.

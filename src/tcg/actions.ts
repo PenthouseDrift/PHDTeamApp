@@ -58,6 +58,7 @@ import {
   type ClashGameCardsConfig,
 } from "./storage";
 import { buildPackContents, type PackContents } from "./pack-contents";
+import { buildPackExtraCards } from "./pack-extras";
 import type {
   PCreditBundle,
   TcgCustomPack,
@@ -647,6 +648,22 @@ export async function buyAndOpenCustomPack(
         tx.zadd(memberCardsIndexKey(user.id), { score: bonusAt, member: bonusCard.id });
         tx.zadd(ALL_MEMBER_CARDS_INDEX, { score: bonusAt, member: bonusCard.id });
       }
+
+      // The Crew and Repair Kit cards this pack is set to give, last in the pack.
+      const extraCards = await buildPackExtraCards({
+        config: runtime.config,
+        userId: user.id,
+        ownerName: user.name,
+        createdAt: baseNow + count + 1,
+        rng,
+        pack: { id: hydrated.id, name: hydrated.name },
+      });
+      for (const extra of extraCards) {
+        pulled.push(extra);
+        tx.set(memberCardKey(extra.id), JSON.stringify(extra));
+        tx.zadd(memberCardsIndexKey(user.id), { score: extra.createdAt, member: extra.id });
+        tx.zadd(ALL_MEMBER_CARDS_INDEX, { score: extra.createdAt, member: extra.id });
+      }
     }
 
     tx.hincrby(`member:${user.id}`, "packsOpened", 1);
@@ -851,7 +868,16 @@ export async function openCustomPackWithCar(
           pack: { id: hydrated.id, name: hydrated.name },
         })
       : null;
-    const allCards = bonusCard ? [...pulled, bonusCard] : pulled;
+    // The Crew and Repair Kit cards this pack is set to give, after the bonus pull.
+    const extraCards = await buildPackExtraCards({
+      config: runtime.config,
+      userId: user.id,
+      ownerName: user.name,
+      createdAt: baseNow + pulled.length + 1,
+      rng,
+      pack: { id: hydrated.id, name: hydrated.name },
+    });
+    const allCards = [...pulled, ...(bonusCard ? [bonusCard] : []), ...extraCards];
 
     const tx = redis.multi();
     for (const stored of allCards) {

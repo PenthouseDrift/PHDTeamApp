@@ -7,6 +7,27 @@ import type { MemberCard } from "@/lib/card-roll";
 import { PackArt } from "@/tcg/components/PackArt";
 
 /**
+ * Lay out the cards of a store pack for the reveal. Its Crew and Repair Kit cards go last, after the cards from the pack
+ * itself, so that however many a pack gives they are never mistaken for the car cards or the bonus pull.
+ */
+export function splitStorePackCards(cards: MemberCard[]): {
+  card: MemberCard | null;
+  bonus: MemberCard | null;
+  featured: MemberCard | null;
+  extras: MemberCard[];
+} {
+  const isUtility = (c: MemberCard) => c.cardType === "crew" || c.cardType === "maintenance";
+  const main = cards.filter((c) => !isUtility(c));
+  return {
+    card: main[0] ?? null,
+    bonus: main[1] ?? null,
+    featured: main[2] ?? null,
+    // Any card after the third, such as the pack's bonus pull, then the Crew and Repair Kit cards.
+    extras: [...main.slice(3), ...cards.filter(isUtility)],
+  };
+}
+
+/**
  * The card pack stage.
  *
  *  1. Loading: a little card car drifts round a ring while the card is drawn on the server. No pack is shown yet.
@@ -396,7 +417,15 @@ export function PackOpening({
             {crew ? ` Plus a ${tierInfo(crew.tier).label} Crew Modifier card: ${crew.name}.` : ""}
             {featured ? ` A rare ${tierInfo(featured.tier).label} bonus card also dropped: ${featured.name}.` : ""}
             {maintenance ? ` Plus a ${tierInfo(maintenance.tier).label} Maintenance Consumable: ${maintenance.name}.` : ""}
-            {extras.map((extra) => ` Plus a ${tierInfo(extra.tier).label} card: ${extra.name}.`).join("")}
+            {extras
+              .map((extra) =>
+                extra.cardType === "crew"
+                  ? ` Plus a ${tierInfo(extra.tier).label} Crew Modifier card: ${extra.name}.`
+                  : extra.cardType === "maintenance"
+                    ? ` Plus a ${tierInfo(extra.tier).label} Maintenance Consumable: ${extra.name}.`
+                    : ` Plus a ${tierInfo(extra.tier).label} card: ${extra.name}.`
+              )
+              .join("")}
           </span>
           <div className={`pc-rays ${isLegend ? "pc-rays-rainbow" : ""}`} aria-hidden style={card.tier === "bronze" ? { display: "none" } : undefined} />
           <div className="pc-burst" aria-hidden />

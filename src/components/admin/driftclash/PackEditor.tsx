@@ -15,7 +15,9 @@ import {
   applyVariant,
   configFromLegacyPack,
   effectivePcts,
+  MAX_EXTRA_CARDS,
   emptyPackConfig,
+  packExtraCounts,
   entryOverallPct,
   generatedPct,
   oneInFromPct,
@@ -525,6 +527,38 @@ export function PackEditor({
                     ))}
                   </select>
                 </div>
+                {!isStandard && (
+                  <>
+                    <div>
+                      <label htmlFor="pk-crew" className={labelCls}>Crew cards per pack</label>
+                      <select
+                        id="pk-crew"
+                        className={inputCls}
+                        value={packExtraCounts(draft).crew}
+                        onChange={(e) => setDraft((d) => ({ ...d, crewCards: Number(e.target.value) }))}
+                      >
+                        {Array.from({ length: MAX_EXTRA_CARDS + 1 }, (_, n) => (
+                          <option key={n} value={n}>{n === 0 ? "None" : n}</option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">Tactical Crew cards for Clash Arena, rolled from the crew set.</p>
+                    </div>
+                    <div>
+                      <label htmlFor="pk-repair" className={labelCls}>Repair kits per pack</label>
+                      <select
+                        id="pk-repair"
+                        className={inputCls}
+                        value={packExtraCounts(draft).repair}
+                        onChange={(e) => setDraft((d) => ({ ...d, repairCards: Number(e.target.value) }))}
+                      >
+                        {Array.from({ length: MAX_EXTRA_CARDS + 1 }, (_, n) => (
+                          <option key={n} value={n}>{n === 0 ? "None" : n}</option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">Maintenance cards that repair a mechanical fault. Not drawn by AI.</p>
+                    </div>
+                  </>
+                )}
               </>
             )}
           </div>
