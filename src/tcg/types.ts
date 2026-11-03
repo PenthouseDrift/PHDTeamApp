@@ -71,7 +71,12 @@ export interface TcgCustomPack {
    * (members can look at what is in it) but its buy button is off. Missing means yes, so existing packs are unchanged.
    */
   purchasable?: boolean;
-  /** Number of cards pulled per pack opening (default 1). */
+  /**
+   * Whether a card credit (earned by checking in, or bought with a Standard Pack) can open this pack instead of paying
+   * its price in P-Credits. Off unless an admin turns it on, so existing packs are unchanged.
+   */
+  allowCardCredits?: boolean;
+  /** Number of cards pulled per pack opening (default 1). Not counting any Crew or Repair Kit cards it also gives. */
   cardsPerPack: number;
   /** Set list of saved Full-Art cards assigned to this pack. */
   cards: TcgCustomPackCardEntry[];
@@ -96,6 +101,8 @@ export interface TcgCustomPackWithCards extends TcgCustomPack {
   needsGeneration?: boolean;
   /** Set when the pack's bonus pull is on: the chance of a bonus card per pack, and how many cards it can be. */
   bonus?: { chancePct: number; count: number };
+  /** The Crew and Repair Kit cards every opening also gives, on top of `cardsPerPack`. */
+  extraCards?: { crew: number; repair: number };
 }
 
 /** Global store configuration for the TCG Pack Store & P-Credit Bundles. */

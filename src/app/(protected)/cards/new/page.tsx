@@ -24,7 +24,9 @@ export default async function NewCardPage({ searchParams }: { searchParams: Prom
 
   // /cards/new?pack=<id> opens a store pack that needs a car, instead of a Standard Pack.
   const { pack: packParam } = await searchParams;
-  let customPack: { id: string; name: string; price: number; pCredits: number } | undefined;
+  let customPack:
+    | { id: string; name: string; price: number; pCredits: number; allowCardCredits: boolean; cardCredits: number }
+    | undefined;
   if (packParam) {
     const raw = MEMBER_CARD_ID_PATTERN.test(packParam) ? parseCustomPack(await redis.get(tcgCustomPackKey(packParam))) : null;
     const [pack] = raw && raw.status === "live" && raw.purchasable !== false ? await hydrateCustomPacks([raw]) : [];
@@ -34,6 +36,8 @@ export default async function NewCardPage({ searchParams }: { searchParams: Prom
       name: pack.name,
       price: getEffectivePrice(pack.price, pack.salePrice),
       pCredits: await getPCredits(userId),
+      allowCardCredits: pack.allowCardCredits === true,
+      cardCredits: await getCardCredits(userId),
     };
   }
 

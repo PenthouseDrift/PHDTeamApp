@@ -4,6 +4,7 @@ import { useCallback, useState, useTransition } from "react";
 import { FullArtCard } from "@/components/cards/FullArtCard";
 import { MemberCarPicker } from "@/components/admin/driftclash/MemberCarPicker";
 import { SavedSetCardPicker, describeVariant } from "@/components/admin/driftclash/SavedSetCardPicker";
+import { SimulatePackDialog } from "@/components/admin/driftclash/SimulatePackDialog";
 import { EntryStatsDialog } from "@/components/admin/driftclash/StatsModeControl";
 import { StyleCardWizard } from "@/components/admin/driftclash/StyleCardWizard";
 import { EntryEditorDialog } from "@/components/admin/driftclash/EntryEditorDialog";
@@ -36,6 +37,7 @@ import {
   deletePackAction,
   savePackAction,
   savePackConfigAction,
+  setPackCardCreditsAction,
   setPackPurchasableAction,
   setPackStatusAction,
   setStandardPackEnabledAction,
@@ -129,6 +131,8 @@ export function PackEditor({
   const [status, setStatus] = useState<TcgPackStatus>(pack?.status ?? "draft");
   /** Whether a live pack can be bought. Off means members can see the pack and what is in it, but not buy it. */
   const [purchasable, setPurchasable] = useState(pack?.purchasable !== false);
+  /** Whether a card credit can open this pack instead of paying its price. */
+  const [allowCardCredits, setAllowCardCredits] = useState(pack?.allowCardCredits === true);
 
   const [adding, setAdding] = useState<FullArtTier | null>(null);
   const [addTab, setAddTab] = useState<"members" | "styles" | "cards">("cards");
@@ -141,6 +145,9 @@ export function PackEditor({
   const [statsFor, setStatsFor] = useState<{ tier: FullArtTier; index: number } | null>(null);
   const closeStats = useCallback(() => setStatsFor(null), []);
   const [detail, setDetail] = useState<Detail>(null);
+  /** The "Simulate opening" window. */
+  const [simulating, setSimulating] = useState(false);
+  const closeSimulating = useCallback(() => setSimulating(false), []);
   const [pending, startTransition] = useTransition();
 
   const readOnly = Boolean(legacy);
@@ -308,6 +315,7 @@ export function PackEditor({
         salePrice: salePrice.trim() ? Number(salePrice) : null,
         status,
         purchasable,
+        allowCardCredits,
         cardsPerPack: Number(cardsPerPack),
         config: draft,
       });
@@ -391,6 +399,28 @@ export function PackEditor({
             res.data.purchasable === false
               ? `"${res.data.name}" can't be bought right now. ${res.data.status === "live" ? "Members can still see it and what is in it." : "It is still a draft, so members can't see it."}`
               : `"${res.data.name}" can be bought again.`,
+        });
+      } else onNotify({ text: res.error, error: true });
+    });
+  }
+
+  /** Whether a card credit can open this pack. For a pack that exists this takes effect straight away; for a new pack it applies when created. */
+  function toggleCardCredits() {
+    const next = !allowCardCredits;
+    if (!pack) {
+      setAllowCardCredits(next);
+      return;
+    }
+    startTransition(async () => {
+      const res = await setPackCardCreditsAction(pack.id, next);
+      if (res.success) {
+        setAllowCardCredits(res.data.allowCardCredits === true);
+        onPackSaved(res.data);
+        onNotify({
+          text:
+            res.data.allowCardCredits === true
+              ? `Members can now open "${res.data.name}" with a card credit.`
+              : `"${res.data.name}" can only be opened with P-Credits now.`,
         });
       } else onNotify({ text: res.error, error: true });
     });
@@ -498,6 +528,29 @@ export function PackEditor({
               className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-50 ${purchasable ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-700"}`}
             >
               <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${purchasable ? "left-[22px]" : "left-0.5"}`} />
+            </button>
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-800/60">
+            <span>
+              <span className="block text-sm font-black text-zinc-900 dark:text-zinc-100">
+                {allowCardCredits ? "Card credits can open this pack" : "Card credits can't open this pack"}
+              </span>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+                {allowCardCredits
+                  ? "A member can spend 1 card credit (earned by checking in at the track) instead of paying the price in P-Credits."
+                  : "Turn this on to let members open this pack with a card credit, as well as with P-Credits."}
+              </span>
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={allowCardCredits}
+              aria-label="Card credits can open this pack"
+              disabled={pending}
+              onClick={toggleCardCredits}
+              className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-50 ${allowCardCredits ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-700"}`}
+            >
+              <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${allowCardCredits ? "left-[22px]" : "left-0.5"}`} />
             </button>
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -790,6 +843,9 @@ export function PackEditor({
           <button type="button" className={primaryBtn} disabled={pending || (!isStandard && !name.trim())} onClick={save}>
             {pending ? "Saving…" : isStandard ? "Save Standard Pack" : pack ? "Save pack" : "Create pack"}
           </button>
+          <button type="button" className={secondaryBtn} disabled={pending} onClick={() => setSimulating(true)}>
+            Simulate opening
+          </button>
           {pack && (
             <button type="button" className={dangerBtn} disabled={pending} onClick={remove}>
               Delete pack
@@ -801,6 +857,17 @@ export function PackEditor({
             </span>
           )}
         </div>
+      )}
+
+      {/* ── Simulate opening ─────────────────────────────────────────── */}
+      {simulating && (
+        <SimulatePackDialog
+          config={draft}
+          cardsPerPack={Number(cardsPerPack) || 1}
+          styles={styles}
+          title={isStandard ? "Standard Pack" : name.trim() || "New pack"}
+          onClose={closeSimulating}
+        />
       )}
 
       {/* ── Add dialog ───────────────────────────────────────────────── */}

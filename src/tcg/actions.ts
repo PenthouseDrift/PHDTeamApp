@@ -4,7 +4,7 @@ import { randomInt, randomUUID } from "crypto";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
-import { grantCardCredits, getCardCredits } from "@/lib/card-credits";
+import { grantCardCredits, getCardCredits, refundCardCredit, spendCardCredit } from "@/lib/card-credits";
 import { deleteImage } from "@/lib/blob";
 import { isBlobUrl } from "@/lib/card-art-generate";
 import {
@@ -514,6 +514,34 @@ export async function buyStandardPackWithPCredits(): Promise<
   }
 }
 
+/** How a store pack is paid for: its P-Credit price, or one card credit when the pack allows that. */
+export type PackPayment = "pcredits" | "cardCredit";
+
+/**
+ * Take payment for opening a store pack: its price in P-Credits, or 1 card credit if the member asked for that and the
+ * pack allows it. Returns a way to give the same thing back if the pack then fails to open.
+ */
+async function chargeForPack(
+  userId: string,
+  pack: TcgCustomPackWithCards,
+  payWith: PackPayment | undefined
+): Promise<{ ok: true; pCredits: number; refund: () => Promise<void> } | { ok: false; error: string }> {
+  if (payWith === "cardCredit") {
+    if (!pack.allowCardCredits) return { ok: false, error: `"${pack.name}" can't be opened with a card credit.` };
+    if (!(await spendCardCredit(userId))) return { ok: false, error: "You don't have a card credit to use." };
+    return { ok: true, pCredits: await getPCredits(userId), refund: () => refundCardCredit(userId) };
+  }
+  const price = getEffectivePrice(pack.price, pack.salePrice);
+  const spent = await spendPCredits(userId, price);
+  if (!spent.ok) {
+    return {
+      ok: false,
+      error: `Not enough P-Credits. "${pack.name}" costs ${price.toLocaleString()} P-Credits (you have ${spent.balance.toLocaleString()}).`,
+    };
+  }
+  return { ok: true, pCredits: spent.balance, refund: async () => void (await grantPCredits(userId, price)) };
+}
+
 /**
  * Purchase and immediately open a Live Custom Set Pack using P-Credits.
  * Deducts `pack.price` P-Credits, rolls `pack.cardsPerPack` card(s) from the pack's
@@ -521,8 +549,9 @@ export async function buyStandardPackWithPCredits(): Promise<
  * collection, and returns them for the animated `PackOpening` reveal.
  */
 export async function buyAndOpenCustomPack(
-  packId: string
-): Promise<ActionResult<{ cards: MemberCard[]; pCredits: number; packName: string }>> {
+  packId: string,
+  options?: { payWith?: PackPayment }
+): Promise<ActionResult<{ cards: MemberCard[]; pCredits: number; packCredits: number; packName: string }>> {
   const user = await currentUser();
   if (!user) return { success: false, error: "Please sign in to buy and open a pack." };
   if (!MEMBER_CARD_ID_PATTERN.test(packId)) return { success: false, error: "Invalid pack." };
@@ -543,14 +572,8 @@ export async function buyAndOpenCustomPack(
     return { success: false, error: "This pack doesn't have any cards in its set list yet." };
   }
 
-  const effectivePackPrice = getEffectivePrice(hydrated.price, hydrated.salePrice);
-  const spent = await spendPCredits(user.id, effectivePackPrice);
-  if (!spent.ok) {
-    return {
-      success: false,
-      error: `Not enough P-Credits. "${hydrated.name}" costs ${effectivePackPrice.toLocaleString()} P-Credits (you have ${spent.balance.toLocaleString()}).`,
-    };
-  }
+  const charge = await chargeForPack(user.id, hydrated, options?.payWith);
+  if (!charge.ok) return { success: false, error: charge.error };
 
   try {
     const totalWeight = hydrated.setList.reduce((sum, item) => sum + item.weight, 0);
@@ -677,13 +700,14 @@ export async function buyAndOpenCustomPack(
       success: true,
       data: {
         cards: pulled.map(publicCard),
-        pCredits: spent.balance,
+        pCredits: charge.pCredits,
+        packCredits: await getCardCredits(user.id),
         packName: hydrated.name,
       },
     };
   } catch (error) {
-    // Refund P-Credits if rolling/saving failed
-    await grantPCredits(user.id, effectivePackPrice).catch(() => {});
+    // Give back the P-Credits or the card credit if rolling/saving failed
+    await charge.refund().catch(() => {});
     console.error("[tcg] buyAndOpenCustomPack failed:", error);
     return {
       success: false,
@@ -702,6 +726,8 @@ export interface OpenCustomPackInput {
   referenceUrl: string;
   /** Draw every generated card from community cars instead of the member's own car. */
   skipPersonalCar?: boolean;
+  /** How the pack is paid for: its P-Credit price (the default), or a card credit if the pack allows it. */
+  payWith?: PackPayment;
 }
 
 const customPackLockKey = (userId: string) => `cardgen:lock:${userId}`;
@@ -716,7 +742,7 @@ const clampText = (v: unknown, max: number) => (typeof v === "string" ? v.replac
 export async function openCustomPackWithCar(
   packId: string,
   input: OpenCustomPackInput
-): Promise<ActionResult<{ cards: MemberCard[]; pCredits: number; packName: string }>> {
+): Promise<ActionResult<{ cards: MemberCard[]; pCredits: number; packCredits: number; packName: string }>> {
   const user = await currentUser();
   if (!user) return { success: false, error: "Please sign in to open a pack." };
   if (!MEMBER_CARD_ID_PATTERN.test(packId)) return { success: false, error: "Invalid pack." };
@@ -747,7 +773,8 @@ export async function openCustomPackWithCar(
   const locked = await redis.set(customPackLockKey(user.id), "1", { nx: true, ex: 150 });
   if (!locked) return { success: false, error: "A pack is already being opened. Give it a moment." };
 
-  let spentAmount = 0;
+  // Set once the member has been charged, and cleared once the cards are saved. If anything fails in between it gives the charge back.
+  let refund: (() => Promise<void>) | null = null;
   try {
     const count = Math.max(1, Math.min(3, hydrated.cardsPerPack || 1));
     const title = cardTitle({ carName, chassis, driver });
@@ -801,15 +828,9 @@ export async function openCustomPackWithCar(
       }
     }
 
-    const effectivePackPrice = getEffectivePrice(hydrated.price, hydrated.salePrice);
-    const spent = await spendPCredits(user.id, effectivePackPrice);
-    if (!spent.ok) {
-      return {
-        success: false,
-        error: `Not enough P-Credits. "${hydrated.name}" costs ${effectivePackPrice.toLocaleString()} P-Credits (you have ${spent.balance.toLocaleString()}).`,
-      };
-    }
-    spentAmount = effectivePackPrice;
+    const charge = await chargeForPack(user.id, hydrated, input?.payWith);
+    if (!charge.ok) return { success: false, error: charge.error };
+    refund = charge.refund;
 
     const runtime = await loadRuntimeFor(hydrated.config);
     const settled = await Promise.allSettled(
@@ -887,7 +908,7 @@ export async function openCustomPackWithCar(
     }
     tx.hincrby(`member:${user.id}`, "packsOpened", 1);
     await tx.exec();
-    spentAmount = 0; // saved: nothing to refund from here on
+    refund = null; // saved: nothing to refund from here on
 
     // The member's own car stands in the community pool, as it does after a Standard Pack.
     const ownCard = pulled.find((c, i) => sources[i].own && !c.setCardId);
@@ -899,7 +920,12 @@ export async function openCustomPackWithCar(
 
     return {
       success: true,
-      data: { cards: allCards.map(publicCard), pCredits: spent.balance, packName: hydrated.name },
+      data: {
+        cards: allCards.map(publicCard),
+        pCredits: charge.pCredits,
+        packCredits: await getCardCredits(user.id),
+        packName: hydrated.name,
+      },
     };
   } catch (error) {
     console.error("[tcg] openCustomPackWithCar failed:", error);
@@ -911,7 +937,7 @@ export async function openCustomPackWithCar(
           : "We couldn't make your cards this time. You haven't been charged. Please try again in a moment.",
     };
   } finally {
-    if (spentAmount > 0) await grantPCredits(user.id, spentAmount).catch(() => {});
+    if (refund) await refund().catch(() => {});
     await redis.del(customPackLockKey(user.id)).catch(() => {});
   }
 }
@@ -1020,6 +1046,7 @@ export interface SaveCustomPackInput {
   salePrice?: number | null;
   status: TcgPackStatus;
   purchasable?: boolean;
+  allowCardCredits?: boolean;
   cardsPerPack?: number;
   cards: TcgCustomPackCardEntry[];
 }
@@ -1081,6 +1108,7 @@ export async function saveCustomPackAction(
       salePrice,
       status,
       purchasable: input.purchasable ?? existing?.purchasable ?? true,
+      allowCardCredits: input.allowCardCredits ?? existing?.allowCardCredits ?? false,
       cardsPerPack,
       cards: cleanCards,
       createdAt: existing?.createdAt ?? now,

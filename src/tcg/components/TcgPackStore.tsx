@@ -75,13 +75,15 @@ export function TcgPackStore({
     });
   }
 
-  function handleBuyCustomPack(pack: TcgCustomPackWithCards) {
+  function handleBuyCustomPack(pack: TcgCustomPackWithCards, payWith: "pcredits" | "cardCredit" = "pcredits") {
     setFeedback(null);
     startTransition(async () => {
-      const res = await buyAndOpenCustomPack(pack.id);
+      const res = await buyAndOpenCustomPack(pack.id, { payWith });
       if (res.success) {
         setInspectPack(null);
         onCustomCardsPulled(res.data.cards, res.data.pCredits);
+        // A card credit leaves the P-Credits alone and takes one pack credit, so the pack credit balance is updated too.
+        onBalancesChange({ pCredits: res.data.pCredits, packCredits: res.data.packCredits });
         setOpeningState({
           packName: res.data.packName,
           cards: res.data.cards,
@@ -216,8 +218,15 @@ export function TcgPackStore({
                             🔥 -{discountPct}% SALE
                           </span>
                         )}
-                        <span className="rounded-full bg-amber-500 px-2.5 py-0.5 text-[11px] font-black text-black">
-                          {pack.cardsPerPack} Card{pack.cardsPerPack === 1 ? "" : "s"} / Pack
+                        <span
+                          className="rounded-full bg-amber-500 px-2.5 py-0.5 text-[11px] font-black text-black"
+                          title={[
+                            `${pack.cardsPerPack} card${pack.cardsPerPack === 1 ? "" : "s"}`,
+                            ...(pack.extraCards?.crew ? [`${pack.extraCards.crew} crew`] : []),
+                            ...(pack.extraCards?.repair ? [`${pack.extraCards.repair} repair kit${pack.extraCards.repair === 1 ? "" : "s"}`] : []),
+                          ].join(" + ")}
+                        >
+                          {totalCardsInPack(pack)} Card{totalCardsInPack(pack) === 1 ? "" : "s"} / Pack
                         </span>
                       </div>
                     </div>
@@ -308,6 +317,28 @@ export function TcgPackStore({
                         `Need ${effectivePrice.toLocaleString()} P`
                       )}
                     </button>
+                    )}
+                    {forSale && pack.allowCardCredits && (
+                      pack.needsGeneration ? (
+                        packCredits > 0 ? (
+                          <Link href={`/cards/new?pack=${pack.id}`} className={`${secondaryBtn} basis-full text-xs`}>
+                            Choose car &amp; use a card credit ({packCredits} left)
+                          </Link>
+                        ) : (
+                          <button type="button" disabled className={`${secondaryBtn} basis-full text-xs`}>
+                            Card credit: none left
+                          </button>
+                        )
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleBuyCustomPack(pack, "cardCredit")}
+                          disabled={pending || packCredits < 1}
+                          className={`${secondaryBtn} basis-full text-xs`}
+                        >
+                          {pending ? "Opening…" : packCredits > 0 ? `Use a card credit (${packCredits} left)` : "Card credit: none left"}
+                        </button>
+                      )
                     )}
                   </div>
                 </div>
@@ -494,7 +525,7 @@ export function TcgPackStore({
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-xs font-bold uppercase tracking-widest text-amber-400">
-                        Pack · {inspectPack.cardsPerPack} Card{inspectPack.cardsPerPack === 1 ? "" : "s"} per pack
+                        Pack · {totalCardsInPack(inspectPack)} Card{totalCardsInPack(inspectPack) === 1 ? "" : "s"} per pack
                       </span>
                       {inspectOnSale && (
                         <span className="rounded-full bg-gradient-to-r from-rose-600 to-amber-500 px-2.5 py-0.5 text-[10px] font-black uppercase text-white">
@@ -586,6 +617,28 @@ export function TcgPackStore({
                       Top Up P-Credits to Buy
                     </button>
                   )}
+                  {inspectPack.purchasable !== false && inspectPack.allowCardCredits && (
+                    inspectPack.needsGeneration ? (
+                      packCredits > 0 ? (
+                        <Link href={`/cards/new?pack=${inspectPack.id}`} className={primaryBtn}>
+                          Choose car &amp; use a card credit ({packCredits} left)
+                        </Link>
+                      ) : (
+                        <span className="rounded-xl border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-300">
+                          Card credit: none left
+                        </span>
+                      )
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleBuyCustomPack(inspectPack, "cardCredit")}
+                        disabled={pending || packCredits < 1}
+                        className={primaryBtn}
+                      >
+                        {pending ? "Opening Pack…" : packCredits > 0 ? `Use a card credit (${packCredits} left)` : "Card credit: none left"}
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
             </div>,
@@ -663,6 +716,11 @@ export function TcgPackStore({
         )}
     </div>
   );
+}
+
+/** Every card a pack gives each time it is opened: its cards plus its Crew and Repair Kit cards. (A bonus pull is a chance, so it isn't counted.) */
+function totalCardsInPack(pack: TcgCustomPackWithCards): number {
+  return pack.cardsPerPack + (pack.extraCards?.crew ?? 0) + (pack.extraCards?.repair ?? 0);
 }
 
 /** For packs that draw some cards from a car: a short note that a car is chosen when opening. */

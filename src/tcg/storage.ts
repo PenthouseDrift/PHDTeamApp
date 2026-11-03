@@ -15,6 +15,7 @@ import {
   bonusIsActive,
   entryOverallPct,
   effectivePcts,
+  packExtraCounts,
   packNeedsGeneration,
 } from "@/lib/pack-config";
 import { entryRefs, loadAllPackConfigs, loadPackConfig } from "@/lib/pack-config-store";
@@ -345,6 +346,7 @@ export function parseCustomPack(raw: unknown): TcgCustomPack | null {
       status: p.status === "live" ? "live" : "draft",
       // Only an explicit "no" turns buying off; packs saved before this existed stay purchasable.
       purchasable: p.purchasable !== false,
+      allowCardCredits: p.allowCardCredits === true,
       cardsPerPack: Math.max(1, Math.min(3, Math.floor(Number(p.cardsPerPack) || 1))),
       cards,
       createdAt: Number(p.createdAt) || Date.now(),
@@ -428,6 +430,7 @@ export async function hydrateCustomPacks(packs: TcgCustomPack[]): Promise<TcgCus
         config,
         needsGeneration: packNeedsGeneration(config),
         ...(bonusIsActive(config.bonus) ? { bonus: { chancePct: config.bonus.chancePct, count: config.bonus.entries.length } } : {}),
+        extraCards: packExtraCounts(config),
       };
     }
 

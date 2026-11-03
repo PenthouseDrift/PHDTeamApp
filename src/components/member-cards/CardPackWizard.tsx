@@ -107,7 +107,16 @@ interface WizardProps {
    * Opening a store pack that needs a car (instead of a Standard Pack). It costs P-Credits rather than
    * a card credit, and is opened with the same car photo or community cars choice.
    */
-  customPack?: { id: string; name: string; price: number; pCredits: number };
+  customPack?: {
+    id: string;
+    name: string;
+    price: number;
+    pCredits: number;
+    /** The pack can be opened with a card credit as well as with its price in P-Credits. */
+    allowCardCredits?: boolean;
+    /** How many card credits the member has to spend. */
+    cardCredits?: number;
+  };
 }
 
 /** What the form starts with: the garage defaults, replaced by the last pack's answers when there are any. */
@@ -224,6 +233,10 @@ function CardPackWizardForm({
   remembered,
 }: WizardProps & { remembered: RememberedPack | null }) {
   const [credits, setCredits] = useState(initialCredits);
+  // How a store pack is paid for. A member who has a card credit and a pack that takes one starts on the card credit.
+  const [payWith, setPayWith] = useState<"pcredits" | "cardCredit">(
+    customPack?.allowCardCredits && (customPack.cardCredits ?? 0) > 0 ? "cardCredit" : "pcredits"
+  );
   const [specSheets, setSpecSheets] = useState<CarSpecSheet[]>(initialSpecSheets);
   const [activeSpecId, setActiveSpecId] = useState<string | null>(null);
   const [specSavedMsg, setSpecSavedMsg] = useState<string | null>(null);
@@ -395,7 +408,7 @@ function CardPackWizardForm({
         skipPersonalCar,
       };
       const res = customPack
-        ? await openCustomPackWithCar(customPack.id, answers).then((r) =>
+        ? await openCustomPackWithCar(customPack.id, { ...answers, payWith }).then((r) =>
             r.success
               ? {
                   success: true as const,
@@ -751,7 +764,7 @@ function CardPackWizardForm({
                   <span className="text-2xl mt-0.5">👥</span>
                   <div>
                     <span className="block text-sm font-black text-zinc-900 dark:text-zinc-100">
-                      Don&apos;t generate my car (Pull 2 Community Cards)
+                      Don&apos;t generate my car
                     </span>
                     <span className="block text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
                       Don&apos;t have an RC car yet? Select this to pull two community car cards from other racers — no driver name, team, chassis or car photos needed!
@@ -845,7 +858,7 @@ function CardPackWizardForm({
                   <span className="text-2xl mt-0.5">👥</span>
                   <div>
                     <p className="text-sm font-black text-zinc-900 dark:text-zinc-100">
-                      Don&apos;t generate my car (Pull 2 Community Cards)
+                      Don&apos;t generate my car
                     </p>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                       Don&apos;t have an RC car yet? We&apos;ll pull two community car cards from other racers instead of custom car art.
@@ -1047,6 +1060,33 @@ function CardPackWizardForm({
                 )}
               </p>
             </div>
+            {customPack?.allowCardCredits && (
+              <fieldset className="space-y-2">
+                <legend className="mb-1 text-sm font-bold text-zinc-900 dark:text-zinc-100">How would you like to pay?</legend>
+                {(
+                  [
+                    ["cardCredit", `Use 1 card credit (you have ${customPack.cardCredits ?? 0})`, (customPack.cardCredits ?? 0) < 1],
+                    ["pcredits", `Pay ${customPack.price.toLocaleString()} P-Credits (you have ${customPack.pCredits.toLocaleString()})`, customPack.pCredits < customPack.price],
+                  ] as const
+                ).map(([value, label, unavailable]) => (
+                  <label
+                    key={value}
+                    className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm ${
+                      payWith === value ? "border-amber-500 bg-amber-500/10" : "border-zinc-200 dark:border-zinc-700"
+                    } ${unavailable ? "opacity-60" : ""}`}
+                  >
+                    <input
+                      type="radio"
+                      name="pack-payment"
+                      className="h-4 w-4"
+                      checked={payWith === value}
+                      onChange={() => setPayWith(value)}
+                    />
+                    <span className="font-bold text-zinc-900 dark:text-zinc-100">{label}</span>
+                  </label>
+                ))}
+              </fieldset>
+            )}
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
               <dt className="font-bold text-zinc-500 dark:text-zinc-400">Driver</dt>
               <dd className="text-zinc-900 dark:text-zinc-100">{skipPersonalCar ? "Community Drivers (2 cards)" : (driver.trim() || "None")}</dd>

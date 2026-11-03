@@ -42,6 +42,7 @@ import {
   tcgCustomPackKey,
 } from "@/tcg/storage";
 import { DEFAULT_STANDARD_PACK_PRICE, isOnSale } from "@/tcg/config";
+import { simulateManyPacks, simulateOnePack, type SimSlot, type SimStats } from "@/tcg/pack-simulate";
 import type { TcgCustomPack, TcgCustomPackWithCards, TcgPackStatus } from "@/tcg/types";
 import type { ActionResult } from "@/types";
 import { saveFullArtCard } from "@/actions/admin/full-art-cards";
@@ -155,6 +156,8 @@ export interface SavePackInput {
   status: TcgPackStatus;
   /** Whether a live pack can be bought. Defaults to the pack's current setting, or yes for a new pack. */
   purchasable?: boolean;
+  /** Whether a card credit can open this pack. Defaults to the pack's current setting, or no for a new pack. */
+  allowCardCredits?: boolean;
   cardsPerPack?: number;
   config: PackConfig;
 }
@@ -216,6 +219,7 @@ export async function savePackAction(input: SavePackInput): Promise<ActionResult
       salePrice,
       status,
       purchasable: input.purchasable ?? existing?.purchasable ?? true,
+      allowCardCredits: input.allowCardCredits ?? existing?.allowCardCredits ?? false,
       cardsPerPack,
       cards: mirror,
       createdAt: existing?.createdAt ?? now,
@@ -329,6 +333,78 @@ export async function setPackPurchasableAction(packId: string, purchasable: bool
   } catch (error) {
     console.error("[driftclash-packs] purchasable change failed:", error);
     return { success: false, error: error instanceof Error ? error.message : "Could not change whether the pack can be bought" };
+  }
+}
+
+/** The most packs one simulation covers. */
+const MAX_SIMULATED_PACKS = 5000;
+
+/** A pack setup sent from the editor (saved or not) cleaned for simulating, or null if it isn't one. */
+function configForSimulation(config: PackConfig): PackConfig | null {
+  const isStandard = config?.packId === STANDARD_PACK_ID;
+  return sanitizePackConfig({ ...config, packId: isStandard ? STANDARD_PACK_ID : randomUUID() });
+}
+
+/**
+ * Open one pack on paper, using the setup as it is in the editor right now (no need to save first). Nobody is charged,
+ * nothing is saved and no AI picture is made: a card opening would draw with AI comes back as a placeholder showing its
+ * rarity and style. Admin only.
+ */
+export async function simulatePackOpeningAction(input: {
+  config: PackConfig;
+  cardsPerPack: number;
+}): Promise<ActionResult<{ slots: SimSlot[] }>> {
+  try {
+    if (!(await requireAdmin())) return { success: false, error: "Only admins can simulate packs" };
+    const config = configForSimulation(input?.config);
+    if (!config) return { success: false, error: "That pack setup isn't valid" };
+    return { success: true, data: { slots: await simulateOnePack({ config, cardsPerPack: Number(input.cardsPerPack) }) } };
+  } catch (error) {
+    console.error("[driftclash-packs] simulate failed:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Could not simulate the pack" };
+  }
+}
+
+/** Open many packs on paper and count what comes out, to check a setup's odds. Same rules as simulatePackOpeningAction. */
+export async function simulatePackStatsAction(input: {
+  config: PackConfig;
+  cardsPerPack: number;
+  packs: number;
+}): Promise<ActionResult<SimStats>> {
+  try {
+    if (!(await requireAdmin())) return { success: false, error: "Only admins can simulate packs" };
+    const config = configForSimulation(input?.config);
+    if (!config) return { success: false, error: "That pack setup isn't valid" };
+    const packs = Math.max(1, Math.min(MAX_SIMULATED_PACKS, Math.round(Number(input.packs)) || 1));
+    return { success: true, data: await simulateManyPacks({ config, cardsPerPack: Number(input.cardsPerPack) }, packs) };
+  } catch (error) {
+    console.error("[driftclash-packs] simulate stats failed:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Could not simulate the packs" };
+  }
+}
+
+/**
+ * Let members open this pack with a card credit instead of paying P-Credits, or stop letting them. Doesn't change whether
+ * the pack is live or buyable, or anything else about it.
+ */
+export async function setPackCardCreditsAction(packId: string, allow: boolean): Promise<ActionResult<TcgCustomPackWithCards>> {
+  try {
+    if (!(await requireAdmin())) return { success: false, error: "Only admins can change packs" };
+    if (!MEMBER_CARD_ID_PATTERN.test(packId)) return { success: false, error: "Invalid pack" };
+
+    const pack = parseCustomPack(await redis.get(tcgCustomPackKey(packId)));
+    if (!pack) return { success: false, error: "That pack no longer exists" };
+
+    // The edit time is left alone so the editor isn't reset mid-edit.
+    const updated: TcgCustomPack = { ...pack, allowCardCredits: allow === true };
+    await redis.set(tcgCustomPackKey(packId), JSON.stringify(updated));
+
+    const [hydrated] = await hydrateCustomPacks([updated]);
+    revalidate();
+    return { success: true, data: hydrated };
+  } catch (error) {
+    console.error("[driftclash-packs] card credit setting failed:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Could not change the card credit setting" };
   }
 }
 
