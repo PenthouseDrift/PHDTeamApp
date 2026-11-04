@@ -346,7 +346,7 @@ export function parseCustomPack(raw: unknown): TcgCustomPack | null {
       status: p.status === "live" ? "live" : "draft",
       // Only an explicit "no" turns buying off; packs saved before this existed stay purchasable.
       purchasable: p.purchasable !== false,
-      allowCardCredits: p.allowCardCredits === true,
+      allowCardCredits: p.allowCardCredits !== false,
       cardsPerPack: Math.max(1, Math.min(3, Math.floor(Number(p.cardsPerPack) || 1))),
       cards,
       createdAt: Number(p.createdAt) || Date.now(),

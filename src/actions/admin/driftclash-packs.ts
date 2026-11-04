@@ -156,7 +156,7 @@ export interface SavePackInput {
   status: TcgPackStatus;
   /** Whether a live pack can be bought. Defaults to the pack's current setting, or yes for a new pack. */
   purchasable?: boolean;
-  /** Whether a card credit can open this pack. Defaults to the pack's current setting, or no for a new pack. */
+  /** Whether a card credit can open this pack. Defaults to the pack's current setting, or yes for a new pack. */
   allowCardCredits?: boolean;
   cardsPerPack?: number;
   config: PackConfig;
@@ -219,7 +219,7 @@ export async function savePackAction(input: SavePackInput): Promise<ActionResult
       salePrice,
       status,
       purchasable: input.purchasable ?? existing?.purchasable ?? true,
-      allowCardCredits: input.allowCardCredits ?? existing?.allowCardCredits ?? false,
+      allowCardCredits: input.allowCardCredits ?? existing?.allowCardCredits ?? true,
       cardsPerPack,
       cards: mirror,
       createdAt: existing?.createdAt ?? now,
@@ -384,7 +384,7 @@ export async function simulatePackStatsAction(input: {
 }
 
 /**
- * Let members open this pack with a card credit instead of paying P-Credits, or stop letting them. Doesn't change whether
+ * Let members open this pack with a card credit instead of paying P-Credits (the default for every pack), or stop letting them. Doesn't change whether
  * the pack is live or buyable, or anything else about it.
  */
 export async function setPackCardCreditsAction(packId: string, allow: boolean): Promise<ActionResult<TcgCustomPackWithCards>> {
@@ -396,7 +396,7 @@ export async function setPackCardCreditsAction(packId: string, allow: boolean): 
     if (!pack) return { success: false, error: "That pack no longer exists" };
 
     // The edit time is left alone so the editor isn't reset mid-edit.
-    const updated: TcgCustomPack = { ...pack, allowCardCredits: allow === true };
+    const updated: TcgCustomPack = { ...pack, allowCardCredits: allow !== false };
     await redis.set(tcgCustomPackKey(packId), JSON.stringify(updated));
 
     const [hydrated] = await hydrateCustomPacks([updated]);

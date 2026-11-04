@@ -73,7 +73,7 @@ export interface TcgCustomPack {
   purchasable?: boolean;
   /**
    * Whether a card credit (earned by checking in, or bought with a Standard Pack) can open this pack instead of paying
-   * its price in P-Credits. Off unless an admin turns it on, so existing packs are unchanged.
+   * its price in P-Credits. On unless an admin turns it off for this pack; a pack that never had the setting is on.
    */
   allowCardCredits?: boolean;
   /** Number of cards pulled per pack opening (default 1). Not counting any Crew or Repair Kit cards it also gives. */

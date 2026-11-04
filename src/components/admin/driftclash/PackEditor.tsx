@@ -132,7 +132,7 @@ export function PackEditor({
   /** Whether a live pack can be bought. Off means members can see the pack and what is in it, but not buy it. */
   const [purchasable, setPurchasable] = useState(pack?.purchasable !== false);
   /** Whether a card credit can open this pack instead of paying its price. */
-  const [allowCardCredits, setAllowCardCredits] = useState(pack?.allowCardCredits === true);
+  const [allowCardCredits, setAllowCardCredits] = useState(pack?.allowCardCredits !== false);
 
   const [adding, setAdding] = useState<FullArtTier | null>(null);
   const [addTab, setAddTab] = useState<"members" | "styles" | "cards">("cards");
@@ -414,11 +414,11 @@ export function PackEditor({
     startTransition(async () => {
       const res = await setPackCardCreditsAction(pack.id, next);
       if (res.success) {
-        setAllowCardCredits(res.data.allowCardCredits === true);
+        setAllowCardCredits(res.data.allowCardCredits !== false);
         onPackSaved(res.data);
         onNotify({
           text:
-            res.data.allowCardCredits === true
+            res.data.allowCardCredits !== false
               ? `Members can now open "${res.data.name}" with a card credit.`
               : `"${res.data.name}" can only be opened with P-Credits now.`,
         });
@@ -538,7 +538,7 @@ export function PackEditor({
               <span className="block text-xs text-zinc-500 dark:text-zinc-400">
                 {allowCardCredits
                   ? "A member can spend 1 card credit (earned by checking in at the track) instead of paying the price in P-Credits."
-                  : "Turn this on to let members open this pack with a card credit, as well as with P-Credits."}
+                  : "Every pack takes card credits by default. Turn this back on to let members open this pack with a card credit again."}
               </span>
             </span>
             <button

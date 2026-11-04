@@ -1108,7 +1108,7 @@ export async function saveCustomPackAction(
       salePrice,
       status,
       purchasable: input.purchasable ?? existing?.purchasable ?? true,
-      allowCardCredits: input.allowCardCredits ?? existing?.allowCardCredits ?? false,
+      allowCardCredits: input.allowCardCredits ?? existing?.allowCardCredits ?? true,
       cardsPerPack,
       cards: cleanCards,
       createdAt: existing?.createdAt ?? now,
