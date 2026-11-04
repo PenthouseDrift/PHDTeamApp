@@ -39,7 +39,8 @@ export function CardsPromo({ credits }: { credits: number }) {
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
         <Link
-          href={has ? "/cards/new" : "/cards"}
+          // "Open a card pack" goes to the Pack Store, where every pack (Standard and store packs) can be opened with credits or P-Credits.
+          href={has ? "/cards?tab=store" : "/cards"}
           className="inline-flex min-h-11 items-center justify-center rounded-xl bg-amber-500 px-5 text-sm font-black text-black transition-colors hover:bg-amber-400"
         >
           {has ? "Open a card pack" : "See my cards"}
