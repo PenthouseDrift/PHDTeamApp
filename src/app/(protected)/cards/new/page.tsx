@@ -10,7 +10,7 @@ import { getMergedPartCategories } from "@/actions/custom-parts";
 import { CardPackWizard } from "@/components/member-cards/CardPackWizard";
 import { redis } from "@/lib/redis";
 import { MEMBER_CARD_ID_PATTERN } from "@/lib/member-card-store";
-import { getPCredits, hydrateCustomPacks, parseCustomPack, tcgCustomPackKey } from "@/tcg/storage";
+import { getPCredits, getTcgStoreConfig, hydrateCustomPacks, parseCustomPack, tcgCustomPackKey } from "@/tcg/storage";
 import { getEffectivePrice } from "@/tcg/config";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +40,14 @@ export default async function NewCardPage({ searchParams }: { searchParams: Prom
       cardCredits: await getCardCredits(userId),
     };
   }
+
+    // A Standard Pack: its price and the member's P-Credits, so the member can buy another one when their card credits run out.
+  const standardPack = customPack
+    ? undefined
+    : await Promise.all([getTcgStoreConfig(), getPCredits(userId)]).then(([store, pCredits]) => ({
+        price: getEffectivePrice(store.standardPackPrice, store.standardPackSalePrice),
+        pCredits,
+      }));
 
   const [hash, carsResult, credits, myCards, initialSpecSheets, partCategories] = await Promise.all([
     getMemberHash(userId),
@@ -94,6 +102,7 @@ export default async function NewCardPage({ searchParams }: { searchParams: Prom
           // A store pack is paid for with P-Credits when it is opened, so it never needs a card credit.
           initialCredits={customPack ? 1 : credits}
           customPack={customPack}
+          standardPack={standardPack}
           initialSpecSheets={initialSpecSheets}
           partCategories={partCategories}
         />

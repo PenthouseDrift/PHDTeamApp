@@ -6,7 +6,7 @@ import ImageUploader from "@/components/ui/ImageUploader";
 import { PackOpening, splitStorePackCards } from "@/components/member-cards/PackOpening";
 import { ChassisSelector } from "@/components/cars/ChassisSelector";
 import { keepCard, openCardPack, rerollCard } from "@/actions/member-cards";
-import { openCustomPackWithCar } from "@/tcg/actions";
+import { buyStandardPackWithPCredits, openCustomPackWithCar } from "@/tcg/actions";
 import { deleteSpecSheet, getMemberSpecSheets, saveSpecSheet } from "@/actions/spec-sheets";
 import { PartSelector } from "@/components/member-cards/PartSelector";
 import { REROLL_ENABLED, rarityLabel, type MemberCard } from "@/lib/card-roll";
@@ -114,9 +114,14 @@ interface WizardProps {
     pCredits: number;
     /** The pack can be opened with a card credit as well as with its price in P-Credits. */
     allowCardCredits?: boolean;
-    /** How many card credits the member has to spend. */
+        /** How many card credits the member has to spend. */
     cardCredits?: number;
   };
+  /**
+   * Opening a Standard Pack: its price and the member's P-Credits, so that when they run out of card credits they can
+   * buy another Standard Pack and open it straight away.
+   */
+  standardPack?: { price: number; pCredits: number };
 }
 
 /** What the form starts with: the garage defaults, replaced by the last pack's answers when there are any. */
@@ -229,10 +234,15 @@ function CardPackWizardForm({
   initialCredits,
   initialSpecSheets = [],
   partCategories,
-  customPack,
+    customPack,
+  standardPack,
   remembered,
 }: WizardProps & { remembered: RememberedPack | null }) {
   const [credits, setCredits] = useState(initialCredits);
+  // What the member can still spend, kept up to date as packs are opened so "open another" shows the right choices.
+  const [pBalance, setPBalance] = useState(customPack?.pCredits ?? standardPack?.pCredits ?? 0);
+  const [cardCreditBalance, setCardCreditBalance] = useState(customPack?.cardCredits ?? 0);
+  const [buying, setBuying] = useState(false);
   // How a store pack is paid for. A member who has a card credit and a pack that takes one starts on the card credit.
   const [payWith, setPayWith] = useState<"pcredits" | "cardCredit">(
     customPack?.allowCardCredits && (customPack.cardCredits ?? 0) > 0 ? "cardCredit" : "pcredits"
@@ -383,7 +393,8 @@ function CardPackWizardForm({
 
   const onRevealed = useCallback(() => setRevealed(true), []);
 
-  function open() {
+    function open(payOverride?: "pcredits" | "cardCredit") {
+    const pay = payOverride ?? payWith;
     setError(null);
     setCard(null);
     setBonus(null);
@@ -408,7 +419,7 @@ function CardPackWizardForm({
         skipPersonalCar,
       };
       const res = customPack
-        ? await openCustomPackWithCar(customPack.id, { ...answers, payWith }).then((r) =>
+        ? await openCustomPackWithCar(customPack.id, { ...answers, payWith: pay }).then((r) =>
             r.success
               ? {
                   success: true as const,
@@ -417,10 +428,12 @@ function CardPackWizardForm({
                       const split = splitStorePackCards(r.data.cards);
                       return { card: split.card ?? r.data.cards[0], bonus: split.bonus, featured: split.featured, extras: split.extras };
                     })(),
-                    crew: null,
+                                        crew: null,
                     maintenance: null,
                     // A store pack is bought one at a time, so there is nothing left to open afterwards.
                     credits: 0,
+                    pCredits: r.data.pCredits,
+                    packCredits: r.data.packCredits,
                   },
                 }
               : r
@@ -442,7 +455,11 @@ function CardPackWizardForm({
         setFeatured(res.data.featured);
         setMaintenance(res.data.maintenance);
         setExtras((res.data as { extras?: MemberCard[] }).extras ?? []);
-        setCredits(res.data.credits);
+                setCredits(res.data.credits);
+        // A store pack reports what the member has left of each kind of credit.
+        const left = res.data as { pCredits?: number; packCredits?: number };
+        if (typeof left.pCredits === "number") setPBalance(left.pCredits);
+        if (customPack && typeof left.packCredits === "number") setCardCreditBalance(left.packCredits);
         setReady(true);
       } else {
         // Nothing was spent, so go back to the form with the reason.
@@ -455,6 +472,24 @@ function CardPackWizardForm({
     });
   }
 
+    /** Out of card credits: buy another Standard Pack with P-Credits, then open it with the same answers. */
+    async function buyStandardPack(): Promise<boolean> {
+    if (!standardPack) return false;
+    setBuying(true);
+    setError(null);
+    const res = await buyStandardPackWithPCredits();
+    setBuying(false);
+    if (!res.success) {
+      setError(res.error);
+      return false;
+    }
+    setPBalance(res.data.pCredits);
+    setCredits(res.data.packCredits);
+    return true;
+  }
+  async function buyAnotherAndOpen() {
+    if (await buyStandardPack()) open();
+  }
   function reroll() {
     if (!card) return;
     const previous = card;
@@ -496,11 +531,22 @@ function CardPackWizardForm({
     return (
       <div className={`${panel} space-y-4 text-center`}>
         <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">You need a card credit</h2>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">
           You earn 1 card credit every time you check in at the track, or 2 with a membership. Check in on your next visit and come back to open a pack.
+          {standardPack && standardPack.price > 0 && pBalance >= standardPack.price ? " Or use your P-Credits to buy a Standard Pack now." : ""}
         </p>
+        {error && (
+          <p role="alert" className="text-sm font-bold text-red-600 dark:text-red-400">
+            {error}
+          </p>
+        )}
         <div className="flex flex-wrap justify-center gap-2">
-          <Link href="/track-checkin" className={primary}>
+          {standardPack && standardPack.price > 0 && pBalance >= standardPack.price && (
+            <button type="button" className={primary} onClick={() => void buyStandardPack()} disabled={buying}>
+              {buying ? "Buying…" : `Buy a Standard Pack · ${standardPack.price.toLocaleString()} P-Credits`}
+            </button>
+          )}
+          <Link href="/track-checkin" className={standardPack && pBalance >= standardPack.price ? secondary : primary}>
             Check in
           </Link>
           <Link href="/cards" className={secondary}>
@@ -575,14 +621,49 @@ function CardPackWizardForm({
                 <p role="status" className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
                   {finalCard && !saved ? "This is your card. It's in your collection." : "Added to your collection."}
                 </p>
+                {error && (
+                  <p role="alert" className="text-sm font-bold text-red-600 dark:text-red-400">
+                    {error}
+                  </p>
+                )}
                 <div className="flex flex-wrap justify-center gap-2">
                   <Link href="/cards" className={credits > 0 ? secondary : primary}>
                     View my cards
                   </Link>
+                                    {customPack && (
+                    <>
+                      {/* A store pack: another one, paid for with P-Credits or a card credit, whichever the member has. */}
+                      {pBalance >= customPack.price && (
+                        <button type="button" className={primary} onClick={() => open("pcredits")} disabled={pending}>
+                          Open another · {customPack.price.toLocaleString()} P-Credits
+                        </button>
+                      )}
+                      {customPack.allowCardCredits !== false && cardCreditBalance > 0 && (
+                        <button
+                          type="button"
+                          className={pBalance >= customPack.price ? secondary : primary}
+                          onClick={() => open("cardCredit")}
+                          disabled={pending}
+                        >
+                          Open another with a card credit ({cardCreditBalance} left)
+                        </button>
+                      )}
+                    </>
+                  )}
+                  {!customPack && credits <= 0 && standardPack && standardPack.price > 0 && pBalance >= standardPack.price && (
+                    <>
+                      <button type="button" className={primary} onClick={buyAnotherAndOpen} disabled={pending || buying}>
+                        {buying ? "Buying…" : `Buy & open another · ${standardPack.price.toLocaleString()} P-Credits`}
+                      </button>
+                      <button type="button" className={secondary} onClick={() => { setMode("form"); setStep(1); setCard(null); setError(null); }}>
+                        Change settings
+                      </button>
+                    </>
+                  )}
                   {credits > 0 && (
                     <>
                       {/* Same answers as the pack just opened: straight to the next pack. */}
-                      <button type="button" className={primary} onClick={open} disabled={pending}>
+                      <button type="button" className={primary} onClick={() => open()} disabled={pending}>
                         Open another with same settings ({credits} left)
                       </button>
                       <button type="button" className={secondary} onClick={() => { setMode("form"); setStep(1); setCard(null); setError(null); }}>
@@ -1127,7 +1208,7 @@ function CardPackWizardForm({
           <span />
         )}
         {skipPersonalCar ? (
-          <button type="button" className={primary} disabled={pending} onClick={open}>
+          <button type="button" className={primary} disabled={pending} onClick={() => open()}>
             {pending ? "Opening pack…" : "Open pack now (2 Community Cards)"}
           </button>
         ) : step < 5 ? (
@@ -1135,7 +1216,7 @@ function CardPackWizardForm({
             {(step === 2 && !team.trim()) || (step === 4 && !description.trim()) ? "Skip" : "Next"}
           </button>
         ) : (
-          <button type="button" className={primary} disabled={pending || !driver.trim() || !photoUrl} onClick={open}>
+          <button type="button" className={primary} disabled={pending || !driver.trim() || !photoUrl} onClick={() => open()}>
             {pending ? "Opening pack…" : "Open my pack"}
           </button>
         )}

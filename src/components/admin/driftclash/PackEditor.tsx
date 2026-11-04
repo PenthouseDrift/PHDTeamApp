@@ -530,28 +530,23 @@ export function PackEditor({
               <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${purchasable ? "left-[22px]" : "left-0.5"}`} />
             </button>
           </label>
-          <label className="flex items-center justify-between gap-3 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-800/60">
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-800/60">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-5 w-5 shrink-0 accent-amber-500"
+              checked={allowCardCredits}
+              disabled={pending}
+              onChange={toggleCardCredits}
+            />
             <span>
-              <span className="block text-sm font-black text-zinc-900 dark:text-zinc-100">
-                {allowCardCredits ? "Card credits can open this pack" : "Card credits can't open this pack"}
-              </span>
+              <span className="block text-sm font-black text-zinc-900 dark:text-zinc-100">Allow card credit opening</span>
               <span className="block text-xs text-zinc-500 dark:text-zinc-400">
                 {allowCardCredits
-                  ? "A member can spend 1 card credit (earned by checking in at the track) instead of paying the price in P-Credits."
-                  : "Every pack takes card credits by default. Turn this back on to let members open this pack with a card credit again."}
+                  ? "Members can open this pack with 1 card credit (earned by checking in at the track), as well as with P-Credits."
+                  : "Members can only open this pack with P-Credits. Tick this to let them use a card credit too."}
+                {pack ? "" : " Applies when the pack is created."}
               </span>
             </span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={allowCardCredits}
-              aria-label="Card credits can open this pack"
-              disabled={pending}
-              onClick={toggleCardCredits}
-              className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-50 ${allowCardCredits ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-700"}`}
-            >
-              <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${allowCardCredits ? "left-[22px]" : "left-0.5"}`} />
-            </button>
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>

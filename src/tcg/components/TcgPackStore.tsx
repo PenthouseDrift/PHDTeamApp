@@ -51,6 +51,8 @@ export function TcgPackStore({
     packName: string;
     cards: MemberCard[];
     revealed: boolean;
+    /** The pack that was opened, so the reveal can offer to open another one. */
+    pack: TcgCustomPackWithCards;
   } | null>(null);
 
   const standardOnSale = isOnSale(standardPackPrice, standardPackSalePrice);
@@ -88,6 +90,7 @@ export function TcgPackStore({
           packName: res.data.packName,
           cards: res.data.cards,
           revealed: false,
+          pack,
         });
       } else {
         setFeedback({ text: res.error, error: true });
@@ -710,6 +713,44 @@ export function TcgPackStore({
                   </button>
                 </div>
               )}
+              {openingState.revealed && (() => {
+                // Another of the same pack, paid for with P-Credits or a card credit, whichever the member has.
+                const again = openingState.pack;
+                const againPrice = getEffectivePrice(again.price, again.salePrice);
+                const canPay = pCredits >= againPrice;
+                const canCredit = again.allowCardCredits !== false && packCredits > 0;
+                if (again.purchasable === false || (!canPay && !canCredit)) return null;
+                return (
+                  <div className="flex flex-wrap justify-center gap-3 border-t border-zinc-800 pt-4">
+                    {canPay && (
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => {
+                          setOpeningState(null);
+                          handleBuyCustomPack(again, "pcredits");
+                        }}
+                        className={primaryBtn}
+                      >
+                        Open another · {againPrice.toLocaleString()} P
+                      </button>
+                    )}
+                    {canCredit && (
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => {
+                          setOpeningState(null);
+                          handleBuyCustomPack(again, "cardCredit");
+                        }}
+                        className={canPay ? "min-h-11 rounded-xl border border-zinc-700 bg-zinc-900 px-5 text-sm font-bold text-zinc-100 hover:bg-zinc-800" : primaryBtn}
+                      >
+                        Open another with a card credit ({packCredits} left)
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>,
           document.body
