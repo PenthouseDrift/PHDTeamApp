@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getActiveShopOrders } from "@/actions/orders";
 import { getReservedListings } from "@/actions/marketplace";
+import { getReservationContext } from "@/actions/marketplace-reservations";
 import { getFacilitatedPayoutReport } from "@/actions/phd-facilitated";
 import { OrderFulfillmentClient } from "./OrderFulfillmentClient";
 import { ReservedListings } from "./ReservedListings";
@@ -16,9 +17,11 @@ export default async function AdminClickCollectPage() {
     redirect("/dashboard");
   }
 
-  const [activeOrders, reservedListings, payoutReport] = await Promise.all([
+  const [activeOrders, reservedListings, reservationCtx, payoutReport] = await Promise.all([
     getActiveShopOrders(),
     getReservedListings(),
+    // Admin only: who each reservation is held for.
+    getReservationContext(),
     getFacilitatedPayoutReport(),
   ]);
 
@@ -42,7 +45,7 @@ export default async function AdminClickCollectPage() {
           </div>
         </div>
 
-        <ReservedListings listings={reservedListings} />
+        <ReservedListings listings={reservedListings} holders={reservationCtx.all} />
 
         <OrderFulfillmentClient initialOrders={activeOrders} />
 

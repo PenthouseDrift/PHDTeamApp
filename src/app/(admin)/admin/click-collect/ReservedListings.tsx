@@ -1,23 +1,28 @@
 import Link from "next/link";
 import Image from "next/image";
 import type { ReservedListingSummary } from "@/actions/marketplace";
+import type { ReservationView } from "@/actions/marketplace-reservations";
+import { formatGbp, heldForText } from "@/lib/reserved-display";
 
 interface ReservedListingsProps {
   listings: ReservedListingSummary[];
+  /** Who each listing's units are held for, by listing id (admin only). */
+  holders?: Record<string, ReservationView[]>;
 }
 
 /**
  * Admin-only panel on the Click & Collect page listing every marketplace item
  * that currently has units RESERVED (held for a buyer but not yet sold/paid).
  * Gives staff one place to see both "held, awaiting payment" and (below) "paid,
- * awaiting collection". Reservations are a pure quantity hold and don't record
- * who they're for, so this shows the product, how many units are held, and the
- * remaining buyable stock. Hidden entirely when nothing is reserved.
+  * awaiting collection". Shows the product, how many units are held and what they
+ * are worth, who they are held for, and the remaining buyable stock. Hidden
+ * entirely when nothing is reserved.
  */
-export function ReservedListings({ listings }: ReservedListingsProps) {
+export function ReservedListings({ listings, holders = {} }: ReservedListingsProps) {
   if (listings.length === 0) return null;
 
   const totalHeld = listings.reduce((s, l) => s + l.reservedCount, 0);
+  const totalValue = listings.reduce((s, l) => s + l.reservedValue, 0);
 
   return (
     <section className="bg-white dark:bg-zinc-900 border border-amber-200 dark:border-amber-500/30 rounded-xl shadow-sm overflow-hidden">
@@ -35,8 +40,13 @@ export function ReservedListings({ listings }: ReservedListingsProps) {
             </p>
           </div>
         </div>
-        <span className="rounded-full bg-amber-500 px-2.5 py-1 text-[11px] font-black text-black">
-          {totalHeld} unit{totalHeld === 1 ? "" : "s"} held
+        <span className="flex flex-wrap items-center justify-end gap-1.5">
+          <span className="rounded-full bg-amber-500 px-2.5 py-1 text-[11px] font-black text-black">
+            {totalHeld} unit{totalHeld === 1 ? "" : "s"} held
+          </span>
+          <span className="rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-black text-white">
+            {formatGbp(totalValue)} total value
+          </span>
         </span>
       </div>
 
@@ -87,12 +97,20 @@ export function ReservedListings({ listings }: ReservedListingsProps) {
               {l.variants.length > 0 && (
                 <p className="mt-0.5 line-clamp-1 text-[11px] text-zinc-400 dark:text-zinc-500">
                   {l.variants
-                    .map((v) => `${v.name}: ${v.reservedCount} held`)
+                    .map((v) => `${v.name}: ${v.reservedCount} held (${formatGbp(v.reservedValue)})`)
                     .join(" · ")}
+                                </p>
+              )}
+              {heldForText(holders[l.listingId], l.reservedCount) && (
+                <p className="mt-0.5 text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">
+                  Held for: {heldForText(holders[l.listingId], l.reservedCount)}
                 </p>
               )}
             </div>
-
+            <span className="shrink-0 text-right">
+              <span className="block text-sm font-black text-emerald-700 dark:text-emerald-400">{formatGbp(l.reservedValue)}</span>
+              <span className="block text-[10px] uppercase tracking-wide text-zinc-400">value held</span>
+            </span>
             <Link
               href={`/marketplace/${l.listingId}`}
               className="shrink-0 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"

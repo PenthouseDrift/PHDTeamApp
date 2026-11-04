@@ -1819,6 +1819,8 @@ export interface ReservedListingSummary {
   image: string | null;
   /** Total units currently held across the listing (sum of variant holds). */
   reservedCount: number;
+  /** What the held units are worth at their sell price in GBP (units held x price, per variant for a variant listing). */
+  reservedValue: number;
   /** Units still buyable right now (after holds + sold). */
   buyable: number;
   /** Total physical units in stock (quantity - soldCount). */
@@ -1830,7 +1832,7 @@ export interface ReservedListingSummary {
   facilitatedByPhd: boolean;
   updatedAt: number;
   /** Per-variant hold breakdown (empty for non-variant listings). */
-  variants: { id: string; name: string; reservedCount: number; buyable: number }[];
+  variants: { id: string; name: string; reservedCount: number; buyable: number; price: number; reservedValue: number }[];
 }
 
 /**
@@ -1854,11 +1856,24 @@ async function loadReservedListings(): Promise<ReservedListingSummary[]> {
           0
         );
         const inStock = l.variants.reduce((s, v) => s + Math.max(0, v.quantity - v.soldCount), 0);
+        const variants = heldVariants.map((v) => {
+          const held = Math.max(0, v.reservedCount ?? 0);
+          const price = Math.max(0, Number(v.price) || 0);
+          return {
+            id: v.id,
+            name: v.name,
+            reservedCount: held,
+            buyable: Math.max(0, v.quantity - v.soldCount - held),
+            price,
+            reservedValue: Math.round(held * price * 100) / 100,
+          };
+        });
         summaries.push({
           listingId: l.listingId,
           title: l.title,
           image: l.images[0] ?? null,
           reservedCount,
+          reservedValue: Math.round(variants.reduce((s, v) => s + v.reservedValue, 0) * 100) / 100,
           buyable,
           inStock,
           fullyReserved: buyable <= 0 && inStock > 0,
@@ -1866,12 +1881,7 @@ async function loadReservedListings(): Promise<ReservedListingSummary[]> {
           soldByAsboRc: l.soldByAsboRc,
           facilitatedByPhd: l.facilitatedByPhd,
           updatedAt: l.updatedAt,
-          variants: heldVariants.map((v) => ({
-            id: v.id,
-            name: v.name,
-            reservedCount: Math.max(0, v.reservedCount ?? 0),
-            buyable: Math.max(0, v.quantity - v.soldCount - Math.max(0, v.reservedCount ?? 0)),
-          })),
+          variants,
         });
       } else {
         const reservedCount = Math.max(0, l.reservedCount || 0);
@@ -1883,6 +1893,7 @@ async function loadReservedListings(): Promise<ReservedListingSummary[]> {
           title: l.title,
           image: l.images[0] ?? null,
           reservedCount,
+          reservedValue: Math.round(reservedCount * Math.max(0, Number(l.price) || 0) * 100) / 100,
           buyable,
           inStock,
           fullyReserved: buyable <= 0 && inStock > 0,
@@ -1905,7 +1916,7 @@ async function loadReservedListings(): Promise<ReservedListingSummary[]> {
 // Building this reads every live listing, so it is cached and rebuilt only when
 // the marketplace changes (every listing / reservation / sale mutation busts the
 // "marketplace" tag) rather than on each admin page view.
-const getReservedListingsCached = unstable_cache(loadReservedListings, ["reserved-listings"], {
+const getReservedListingsCached = unstable_cache(loadReservedListings, ["reserved-listings", "v2"], {
   revalidate: 3600,
   tags: [MARKETPLACE_TAG],
 });

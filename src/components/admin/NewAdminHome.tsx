@@ -6,6 +6,7 @@ import { getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
 import { getActiveShopOrders } from "@/actions/orders";
 import { getReservedListings } from "@/actions/marketplace";
 import { getReservationContext } from "@/actions/marketplace-reservations";
+import { formatGbp } from "@/lib/reserved-display";
 import { getUnpaidSummary } from "@/actions/admin/unpaid";
 import { UnpaidPanel } from "@/components/admin/UnpaidPanel";
 import { ShellIcon } from "@/components/new-shell/shell-icons";
@@ -77,6 +78,7 @@ export async function NewAdminHome({ isModerator }: { isModerator: boolean }) {
   const timing = featured ? getEventTiming(featured) : null;
 
   const reservedUnits = reserved.reduce((sum, l) => sum + l.reservedCount, 0);
+  const reservedValue = reserved.reduce((sum, l) => sum + l.reservedValue, 0);
 
   const unpaid = todayCheckIns.filter((c) => c.unpaid).length;
   const runningRentals = activeRentals.filter((r) => r.status === "active");
@@ -256,8 +258,9 @@ export async function NewAdminHome({ isModerator }: { isModerator: boolean }) {
 
             {reserved.length > 0 && (
               <div>
-                <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  Reserved items
+                <h3 className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-3 text-xs font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  <span>Reserved items</span>
+                  <span className="text-emerald-700 dark:text-emerald-400">{formatGbp(reservedValue)} total value</span>
                 </h3>
                 <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
                   {reserved.slice(0, 4).map((l) => {
@@ -268,11 +271,14 @@ export async function NewAdminHome({ isModerator }: { isModerator: boolean }) {
                           <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{l.title}</span>
                           {holders && <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">{holders}</span>}
                         </span>
-                        <span
-                          className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300"
-                          aria-label={`${l.reservedCount} reserved`}
-                        >
-                          ×{l.reservedCount}
+                        <span className="flex shrink-0 flex-col items-end gap-0.5">
+                          <span
+                            className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300"
+                            aria-label={`${l.reservedCount} reserved`}
+                          >
+                            ×{l.reservedCount}
+                          </span>
+                          <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400">{formatGbp(l.reservedValue)}</span>
                         </span>
                       </li>
                     );
