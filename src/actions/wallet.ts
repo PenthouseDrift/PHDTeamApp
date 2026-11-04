@@ -1,5 +1,6 @@
 "use server";
 
+import { hostedCheckoutUrl } from "@/lib/sumup-urls";
 import { redis } from "@/lib/redis";
 import { revalidatePath } from "next/cache";
 import { bustAdminMembers } from "@/lib/cache-bust";
@@ -232,7 +233,7 @@ export async function createWalletCheckout(
     const { registerPendingCheckout } = await import("@/lib/pending-checkouts");
     await registerPendingCheckout(checkout.id);
 
-    const redirectUrl = checkout.hosted_checkout_url || `https://pay.sumup.com/b2c/Q${checkout.id}`;
+    const redirectUrl = hostedCheckoutUrl(checkout.id, checkout.hosted_checkout_url);
     return {
       success: true,
       data: { url: redirectUrl, checkoutId: checkout.id, amount: totalAmount, currency: CURRENCY, email: memberEmail || undefined },

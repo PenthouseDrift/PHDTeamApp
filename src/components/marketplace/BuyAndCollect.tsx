@@ -55,7 +55,7 @@ export function BuyAndCollect({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   // Set when the embedded widget is active, holding the created checkout.
-  const [embedded, setEmbedded] = useState<{ checkoutId: string; amount: number; currency: string; email?: string } | null>(null);
+  const [embedded, setEmbedded] = useState<{ checkoutId: string; amount: number; currency: string; email?: string; url?: string } | null>(null);
 
   const selectedVariant = hasVariations ? sellable.find((v) => v.id === selectedId) : undefined;
   const displayPrice = hasVariations ? selectedVariant?.price ?? 0 : price;
@@ -94,6 +94,7 @@ export function BuyAndCollect({
           amount: result.data.amount,
           currency: result.data.currency,
           email: result.data.email,
+          url: result.data.url,
         });
       } else {
         // Hand off to SumUp's hosted checkout page.
@@ -138,6 +139,7 @@ export function BuyAndCollect({
           amount={embedded.amount}
           currency={embedded.currency}
           email={embedded.email}
+          hostedUrl={embedded.url}
           onCancel={() => setEmbedded(null)}
           finalizeUrl="/api/marketplace/finalize"
           label="Click & Collect"

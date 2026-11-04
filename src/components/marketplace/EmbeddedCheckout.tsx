@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { hostedCheckoutUrl } from "@/lib/sumup-urls";
 
 /**
  * Embedded SumUp Card Widget checkout, presented as a full-screen modal. Renders
@@ -129,7 +130,7 @@ export function EmbeddedCheckout({
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const popupRef = useRef<Window | null>(null);
 
-  const checkoutUrl = hostedUrl || (checkoutId ? `https://pay.sumup.com/b2c/Q${checkoutId}` : "");
+  const checkoutUrl = hostedCheckoutUrl(checkoutId, hostedUrl);
 
   function stopWalletPolling() {
     if (pollTimerRef.current) {
@@ -154,7 +155,12 @@ export function EmbeddedCheckout({
       "width=500,height=720,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes"
     );
     popupRef.current = popup;
-
+    // A phone's browser can refuse the pop-up. Pay on SumUp's page in this tab instead: after paying SumUp sends the buyer
+    // back to the page this checkout was started from, which confirms the payment.
+    if (!popup) {
+      window.location.href = checkoutUrl;
+      return;
+    }
     stopWalletPolling();
     pollTimerRef.current = setInterval(async () => {
       try {

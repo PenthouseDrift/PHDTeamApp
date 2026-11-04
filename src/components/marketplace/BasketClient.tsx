@@ -22,6 +22,8 @@ export function BasketClient() {
     amount: number;
     currency: string;
     email?: string;
+    /** SumUp's own page for this checkout, which Apple Pay and Google Pay open. */
+    url?: string;
   } | null>(null);
 
   function handleCheckout() {
@@ -41,6 +43,7 @@ export function BasketClient() {
           amount: result.data.amount,
           currency: result.data.currency,
           email: result.data.email,
+          url: result.data.url,
         });
       } else {
         // Hosted redirect. The basket is cleared on the success page return.
@@ -203,6 +206,7 @@ export function BasketClient() {
           amount={embedded.amount}
           currency={embedded.currency}
           email={embedded.email}
+          hostedUrl={embedded.url}
           onCancel={() => setEmbedded(null)}
           finalizeUrl="/api/marketplace/finalize"
           label="Click & Collect"

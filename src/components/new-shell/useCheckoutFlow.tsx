@@ -21,6 +21,8 @@ interface EmbeddedState {
   amount: number;
   currency: string;
   email?: string;
+  /** SumUp's own page for this checkout, which Apple Pay and Google Pay open. */
+  url?: string;
   label: string;
 }
 
@@ -57,6 +59,7 @@ export function useCheckoutFlow(userId: string) {
           amount: res.data.amount,
           currency: res.data.currency,
           email: res.data.email,
+          url: res.data.url,
           label: labelFor(product, quantity),
         });
       } else {
@@ -76,6 +79,7 @@ export function useCheckoutFlow(userId: string) {
       amount={embedded.amount}
       currency={embedded.currency}
       email={embedded.email}
+      hostedUrl={embedded.url}
       onCancel={() => setEmbedded(null)}
       label={embedded.label}
       successTitle="Payment received"

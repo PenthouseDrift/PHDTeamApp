@@ -1,5 +1,6 @@
 "use server";
 
+import { hostedCheckoutUrl } from "@/lib/sumup-urls";
 import { randomInt, randomUUID } from "crypto";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
@@ -160,7 +161,7 @@ export async function createPCreditsCheckout(
     const { registerPendingCheckout } = await import("@/lib/pending-checkouts");
     await registerPendingCheckout(checkout.id);
 
-    const redirectUrl = checkout.hosted_checkout_url || `https://pay.sumup.com/b2c/Q${checkout.id}`;
+    const redirectUrl = hostedCheckoutUrl(checkout.id, checkout.hosted_checkout_url);
     return {
       success: true,
       data: {
