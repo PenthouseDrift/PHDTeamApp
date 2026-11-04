@@ -30,11 +30,10 @@ export async function getCardCredits(userId: string): Promise<number> {
 }
 
 /**
- * What a check-in at this time earns: the member rate when their membership (the `membership:<id>`
- * record every activation path writes: online payment, cash at the desk, admin) hasn't expired yet.
- * On Wednesday (3) and Saturday (6) track days, check-in awards an additional pack (2 total),
- * or an additional 2 packs for members (4 total).
- * If the membership can't be read, the normal rate applies rather than failing the check-in.
+ * What a check-in at this time earns: 2 for a member whose membership (the `membership:<id>` record every
+ * activation path writes: online payment, cash at the desk, admin) hasn't expired yet, and 1 for everyone else.
+ * It is the same on every day of the week: there is no extra on track days. Staff (admins and moderators) count
+ * as members. If the membership can't be read, the normal rate applies rather than failing the check-in.
  */
 async function creditsForCheckIn(userId: string, timestamp: number): Promise<number> {
   try {
@@ -42,18 +41,7 @@ async function creditsForCheckIn(userId: string, timestamp: number): Promise<num
       redis.hget(`membership:${userId}`, "expiresAt"),
       redis.hget(memberKey(userId), "role"),
     ]);
-
     const isMember = role === "admin" || role === "moderator" || (Number.isFinite(Number(expiresAtRaw)) && Number(expiresAtRaw) > timestamp);
-
-    // Day of week: 0 = Sun, 1 = Mon, 2 = Tue, 3 = Wed, 4 = Thu, 5 = Fri, 6 = Sat
-    const dayOfWeek = new Date(timestamp).getUTCDay();
-    const isTrackDay = dayOfWeek === 3 || dayOfWeek === 6; // Wednesday or Saturday
-
-    if (isTrackDay) {
-      // Wednesday / Saturday track day bonus: +1 additional pack for regular (2 total), +2 for members (4 total)
-      return isMember ? (CREDITS_PER_CHECKIN_MEMBER + 2) : (CREDITS_PER_CHECKIN + 1);
-    }
-
     return isMember ? CREDITS_PER_CHECKIN_MEMBER : CREDITS_PER_CHECKIN;
   } catch (error) {
     console.error("[card-credits] could not check membership:", error);

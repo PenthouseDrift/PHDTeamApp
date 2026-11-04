@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { FullArtCard } from "@/components/cards/FullArtCard";
+import type { FullArtCardData } from "@/lib/full-art-card";
 import { rarityLabel } from "@/lib/card-roll";
 import { getPackContentsAction } from "@/tcg/actions";
 import type { PackContents, PackContentsTier } from "@/tcg/pack-contents";
@@ -26,7 +27,64 @@ function MysteryTile({ tier }: { tier: PackContentsTier["tier"] }) {
   );
 }
 
+/** A card that opens larger when tapped or clicked. */
+function ZoomableCard({ card, onZoom }: { card: FullArtCardData; onZoom: (card: FullArtCardData) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onZoom(card)}
+      aria-label={`View ${card.name} larger`}
+      className="block w-full cursor-zoom-in rounded-xl text-left transition-transform hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+    >
+      <FullArtCard card={card} className="drop-shadow-lg" />
+    </button>
+  );
+}
+
+/** One card shown large over everything else. Closes on a tap anywhere, the Close button or Escape. */
+function CardLightbox({ card, onClose }: { card: FullArtCardData; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        // Only this window closes, not the pack window behind it.
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
+
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[10000] flex flex-col items-center justify-center gap-3 bg-black/90 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label={card.name}
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute right-4 top-4 min-h-10 rounded-xl border border-zinc-600 bg-zinc-900 px-4 text-xs font-bold text-zinc-100 hover:bg-zinc-800"
+      >
+        Close
+      </button>
+      {/* As wide as fits: the screen's width or height, whichever is tighter, and no bigger than 26rem. */}
+      <div style={{ width: "min(88vw, calc((100dvh - 8rem) * 63 / 88), 26rem)" }} onClick={(e) => e.stopPropagation()}>
+        <FullArtCard card={card} showDurability={false} className="drop-shadow-2xl" />
+      </div>
+      <p className="text-sm font-bold text-zinc-200">
+        {card.name} · {rarityLabel(card.tier)}
+      </p>
+    </div>,
+    document.body
+  );
+}
+
 function ContentsBody({ contents }: { contents: PackContents }) {
+  const [zoomed, setZoomed] = useState<FullArtCardData | null>(null);
   const hasSetCards = contents.tiers.some((t) => t.cards.length > 0);
   const bonus = contents.bonus;
   return (
@@ -70,7 +128,7 @@ function ContentsBody({ contents }: { contents: PackContents }) {
                 <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
                   {t.cards.map(({ card, rerolled }) => (
                     <li key={card.id ?? card.name} className="space-y-1.5">
-                      <FullArtCard card={card} className="drop-shadow-lg" />
+                      <ZoomableCard card={card} onZoom={setZoomed} />
                       <div className="px-1 text-xs">
                         <span className="block truncate font-bold text-zinc-200">{card.name}</span>
                       </div>
@@ -96,7 +154,7 @@ function ContentsBody({ contents }: { contents: PackContents }) {
           <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
             {contents.bonus.cards.map(({ card }) => (
               <li key={card.id ?? card.name} className="space-y-1.5">
-                <FullArtCard card={card} className="drop-shadow-lg" />
+                <ZoomableCard card={card} onZoom={setZoomed} />
                 <div className="px-1 text-xs">
                   <span className="block truncate font-bold text-zinc-200">{card.name}</span>
                 </div>
@@ -105,6 +163,8 @@ function ContentsBody({ contents }: { contents: PackContents }) {
           </ul>
         </section>
       )}
+
+      {zoomed && <CardLightbox card={zoomed} onClose={() => setZoomed(null)} />}
     </div>
   );
 }
