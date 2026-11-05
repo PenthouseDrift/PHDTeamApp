@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { CardCollection } from "@/components/member-cards/CardCollection";
 import type { MemberCard } from "@/lib/card-roll";
@@ -26,6 +27,12 @@ import { TcgMarketplace } from "./TcgMarketplace";
 import { TcgPackStore } from "./TcgPackStore";
 import { TcgPCreditsShop } from "./TcgPCreditsShop";
 
+// Tandem Tour is loaded only when its tab is opened, so the rest of the game does not get heavier.
+const TourTab = dynamic(() => import("@/tcg/tour/components/TourTab").then((m) => m.TourTab), {
+  ssr: false,
+  loading: () => <p className="text-xs text-zinc-500" role="status">Loading Tandem Tour…</p>,
+});
+
 const TABS: Array<{
   id: TcgTab;
   label: string;
@@ -45,6 +52,12 @@ const TABS: Array<{
     shortLabel: "Home",
     icon: "🏁",
     badge: ({ dailyWinAvailable }) => (dailyWinAvailable ? `+${DAILY_CLASH_WIN_REWARD_PCREDITS}P` : null),
+  },
+  {
+    id: "tour",
+    label: "Tour",
+    shortLabel: "Tour",
+    icon: "🏎️",
   },
   {
     id: "collection",
@@ -103,6 +116,7 @@ export function TcgApp({
   initialCompletedChallengeIds = [],
   initialRareCards = [],
   initialComingSoon = [],
+  hasTourAccess = false,
 }: {
   userId: string;
   isAdmin?: boolean;
@@ -126,6 +140,8 @@ export function TcgApp({
   initialCompletedChallengeIds?: string[];
   initialRareCards?: ShowcaseRareCard[];
   initialComingSoon?: ComingSoonCard[];
+  /** Whether to show the Tandem Tour tab (an admin, or open to this member). */
+  hasTourAccess?: boolean;
 }) {
   const [tab, setTab] = useState<TcgTab>(initialTab);
   const [cards, setCards] = useState<MemberCard[]>(initialCards);
@@ -148,7 +164,8 @@ export function TcgApp({
   }, [initialTab]);
 
   // The same sections and badges as the header panel, for the bar fixed to the bottom of a phone screen.
-  const navItems: GameNavItem[] = TABS.map((t) => ({
+  const visibleTabs = TABS.filter((t) => t.id !== "tour" || hasTourAccess);
+  const navItems: GameNavItem[] = visibleTabs.map((t) => ({
     id: t.id,
     label: t.label,
     shortLabel: t.shortLabel,
@@ -276,9 +293,10 @@ export function TcgApp({
         {/* Game navigation for tablets and desktop. On phones the same sections are the bar fixed above the main tabs. */}
         <nav
           aria-label="DriftClash game navigation"
-          className="mt-3 hidden grid-cols-6 gap-1.5 rounded-2xl bg-zinc-900/90 p-1.5 md:grid"
+          style={{ gridTemplateColumns: `repeat(${visibleTabs.length}, minmax(0, 1fr))` }}
+          className="mt-3 hidden gap-1.5 rounded-2xl bg-zinc-900/90 p-1.5 md:grid"
         >
-          {TABS.map((t) => {
+          {visibleTabs.map((t) => {
             const active = tab === t.id;
             const badgeText = t.badge?.({
               cards: cards.length,
@@ -368,6 +386,16 @@ export function TcgApp({
           />
 
         </TcgHome>
+      )}
+
+      {tab === "tour" && hasTourAccess && (
+        <TourTab
+          onBalances={({ pCredits: nextP, packCredits: nextPack }) => {
+            setPCredits(nextP);
+            setPackCredits(nextPack);
+          }}
+          onKitsUsed={(ids) => setCards((prev) => prev.filter((c) => !ids.includes(c.id)))}
+        />
       )}
 
       {tab === "collection" && (

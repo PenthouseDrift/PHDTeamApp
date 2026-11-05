@@ -19,6 +19,12 @@ const SETTINGS: Array<{ href: string; title: string; desc: string; icon: string 
     icon: "🎴",
   },
   {
+    href: "/admin/driftclash/tour",
+    title: "Tandem Tour",
+    desc: "The long run-based game mode: switch it on, set prices, free runs and prizes, and manage early access",
+    icon: "🏎️",
+  },
+  {
     href: "/admin/card-maker",
     title: "Card maker",
     desc: "Design full art cards, with frame colours and effects",

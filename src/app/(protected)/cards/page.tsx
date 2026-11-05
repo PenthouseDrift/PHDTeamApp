@@ -23,6 +23,7 @@ import {
 import { TcgApp } from "@/tcg/components/TcgApp";
 import { standardPackAllowsCardCredits } from "@/lib/pack-config-store";
 import { listTandemClashChallengesAction } from "@/tcg/challenges-actions";
+import { getTourAccess } from "@/tcg/tour/actions";
 import type { TcgTab } from "@/tcg/types";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +36,7 @@ interface CardsPageProps {
 
 const VALID_TABS: TcgTab[] = [
   "home",
+  "tour",
   "collection",
   "store",
   "marketplace",
@@ -92,6 +94,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
     rareCards,
     comingSoon,
     standardAllowsCardCredits,
+    hasTourAccess,
   ] = await Promise.all([
     listMyCards(),
     getCardCredits(userId),
@@ -107,6 +110,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
     getFeaturedShowcaseCards(12),
     getComingSoonCards(),
     standardPackAllowsCardCredits(),
+    getTourAccess(),
   ]);
 
   // The Clash tab is gone: Tandem Clash is on the game's Home page now, so old ?tab=clash links land there.
@@ -142,6 +146,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
           initialCompletedChallengeIds={challengeData.success ? challengeData.data.completedIds : []}
           initialRareCards={rareCards}
           initialComingSoon={comingSoon}
+          hasTourAccess={hasTourAccess}
           checkoutConfirmed={checkoutConfirmed}
         />
       </div>
