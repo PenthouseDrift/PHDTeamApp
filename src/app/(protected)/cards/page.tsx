@@ -102,7 +102,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
     getDriftClashLeaderboard(25),
     hasClashEarlyAccess(userId, session.user.role),
     listTandemClashChallengesAction(),
-    getFeaturedShowcaseCards(8),
+    getFeaturedShowcaseCards(12),
     getComingSoonCards(),
   ]);
 

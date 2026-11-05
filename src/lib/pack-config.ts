@@ -72,8 +72,13 @@ export interface PackEntry {
   refId: string;
   /** Percent (0 to 100) of cards on this rarity that use this entry. */
   chancePct: number;
-  /** Only for set cards (kind "card"): this pack's changes to the card. */
+    /** Only for set cards (kind "card"): this pack's changes to the card. */
   variant?: EntryVariant;
+  /**
+   * Only for set cards (kind "card"): show this card under "Rare cards to pull" on the game's Home page.
+   * Only ever saved as true; left out means it is not shown there.
+   */
+  displayPullable?: boolean;
 }
 
 /** Rarities that have their own odds. Bronze is whatever is left. */
@@ -131,9 +136,11 @@ export function packExtraCounts(config: Pick<PackConfig, "crewCards" | "repairCa
 export interface BonusEntry {
   /** A saved full art card id. */
   refId: string;
-  weight: number;
+    weight: number;
   /** This pack's changes to the card. Only the style and redrawn picture count: a bonus card's rarity and stats are set when it is given out. */
   variant?: EntryVariant;
+  /** Show this card under "Rare cards to pull" on the game's Home page. Only ever saved as true. */
+  displayPullable?: boolean;
 }
 
 /**
@@ -320,7 +327,13 @@ export function cleanEntries(v: unknown): PackEntry[] {
     const chancePct = Math.min(clampPct(e.chancePct), round(Math.max(0, 100 - used), 4));
     used += chancePct;
     const variant = kind === "card" ? cleanVariant(e.variant) : undefined;
-    out.push({ kind, refId, chancePct, ...(variant ? { variant } : {}) });
+        out.push({
+      kind,
+      refId,
+      chancePct,
+      ...(variant ? { variant } : {}),
+      ...(kind === "card" && e.displayPullable === true ? { displayPullable: true } : {}),
+    });
   }
   return out;
 }
@@ -350,8 +363,9 @@ export function cleanBonus(v: unknown): PackBonus | undefined {
         : undefined;
     entries.push({
       refId,
-      weight: Number.isFinite(weight) ? Math.min(MAX_BONUS_WEIGHT, Math.max(MIN_BONUS_WEIGHT, weight)) : MIN_BONUS_WEIGHT,
+            weight: Number.isFinite(weight) ? Math.min(MAX_BONUS_WEIGHT, Math.max(MIN_BONUS_WEIGHT, weight)) : MIN_BONUS_WEIGHT,
       ...(variant ? { variant } : {}),
+      ...(e.displayPullable === true ? { displayPullable: true } : {}),
     });
   }
   return { chancePct: clampPct(src.chancePct, 6), entries };

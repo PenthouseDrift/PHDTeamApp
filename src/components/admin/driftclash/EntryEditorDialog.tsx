@@ -62,7 +62,8 @@ export function EntryEditorDialog({
   mode,
   tier,
   saved,
-  variant,
+    variant,
+  displayPullable: initialDisplayPullable = false,
   styles,
   onApply,
   onSaveAsNew,
@@ -75,11 +76,13 @@ export function EntryEditorDialog({
   /** The card as saved. */
   saved: SetCard;
   /** What this pack already changes about it. */
-  variant: EntryVariant | undefined;
+    variant: EntryVariant | undefined;
+  /** Whether this card is shown under "Rare cards to pull" on the game's Home page. */
+  displayPullable?: boolean;
   styles: PackStyle[];
-  onApply: (variant: EntryVariant | undefined) => void;
+  onApply: (variant: EntryVariant | undefined, displayPullable: boolean) => void;
   /** Save the result as a new set card. Resolves to an error message, or null when it worked (the caller closes the dialog). */
-  onSaveAsNew: (variant: EntryVariant | undefined) => Promise<string | null>;
+  onSaveAsNew: (variant: EntryVariant | undefined, displayPullable: boolean) => Promise<string | null>;
   onClose: () => void;
 }) {
   const bonus = mode === "bonus";
@@ -100,6 +103,7 @@ export function EntryEditorDialog({
   /** A picture the admin brought in (uploaded, or a member's car), kept in the set cards' file area. */
   const [sourcePicture, setSourcePicture] = useState<string | null>(variant?.artUrl ?? null);
   const [statsChoice, setStatsChoice] = useState<StatsChoice | null>(() => (bonus ? null : statsChoiceOf(variant, saved, tier)));
+    const [displayPullable, setDisplayPullable] = useState(initialDisplayPullable);
   const [uploaderKey, setUploaderKey] = useState(0);
   const [showMembers, setShowMembers] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -189,7 +193,7 @@ export function EntryEditorDialog({
     if (built.error) return setMessage(built.error);
     setMessage(null);
     startSave(async () => {
-      const error = await onSaveAsNew(built.variant);
+            const error = await onSaveAsNew(built.variant, displayPullable);
       if (error) setMessage(error);
     });
   }
@@ -408,12 +412,31 @@ export function EntryEditorDialog({
             </details>
           )}
 
+                    <div className="rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
+            <label htmlFor="ee-display-pullable" className="flex cursor-pointer items-start gap-3">
+              <input
+                id="ee-display-pullable"
+                type="checkbox"
+                className="mt-0.5 h-5 w-5 shrink-0 accent-amber-500"
+                checked={displayPullable}
+                onChange={(e) => setDisplayPullable(e.target.checked)}
+              />
+              <span>
+                <span className="block text-sm font-black text-zinc-900 dark:text-zinc-100">Display as pullable in packs</span>
+                <span className="block text-xs text-zinc-600 dark:text-zinc-400">
+                  Shows this card to members under &ldquo;Rare cards to pull&rdquo; on the game&apos;s Home page. It only shows while this card can
+                  actually drop: the pack is live{bonus ? "" : " and (for the Standard Pack) its rarity setup is switched on"}.
+                </span>
+              </span>
+            </label>
+          </div>
+
           <div role="status" aria-live="polite">
             {(message || built.error) && <p className="text-sm font-bold text-red-600 dark:text-red-400">{message ?? built.error}</p>}
           </div>
 
           <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
-            <button type="button" className={primaryBtn} disabled={busy || Boolean(built.error)} onClick={() => onApply(built.variant)}>
+            <button type="button" className={primaryBtn} disabled={busy || Boolean(built.error)} onClick={() => onApply(built.variant, displayPullable)}>
               Apply to this pack
             </button>
             <button type="button" className={secondaryBtn} disabled={busy || Boolean(built.error)} onClick={saveAsNew}>

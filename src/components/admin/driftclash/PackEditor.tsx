@@ -207,7 +207,12 @@ export function PackEditor({
    * card, so it is in Saved set cards and the Card maker, and point the entry at it. Only "reroll at the pull" stays on the
    * entry. The card it was made from is left as it is. Resolves to an error message, or null when it worked.
    */
-  async function saveEntryAsCardWith(tier: FullArtTier, index: number, variant: EntryVariant | undefined): Promise<string | null> {
+    async function saveEntryAsCardWith(
+    tier: FullArtTier,
+    index: number,
+    variant: EntryVariant | undefined,
+    displayPullable?: boolean
+  ): Promise<string | null> {
     const entry = draft.rarities[tier][index];
     if (!entry || entry.kind !== "card") return "That card is no longer in the pack.";
     const res = await createFinishedSetCardAction({ source: { kind: "saved", id: entry.refId }, tier, variant });
@@ -219,10 +224,17 @@ export function PackEditor({
       rarities: {
         ...d.rarities,
         [tier]: d.rarities[tier].map((e, i) => {
-          if (i !== index || e.refId !== entry.refId) return e;
-          const { variant: _old, ...rest } = e;
+                    if (i !== index || e.refId !== entry.refId) return e;
+          const { variant: _old, displayPullable: _shown, ...rest } = e;
           void _old;
-          return { ...rest, refId: created.id, ...(res.data.entryVariant ? { variant: res.data.entryVariant } : {}) };
+          void _shown;
+          const shown = displayPullable ?? e.displayPullable;
+          return {
+            ...rest,
+            refId: created.id,
+            ...(res.data.entryVariant ? { variant: res.data.entryVariant } : {}),
+            ...(shown ? { displayPullable: true } : {}),
+          };
         }),
       },
     }));
@@ -240,14 +252,15 @@ export function PackEditor({
     });
   }
   /** Replace everything this pack changes about a set card in a rarity. The saved card is not changed. */
-  function setEntryVariant(tier: FullArtTier, index: number, variant: EntryVariant | undefined) {
+    function setEntryVariant(tier: FullArtTier, index: number, variant: EntryVariant | undefined, displayPullable: boolean) {
     setEntries(
       tier,
       draft.rarities[tier].map((e, i) => {
         if (i !== index) return e;
-        const { variant: _old, ...rest } = e;
+        const { variant: _old, displayPullable: _shown, ...rest } = e;
         void _old;
-        return variant ? { ...rest, variant } : rest;
+        void _shown;
+        return { ...rest, ...(variant ? { variant } : {}), ...(displayPullable ? { displayPullable: true } : {}) };
       })
     );
   }
@@ -1009,15 +1022,16 @@ export function PackEditor({
               mode="rarity"
               tier={editing.tier}
               saved={saved}
-              variant={entry.variant}
+                            variant={entry.variant}
+              displayPullable={entry.displayPullable === true}
               styles={styles}
-              onApply={(variant) => {
-                setEntryVariant(editing.tier, editing.index, variant);
+              onApply={(variant, displayPullable) => {
+                setEntryVariant(editing.tier, editing.index, variant, displayPullable);
                 setEditing(null);
                 onNotify({ text: `Updated "${saved.name}" on ${tierLabel(editing.tier)}. The saved card is unchanged. Save the pack to keep your changes.` });
               }}
-              onSaveAsNew={async (variant) => {
-                const error = await saveEntryAsCardWith(editing.tier, editing.index, variant);
+                            onSaveAsNew={async (variant, displayPullable) => {
+                const error = await saveEntryAsCardWith(editing.tier, editing.index, variant, displayPullable);
                 if (!error) setEditing(null);
                 return error;
               }}

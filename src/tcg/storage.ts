@@ -8,17 +8,19 @@ import {
   type DebuffCardDefinition,
   type TrackCardDefinition,
 } from "@/lib/crew-cards";
-import { FEATURED_CARDS_KEY, MEMBER_CARD_ID_PATTERN, fullArtCardKey } from "@/lib/member-card-store";
+import { fullArtCardKey } from "@/lib/member-card-store";
 import {
   STANDARD_PACK_ID,
   applyVariant,
   bonusIsActive,
+  bonusPullCard,
   entryOverallPct,
   effectivePcts,
   packExtraCounts,
   packNeedsGeneration,
+  type PackConfig,
 } from "@/lib/pack-config";
-import { entryRefs, loadAllPackConfigs, loadPackConfig } from "@/lib/pack-config-store";
+import { entryRefs, loadAllPackConfigs, loadPackConfig, loadRuntimeFor } from "@/lib/pack-config-store";
 import { ALL_TIERS, type PackStyle } from "@/lib/pack-styles";
 import { loadPackStyles } from "@/lib/pack-styles-store";
 import { RARITY_RANK, type MemberCard } from "@/lib/card-roll";
@@ -564,43 +566,57 @@ export interface ShowcaseRareCard {
 }
 
 /**
- * The rare set cards that can drop as a Standard Pack's bonus card, rarest first, for the game's Home
- * page. These are public (members see them in their packs), so no admin check. A failed read gives
- * an empty list so the page still loads.
+ * The cards shown under "Rare cards to pull" on the game's Home page: every set card an admin switched "Display as pullable in
+ * packs" on for, in the Standard Pack or a live store pack. Rarest first. These are public (members see them in their packs), so
+ * no admin check. A card only counts while it can really drop: the Standard Pack's rarity cards need its setup switched on, a
+ * rarity with no chance of being rolled is left out, and a bonus card needs an active bonus pull. Shown the way "What's in the
+ * pack?" shows them (a card whose stats are rolled at the pull shows "??"; a bonus card shows as it is given out). A failed read
+ * gives an empty list so the page still loads.
  */
-export async function getFeaturedShowcaseCards(limit = 8): Promise<ShowcaseRareCard[]> {
+export async function getFeaturedShowcaseCards(limit = 12): Promise<ShowcaseRareCard[]> {
   try {
-    // Once the Standard Pack's bonus pull has been set up in the pack maker, its cards are the ones that can drop.
-    // Until then it is still the admin's pullable list.
-    const standard = await loadPackConfig(STANDARD_PACK_ID).catch(() => null);
-    const raw: Record<string, unknown> = standard?.bonus
-      ? bonusIsActive(standard.bonus)
-        ? Object.fromEntries(standard.bonus.entries.map((e) => [e.refId, e.weight]))
-        : {}
-      : ((await redis.hgetall(FEATURED_CARDS_KEY)) ?? {});
-    const entries = Object.entries(raw)
-      .map(([id, w]) => ({ id, weight: Number(w) }))
-      .filter((e) => MEMBER_CARD_ID_PATTERN.test(e.id) && Number.isFinite(e.weight) && e.weight > 0);
-    if (entries.length === 0) return [];
+    const [standard, livePacks] = await Promise.all([
+      loadPackConfig(STANDARD_PACK_ID).catch(() => null),
+      listCustomPacks({ onlyLive: true }).catch(() => [] as TcgCustomPackWithCards[]),
+    ]);
+    const configs: PackConfig[] = [];
+    if (standard) configs.push(standard);
+    for (const pack of livePacks) if (pack.config) configs.push(pack.config);
 
-    const rows = await redis.mget(...entries.map((e) => fullArtCardKey(e.id)));
-    const out: Array<ShowcaseRareCard & { weight: number }> = [];
-    entries.forEach((e, i) => {
-      try {
-        const value = typeof rows[i] === "string" ? JSON.parse(rows[i] as string) : rows[i];
-        if (!value || typeof value !== "object") return;
-        const card = sanitizeFullArtCard(value as Partial<FullArtCardData>);
-        if (!card.imageUrl) return;
-        out.push({ card: { ...card, id: e.id }, weight: e.weight });
-      } catch {
-        /* a card that can't be read is simply not shown */
+    const found = new Map<string, FullArtCardData & { id: string }>();
+    for (const config of configs) {
+      const rarityOn = config.packId !== STANDARD_PACK_ID || config.enabled;
+      const pcts = effectivePcts(config);
+      const rarityPicks = rarityOn
+        ? ALL_TIERS.flatMap((tier) =>
+            pcts[tier] > 0
+              ? config.rarities[tier]
+                  .filter((e) => e.kind === "card" && e.displayPullable === true && e.chancePct > 0)
+                  .map((entry) => ({ tier, entry }))
+              : []
+          )
+        : [];
+      const bonusPicks = bonusIsActive(config.bonus) ? config.bonus.entries.filter((e) => e.displayPullable === true) : [];
+      if (rarityPicks.length === 0 && bonusPicks.length === 0) continue;
+
+      const runtime = await loadRuntimeFor(config);
+      for (const { tier, entry } of rarityPicks) {
+        const saved = runtime.cards.get(entry.refId);
+        if (!saved || found.has(entry.refId)) continue;
+        found.set(entry.refId, { ...applyVariant(saved, entry.variant, runtime.styles, tier), id: entry.refId });
       }
-    });
-    // Rarest first. The odds weight only decides the order; it is not sent to the browser.
-    return out
-      .sort((a, b) => RARITY_RANK[b.card.tier] - RARITY_RANK[a.card.tier] || a.weight - b.weight)
+      for (const entry of bonusPicks) {
+        const saved = runtime.cards.get(entry.refId);
+        if (!saved || found.has(entry.refId)) continue;
+        const shown = applyVariant(saved, entry.variant, runtime.styles);
+        found.set(entry.refId, { ...shown, ...bonusPullCard(shown), id: entry.refId });
+      }
+    }
+
+    return [...found.values()]
+      .sort((a, b) => RARITY_RANK[b.tier] - RARITY_RANK[a.tier] || a.name.localeCompare(b.name))
       .slice(0, limit)
-      .map(({ card }) => ({ card }));
+      .map((card) => ({ card }));
   } catch (error) {
     console.error("[tcg] could not load the rare cards showcase:", error);
     return [];

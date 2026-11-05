@@ -167,7 +167,7 @@ export function TcgHome({
           {/* ── Rare cards to pull ──────────────────────────────────────── */}
           {rareCards.length > 0 && (
             <section aria-label="Rare cards to pull" className="space-y-2.5">
-              <SectionHeader title="Rare cards to pull" hint="A rare bonus card that can drop in a Standard Pack" action="Open a pack" onAction={onOpenStore} />
+              <SectionHeader title="Rare cards to pull" hint="Rare cards that can drop in packs" action="Open a pack" onAction={onOpenStore} />
               <ul className={rowCls}>
                 {rareCards.map(({ card }) => (
                   <li key={card.id} className="w-28 shrink-0 space-y-1">

@@ -274,28 +274,30 @@ export function BonusPullEditor({
               mode="bonus"
               tier="legend"
               saved={saved}
-              variant={entry.variant}
+                            variant={entry.variant}
+              displayPullable={entry.displayPullable === true}
               styles={styles}
-              onApply={(variant) => {
+              onApply={(variant, displayPullable) => {
                 onChange({
                   ...bonus,
                   entries: bonus.entries.map((e) => {
                     if (e.refId !== entry.refId) return e;
-                    const { variant: _old, ...rest } = e;
+                    const { variant: _old, displayPullable: _shown, ...rest } = e;
                     void _old;
-                    return variant ? { ...rest, variant } : rest;
+                    void _shown;
+                    return { ...rest, ...(variant ? { variant } : {}), ...(displayPullable ? { displayPullable: true } : {}) };
                   }),
                 });
                 setEditingId(null);
                 onNotify({ text: `Updated "${saved.name}" in the bonus pull. The saved card is unchanged. Save the pack to keep your changes.` });
               }}
-              onSaveAsNew={async (variant) => {
+                            onSaveAsNew={async (variant, displayPullable) => {
                 // A bonus card keeps the rarity it was saved on; it is given out as Legend either way.
                 const res = await createFinishedSetCardAction({ source: { kind: "saved", id: entry.refId }, tier: saved.tier, variant });
                 if (!res.success) return res.error;
                 const created = res.data.card as SetCard;
                 onCardCreated(created);
-                onChange({ ...bonus, entries: bonus.entries.map((e) => (e.refId === entry.refId ? { refId: created.id, weight: e.weight } : e)) });
+                onChange({ ...bonus, entries: bonus.entries.map((e) => (e.refId === entry.refId ? { refId: created.id, weight: e.weight, ...(displayPullable ? { displayPullable: true } : {}) } : e)) });
                 setEditingId(null);
                 onNotify({ text: `Saved "${created.name}" as a new set card and pointed the bonus pull at it. The card it was made from is unchanged. Save the pack to keep your changes.` });
                 return null;
