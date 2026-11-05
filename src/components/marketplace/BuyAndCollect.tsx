@@ -110,8 +110,8 @@ export function BuyAndCollect({
         <h2 className="text-sm font-semibold text-amber-900 dark:text-amber-200">Buy &amp; Collect</h2>
       </div>
       <p className="text-xs leading-relaxed text-amber-800/80 dark:text-amber-200/70">
-        Pay online now and collect from a staff member at Penthouse Drift. We&apos;ll email your order
-        confirmation with a collection reference.
+        Pay online now, then please notify a staff member that you&apos;ve placed the order. We&apos;ll email
+        your order confirmation with an order reference.
       </p>
 
       {hasVariations && (
@@ -145,7 +145,7 @@ export function BuyAndCollect({
           label="Click & Collect"
           successBody={(ref) =>
             ref
-              ? `Your order is confirmed. Collection reference ${ref} — speak to staff at Penthouse Drift to collect.`
+              ? `Your order is confirmed. Order reference ${ref} — please notify a staff member that you've placed the order.`
               : "Your order is being confirmed and will appear under My Orders shortly."
           }
           doneHref="/orders"

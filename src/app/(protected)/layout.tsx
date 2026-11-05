@@ -4,6 +4,7 @@ import { getUnreadCount } from "@/actions/notifications";
 import { getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
 import { ProtectedNavigation } from "@/components/ProtectedNavigation";
 import { PullToRefresh } from "@/components/PullToRefresh";
+import { MembershipRefresh } from "@/components/MembershipRefresh";
 import { DevToolsPanel } from "@/components/DevToolsPanel";
 import { BasketProvider } from "@/components/marketplace/BasketProvider";
 import { getForceSelfCheckIn, getImpersonation } from "@/actions/dev";
@@ -80,7 +81,8 @@ export default async function ProtectedLayout({
   if ((await getDashboardVersion(session.user.id)) === "new") {
     return (
       // BasketProvider sits ABOVE the shell so the top bar can show the basket.
-      <BasketProvider>
+            <BasketProvider>
+        <MembershipRefresh />
         {autoCheckInPrompt}
         {/* Dev tools stay available app-wide, in both experiences. */}
         {isDev && (
@@ -106,7 +108,8 @@ export default async function ProtectedLayout({
   }
 
   return (
-    <div className="flex h-screen bg-zinc-50 dark:bg-zinc-950">
+        <div className="flex h-screen bg-zinc-50 dark:bg-zinc-950">
+      <MembershipRefresh />
       {autoCheckInPrompt}
       {isDev && (
         <DevToolsPanel

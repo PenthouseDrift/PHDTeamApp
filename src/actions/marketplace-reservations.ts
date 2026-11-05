@@ -175,6 +175,99 @@ export async function cancelReservation(reservationId: string): Promise<ActionRe
   }
 }
 
+/**
+ * Admin: the member has paid for a reserved item at the desk. This runs the same
+ * finalizer an online payment does, so everything follows the normal process: stock
+ * and the ASBO-RC / facilitated ledgers, a paid order that lands in "ready to
+ * collect", the reservation turning into a purchase, the activity log and the
+ * confirmation email. It is idempotent per reservation (the finalizer claims
+ * `payment:processed:<checkoutId>`), so a double click can't sell the item twice.
+ */
+export async function markReservationPaid(reservationId: string): Promise<ActionResult<{ orderRef: string }>> {
+  try {
+    const session = await auth();
+    if (session?.user?.role !== "admin") return { success: false, error: "Only admins can mark an order as paid" };
+
+    const record = await getReservation(reservationId);
+    if (!record || record.status !== "active") {
+      return { success: false, error: "That reservation is no longer active" };
+    }
+
+    const listing = await getListingById(record.listingId);
+    if (!listing) return { success: false, error: "Listing not found" };
+    if (listing.isDraft) return { success: false, error: "This listing is a draft" };
+    if (listing.status !== "available") return { success: false, error: "This item has already sold" };
+
+    let unitPrice: number;
+    let label = listing.title;
+    if (listing.hasVariations) {
+      const variant = listing.variants.find((v) => v.id === record.variantId);
+      if (!variant) return { success: false, error: "That option no longer exists on the listing" };
+      if (variant.quantity - variant.soldCount < record.quantity) {
+        return { success: false, error: "There isn't enough stock left of this option" };
+      }
+      unitPrice = variant.price;
+      label = `${listing.title} - ${variant.name}`;
+    } else {
+      if (listing.quantity - listing.soldCount < record.quantity) {
+        return { success: false, error: "There isn't enough stock left" };
+      }
+      unitPrice = listing.price;
+    }
+    if (!(unitPrice > 0)) return { success: false, error: "This item has no price set, so it can't be marked as paid" };
+
+    const amount = Math.round(unitPrice * record.quantity * 100) / 100;
+    const checkoutId = `inperson_${record.id}`;
+    const checkoutReference = `phd_inperson_${record.id}`;
+
+    // Same record shape an online checkout leaves behind, so the finalizer needs no special case.
+    await redis.set(
+      `checkout:${checkoutId}`,
+      JSON.stringify({
+        memberId: record.userId,
+        itemType: "marketplace",
+        itemLabel: label,
+        quantity: record.quantity,
+        amount,
+        currency: "GBP",
+        lines: [
+          {
+            listingId: record.listingId,
+            variantId: record.variantId,
+            quantity: record.quantity,
+            unitPrice,
+            label,
+          },
+        ],
+        reservationId: record.id,
+        inPerson: true,
+        markedBy: session.user.id,
+        checkoutReference,
+        createdAt: Date.now(),
+      }),
+      { ex: 86400 * 30 }
+    );
+
+    const { processSuccessfulPaymentReference } = await import("@/lib/membership-activation");
+    await processSuccessfulPaymentReference(checkoutReference, checkoutId, amount, "GBP");
+
+    // The finalizer claims the checkout once. If an earlier attempt claimed it but died part way,
+    // the reservation is still active: say so rather than reporting a sale that didn't finish.
+    const after = await getReservation(record.id);
+    if (after && after.status === "active") {
+      return {
+        success: false,
+        error: "The payment was recorded but the reservation is still open. Check Orders and Activity before trying again.",
+      };
+    }
+
+    refreshPaths(record.listingId);
+    return { success: true, data: { orderRef: (after?.orderId ?? record.id).slice(0, 8).toUpperCase() } };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Could not mark as paid" };
+  }
+}
+
 /** The signed-in member's own active reservations (for /orders). */
 export async function getMyReservations(): Promise<ReservationView[]> {
   const session = await auth();

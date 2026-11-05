@@ -205,6 +205,29 @@ export function cardTitle(parts: { carName?: string; chassis?: string; driver: s
 
 export const rarityLabel = (tier: FullArtTier) => FULL_ART_TIERS.find((t) => t.id === tier)?.label ?? "Bronze";
 
+// ── Card type quick filters ─────────────────────────────────────────────────
+
+/** Quick filter on the kind of card: a drift car, a crew card or a repair (maintenance) card. */
+export type CardTypeFilter = "all" | "car" | "crew" | "repair";
+
+export const CARD_TYPE_FILTERS: Array<{ id: CardTypeFilter; label: string; icon: string }> = [
+  { id: "all", label: "All", icon: "" },
+  { id: "car", label: "Cars", icon: "🏎️" },
+  { id: "crew", label: "Crew", icon: "⚡" },
+  { id: "repair", label: "Repairs", icon: "🛠️" },
+];
+
+/**
+ * Which quick filter a card belongs to. Debuff and track cards are neither cars, crew nor repairs, so they
+ * return "other" and only show under "All".
+ */
+export function cardKind(card: Pick<MemberCard, "cardType" | "crewCardId">): "car" | "crew" | "repair" | "other" {
+  if (card.cardType === "maintenance") return "repair";
+  if (card.cardType === "debuff" || card.cardType === "track") return "other";
+  if (card.cardType === "crew" || card.crewCardId) return "crew";
+  return "car";
+}
+
 // ── Sorting the collection ──────────────────────────────────────────────────
 
 export type CardSortKey = "power" | "rarity" | "newest" | "name" | "team" | "driver";

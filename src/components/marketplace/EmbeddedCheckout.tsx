@@ -396,7 +396,7 @@ export function EmbeddedCheckout({
                 {successBody
                   ? successBody(orderRef, autoCheckedIn)
                   : orderRef
-                    ? `Your order is confirmed. Collection reference ${orderRef} — speak to staff at Penthouse Drift to collect.`
+                    ? `Your order is confirmed. Order reference ${orderRef} — please notify a staff member that you've placed the order.`
                     : "Your order is being confirmed and will appear under My Orders shortly."}
               </p>
               <button

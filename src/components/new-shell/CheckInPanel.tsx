@@ -74,9 +74,22 @@ export function CheckInPanel({
   autoCheckedIn = false,
 }: Props) {
   const router = useRouter();
-  const [checkedIn, setCheckedIn] = useState(alreadyCheckedIn);
+    const [checkedIn, setCheckedIn] = useState(alreadyCheckedIn);
   const [dayPasses, setDayPasses] = useState(initialDayPasses);
   const [rentalHours, setRentalHours] = useState(initialRentalHours);
+  // When the page re-renders with fresh data (a refresh after the app was reopened), take the
+  // server's values instead of keeping what was set when this component first mounted.
+  const [fromServer, setFromServer] = useState({ alreadyCheckedIn, initialDayPasses, initialRentalHours });
+  if (
+    fromServer.alreadyCheckedIn !== alreadyCheckedIn ||
+    fromServer.initialDayPasses !== initialDayPasses ||
+    fromServer.initialRentalHours !== initialRentalHours
+  ) {
+    setFromServer({ alreadyCheckedIn, initialDayPasses, initialRentalHours });
+    setCheckedIn(alreadyCheckedIn);
+    setDayPasses(initialDayPasses);
+    setRentalHours(initialRentalHours);
+  }
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [isPending, startTransition] = useTransition();
   const { start, busy, error: payError, overlay } = useCheckoutFlow(userId);

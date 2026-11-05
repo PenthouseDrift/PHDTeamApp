@@ -7,11 +7,14 @@ import { FullArtCard } from "@/components/cards/FullArtCard";
 import { DeleteCardButton } from "@/components/member-cards/DeleteCardButton";
 import { keepCard, rerollCard } from "@/actions/member-cards";
 import {
+  CARD_TYPE_FILTERS,
   DEFAULT_SORT_DIRECTION,
   canRerollCard,
+  cardKind,
   rarityLabel,
   sortCards,
-  type CardSortKey,
+    type CardSortKey,
+  type CardTypeFilter,
   type MemberCard,
   type SortDirection,
 } from "@/lib/card-roll";
@@ -70,6 +73,7 @@ export function CardCollection({
 }) {
   const [cards, setCards] = useState(initialCards);
   const [tierFilter, setTierFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<CardTypeFilter>("all");
   const [sortKey, setSortKey] = useState<CardSortKey>("power");
   const [direction, setDirection] = useState<SortDirection>("desc");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -100,14 +104,12 @@ export function CardCollection({
 
   const filteredCards = useMemo(
     () =>
-      tierFilter === "all"
-        ? cards
-        : tierFilter === "crew"
-          ? cards.filter((c) => c.cardType === "crew" || Boolean(c.crewCardId))
-          : tierFilter === "maintenance"
-            ? cards.filter((c) => c.cardType === "maintenance")
-            : cards.filter((c) => c.tier === tierFilter),
-    [cards, tierFilter]
+      cards.filter(
+        (c) =>
+          (typeFilter === "all" || cardKind(c) === typeFilter) &&
+          (tierFilter === "all" || c.tier === tierFilter)
+      ),
+    [cards, tierFilter, typeFilter]
   );
   const sorted = useMemo(
     () => sortCards(filteredCards, sortKey, direction),
@@ -119,14 +121,18 @@ export function CardCollection({
       silver: 0,
       gold: 0,
       legend: 0,
-      mythic: 0,
-      crew: 0,
-      maintenance: 0,
+            mythic: 0,
     };
     for (const c of cards) {
       counts[c.tier] = (counts[c.tier] ?? 0) + 1;
-      if (c.cardType === "crew" || c.crewCardId) counts.crew += 1;
-      if (c.cardType === "maintenance") counts.maintenance += 1;
+    }
+    return counts;
+  }, [cards]);
+  const typeTally = useMemo(() => {
+    const counts: Record<CardTypeFilter, number> = { all: cards.length, car: 0, crew: 0, repair: 0 };
+    for (const c of cards) {
+      const kind = cardKind(c);
+      if (kind !== "other") counts[kind] += 1;
     }
     return counts;
   }, [cards]);
@@ -210,10 +216,43 @@ export function CardCollection({
         <>
           {/* Compact Mobile-Friendly Filter & Sort Bar */}
           <div className="space-y-2 rounded-2xl border border-zinc-200 bg-white p-2.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            {/* Card type quick filters: cars, crew and repair cards */}
+            <div
+              className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar"
+              role="group"
+              aria-label="Filter by card type"
+            >
+              {CARD_TYPE_FILTERS.map((t) => {
+                const active = typeFilter === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setTypeFilter(t.id)}
+                    className={`inline-flex shrink-0 items-center gap-1 rounded-xl px-3 py-1.5 text-[11px] font-black transition-colors ${
+                      active
+                        ? "bg-zinc-900 text-white shadow-sm dark:bg-zinc-100 dark:text-zinc-900"
+                        : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300"
+                    }`}
+                  >
+                    {t.icon ? <span aria-hidden>{t.icon}</span> : null}
+                    <span>{t.label}</span>
+                    <span className="opacity-75">({typeTally[t.id]})</span>
+                  </button>
+                );
+              })}
+            </div>
+
             {/* Rarity Filter Strip (Horizontally Scrollable on Mobile) */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
+            <div
+              className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar"
+              role="group"
+              aria-label="Filter by rarity"
+            >
               <button
                 type="button"
+                aria-pressed={tierFilter === "all"}
                 onClick={() => setTierFilter("all")}
                 className={`shrink-0 rounded-xl px-3 py-1.5 text-[11px] font-black transition-colors ${
                   tierFilter === "all"
@@ -221,33 +260,7 @@ export function CardCollection({
                     : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300"
                 }`}
               >
-                All ({cards.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setTierFilter(tierFilter === "crew" ? "all" : "crew")}
-                className={`inline-flex shrink-0 items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] font-black transition-colors ${
-                  tierFilter === "crew"
-                    ? "bg-cyan-500 text-black shadow-sm"
-                    : "bg-cyan-500/10 text-cyan-700 hover:bg-cyan-500/20 dark:bg-cyan-500/15 dark:text-cyan-300"
-                }`}
-              >
-                <span>⚡ Crew</span>
-                <span className="opacity-75">({tally.crew ?? 0})</span>
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setTierFilter(tierFilter === "maintenance" ? "all" : "maintenance")
-                }
-                className={`inline-flex shrink-0 items-center gap-1 rounded-xl px-2.5 py-1.5 text-[11px] font-black transition-colors ${
-                  tierFilter === "maintenance"
-                    ? "bg-purple-500 text-white shadow-sm"
-                    : "bg-purple-500/10 text-purple-700 hover:bg-purple-500/20 dark:bg-purple-500/15 dark:text-purple-300"
-                }`}
-              >
-                <span>🛠️ Repairs</span>
-                <span className="opacity-75">({tally.maintenance ?? 0})</span>
+                All rarities
               </button>
               {[...FULL_ART_TIERS].reverse().map((t) => {
                 const count = tally[t.id] ?? 0;
@@ -322,6 +335,12 @@ export function CardCollection({
               </button>
             </div>
           </div>
+
+          {sorted.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-zinc-300 py-8 text-center text-sm font-bold text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+              No cards match these filters.
+            </p>
+          ) : null}
 
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4" aria-label="Your cards">
             {sorted.map((c) => {

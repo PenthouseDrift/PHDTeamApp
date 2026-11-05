@@ -4,35 +4,50 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 /**
- * Keeps membership/wallet status reasonably fresh without hammering the DB.
- * Membership rarely changes (a purchase or an admin action), so instead of a
- * tight 60s poll on every open tab we:
- *   - only refresh while the tab is actually visible, and
- *   - refresh on a slow 5-minute cadence, plus once when the tab regains focus
- *     (which is what actually matters after returning from a payment flow).
- * This cuts the steady background Redis read volume dramatically.
+ * Keeps what a signed-in member sees (check-in open or closed, membership, wallet) from going stale.
+ *
+ * A phone app that was backgrounded is usually resumed as the same frozen page, not reloaded, so
+ * server-rendered state such as "Check-in is open" can be from yesterday. To fix that we:
+ *   - refresh when the app comes back to the front after being away for a little while
+ *     (visibilitychange, and pageshow for a page restored from the back/forward cache),
+ *   - refresh on a slow 5-minute cadence while the app is visible, so a check-in window that opens
+ *     or closes while the screen is on is picked up too.
+ * Refreshing re-renders the server components and keeps client state, so nothing in progress is lost.
  */
+const REFRESH_MS = 5 * 60 * 1000; // visible-app cadence
+const AWAY_MS = 20 * 1000; // shorter trips (e.g. a payment popup) are covered by the pages themselves
+
 export function MembershipRefresh() {
   const router = useRouter();
 
   useEffect(() => {
-    const REFRESH_MS = 5 * 60 * 1000; // 5 minutes
+    let hiddenAt: number | null = document.visibilityState === "hidden" ? Date.now() : null;
 
     const timer = setInterval(() => {
-      if (document.visibilityState === "visible") {
-        router.refresh();
-      }
+      if (document.visibilityState === "visible") router.refresh();
     }, REFRESH_MS);
 
-    // Refresh when the user returns to the tab (e.g. back from checkout).
-    const onVisible = () => {
-      if (document.visibilityState === "visible") router.refresh();
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now();
+        return;
+      }
+      const awayFor = hiddenAt === null ? Infinity : Date.now() - hiddenAt;
+      hiddenAt = null;
+      if (awayFor >= AWAY_MS) router.refresh();
     };
-    document.addEventListener("visibilitychange", onVisible);
 
+    // A page restored from the back/forward cache is not reloaded, and may be a day old.
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) router.refresh();
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pageshow", onPageShow);
     return () => {
       clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisible);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pageshow", onPageShow);
     };
   }, [router]);
 

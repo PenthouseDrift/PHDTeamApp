@@ -65,11 +65,11 @@ export default async function MarketplacePurchaseSuccessPage({ searchParams }: P
             </div>
             <h1 className="text-2xl font-black text-zinc-900 dark:text-zinc-100">Payment received</h1>
             <p className="text-zinc-600 dark:text-zinc-300">
-              Your order is confirmed and reserved. Speak to a member of staff at Penthouse Drift to collect it.
+              Your order is confirmed. Please notify a staff member that you&apos;ve placed the order.
             </p>
             {orderRef && (
               <div className="rounded-xl bg-zinc-100 p-4 dark:bg-zinc-800">
-                <p className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Collection reference</p>
+                <p className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Order reference</p>
                 <p className="text-xl font-black tracking-wider text-amber-600 dark:text-amber-400">{orderRef}</p>
               </div>
             )}

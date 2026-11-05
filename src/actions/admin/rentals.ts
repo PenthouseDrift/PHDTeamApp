@@ -3,6 +3,7 @@
 import { redis } from "@/lib/redis";
 import { revalidatePath } from "next/cache";
 import type { RentalSession, ActionResult } from "@/types";
+import { checkInDedupTtlSeconds } from "@/lib/checkin-dedup";
 
 const FIFTEEN_MINUTES = 15 * 60 * 1000;
 const ONE_HOUR = 60 * 60 * 1000;
@@ -166,7 +167,7 @@ export async function extendRentalSessionManual(
     });
 
     await redis.rpush(`checkins:${today}`, entry);
-    await redis.set(`checkin:dedup:${userId}`, "1", { ex: 86400 });
+    await redis.set(`checkin:dedup:${userId}`, "1", { ex: checkInDedupTtlSeconds() });
 
     revalidatePath("/admin/check-in");
     revalidatePath("/admin/members");

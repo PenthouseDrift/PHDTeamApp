@@ -8,7 +8,10 @@ interface MarketplaceSearchProps {
    * change (back button, clear link) remounts with the right initial value. */
   initialQuery?: string;
   /** Route the search navigates to (defaults to the browse grid). */
-  basePath?: string;
+    basePath?: string;
+  /** Other active filters to keep when the search changes. */
+  category?: string;
+  soldByPhd?: boolean;
 }
 
 /**
@@ -16,7 +19,12 @@ interface MarketplaceSearchProps {
  * (?q=...), always resetting to page 1. Server component re-renders with the
  * filtered, paginated results.
  */
-export function MarketplaceSearch({ initialQuery = "", basePath = "/marketplace" }: MarketplaceSearchProps) {
+export function MarketplaceSearch({
+  initialQuery = "",
+  basePath = "/marketplace",
+  category = "",
+  soldByPhd = false,
+}: MarketplaceSearchProps) {
   const router = useRouter();
   const [value, setValue] = useState(initialQuery);
 
@@ -26,10 +34,16 @@ export function MarketplaceSearch({ initialQuery = "", basePath = "/marketplace"
     const trimmed = value.trim();
     if (trimmed === initialQuery.trim()) return;
     const t = setTimeout(() => {
-      router.push(trimmed ? `${basePath}?q=${encodeURIComponent(trimmed)}` : basePath);
+            // Keep the category and "Sold by PHD" filters; only the query (and page) change.
+      const sp = new URLSearchParams();
+      if (trimmed) sp.set("q", trimmed);
+      if (category) sp.set("category", category);
+      if (soldByPhd) sp.set("sold", "phd");
+      const qs = sp.toString();
+      router.push(qs ? `${basePath}?${qs}` : basePath);
     }, 300);
     return () => clearTimeout(t);
-  }, [value, initialQuery, basePath, router]);
+  }, [value, initialQuery, basePath, category, soldByPhd, router]);
 
   return (
     <div className="relative">

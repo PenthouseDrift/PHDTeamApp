@@ -6,6 +6,7 @@ import { redis } from "@/lib/redis";
 import { cookies } from "next/headers";
 import { auth } from "@/lib/auth";
 import type { Membership, ActionResult } from "@/types";
+import { checkInDedupTtlSeconds } from "@/lib/checkin-dedup";
 
 /**
  * DEV ONLY: when an admin uses the "Impersonate Member (with membership)" dev
@@ -182,7 +183,7 @@ export async function activateMembershipInPerson(
       });
 
       await redis.rpush(`checkins:${today}`, entry);
-      await redis.set(dedupKey, "1", { ex: 86400 });
+      await redis.set(dedupKey, "1", { ex: checkInDedupTtlSeconds() });
       const { recordCheckInCount } = await import("@/lib/checkin-count");
       await recordCheckInCount(memberId, now);
     }

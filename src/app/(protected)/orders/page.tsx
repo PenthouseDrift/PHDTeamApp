@@ -120,8 +120,13 @@ export default async function OrdersPage() {
                               ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 animate-pulse"
                               : "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400"
                           }`}>
-                            {order.status === "collected" ? "Collected" : order.status === "ready_for_collection" ? "Ready for Collection" : "Processing"}
+                            {order.status === "collected" ? "Collected" : order.status === "ready_for_collection" ? "Notify a staff member" : "Processing"}
                           </span>
+                          {order.status === "ready_for_collection" && (
+                            <p className="mt-1.5 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+                              Please notify a staff member that you&apos;ve placed the order.
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>

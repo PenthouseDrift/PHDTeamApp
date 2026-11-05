@@ -3,6 +3,7 @@ import Image from "next/image";
 import type { ReservedListingSummary } from "@/actions/marketplace";
 import type { ReservationView } from "@/actions/marketplace-reservations";
 import { formatGbp, heldForText } from "@/lib/reserved-display";
+import { MarkReservationPaidButton } from "./MarkReservationPaidButton";
 
 interface ReservedListingsProps {
   listings: ReservedListingSummary[];
@@ -52,7 +53,8 @@ export function ReservedListings({ listings, holders = {} }: ReservedListingsPro
 
       <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
         {listings.map((l) => (
-          <li key={l.listingId} className="flex items-center gap-3 px-4 py-3">
+          <li key={l.listingId} className="px-4 py-3">
+          <div className="flex items-center gap-3">
             <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800">
               {l.image ? (
                 <Image src={l.image} alt={l.title} fill sizes="48px" className="object-cover" />
@@ -115,9 +117,33 @@ export function ReservedListings({ listings, holders = {} }: ReservedListingsPro
               href={`/marketplace/${l.listingId}`}
               className="shrink-0 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
-              Manage
+                            Manage
             </Link>
-          </li>
+          </div>
+          {(holders[l.listingId] ?? []).length > 0 && (
+            <ul className="mt-2 space-y-1.5 border-t border-dashed border-zinc-200 pt-2 dark:border-zinc-800">
+              {(holders[l.listingId] ?? []).map((r) => {
+                const unit = r.variantId
+                  ? l.variants.find((v) => v.id === r.variantId)?.price ?? 0
+                  : l.reservedCount > 0
+                    ? l.reservedValue / l.reservedCount
+                    : 0;
+                const amount = Math.round(unit * r.quantity * 100) / 100;
+                const holderName = r.holderName ?? "Member";
+                return (
+                  <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 pl-[60px]">
+                    <span className="min-w-0 text-xs text-zinc-700 dark:text-zinc-300">
+                      <span className="font-semibold">{holderName}</span> ×{r.quantity}
+                      {r.variantName ? ` (${r.variantName})` : ""}
+                      {amount > 0 ? ` · ${formatGbp(amount)}` : ""}
+                    </span>
+                    <MarkReservationPaidButton reservationId={r.id} amount={amount} holderName={holderName} />
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </li>
         ))}
       </ul>
     </section>

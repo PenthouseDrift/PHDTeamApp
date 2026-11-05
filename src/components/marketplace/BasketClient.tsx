@@ -213,7 +213,7 @@ export function BasketClient() {
           successTitle="Order confirmed"
           successBody={(ref) =>
             ref
-              ? `Your order is confirmed. Collection reference ${ref} — speak to staff at Penthouse Drift to collect all items.`
+              ? `Your order is confirmed. Order reference ${ref} — please notify a staff member that you've placed the order.`
               : "Your order is being confirmed and will appear under My Orders shortly."
           }
           doneHref="/orders"

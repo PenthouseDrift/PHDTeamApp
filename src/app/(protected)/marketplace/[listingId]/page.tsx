@@ -263,7 +263,15 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
                   quantity={listing.quantity}
                   initialSoldCount={listing.soldCount}
                   soldByAsboRc={listing.soldByAsboRc}
-                  hasVariations={listing.hasVariations}
+                                    hasVariations={listing.hasVariations}
+                  variationLabel={listing.variationLabel}
+                  variants={listing.variants.map((v) => ({
+                    id: v.id,
+                    name: v.name,
+                    price: v.price,
+                    quantity: v.quantity,
+                    soldCount: v.soldCount,
+                  }))}
                 />
                 {canReserve && (
                   <div className="mt-3">

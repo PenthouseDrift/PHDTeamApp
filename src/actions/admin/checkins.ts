@@ -6,6 +6,7 @@ import type { ActionResult } from "@/types";
 import { logActivity } from "@/lib/activity";
 import { recordCheckInCount } from "@/lib/checkin-count";
 import { requireStaff } from "@/lib/staff-auth";
+import { checkInDedupTtlSeconds } from "@/lib/checkin-dedup";
 
 export interface CheckInEntry {
   userId: string;
@@ -101,7 +102,7 @@ export async function submitSelfCheckIn(memberId: string, memberName: string): P
     });
 
     await redis.rpush(`checkins:${today}`, entry);
-    await redis.set(dedupKey, "1", { ex: 86400 });
+    await redis.set(dedupKey, "1", { ex: checkInDedupTtlSeconds() });
     // Counts the visit and earns the day's card credit, like every other check-in path.
     await recordCheckInCount(memberId, now);
 
@@ -180,7 +181,7 @@ export async function ensureAdminsCheckedInForTodayEvent(): Promise<void> {
         });
 
         await redis.rpush(`checkins:${utcToday}`, entry);
-        await redis.set(`checkin:dedup:${admin.id}`, "1", { ex: 86400 });
+        await redis.set(`checkin:dedup:${admin.id}`, "1", { ex: checkInDedupTtlSeconds() });
         await recordCheckInCount(admin.id, now);
 
         await logActivity({
@@ -293,7 +294,7 @@ export async function quickCheckIn(
     });
 
     await redis.rpush(`checkins:${today}`, entry);
-    await redis.set(dedupKey, "1", { ex: 86400 });
+    await redis.set(dedupKey, "1", { ex: checkInDedupTtlSeconds() });
     await recordCheckInCount(memberId, now);
 
     const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";
@@ -630,7 +631,7 @@ export async function checkInWithDayPass(
     });
 
     await redis.rpush(`checkins:${today}`, entry);
-    await redis.set(`checkin:dedup:${memberId}`, "1", { ex: 86400 });
+    await redis.set(`checkin:dedup:${memberId}`, "1", { ex: checkInDedupTtlSeconds() });
     await recordCheckInCount(memberId, now);
 
     const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";
@@ -700,7 +701,7 @@ export async function checkInWithRental(
     });
 
     await redis.rpush(`checkins:${today}`, entry);
-    await redis.set(`checkin:dedup:${memberId}`, "1", { ex: 86400 });
+    await redis.set(`checkin:dedup:${memberId}`, "1", { ex: checkInDedupTtlSeconds() });
     await recordCheckInCount(memberId, now);
 
     const adminName = (await redis.hget(`member:${adminId}`, "name")) as string || "Admin";

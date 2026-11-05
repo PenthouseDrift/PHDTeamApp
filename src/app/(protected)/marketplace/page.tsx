@@ -12,11 +12,11 @@ export const dynamic = "force-dynamic";
 const PER_PAGE = 14;
 
 interface MarketplacePageProps {
-  searchParams: Promise<{ page?: string; q?: string; category?: string }>;
+  searchParams: Promise<{ page?: string; q?: string; category?: string; sold?: string }>;
 }
 
 export default async function MarketplacePage({ searchParams }: MarketplacePageProps) {
-  const [session, { page: pageParam, q: qParam, category: catParam }] = await Promise.all([
+  const [session, { page: pageParam, q: qParam, category: catParam, sold: soldParam }] = await Promise.all([
     auth(),
     searchParams,
   ]);
@@ -33,10 +33,12 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
   const category = (MARKETPLACE_CATEGORIES as readonly string[]).includes((catParam ?? "").trim())
     ? (catParam as string).trim()
     : "";
-  const isFiltered = Boolean(query || category);
+    // "Sold by PHD" toggle: off unless the URL says sold=phd. It combines with search and category.
+  const soldByPhd = (soldParam ?? "").trim().toLowerCase() === "phd";
+  const isFiltered = Boolean(query || category || soldByPhd);
   const requestedPage = Math.max(1, Number(pageParam) || 1);
   const [{ listings, page, totalPages, total }, drafts, reservationCtx] = await Promise.all([
-    getListingsPage(requestedPage, PER_PAGE, { query, category }),
+    getListingsPage(requestedPage, PER_PAGE, { query, category, soldByPhd }),
     // Drafts only show on the first page of an unfiltered view, so they don't
     // clutter search results or deeper pages. Empty for non-admin/ASBO-RC.
     !isFiltered && requestedPage === 1 ? getDraftListings() : Promise.resolve([]),
@@ -44,12 +46,13 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
     getReservationContext(),
   ]);
 
-  // Build hrefs that preserve the active query + category.
-  const withParams = (overrides: { page?: number; category?: string | null }) => {
+    // Build hrefs that preserve the active query, category and Sold by PHD toggle.
+  const withParams = (overrides: { page?: number; category?: string | null; soldByPhd?: boolean }) => {
     const sp = new URLSearchParams();
     if (query) sp.set("q", query);
     const cat = overrides.category === undefined ? category : overrides.category;
     if (cat) sp.set("category", cat);
+    if (overrides.soldByPhd === undefined ? soldByPhd : overrides.soldByPhd) sp.set("sold", "phd");
     if (overrides.page && overrides.page > 1) sp.set("page", String(overrides.page));
     const qs = sp.toString();
     return qs ? `/marketplace?${qs}` : "/marketplace";
@@ -145,11 +148,41 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
         </div>
 
         {/* Search (keyed on query so external URL changes reset the input) */}
-        <MarketplaceSearch key={query} initialQuery={query} basePath="/marketplace" />
+        <MarketplaceSearch
+          key={query}
+          initialQuery={query}
+          basePath="/marketplace"
+          category={category}
+          soldByPhd={soldByPhd}
+        />
 
-        {/* Category filter chips. Each preserves the active search query and
-            resets to page 1. "All" clears the category. */}
+                {/* Filter chips. Each preserves the active search query and the other filters
+            and resets to page 1. "Sold by PHD" is an on/off toggle; "All" clears the category. */}
         <div data-chip-row className="flex flex-wrap gap-2">
+          <Link
+            href={withParams({ soldByPhd: !soldByPhd, page: 1 })}
+            role="switch"
+            aria-checked={soldByPhd}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              soldByPhd
+                ? "border-teal-600 bg-teal-600 text-white"
+                : "border-zinc-300 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            }`}
+          >
+            <span
+              aria-hidden
+              className={`relative inline-block h-3.5 w-6 rounded-full transition-colors ${
+                soldByPhd ? "bg-white/40" : "bg-zinc-300 dark:bg-zinc-600"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 h-2.5 w-2.5 rounded-full bg-white shadow transition-all ${
+                  soldByPhd ? "left-3" : "left-0.5"
+                }`}
+              />
+            </span>
+            Sold by PHD
+          </Link>
           <Link
             href={withParams({ category: null, page: 1 })}
             className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
@@ -213,7 +246,9 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
           isFiltered ? (
             <div className="rounded-xl border border-zinc-200 bg-white p-12 text-center dark:border-zinc-800 dark:bg-zinc-900">
               <p className="text-zinc-500 dark:text-zinc-400">
-                {query && category
+                                {soldByPhd
+                  ? `No items sold by PHD${category ? ` in ${category}` : ""}${query ? ` match “${query}”` : ""}.`
+                  : query && category
                   ? `No ${category} items match “${query}”.`
                   : query
                   ? `No items match “${query}”.`

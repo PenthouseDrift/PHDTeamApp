@@ -101,7 +101,7 @@ function escapeHtml(input: string): string {
 
 /**
  * Build the Click & Collect order confirmation email. Includes the order ID and
- * instructions to speak to a staff member at Penthouse Drift to collect.
+ * a reminder to notify a staff member at Penthouse Drift that the order has been placed.
  */
 export function renderOrderConfirmation(params: OrderConfirmationParams): {
   subject: string;
@@ -143,7 +143,7 @@ export function renderOrderConfirmation(params: OrderConfirmationParams): {
           <tr>
             <td style="padding:28px;">
               <p style="margin:0 0 20px;color:#111827;font-size:15px;line-height:1.5;font-family:Arial,Helvetica,sans-serif;">
-                Thanks ${escapeHtml(params.buyerName)}, your payment was successful and your order is reserved.
+                Thanks ${escapeHtml(params.buyerName)}, your payment was successful and your order has been placed.
               </p>
 
               <!-- Order reference -->
@@ -167,14 +167,14 @@ export function renderOrderConfirmation(params: OrderConfirmationParams): {
                 </tr>
               </table>
 
-              <!-- How to collect -->
+              <!-- What to do next -->
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;margin-top:24px;">
                 <tr>
                   <td style="padding:16px;">
-                    <p style="margin:0 0 6px;color:#b45309;font-size:14px;font-weight:bold;font-family:Arial,Helvetica,sans-serif;">How to collect</p>
+                    <p style="margin:0 0 6px;color:#b45309;font-size:14px;font-weight:bold;font-family:Arial,Helvetica,sans-serif;">What to do next</p>
                     <p style="margin:0;color:#374151;font-size:14px;line-height:1.5;font-family:Arial,Helvetica,sans-serif;">
-                      Speak to a member of staff at Penthouse Drift and quote your order reference
-                      <strong style="color:#111827;">${shortId}</strong> to collect your order.
+                      Please notify a staff member at Penthouse Drift that you&#39;ve placed the order, and quote your
+                      order reference <strong style="color:#111827;">${shortId}</strong>.
                     </p>
                   </td>
                 </tr>

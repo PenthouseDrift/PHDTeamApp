@@ -557,18 +557,20 @@ export interface MarketplacePage {
  */
 async function loadListingsPage(
   page = 1,
-  perPage = 14,
-  options: { query?: string; category?: string } = {}
+    perPage = 14,
+  options: { query?: string; category?: string; soldByPhd?: boolean } = {}
 ): Promise<MarketplacePage> {
   const safePerPage = Math.max(1, Math.min(60, Math.floor(perPage) || 14));
   const query = (options.query ?? "").trim().toLowerCase();
   const category = (options.category ?? "").trim();
-  const hasCategory = (MARKETPLACE_CATEGORIES as readonly string[]).includes(category);
+    const hasCategory = (MARKETPLACE_CATEGORIES as readonly string[]).includes(category);
+  const soldByPhdOnly = options.soldByPhd === true;
+
 
   try {
     // --- Filter path: a search query and/or a category both require scanning
     // the whole catalogue (the fast page-slice below can't filter). ---
-    if (query || hasCategory) {
+        if (query || hasCategory || soldByPhdOnly) {
       const ids = await redis.zrange(MARKETPLACE_INDEX, 0, -1);
       if (!ids || ids.length === 0) {
         return { listings: [], total: 0, page: 1, perPage: safePerPage, totalPages: 0 };
@@ -582,7 +584,9 @@ async function loadListingsPage(
       const matches = raws
         .map((raw) => toListing(raw as Record<string, unknown> | null))
         .filter((l): l is MarketplaceListing => l !== null)
-        .filter((l) => !hasCategory || l.category === category)
+                .filter((l) => !hasCategory || l.category === category)
+        // "Sold by PHD" matches the badge shown on the card (ASBO-RC listings count too).
+        .filter((l) => !soldByPhdOnly || l.soldByPhd || l.soldByAsboRc)
         .filter(
           (l) =>
             !query ||
@@ -645,8 +649,8 @@ const getListingsPageCached = unstable_cache(loadListingsPage, ["marketplace-pag
 
 export async function getListingsPage(
   page = 1,
-  perPage = 14,
-  options: { query?: string; category?: string } = {}
+    perPage = 14,
+  options: { query?: string; category?: string; soldByPhd?: boolean } = {}
 ): Promise<MarketplacePage> {
   try {
     return await getListingsPageCached(page, perPage, options);

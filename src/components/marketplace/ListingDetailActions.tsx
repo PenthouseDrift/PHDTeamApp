@@ -2,14 +2,25 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import {
+  adjustVariantSold,
   deleteListing,
   setListingStatus,
   setListingSoldCount,
   sellAsboRcUnits,
   addListingStock,
 } from "@/actions/marketplace";
+
+/** What the "mark a variation sold" window needs to know about each variation. */
+export interface DetailVariant {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  soldCount: number;
+}
 
 interface ListingDetailActionsProps {
   listingId: string;
@@ -18,8 +29,13 @@ interface ListingDetailActionsProps {
   initialSoldCount?: number;
   soldByAsboRc?: boolean;
   /** Whether this listing uses per-option variants (stock managed per variant). */
-  hasVariations?: boolean;
+    hasVariations?: boolean;
+  /** The listing's variations (variant listings only), for the "mark a variation sold" window. */
+  variants?: DetailVariant[];
+  /** Label the listing uses for its variations (e.g. "Size"), defaults to "option". */
+  variationLabel?: string;
 }
+
 
 export function ListingDetailActions({
   listingId,
@@ -27,7 +43,9 @@ export function ListingDetailActions({
   quantity = 1,
   initialSoldCount = 0,
   soldByAsboRc = false,
-  hasVariations = false,
+    hasVariations = false,
+  variants: initialVariants = [],
+  variationLabel,
 }: ListingDetailActionsProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -38,11 +56,24 @@ export function ListingDetailActions({
   const [asboAvailable, setAsboAvailable] = useState(Math.max(0, quantity));
   // Total quantity (restockable). For ASBO this doubles as live available.
   const [quantityState, setQuantityState] = useState(Math.max(0, quantity));
-  const [addQty, setAddQty] = useState(1);
+    const [addQty, setAddQty] = useState(1);
+  const [variants, setVariants] = useState(initialVariants);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerError, setPickerError] = useState<string | null>(null);
+  const optionWord = (variationLabel || "option").toLowerCase();
 
-  const totalUnits = Math.max(1, quantityState);
+  // Variant listings keep their stock on each variation: the listing-level quantity is everything
+  // ever stocked, so what is left is the sum of each variation's remaining units.
+  const variantTotal = variants.reduce((s, v) => s + v.quantity, 0);
+  const variantAvailable = variants.reduce((s, v) => s + Math.max(0, v.quantity - v.soldCount), 0);
+
+  const totalUnits = hasVariations ? Math.max(1, variantTotal) : Math.max(1, quantityState);
   // Physical stock remaining (ignores holds).
-  const inStock = soldByAsboRc ? asboAvailable : Math.max(0, totalUnits - soldCount);
+  const inStock = hasVariations
+    ? variantAvailable
+    : soldByAsboRc
+      ? asboAvailable
+      : Math.max(0, totalUnits - soldCount);
   // Units still in stock (holds are managed in the Reservations panel).
   const available = inStock;
   const multiUnit = totalUnits > 1;
@@ -105,6 +136,38 @@ export function ListingDetailActions({
     });
   };
 
+    // Variant listings: sell (or undo) one unit of a chosen variation.
+  const adjustVariant = (variantId: string, delta: number) => {
+    setPickerError(null);
+    startTransition(async () => {
+      const result = await adjustVariantSold(listingId, variantId, delta);
+      if (result.success) {
+        setVariants((list) =>
+          list.map((v) => (v.id === variantId ? { ...v, soldCount: result.data.variantSoldCount } : v))
+        );
+        setStatus(result.data.status);
+        router.refresh();
+      } else {
+        setPickerError(result.error);
+      }
+    });
+  };
+
+  // Close the window with Escape and stop the page scrolling behind it.
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPickerOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [pickerOpen]);
+
   const handleDelete = () => {
     if (!confirm("Delete this listing? This cannot be undone.")) return;
     startTransition(async () => {
@@ -120,7 +183,30 @@ export function ListingDetailActions({
 
   return (
     <div className="space-y-3">
-      {soldByAsboRc ? (
+            {hasVariations ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-800/40">
+          <div className="text-sm">
+            <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+              {variantAvailable > 0 ? `${variantAvailable} of ${variantTotal} available` : "Sold out"}
+            </span>
+            <span className="ml-2 text-xs text-zinc-500 dark:text-zinc-400">
+              ({variantTotal - variantAvailable} sold across {variants.length} {optionWord}
+              {variants.length === 1 ? "" : "s"})
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setPickerError(null);
+              setPickerOpen(true);
+            }}
+            disabled={isPending || variants.length === 0}
+            className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-bold text-black transition-colors hover:bg-amber-400 disabled:opacity-40"
+          >
+            Mark a {optionWord} sold
+          </button>
+        </div>
+      ) : soldByAsboRc ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-teal-200 bg-teal-50/60 px-3 py-2.5 dark:border-teal-900/50 dark:bg-teal-950/20">
           <div className="text-sm">
             <span className="font-semibold text-teal-800 dark:text-teal-200">
@@ -216,7 +302,7 @@ export function ListingDetailActions({
         </Link>
         {/* ASBO-RC stock is managed via "Record a sale" + the ASBO report, so no
             whole-listing sold toggle is shown for it. */}
-        {!soldByAsboRc && (
+                {!soldByAsboRc && !hasVariations && (
           <button
             type="button"
             onClick={handleToggleSold}
@@ -241,6 +327,84 @@ export function ListingDetailActions({
           Delete listing
         </button>
       </div>
+
+      {pickerOpen &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[9999] flex items-end justify-center p-0 sm:items-center sm:p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mark-variant-sold-title"
+          >
+            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setPickerOpen(false)} aria-hidden="true" />
+            <div className="relative z-10 flex max-h-[85dvh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl dark:bg-zinc-900 sm:rounded-2xl">
+              <div className="flex items-start justify-between gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+                <div>
+                  <h2 id="mark-variant-sold-title" className="text-base font-black text-zinc-900 dark:text-zinc-100">
+                    Which {optionWord} sold?
+                  </h2>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Pick a {optionWord} to mark 1 unit sold. {variantAvailable} left in total.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPickerOpen(false)}
+                  className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                >
+                  Done
+                </button>
+              </div>
+
+              <ul className="divide-y divide-zinc-100 overflow-y-auto dark:divide-zinc-800">
+                {variants.map((v) => {
+                  const left = Math.max(0, v.quantity - v.soldCount);
+                  return (
+                    <li key={v.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{v.name}</p>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                          £{v.price.toFixed(2)} · {left > 0 ? `${left} left` : "Sold out"}
+                          {v.soldCount > 0 ? ` · ${v.soldCount} sold` : ""}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {v.soldCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => adjustVariant(v.id, -1)}
+                            disabled={isPending}
+                            aria-label={`Undo 1 sold for ${v.name}`}
+                            className="min-h-9 rounded-lg border border-zinc-300 px-2.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                          >
+                            Undo 1
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => adjustVariant(v.id, 1)}
+                          disabled={isPending || left <= 0}
+                          aria-label={`Mark 1 ${v.name} sold`}
+                          className="min-h-9 rounded-lg bg-amber-500 px-3 text-xs font-bold text-black hover:bg-amber-400 disabled:opacity-40"
+                        >
+                          Mark 1 sold
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              {pickerError && (
+                <p role="alert" className="border-t border-red-200 bg-red-50 px-4 py-2 text-xs font-semibold text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
+                  {pickerError}
+                </p>
+              )}
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

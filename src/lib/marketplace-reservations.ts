@@ -192,15 +192,19 @@ export function bustMarketplaceTag(): void {
  */
 export async function consumeReservationsForPurchase(
   userId: string,
-  lines: Array<{ listingId: string; variantId?: string; quantity: number }>,
-  orderId: string
+    lines: Array<{ listingId: string; variantId?: string; quantity: number }>,
+  orderId: string,
+  /** When an admin marks one specific reservation as paid, convert that one first. */
+  preferReservationId?: string
 ): Promise<void> {
   const mine = await listActiveForUser(userId);
   if (mine.length === 0) return;
 
   for (const line of lines) {
     let remaining = line.quantity;
-    const matching = mine.filter((r) => r.listingId === line.listingId && sameVariant(r.variantId, line.variantId));
+    const matching = mine
+      .filter((r) => r.listingId === line.listingId && sameVariant(r.variantId, line.variantId))
+      .sort((a, b) => Number(b.id === preferReservationId) - Number(a.id === preferReservationId));
     for (const rec of matching) {
       if (remaining <= 0) break;
       const take = Math.min(rec.quantity, remaining);

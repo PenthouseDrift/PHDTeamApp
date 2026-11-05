@@ -4,11 +4,12 @@ import { redis } from "@/lib/redis";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import type { ActionResult } from "@/types";
-import { isUserCheckedInToday } from "@/actions/admin/checkins";
+import { getSelfCheckInStatus, isUserCheckedInToday } from "@/actions/admin/checkins";
 import { redeemDayPass, redeemRentalHour } from "@/actions/wallet";
 import { createRentalSession } from "@/actions/admin/rentals";
 import { logActivity } from "@/lib/activity";
 import { recordCheckInCount } from "@/lib/checkin-count";
+import { checkInDedupTtlSeconds } from "@/lib/checkin-dedup";
 
 /**
  * DEV-ONLY: true when an admin is impersonating a "member with membership" via
@@ -28,13 +29,22 @@ async function isDevFakeMembershipActive(): Promise<boolean> {
 
 export async function performSelfCheckIn(
   userId: string,
-  method: "membership" | "day_pass" | "rental",
-  skipRevalidate = false
+    method: "membership" | "day_pass" | "rental",
+  skipRevalidate = false,
+  /** Only for callers that have already confirmed check-in is open (or that are finishing a payment). */
+  skipLiveCheck = false
 ): Promise<ActionResult<{ checkedIn: boolean; method: string; message: string }>> {
   try {
     if (!userId) {
       return { success: false, error: "User ID required" };
     }
+
+    // A screen left open from an earlier event can still show a check-in button. Don't let it spend a
+    // pass or hour (or log a visit) when no event is running.
+    if (!skipLiveCheck && !(await getSelfCheckInStatus())) {
+      return { success: false, error: "Check-in isn't open right now. Pull down or reopen the app to see the latest." };
+    }
+
 
     const now = Date.now();
     const today = new Date().toISOString().split("T")[0];
@@ -103,7 +113,7 @@ export async function performSelfCheckIn(
     });
 
     await redis.rpush(`checkins:${today}`, entry);
-    await redis.set(`checkin:dedup:${userId}`, "1", { ex: 86400 });
+    await redis.set(`checkin:dedup:${userId}`, "1", { ex: checkInDedupTtlSeconds() });
     await recordCheckInCount(userId, now);
 
     await logActivity({
@@ -143,13 +153,20 @@ export async function performSelfCheckIn(
 export async function performGuestSelfCheckIn(
   userId: string,
   guestName: string,
-  method: "day_pass" | "rental",
-  skipRevalidate = false
+    method: "day_pass" | "rental",
+  skipRevalidate = false,
+  /** Only for callers that have already confirmed check-in is open (or that are finishing a payment). */
+  skipLiveCheck = false
 ): Promise<ActionResult<{ checkedIn: boolean; message: string }>> {
   try {
     if (!userId || !guestName.trim()) {
       return { success: false, error: "Guest name is required" };
     }
+
+    if (!skipLiveCheck && !(await getSelfCheckInStatus())) {
+      return { success: false, error: "Check-in isn't open right now. Pull down or reopen the app to see the latest." };
+    }
+
 
     const now = Date.now();
     const today = new Date().toISOString().split("T")[0];

@@ -162,7 +162,13 @@ export function ListingCard({
   // For ASBO-RC listings, quantity IS the live available stock (sold units live
   // in the ledger, not soldCount). For normal listings, available = quantity - sold.
   const quantity = Math.max(0, quantityState || 0);
-  const available = isAsbo ? quantity : Math.max(0, quantity - soldCount);
+  // Variant listings: the listing-level quantity is the total EVER stocked across the
+  // variants (sales only raise each variant's soldCount), so add up what is left per variant.
+  const available = hasVariations
+    ? variants.reduce((sum, v) => sum + Math.max(0, v.quantity - v.soldCount), 0)
+    : isAsbo
+      ? quantity
+      : Math.max(0, quantity - soldCount);
   // "multiUnit" only tweaks wording for normal listings.
   const multiUnit = Math.max(1, quantityState || 1) > 1;
 

@@ -22,7 +22,7 @@ export async function tryAutoCheckIn(memberId: string, kind: "day_pass" | "renta
     if (!(await getSelfCheckInStatus())) return false;
 
     const { performSelfCheckIn } = await import("@/actions/self-checkin");
-    const result = await performSelfCheckIn(memberId, kind, true);
+    const result = await performSelfCheckIn(memberId, kind, true, true);
     if (result.success) {
       // The wallet changed and they're now on the track.
       const { bustAdminMembers } = await import("@/lib/cache-bust");

@@ -12,7 +12,16 @@ import {
 } from "@/actions/admin/member-cards";
 import { ART_STYLES } from "@/lib/card-maker";
 import { FULL_ART_TIERS, type FullArtTier } from "@/lib/full-art-card";
-import { DEFAULT_SORT_DIRECTION, rarityLabel, sortCards, type CardSortKey, type SortDirection } from "@/lib/card-roll";
+import {
+  CARD_TYPE_FILTERS,
+  DEFAULT_SORT_DIRECTION,
+  cardKind,
+  rarityLabel,
+  sortCards,
+  type CardSortKey,
+  type CardTypeFilter,
+  type SortDirection,
+} from "@/lib/card-roll";
 import { normalizeStatValue } from "@/tcg/progression";
 
 /**
@@ -113,6 +122,7 @@ export function MemberCardsAdmin({ initialCards: loadedCards, total: loadedTotal
   const [query, setQuery] = useState("");
   const [tier, setTier] = useState<FullArtTier | "all">("all");
   const [status, setStatus] = useState<StatusFilter>("all");
+  const [kind, setKind] = useState<CardTypeFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("newest");
   const [direction, setDirection] = useState<SortDirection>("desc");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -130,10 +140,20 @@ export function MemberCardsAdmin({ initialCards: loadedCards, total: loadedTotal
     return { counts, archived };
   }, [initialCards]);
 
+    const kindCounts = useMemo(() => {
+    const counts: Record<CardTypeFilter, number> = { all: initialCards.length, car: 0, crew: 0, repair: 0 };
+    for (const c of initialCards) {
+      const k = cardKind(c);
+      if (k !== "other") counts[k] += 1;
+    }
+    return counts;
+  }, [initialCards]);
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = initialCards.filter((c) => {
       if (tier !== "all" && c.tier !== tier) return false;
+      if (kind !== "all" && cardKind(c) !== kind) return false;
       if (status === "active" && c.archived) return false;
       if (status === "archived" && !c.archived) return false;
       if (!q) return true;
@@ -144,7 +164,7 @@ export function MemberCardsAdmin({ initialCards: loadedCards, total: loadedTotal
       return [...filtered].sort((a, b) => a.owner.localeCompare(b.owner, undefined, { sensitivity: "base" }) * sign || b.createdAt - a.createdAt);
     }
     return sortCards(filtered, sortKey, direction);
-  }, [initialCards, query, tier, status, sortKey, direction]);
+  }, [initialCards, query, tier, kind, status, sortKey, direction]);
 
   const openIndex = openId ? visible.findIndex((c) => c.id === openId) : -1;
   const openCard = openIndex >= 0 ? visible[openIndex] : null;
@@ -300,6 +320,13 @@ export function MemberCardsAdmin({ initialCards: loadedCards, total: loadedTotal
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+        </div>
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Card type">
+          {CARD_TYPE_FILTERS.map((t) => (
+            <button key={t.id} type="button" aria-pressed={kind === t.id} onClick={() => setKind(t.id)} className={chip(kind === t.id)}>
+              {t.id === "all" ? "All types" : `${t.icon} ${t.label}`} ({kindCounts[t.id]})
+            </button>
+          ))}
         </div>
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Rarity">
           <button type="button" aria-pressed={tier === "all"} onClick={() => setTier("all")} className={chip(tier === "all")}>

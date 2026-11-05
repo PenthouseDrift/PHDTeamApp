@@ -89,6 +89,10 @@ export async function processSuccessfulPaymentReference(
   let listingId: string | undefined = undefined;
   let variantId: string | undefined = undefined;
   let itemLabel: string | undefined = undefined;
+  // Set when an admin marks a member's reserved item as paid at the desk. The
+  // reservation is the one to convert, and the activity log says it was paid in person.
+  let reservationId: string | undefined = undefined;
+  let paidInPerson = false;
   // Basket checkouts carry a lines[] array (one entry per listing). Single-item
   // checkouts leave this undefined and use listingId/variantId above.
   let lines:
@@ -112,6 +116,8 @@ export async function processSuccessfulPaymentReference(
         if (stored.listingId) listingId = String(stored.listingId);
         if (stored.variantId) variantId = String(stored.variantId);
         if (stored.itemLabel) itemLabel = String(stored.itemLabel);
+        if (stored.reservationId) reservationId = String(stored.reservationId);
+        if (stored.inPerson === true) paidInPerson = true;
         if (Array.isArray(stored.lines) && stored.lines.length > 0) {
           lines = stored.lines
             .map((l: Record<string, unknown>) => ({
@@ -362,7 +368,8 @@ export async function processSuccessfulPaymentReference(
         await consumeReservationsForPurchase(
           memberId,
           saleLines.map((l) => ({ listingId: l.listingId, variantId: l.variantId, quantity: l.quantity })),
-          orderId
+          orderId,
+          reservationId
         );
       } catch (e) {
         console.error("Marketplace reservation consume failed:", e);
@@ -378,7 +385,7 @@ export async function processSuccessfulPaymentReference(
         type: "purchase",
         memberId,
         memberName: finalName,
-        description: `Marketplace: ${activityLabel} (Click & Collect)`,
+        description: `Marketplace: ${activityLabel} (${paidInPerson ? "Click & Collect, paid in person" : "Click & Collect"})`,
         amount: saleTotal,
         currency: saleCurrency,
       });
