@@ -2,7 +2,7 @@ import { redis } from "@/lib/redis";
 import { bustAdminMembers } from "@/lib/cache-bust";
 
 /**
- * Card credits: a check-in at the track earns 1 credit, or 2 when the member has an active paid
+ * Pack credits: a check-in at the track earns 1 credit, or 2 when the member has an active paid
  * membership at the time, and opening a card pack spends 1. The balance is a field on the
  * `member:<id>` hash (like `checkinCount` and `aiGenerations`), so it can be read with the rest of
  * the member's data.

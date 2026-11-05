@@ -14,7 +14,7 @@ export interface Member {
   checkinCount?: number;
   /** Timestamp (ms) of the member's most recent check-in. */
   lastCheckIn?: number;
-  /** Card pack credits the member can spend (1 earned per track check-in). */
+  /** Pack credits the member can spend (1 earned per track check-in). */
   cardCredits?: number;
   /** P-Credits balance: the Penthouse TCG currency (bought, earned in Clash, or given by an admin). */
   pCredits?: number;

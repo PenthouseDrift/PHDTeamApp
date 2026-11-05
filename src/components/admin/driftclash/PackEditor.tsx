@@ -132,7 +132,7 @@ export function PackEditor({
   const [status, setStatus] = useState<TcgPackStatus>(pack?.status ?? "draft");
   /** Whether a live pack can be bought. Off means members can see the pack and what is in it, but not buy it. */
   const [purchasable, setPurchasable] = useState(pack?.purchasable !== false);
-  /** Whether a card credit can open this pack instead of paying its price. */
+  /** Whether a pack credit can open this pack instead of paying its price. */
   const [allowCardCredits, setAllowCardCredits] = useState(pack?.allowCardCredits !== false);
 
   const [adding, setAdding] = useState<FullArtTier | null>(null);
@@ -418,7 +418,7 @@ export function PackEditor({
     });
   }
 
-  /** Whether a card credit can open this pack. For a pack that exists this takes effect straight away; for a new pack it applies when created. */
+  /** Whether a pack credit can open this pack. For a pack that exists this takes effect straight away; for a new pack it applies when created. */
   function toggleCardCredits() {
     const next = !allowCardCredits;
     if (!pack) {
@@ -433,14 +433,14 @@ export function PackEditor({
         onNotify({
           text:
             res.data.allowCardCredits !== false
-              ? `Members can now open "${res.data.name}" with a card credit.`
+              ? `Members can now open "${res.data.name}" with a pack credit.`
               : `"${res.data.name}" can only be opened with P-Credits now.`,
         });
       } else onNotify({ text: res.error, error: true });
     });
   }
 
-  /** Whether a card credit can open the Standard Pack. Takes effect straight away, like the switch above it. */
+  /** Whether a pack credit can open the Standard Pack. Takes effect straight away, like the switch above it. */
   function toggleStandardCardCredits() {
     const next = standardConfig.allowCardCredits === false;
     startTransition(async () => {
@@ -457,7 +457,7 @@ export function PackEditor({
           text:
             res.data.allowCardCredits === false
               ? "The Standard Pack can only be opened with P-Credits now."
-              : "Members can now open the Standard Pack with a card credit.",
+              : "Members can now open the Standard Pack with a pack credit.",
         });
       } else onNotify({ text: res.error, error: true });
     });
@@ -519,11 +519,11 @@ export function PackEditor({
               onChange={toggleStandardCardCredits}
             />
             <span>
-              <span className="block text-sm font-black text-zinc-900 dark:text-zinc-100">Allow card credit opening</span>
+              <span className="block text-sm font-black text-zinc-900 dark:text-zinc-100">Allow pack credit opening</span>
               <span className="block text-xs text-zinc-500 dark:text-zinc-400">
                 {standardConfig.allowCardCredits !== false
-                  ? "Members can open the Standard Pack with 1 card credit (earned by checking in at the track), or buy one with P-Credits. Takes effect straight away."
-                  : "Members can only open the Standard Pack by paying its price in P-Credits when they open it. Card credits they already hold can't open it, but still work on any other pack that allows them. Takes effect straight away."}
+                  ? "Members can open the Standard Pack with 1 pack credit (earned by checking in at the track), or buy one with P-Credits. Takes effect straight away."
+                  : "Members can only open the Standard Pack by paying its price in P-Credits when they open it. Pack credits they already hold can't open it, but still work on any other pack that allows them. Takes effect straight away."}
               </span>
             </span>
           </label>
@@ -593,11 +593,11 @@ export function PackEditor({
               onChange={toggleCardCredits}
             />
             <span>
-              <span className="block text-sm font-black text-zinc-900 dark:text-zinc-100">Allow card credit opening</span>
+              <span className="block text-sm font-black text-zinc-900 dark:text-zinc-100">Allow pack credit opening</span>
               <span className="block text-xs text-zinc-500 dark:text-zinc-400">
                 {allowCardCredits
-                  ? "Members can open this pack with 1 card credit (earned by checking in at the track), as well as with P-Credits."
-                  : "Members can only open this pack with P-Credits. Tick this to let them use a card credit too."}
+                  ? "Members can open this pack with 1 pack credit (earned by checking in at the track), as well as with P-Credits."
+                  : "Members can only open this pack with P-Credits. Tick this to let them use a pack credit too."}
                 {pack ? "" : " Applies when the pack is created."}
               </span>
             </span>

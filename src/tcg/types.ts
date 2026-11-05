@@ -72,7 +72,7 @@ export interface TcgCustomPack {
    */
   purchasable?: boolean;
   /**
-   * Whether a card credit (earned by checking in, or bought with a Standard Pack) can open this pack instead of paying
+   * Whether a pack credit (earned by checking in, or bought with a Standard Pack) can open this pack instead of paying
    * its price in P-Credits. On unless an admin turns it off for this pack; a pack that never had the setting is on.
    */
   allowCardCredits?: boolean;

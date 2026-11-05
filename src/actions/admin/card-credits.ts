@@ -12,13 +12,13 @@ import type { ActionResult } from "@/types";
 const MAX_CHANGE = 50;
 
 /**
- * Admin only: add or remove card pack credits on a member's account (for example to reward someone,
+ * Admin only: add or remove pack credits on a member's account (for example to reward someone,
  * or put right a missed check-in). Logged to the activity feed with who it was for.
  */
 export async function adminAdjustCardCredits(memberId: string, delta: number): Promise<ActionResult<{ cardCredits: number }>> {
   try {
     const session = await auth();
-    if (session?.user?.role !== "admin") return { success: false, error: "Only admins can change card credits" };
+    if (session?.user?.role !== "admin") return { success: false, error: "Only admins can change pack credits" };
 
     const change = Math.trunc(Number(delta));
     if (!Number.isFinite(change) || change === 0 || Math.abs(change) > MAX_CHANGE) {
@@ -37,7 +37,7 @@ export async function adminAdjustCardCredits(memberId: string, delta: number): P
       type: "purchase",
       memberId,
       memberName: typeof profile.name === "string" && profile.name ? profile.name : "Member",
-      description: `[ADMIN ACTION] ${change > 0 ? "Added" : "Removed"} ${Math.abs(change)}x card pack credit(s) manually (now ${cardCredits})`,
+      description: `[ADMIN ACTION] ${change > 0 ? "Added" : "Removed"} ${Math.abs(change)}x pack credit(s) manually (now ${cardCredits})`,
       amount: 0,
       currency: "GBP",
       isDev: false,
@@ -47,6 +47,6 @@ export async function adminAdjustCardCredits(memberId: string, delta: number): P
     revalidatePath("/admin/members");
     return { success: true, data: { cardCredits } };
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : "Could not change the card credits" };
+    return { success: false, error: error instanceof Error ? error.message : "Could not change the pack credits" };
   }
 }

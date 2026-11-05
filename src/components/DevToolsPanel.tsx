@@ -23,7 +23,7 @@ interface DevToolsPanelProps {
   realRole: string;
   /** Whether the dev "force self check-in" override is active. */
   forceSelfCheckin: boolean;
-  /** The signed-in user's card credits, for the test shortcuts below. */
+  /** The signed-in user's pack credits, for the test shortcuts below. */
   cardCredits: number;
 }
 
@@ -164,7 +164,7 @@ export function DevToolsPanel({
               </DevActionButton>
             </div>
             <p className="mb-1 mt-3 flex items-center justify-between text-[10px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
-              <span>Card credits</span>
+              <span>Pack credits</span>
               <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] normal-case text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
                 You have {cardCredits}
               </span>

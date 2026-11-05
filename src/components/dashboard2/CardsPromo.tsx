@@ -28,7 +28,7 @@ export function CardsPromo({ credits }: { credits: number }) {
         <div className="min-w-0 flex-1 space-y-1">
           <p className="text-xs font-bold uppercase tracking-widest text-amber-400">New · Collect your cards</p>
           <h2 className="text-lg font-black leading-tight">
-            {has ? `You have ${credits} card credit${credits === 1 ? "" : "s"}` : "Earn cards by checking in"}
+            {has ? `You have ${credits} pack credit${credits === 1 ? "" : "s"}` : "Earn cards by checking in"}
           </h2>
           <p className="text-sm text-zinc-300">
             {has

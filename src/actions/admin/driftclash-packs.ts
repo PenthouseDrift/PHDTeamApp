@@ -125,7 +125,7 @@ export async function savePackConfigAction(input: PackConfig): Promise<ActionRes
     if (problem) return { success: false, error: problem };
 
     if (config.packId === STANDARD_PACK_ID) {
-      // The card credit setting has its own switch, so saving the setup never changes it (a stale editor can't undo it).
+      // The pack credit setting has its own switch, so saving the setup never changes it (a stale editor can't undo it).
       const current = await loadPackConfig(STANDARD_PACK_ID).catch(() => null);
       if (current?.allowCardCredits === false) config.allowCardCredits = false;
       else delete config.allowCardCredits;
@@ -155,7 +155,7 @@ export async function setStandardPackEnabledAction(enabled: boolean): Promise<Ac
 }
 
 /**
- * Let members open the Standard Pack with a card credit as well as with P-Credits (the default), or stop letting them.
+ * Let members open the Standard Pack with a pack credit as well as with P-Credits (the default), or stop letting them.
  * Switched off, the Standard Pack can only be opened by paying its price in P-Credits. Nothing else about it changes.
  */
 export async function setStandardPackCardCreditsAction(allow: boolean): Promise<ActionResult<PackConfig>> {
@@ -170,8 +170,8 @@ export async function setStandardPackCardCreditsAction(allow: boolean): Promise<
     revalidatePath("/cards/new");
     return { success: true, data: saved };
   } catch (error) {
-    console.error("[driftclash-packs] standard card credit setting failed:", error);
-    return { success: false, error: error instanceof Error ? error.message : "Could not change the card credit setting" };
+    console.error("[driftclash-packs] standard pack credit setting failed:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Could not change the pack credit setting" };
   }
 }
 
@@ -184,7 +184,7 @@ export interface SavePackInput {
   status: TcgPackStatus;
   /** Whether a live pack can be bought. Defaults to the pack's current setting, or yes for a new pack. */
   purchasable?: boolean;
-  /** Whether a card credit can open this pack. Defaults to the pack's current setting, or yes for a new pack. */
+  /** Whether a pack credit can open this pack. Defaults to the pack's current setting, or yes for a new pack. */
   allowCardCredits?: boolean;
   cardsPerPack?: number;
   config: PackConfig;
@@ -412,7 +412,7 @@ export async function simulatePackStatsAction(input: {
 }
 
 /**
- * Let members open this pack with a card credit instead of paying P-Credits (the default for every pack), or stop letting them. Doesn't change whether
+ * Let members open this pack with a pack credit instead of paying P-Credits (the default for every pack), or stop letting them. Doesn't change whether
  * the pack is live or buyable, or anything else about it.
  */
 export async function setPackCardCreditsAction(packId: string, allow: boolean): Promise<ActionResult<TcgCustomPackWithCards>> {
@@ -431,8 +431,8 @@ export async function setPackCardCreditsAction(packId: string, allow: boolean): 
     revalidate();
     return { success: true, data: hydrated };
   } catch (error) {
-    console.error("[driftclash-packs] card credit setting failed:", error);
-    return { success: false, error: error instanceof Error ? error.message : "Could not change the card credit setting" };
+    console.error("[driftclash-packs] pack credit setting failed:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Could not change the pack credit setting" };
   }
 }
 

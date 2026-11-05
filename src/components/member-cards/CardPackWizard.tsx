@@ -105,22 +105,22 @@ interface WizardProps {
   partCategories?: PartCategory[];
   /**
    * Opening a store pack that needs a car (instead of a Standard Pack). It costs P-Credits rather than
-   * a card credit, and is opened with the same car photo or community cars choice.
+   * a pack credit, and is opened with the same car photo or community cars choice.
    */
   customPack?: {
     id: string;
     name: string;
     price: number;
     pCredits: number;
-    /** The pack can be opened with a card credit as well as with its price in P-Credits. */
+    /** The pack can be opened with a pack credit as well as with its price in P-Credits. */
     allowCardCredits?: boolean;
-        /** How many card credits the member has to spend. */
+        /** How many pack credits the member has to spend. */
     cardCredits?: number;
   };
   /**
-   * Opening a Standard Pack: its price and the member's P-Credits, so that when they run out of card credits they can
+   * Opening a Standard Pack: its price and the member's P-Credits, so that when they run out of pack credits they can
    * buy another Standard Pack and open it straight away. With `allowCardCredits` false the pack can't be opened with a
-   * card credit at all: it is paid for with its price in P-Credits when it is opened.
+   * pack credit at all: it is paid for with its price in P-Credits when it is opened.
    */
   standardPack?: { price: number; pCredits: number; allowCardCredits?: boolean };
 }
@@ -240,13 +240,13 @@ function CardPackWizardForm({
   remembered,
 }: WizardProps & { remembered: RememberedPack | null }) {
   const [credits, setCredits] = useState(initialCredits);
-  // The Standard Pack with card credit opening switched off: paid for in P-Credits at the moment it is opened.
+  // The Standard Pack with pack credit opening switched off: paid for in P-Credits at the moment it is opened.
   const payStandardWithPCredits = Boolean(!customPack && standardPack && standardPack.allowCardCredits === false);
   // What the member can still spend, kept up to date as packs are opened so "open another" shows the right choices.
   const [pBalance, setPBalance] = useState(customPack?.pCredits ?? standardPack?.pCredits ?? 0);
   const [cardCreditBalance, setCardCreditBalance] = useState(customPack?.cardCredits ?? 0);
   const [buying, setBuying] = useState(false);
-  // How a store pack is paid for. A member who has a card credit and a pack that takes one starts on the card credit.
+  // How a store pack is paid for. A member who has a pack credit and a pack that takes one starts on the pack credit.
   const [payWith, setPayWith] = useState<"pcredits" | "cardCredit">(
     customPack?.allowCardCredits && (customPack.cardCredits ?? 0) > 0 ? "cardCredit" : "pcredits"
   );
@@ -476,7 +476,7 @@ function CardPackWizardForm({
     });
   }
 
-    /** Out of card credits: buy another Standard Pack with P-Credits, then open it with the same answers. */
+    /** Out of pack credits: buy another Standard Pack with P-Credits, then open it with the same answers. */
     async function buyStandardPack(): Promise<boolean> {
     if (!standardPack) return false;
     setBuying(true);
@@ -555,9 +555,9 @@ function CardPackWizardForm({
   if (mode === "form" && credits <= 0 && !payStandardWithPCredits) {
     return (
       <div className={`${panel} space-y-4 text-center`}>
-        <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">You need a card credit</h2>
+        <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">You need a pack credit</h2>
                 <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          You earn 1 card credit every time you check in at the track, or 2 with a membership. Check in on your next visit and come back to open a pack.
+          You earn 1 pack credit every time you check in at the track, or 2 with a membership. Check in on your next visit and come back to open a pack.
           {standardPack && standardPack.price > 0 && pBalance >= standardPack.price ? " Or use your P-Credits to buy a Standard Pack now." : ""}
         </p>
         {error && (
@@ -660,7 +660,7 @@ function CardPackWizardForm({
                   </Link>
                                     {customPack && (
                     <>
-                      {/* A store pack: another one, paid for with P-Credits or a card credit, whichever the member has. */}
+                      {/* A store pack: another one, paid for with P-Credits or a pack credit, whichever the member has. */}
                       {pBalance >= customPack.price && (
                         <button type="button" className={primary} onClick={() => open("pcredits")} disabled={pending}>
                           Open another · {customPack.price.toLocaleString()} P-Credits
@@ -673,7 +673,7 @@ function CardPackWizardForm({
                           onClick={() => open("cardCredit")}
                           disabled={pending}
                         >
-                          Open another with a card credit ({cardCreditBalance} left)
+                          Open another with a pack credit ({cardCreditBalance} left)
                         </button>
                       )}
                     </>
@@ -1167,7 +1167,7 @@ function CardPackWizardForm({
                   <>
                     {payStandardWithPCredits && standardPack
                       ? `It costs ${standardPack.price.toLocaleString()} P-Credits (you have ${pBalance.toLocaleString()}). If the pack can't be opened, you get them back.`
-                      : `It costs 1 card credit (you have ${credits}).`}{" "}
+                      : `It costs 1 pack credit (you have ${credits}).`}{" "}
                     Every Standard Pack contains{" "}
                 {skipPersonalCar ? (
                   <>
@@ -1188,7 +1188,7 @@ function CardPackWizardForm({
                 <legend className="mb-1 text-sm font-bold text-zinc-900 dark:text-zinc-100">How would you like to pay?</legend>
                 {(
                   [
-                    ["cardCredit", `Use 1 card credit (you have ${customPack.cardCredits ?? 0})`, (customPack.cardCredits ?? 0) < 1],
+                    ["cardCredit", `Use 1 pack credit (you have ${customPack.cardCredits ?? 0})`, (customPack.cardCredits ?? 0) < 1],
                     ["pcredits", `Pay ${customPack.price.toLocaleString()} P-Credits (you have ${customPack.pCredits.toLocaleString()})`, customPack.pCredits < customPack.price],
                   ] as const
                 ).map(([value, label, unavailable]) => (

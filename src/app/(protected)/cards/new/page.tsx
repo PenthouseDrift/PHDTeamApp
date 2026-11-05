@@ -42,8 +42,8 @@ export default async function NewCardPage({ searchParams }: { searchParams: Prom
     };
   }
 
-    // A Standard Pack: its price and the member's P-Credits, so the member can buy another one when their card credits run out.
-  // With card credit opening switched off for the Standard Pack, it is paid for in P-Credits when it is opened.
+    // A Standard Pack: its price and the member's P-Credits, so the member can buy another one when their pack credits run out.
+  // With pack credit opening switched off for the Standard Pack, it is paid for in P-Credits when it is opened.
   const standardPack = customPack
     ? undefined
     : await Promise.all([getTcgStoreConfig(), getPCredits(userId), standardPackAllowsCardCredits()]).then(
@@ -99,7 +99,7 @@ export default async function NewCardPage({ searchParams }: { searchParams: Prom
             </p>
           ) : (
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              You have {credits} card credit{credits === 1 ? "" : "s"}. Earn 1 each time you check in at the track, or 2 with a membership.
+              You have {credits} pack credit{credits === 1 ? "" : "s"}. Earn 1 each time you check in at the track, or 2 with a membership.
             </p>
           )}
         </div>
@@ -109,7 +109,7 @@ export default async function NewCardPage({ searchParams }: { searchParams: Prom
           nameOptions={nameOptions}
           recentTeams={recentTeams}
           cars={cars}
-          // A store pack is paid for with P-Credits when it is opened, so it never needs a card credit.
+          // A store pack is paid for with P-Credits when it is opened, so it never needs a pack credit.
           initialCredits={customPack ? 1 : credits}
           customPack={customPack}
           standardPack={standardPack}

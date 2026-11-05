@@ -112,7 +112,7 @@ export interface PackConfig {
   /** How many Repair Kit (Maintenance Consumable) cards every opening of this pack also gives. Left out means none. */
   repairCards?: number;
   /**
-   * Standard Pack only: whether a card credit can open the pack, as well as its price in P-Credits. Left out means yes, so
+   * Standard Pack only: whether a pack credit can open the pack, as well as its price in P-Credits. Left out means yes, so
    * nothing changes until an admin switches it off. A custom pack keeps this setting on the pack itself, not here.
    */
   allowCardCredits?: boolean;
@@ -409,7 +409,7 @@ export function sanitizePackConfig(input: unknown): PackConfig | null {
       ...(bonus ? { bonus } : {}),
       ...(!isStandard && crewCards !== undefined ? { crewCards } : {}),
       ...(!isStandard && repairCards !== undefined ? { repairCards } : {}),
-      // Only an explicit "no" is kept; a Standard Pack config saved before this existed still takes card credits.
+      // Only an explicit "no" is kept; a Standard Pack config saved before this existed still takes pack credits.
       ...(isStandard && v.allowCardCredits === false ? { allowCardCredits: false } : {}),
       updatedAt: Number(v.updatedAt) || 0,
     };

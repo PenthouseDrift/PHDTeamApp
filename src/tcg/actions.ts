@@ -488,7 +488,7 @@ export async function buyStandardPackWithPCredits(): Promise<
   const user = await currentUser();
   if (!user) return { success: false, error: "Please sign in to buy a pack." };
 
-  // With card credit opening switched off, a bought credit couldn't open the Standard Pack, so don't sell one. The pack
+  // With pack credit opening switched off, a bought credit couldn't open the Standard Pack, so don't sell one. The pack
   // is paid for with P-Credits when it is opened instead.
   if (!(await standardPackAllowsCardCredits())) {
     return {
@@ -531,11 +531,11 @@ export async function buyStandardPackWithPCredits(): Promise<
   }
 }
 
-/** How a store pack is paid for: its P-Credit price, or one card credit when the pack allows that. */
+/** How a store pack is paid for: its P-Credit price, or one pack credit when the pack allows that. */
 export type PackPayment = "pcredits" | "cardCredit";
 
 /**
- * Take payment for opening a store pack: its price in P-Credits, or 1 card credit if the member asked for that and the
+ * Take payment for opening a store pack: its price in P-Credits, or 1 pack credit if the member asked for that and the
  * pack allows it. Returns a way to give the same thing back if the pack then fails to open.
  */
 async function chargeForPack(
@@ -544,8 +544,8 @@ async function chargeForPack(
   payWith: PackPayment | undefined
 ): Promise<{ ok: true; pCredits: number; refund: () => Promise<void> } | { ok: false; error: string }> {
   if (payWith === "cardCredit") {
-    if (!pack.allowCardCredits) return { ok: false, error: `"${pack.name}" can't be opened with a card credit.` };
-    if (!(await spendCardCredit(userId))) return { ok: false, error: "You don't have a card credit to use." };
+    if (!pack.allowCardCredits) return { ok: false, error: `"${pack.name}" can't be opened with a pack credit.` };
+    if (!(await spendCardCredit(userId))) return { ok: false, error: "You don't have a pack credit to use." };
     return { ok: true, pCredits: await getPCredits(userId), refund: () => refundCardCredit(userId) };
   }
   const price = getEffectivePrice(pack.price, pack.salePrice);
@@ -723,7 +723,7 @@ export async function buyAndOpenCustomPack(
       },
     };
   } catch (error) {
-    // Give back the P-Credits or the card credit if rolling/saving failed
+    // Give back the P-Credits or the pack credit if rolling/saving failed
     await charge.refund().catch(() => {});
     console.error("[tcg] buyAndOpenCustomPack failed:", error);
     return {
@@ -743,7 +743,7 @@ export interface OpenCustomPackInput {
   referenceUrl: string;
   /** Draw every generated card from community cars instead of the member's own car. */
   skipPersonalCar?: boolean;
-  /** How the pack is paid for: its P-Credit price (the default), or a card credit if the pack allows it. */
+  /** How the pack is paid for: its P-Credit price (the default), or a pack credit if the pack allows it. */
   payWith?: PackPayment;
 }
 

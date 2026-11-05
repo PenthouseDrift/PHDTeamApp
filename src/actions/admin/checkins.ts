@@ -103,7 +103,7 @@ export async function submitSelfCheckIn(memberId: string, memberName: string): P
 
     await redis.rpush(`checkins:${today}`, entry);
     await redis.set(dedupKey, "1", { ex: checkInDedupTtlSeconds() });
-    // Counts the visit and earns the day's card credit, like every other check-in path.
+    // Counts the visit and earns the day's pack credit, like every other check-in path.
     await recordCheckInCount(memberId, now);
 
     await logActivity({
@@ -124,7 +124,7 @@ export async function submitSelfCheckIn(memberId: string, memberName: string): P
 }
 
 /**
- * Automatically check in all admins (and award their daily card credits) whenever there is a
+ * Automatically check in all admins (and award their daily pack credits) whenever there is a
  * non-cancelled event scheduled for today. Idempotent: safe to call repeatedly on any page load
  * or event mutation; each admin is checked in at most once per day.
  */

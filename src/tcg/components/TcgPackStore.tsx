@@ -36,7 +36,7 @@ export function TcgPackStore({
   packCredits: number;
   standardPackPrice: number;
   standardPackSalePrice?: number | null;
-  /** False when an admin has switched card credit opening off for the Standard Pack: it is paid for in P-Credits when opened. */
+  /** False when an admin has switched pack credit opening off for the Standard Pack: it is paid for in P-Credits when opened. */
   standardAllowsCardCredits?: boolean;
   customPacks: TcgCustomPackWithCards[];
   isAdmin?: boolean;
@@ -87,7 +87,7 @@ export function TcgPackStore({
       if (res.success) {
         setInspectPack(null);
         onCustomCardsPulled(res.data.cards, res.data.pCredits);
-        // A card credit leaves the P-Credits alone and takes one pack credit, so the pack credit balance is updated too.
+        // A pack credit leaves the P-Credits alone and takes one pack credit, so the pack credit balance is updated too.
         onBalancesChange({ pCredits: res.data.pCredits, packCredits: res.data.packCredits });
         setOpeningState({
           packName: res.data.packName,
@@ -328,11 +328,11 @@ export function TcgPackStore({
                       pack.needsGeneration ? (
                         packCredits > 0 ? (
                           <Link href={`/cards/new?pack=${pack.id}`} className={`${secondaryBtn} basis-full text-xs`}>
-                            Choose car &amp; use a card credit ({packCredits} left)
+                            Choose car &amp; use a pack credit ({packCredits} left)
                           </Link>
                         ) : (
                           <button type="button" disabled className={`${secondaryBtn} basis-full text-xs`}>
-                            Card credit: none left
+                            Pack credit: none left
                           </button>
                         )
                       ) : (
@@ -342,7 +342,7 @@ export function TcgPackStore({
                           disabled={pending || packCredits < 1}
                           className={`${secondaryBtn} basis-full text-xs`}
                         >
-                          {pending ? "Opening…" : packCredits > 0 ? `Use a card credit (${packCredits} left)` : "Card credit: none left"}
+                          {pending ? "Opening…" : packCredits > 0 ? `Use a pack credit (${packCredits} left)` : "Pack credit: none left"}
                         </button>
                       )
                     )}
@@ -643,11 +643,11 @@ export function TcgPackStore({
                     inspectPack.needsGeneration ? (
                       packCredits > 0 ? (
                         <Link href={`/cards/new?pack=${inspectPack.id}`} className={primaryBtn}>
-                          Choose car &amp; use a card credit ({packCredits} left)
+                          Choose car &amp; use a pack credit ({packCredits} left)
                         </Link>
                       ) : (
                         <span className="rounded-xl border border-zinc-700 px-4 py-2 text-sm font-bold text-zinc-300">
-                          Card credit: none left
+                          Pack credit: none left
                         </span>
                       )
                     ) : (
@@ -657,7 +657,7 @@ export function TcgPackStore({
                         disabled={pending || packCredits < 1}
                         className={primaryBtn}
                       >
-                        {pending ? "Opening Pack…" : packCredits > 0 ? `Use a card credit (${packCredits} left)` : "Card credit: none left"}
+                        {pending ? "Opening Pack…" : packCredits > 0 ? `Use a pack credit (${packCredits} left)` : "Pack credit: none left"}
                       </button>
                     )
                   )}
@@ -733,7 +733,7 @@ export function TcgPackStore({
                 </div>
               )}
               {openingState.revealed && (() => {
-                // Another of the same pack, paid for with P-Credits or a card credit, whichever the member has.
+                // Another of the same pack, paid for with P-Credits or a pack credit, whichever the member has.
                 const again = openingState.pack;
                 const againPrice = getEffectivePrice(again.price, again.salePrice);
                 const canPay = pCredits >= againPrice;
@@ -764,7 +764,7 @@ export function TcgPackStore({
                         }}
                         className={canPay ? "min-h-11 rounded-xl border border-zinc-700 bg-zinc-900 px-5 text-sm font-bold text-zinc-100 hover:bg-zinc-800" : primaryBtn}
                       >
-                        Open another with a card credit ({packCredits} left)
+                        Open another with a pack credit ({packCredits} left)
                       </button>
                     )}
                   </div>

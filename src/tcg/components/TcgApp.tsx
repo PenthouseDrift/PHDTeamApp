@@ -112,7 +112,7 @@ export function TcgApp({
   initialPCredits: number;
   initialStandardPackPrice: number;
   initialStandardPackSalePrice?: number | null;
-  /** False when card credit opening is switched off for the Standard Pack (it is paid for in P-Credits when opened). */
+  /** False when pack credit opening is switched off for the Standard Pack (it is paid for in P-Credits when opened). */
   initialStandardAllowsCardCredits?: boolean;
   initialPCreditBundles?: PCreditBundle[];
   initialCustomPacks: TcgCustomPackWithCards[];

@@ -62,7 +62,7 @@ export default async function ProtectedLayout({
   const realRole = sessionUserWithReal.realRole ?? session.user.role ?? "member";
   const forceSelfCheckin = isDev ? await getForceSelfCheckIn() : false;
   const impersonateVariant = isDev ? await getImpersonation() : null;
-  // Shown in the dev panel's card credit shortcuts (development only, so production never reads it here).
+  // Shown in the dev panel's pack credit shortcuts (development only, so production never reads it here).
   const devCardCredits = isDev ? await getCardCredits(session.user.id) : 0;
 
   // First-run question: should buying a pass check you in automatically? Only

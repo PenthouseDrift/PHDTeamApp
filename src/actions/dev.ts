@@ -132,7 +132,7 @@ export async function devActivateMembership() {
 }
 
 /**
- * DEV ONLY: give the signed-in user card credits without a track check-in, so the card pack flow
+ * DEV ONLY: give the signed-in user pack credits without a track check-in, so the card pack flow
  * can be tried straight away. Credits are normally earned by checking in (see lib/card-credits.ts).
  */
 export async function devAddCardCredits(amount = 1) {
@@ -145,7 +145,7 @@ export async function devAddCardCredits(amount = 1) {
   return { success: true as const };
 }
 
-/** DEV ONLY: set the signed-in user's card credits back to zero. */
+/** DEV ONLY: set the signed-in user's pack credits back to zero. */
 export async function devResetCardCredits() {
   if (process.env.NODE_ENV !== "development") return { success: false as const };
   const session = await auth();

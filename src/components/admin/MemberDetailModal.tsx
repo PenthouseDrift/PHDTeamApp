@@ -123,7 +123,7 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate, ch
       const res = await adminAdjustCardCredits(m.id, delta);
       if (res.success) {
         setLocalCardCredits(res.data.cardCredits);
-        onUpdate({ type: "success", message: `Card pack credits updated for ${m.name}: now ${res.data.cardCredits}` });
+        onUpdate({ type: "success", message: `Pack credits updated for ${m.name}: now ${res.data.cardCredits}` });
       } else {
         onUpdate({ type: "error", message: res.error });
       }
@@ -636,17 +636,17 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate, ch
                 </div>
               </div>
 
-              {/* Card pack credits: earned by checking in, spent on a card pack */}
+              {/* Pack credits: earned by checking in, spent on a card pack */}
               <div className="rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Card pack credits</span>
+                  <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Pack credits</span>
                   <p className="text-2xl font-black text-zinc-900 dark:text-zinc-100" aria-live="polite">{localCardCredits}</p>
                 </div>
                 <div className="flex gap-1.5">
                   <button
                     onClick={() => handleAdjustCardCredits(-1)}
                     disabled={isPending || localCardCredits <= 0}
-                    aria-label="Remove 1 card pack credit"
+                    aria-label="Remove 1 pack credit"
                     className="flex-1 py-1.5 text-sm font-bold rounded-md bg-white dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300 hover:bg-red-50 hover:text-red-600 hover:border-red-200 disabled:opacity-40 transition-colors"
                   >
                     −1
@@ -654,7 +654,7 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate, ch
                   <button
                     onClick={() => handleAdjustCardCredits(1)}
                     disabled={isPending}
-                    aria-label="Add 1 card pack credit"
+                    aria-label="Add 1 pack credit"
                     className="flex-1 py-1.5 text-sm font-bold rounded-md bg-white dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300 hover:bg-green-50 hover:text-green-600 hover:border-green-200 disabled:opacity-40 transition-colors"
                   >
                     +1
@@ -662,7 +662,7 @@ export function MemberDetailModal({ member: initialMember, onClose, onUpdate, ch
                   <button
                     onClick={() => handleAdjustCardCredits(5)}
                     disabled={isPending}
-                    aria-label="Add 5 card pack credits"
+                    aria-label="Add 5 pack credits"
                     className="flex-1 py-1.5 text-sm font-bold rounded-md bg-white dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300 hover:bg-green-50 hover:text-green-600 hover:border-green-200 disabled:opacity-40 transition-colors"
                   >
                     +5

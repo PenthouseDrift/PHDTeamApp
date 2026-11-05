@@ -60,7 +60,7 @@ import { getEffectivePrice } from "@/tcg/config";
 import type { ActionResult } from "@/types";
 
 /**
- * Member card packs. A member spends 1 card credit (earned by checking in at the track: 1, or 2 with a membership) to open a
+ * Member card packs. A member spends 1 pack credit (earned by checking in at the track: 1, or 2 with a membership) to open a
  * pack: the server rolls the rarity, art styles and stats, draws the art with Gemini, and saves the
  * card to the member's collection. Nothing about the roll is ever decided by the browser.
  *
@@ -176,7 +176,7 @@ function friendlyError(error: unknown): string {
 
 // ── Reading ─────────────────────────────────────────────────────────────────
 
-/** The signed-in member's card credits. */
+/** The signed-in member's pack credits. */
 export async function getMyCardCredits(): Promise<number> {
   const user = await currentUser();
   return user ? getCardCredits(user.id) : 0;
@@ -217,13 +217,13 @@ export interface NewCardInput {
   /** If true, the user has no car and selects to pull 2 community car cards instead of generating their own car. */
   skipPersonalCar?: boolean;
   /**
-   * How the pack is paid for: 1 card credit (the default), or the Standard Pack's price in P-Credits. A card credit is
-   * refused while an admin has switched card credit opening off for the Standard Pack; P-Credits always work.
+   * How the pack is paid for: 1 pack credit (the default), or the Standard Pack's price in P-Credits. A pack credit is
+   * refused while an admin has switched pack credit opening off for the Standard Pack; P-Credits always work.
    */
   payWith?: "cardCredit" | "pcredits";
 }
 
-/** Pay for the pack (a card credit, or its price in P-Credits), roll it, draw the card and add it to the collection. */
+/** Pay for the pack (a pack credit, or its price in P-Credits), roll it, draw the card and add it to the collection. */
 export async function openCardPack(
   input: NewCardInput
 ): Promise<
@@ -234,7 +234,7 @@ export async function openCardPack(
     featured: MemberCard | null;
     maintenance: MemberCard | null;
     credits: number;
-    /** The member's P-Credits after paying (unchanged when a card credit was used). */
+    /** The member's P-Credits after paying (unchanged when a pack credit was used). */
     pCredits: number;
   }>
 > {
@@ -252,12 +252,12 @@ export async function openCardPack(
     return { success: false, error: "Choose or upload a photo of your car first.", field: "referenceUrl" };
   }
 
-  // Checked on the server, whatever the browser shows: with card credit opening switched off, only P-Credits can pay.
+  // Checked on the server, whatever the browser shows: with pack credit opening switched off, only P-Credits can pay.
   const payWithPCredits = input?.payWith === "pcredits";
   if (!payWithPCredits && !(await standardPackAllowsCardCredits())) {
     return {
       success: false,
-      error: "The Standard Pack can't be opened with a card credit right now. Pay with P-Credits instead.",
+      error: "The Standard Pack can't be opened with a pack credit right now. Pay with P-Credits instead.",
     };
   }
 
@@ -265,7 +265,7 @@ export async function openCardPack(
   const locked = await redis.set(lockKey(user.id), "1", { nx: true, ex: LOCK_SECONDS });
   if (!locked) return { success: false, error: "A pack is already being opened. Give it a moment." };
 
-  // Gives back whatever was taken (the card credit or the P-Credits) if the pack then fails to open.
+  // Gives back whatever was taken (the pack credit or the P-Credits) if the pack then fails to open.
   let refund: (() => Promise<void>) | null = null;
   try {
     if (payWithPCredits) {
@@ -281,7 +281,7 @@ export async function openCardPack(
       refund = async () => void (await grantPCredits(user.id, price));
     } else {
       if (!(await spendCardCredit(user.id))) {
-        return { success: false, error: "You don't have a card credit. Check in at the track to earn one." };
+        return { success: false, error: "You don't have a pack credit. Check in at the track to earn one." };
       }
       refund = () => refundCardCredit(user.id);
     }
