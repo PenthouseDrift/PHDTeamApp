@@ -90,6 +90,7 @@ export function TcgApp({
   initialPCredits,
   initialStandardPackPrice,
   initialStandardPackSalePrice = null,
+  initialStandardAllowsCardCredits = true,
   initialPCreditBundles = P_CREDIT_BUNDLES,
   initialCustomPacks,
   initialListings,
@@ -111,6 +112,8 @@ export function TcgApp({
   initialPCredits: number;
   initialStandardPackPrice: number;
   initialStandardPackSalePrice?: number | null;
+  /** False when card credit opening is switched off for the Standard Pack (it is paid for in P-Credits when opened). */
+  initialStandardAllowsCardCredits?: boolean;
   initialPCreditBundles?: PCreditBundle[];
   initialCustomPacks: TcgCustomPackWithCards[];
   initialListings: TcgMarketListing[];
@@ -397,6 +400,7 @@ export function TcgApp({
           packCredits={packCredits}
           standardPackPrice={initialStandardPackPrice}
           standardPackSalePrice={initialStandardPackSalePrice}
+          standardAllowsCardCredits={initialStandardAllowsCardCredits}
           customPacks={initialCustomPacks}
           isAdmin={isAdmin}
           onBalancesChange={({ pCredits: nextP, packCredits: nextPack }) => {

@@ -40,6 +40,7 @@ import {
   setPackCardCreditsAction,
   setPackPurchasableAction,
   setPackStatusAction,
+  setStandardPackCardCreditsAction,
   setStandardPackEnabledAction,
 } from "@/actions/admin/driftclash-packs";
 import { updateCustomPackPricingAction } from "@/tcg/actions";
@@ -439,6 +440,29 @@ export function PackEditor({
     });
   }
 
+  /** Whether a card credit can open the Standard Pack. Takes effect straight away, like the switch above it. */
+  function toggleStandardCardCredits() {
+    const next = standardConfig.allowCardCredits === false;
+    startTransition(async () => {
+      const res = await setStandardPackCardCreditsAction(next);
+      if (res.success) {
+        onStandardConfig(res.data);
+        // Keep the open editor's copy in step, so saving the setup below can't put the old value back.
+        setDraft((d) => {
+          const { allowCardCredits: _previous, ...rest } = d;
+          void _previous;
+          return res.data.allowCardCredits === false ? { ...rest, allowCardCredits: false } : rest;
+        });
+        onNotify({
+          text:
+            res.data.allowCardCredits === false
+              ? "The Standard Pack can only be opened with P-Credits now."
+              : "Members can now open the Standard Pack with a card credit.",
+        });
+      } else onNotify({ text: res.error, error: true });
+    });
+  }
+
   function remove() {
     if (!pack || !window.confirm(`Delete the pack "${pack.name}"? This can't be undone.`)) return;
     startTransition(async () => {
@@ -486,6 +510,23 @@ export function PackEditor({
               ? "ON: after a card's rarity is rolled, the entries on that rarity can take its place."
               : "OFF: whatever is set up below is ignored and the Standard Pack rolls exactly as it always has. You can set things up first and switch on when ready."}
           </p>
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-800/60">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-5 w-5 shrink-0 accent-amber-500"
+              checked={standardConfig.allowCardCredits !== false}
+              disabled={pending}
+              onChange={toggleStandardCardCredits}
+            />
+            <span>
+              <span className="block text-sm font-black text-zinc-900 dark:text-zinc-100">Allow card credit opening</span>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+                {standardConfig.allowCardCredits !== false
+                  ? "Members can open the Standard Pack with 1 card credit (earned by checking in at the track), or buy one with P-Credits. Takes effect straight away."
+                  : "Members can only open the Standard Pack by paying its price in P-Credits when they open it. Card credits they already hold can't open it, but still work on any other pack that allows them. Takes effect straight away."}
+              </span>
+            </span>
+          </label>
         </section>
       ) : (
         <section className={panel}>

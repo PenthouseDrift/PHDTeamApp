@@ -19,7 +19,12 @@ import {
 import { sanitizeFullArtCard } from "@/lib/full-art-card";
 import { rollAndDrawSlot, slotOverrides, type DrawnSlot } from "@/lib/pack-draw";
 import { STANDARD_PACK_ID } from "@/lib/pack-config";
-import { loadPackConfig, loadStandardPackRuntime, rollPackBonus } from "@/lib/pack-config-store";
+import {
+  loadPackConfig,
+  loadStandardPackRuntime,
+  rollPackBonus,
+  standardPackAllowsCardCredits,
+} from "@/lib/pack-config-store";
 import { buildBonusCard } from "@/lib/pack-bonus";
 import { crewDefinitionToCardData, rollCrewCardDefinition } from "@/lib/crew-cards";
 import {
@@ -42,7 +47,16 @@ import { updateCarParts } from "@/actions/cars";
 import { recordCommunityParts } from "@/actions/custom-parts";
 import { parsePartsFromDescription } from "@/lib/spec-sheets";
 import type { PartValues } from "@/lib/rc-parts-data";
-import { attachListingStateToCards, getClashGameCardsConfig, getListingIdForCard } from "@/tcg/storage";
+import {
+  attachListingStateToCards,
+  getClashGameCardsConfig,
+  getListingIdForCard,
+  getPCredits,
+  getTcgStoreConfig,
+  grantPCredits,
+  spendPCredits,
+} from "@/tcg/storage";
+import { getEffectivePrice } from "@/tcg/config";
 import type { ActionResult } from "@/types";
 
 /**
@@ -202,9 +216,14 @@ export interface NewCardInput {
   referenceUrl: string;
   /** If true, the user has no car and selects to pull 2 community car cards instead of generating their own car. */
   skipPersonalCar?: boolean;
+  /**
+   * How the pack is paid for: 1 card credit (the default), or the Standard Pack's price in P-Credits. A card credit is
+   * refused while an admin has switched card credit opening off for the Standard Pack; P-Credits always work.
+   */
+  payWith?: "cardCredit" | "pcredits";
 }
 
-/** Spend a credit, roll a pack, draw the card and add it to the collection. */
+/** Pay for the pack (a card credit, or its price in P-Credits), roll it, draw the card and add it to the collection. */
 export async function openCardPack(
   input: NewCardInput
 ): Promise<
@@ -215,6 +234,8 @@ export async function openCardPack(
     featured: MemberCard | null;
     maintenance: MemberCard | null;
     credits: number;
+    /** The member's P-Credits after paying (unchanged when a card credit was used). */
+    pCredits: number;
   }>
 > {
   const user = await currentUser();
@@ -231,15 +252,38 @@ export async function openCardPack(
     return { success: false, error: "Choose or upload a photo of your car first.", field: "referenceUrl" };
   }
 
+  // Checked on the server, whatever the browser shows: with card credit opening switched off, only P-Credits can pay.
+  const payWithPCredits = input?.payWith === "pcredits";
+  if (!payWithPCredits && !(await standardPackAllowsCardCredits())) {
+    return {
+      success: false,
+      error: "The Standard Pack can't be opened with a card credit right now. Pay with P-Credits instead.",
+    };
+  }
+
   // One pack at a time per member, so a double tap can't spend two credits or make two cards.
   const locked = await redis.set(lockKey(user.id), "1", { nx: true, ex: LOCK_SECONDS });
   if (!locked) return { success: false, error: "A pack is already being opened. Give it a moment." };
 
-  let spent = false;
+  // Gives back whatever was taken (the card credit or the P-Credits) if the pack then fails to open.
+  let refund: (() => Promise<void>) | null = null;
   try {
-    spent = await spendCardCredit(user.id);
-    if (!spent) {
-      return { success: false, error: "You don't have a card credit. Check in at the track to earn one." };
+    if (payWithPCredits) {
+      const store = await getTcgStoreConfig();
+      const price = getEffectivePrice(store.standardPackPrice, store.standardPackSalePrice);
+      const paid = await spendPCredits(user.id, price);
+      if (!paid.ok) {
+        return {
+          success: false,
+          error: `Not enough P-Credits. A Standard Pack costs ${price.toLocaleString()} P-Credits (you have ${paid.balance.toLocaleString()}).`,
+        };
+      }
+      refund = async () => void (await grantPCredits(user.id, price));
+    } else {
+      if (!(await spendCardCredit(user.id))) {
+        return { success: false, error: "You don't have a card credit. Check in at the track to earn one." };
+      }
+      refund = () => refundCardCredit(user.id);
     }
 
     let stored: StoredMemberCard;
@@ -249,6 +293,8 @@ export async function openCardPack(
       // User has no car / selected not to generate their own car: pull two community car cards instead
       const source1 = await pickBonusSource(user.id);
       if (!source1) {
+        // Nothing was opened, so the member gets back what they paid.
+        await refund().catch((error) => console.error("[member-cards] could not give the payment back:", error));
         return { success: false, error: "The community card pool is currently empty. Please add a car or check back soon." };
       }
       let source2 = await pickBonusSource(user.id, [source1.id]);
@@ -525,11 +571,12 @@ export async function openCardPack(
         featured: featured ? publicCard(featured) : null,
         maintenance: maintenance ? publicCard(maintenance) : null,
         credits: await getCardCredits(user.id),
+        pCredits: await getPCredits(user.id),
       },
     };
   } catch (error) {
-    // The pack didn't open, so the member gets their credit back.
-    if (spent) await refundCardCredit(user.id);
+    // The pack didn't open, so the member gets their credit (or P-Credits) back.
+    if (refund) await refund().catch((e) => console.error("[member-cards] could not give the payment back:", e));
     console.error("[member-cards] opening a pack failed:", error);
     return { success: false, error: friendlyError(error) };
   } finally {

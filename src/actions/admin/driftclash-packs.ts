@@ -124,6 +124,13 @@ export async function savePackConfigAction(input: PackConfig): Promise<ActionRes
     const problem = validatePackConfig(config) ?? (await checkReferences(config));
     if (problem) return { success: false, error: problem };
 
+    if (config.packId === STANDARD_PACK_ID) {
+      // The card credit setting has its own switch, so saving the setup never changes it (a stale editor can't undo it).
+      const current = await loadPackConfig(STANDARD_PACK_ID).catch(() => null);
+      if (current?.allowCardCredits === false) config.allowCardCredits = false;
+      else delete config.allowCardCredits;
+    }
+
     const saved = await savePackConfig(config);
     revalidate();
     return { success: true, data: saved };
@@ -144,6 +151,27 @@ export async function setStandardPackEnabledAction(enabled: boolean): Promise<Ac
   } catch (error) {
     console.error("[driftclash-packs] switch failed:", error);
     return { success: false, error: error instanceof Error ? error.message : "Could not change the switch" };
+  }
+}
+
+/**
+ * Let members open the Standard Pack with a card credit as well as with P-Credits (the default), or stop letting them.
+ * Switched off, the Standard Pack can only be opened by paying its price in P-Credits. Nothing else about it changes.
+ */
+export async function setStandardPackCardCreditsAction(allow: boolean): Promise<ActionResult<PackConfig>> {
+  try {
+    if (!(await requireAdmin())) return { success: false, error: "Only admins can change packs" };
+    const current = (await loadPackConfig(STANDARD_PACK_ID)) ?? emptyPackConfig(STANDARD_PACK_ID);
+    const next: PackConfig = { ...current };
+    if (allow === false) next.allowCardCredits = false;
+    else delete next.allowCardCredits;
+    const saved = await savePackConfig(next);
+    revalidate();
+    revalidatePath("/cards/new");
+    return { success: true, data: saved };
+  } catch (error) {
+    console.error("[driftclash-packs] standard card credit setting failed:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Could not change the card credit setting" };
   }
 }
 

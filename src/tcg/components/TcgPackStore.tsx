@@ -24,6 +24,7 @@ export function TcgPackStore({
   packCredits,
   standardPackPrice,
   standardPackSalePrice = null,
+  standardAllowsCardCredits = true,
   customPacks,
   isAdmin = false,
   onBalancesChange,
@@ -35,6 +36,8 @@ export function TcgPackStore({
   packCredits: number;
   standardPackPrice: number;
   standardPackSalePrice?: number | null;
+  /** False when an admin has switched card credit opening off for the Standard Pack: it is paid for in P-Credits when opened. */
+  standardAllowsCardCredits?: boolean;
   customPacks: TcgCustomPackWithCards[];
   isAdmin?: boolean;
   onBalancesChange: (next: { pCredits: number; packCredits: number }) => void;
@@ -373,9 +376,11 @@ export function TcgPackStore({
                       discountPct={standardOnSale ? standardDiscountPct : 0}
                     />
                   </div>
-                  <span className="z-20 absolute left-3 top-3 rounded-full border border-amber-400/40 bg-black/75 px-2.5 py-0.5 text-[11px] font-black text-amber-300 backdrop-blur-sm">
-                    You have {packCredits} unopened
-                  </span>
+                  {standardAllowsCardCredits && (
+                    <span className="z-20 absolute left-3 top-3 rounded-full border border-amber-400/40 bg-black/75 px-2.5 py-0.5 text-[11px] font-black text-amber-300 backdrop-blur-sm">
+                      You have {packCredits} unopened
+                    </span>
+                  )}
                   <div className="z-20 absolute right-3 top-3 flex items-center gap-1.5">
                     {standardOnSale && (
                       <span className="rounded-full bg-gradient-to-r from-rose-600 to-amber-500 px-2.5 py-0.5 text-[11px] font-black uppercase text-white shadow">
@@ -423,6 +428,13 @@ export function TcgPackStore({
                   <button type="button" onClick={() => setShowStandardContents(true)} className={`${secondaryBtn} flex-1 text-xs`}>
                     What&apos;s in the pack?
                   </button>
+                  {!standardAllowsCardCredits && pCredits >= effectiveStandardPrice && (
+                    // Paid for when it is opened: the member picks their car in the wizard, which charges the price.
+                    <Link href="/cards/new" className={`${primaryBtn} flex-1 text-xs`}>
+                      Choose car &amp; open · {effectiveStandardPrice.toLocaleString()} P
+                    </Link>
+                  )}
+                  {(standardAllowsCardCredits || pCredits < effectiveStandardPrice) && (
                   <button
                     type="button"
                     onClick={handleBuyStandardPack}
@@ -443,8 +455,9 @@ export function TcgPackStore({
                       `Buy Pack · ${effectiveStandardPrice.toLocaleString()} P`
                     )}
                   </button>
+                  )}
                 </div>
-                {packCredits > 0 && (
+                {standardAllowsCardCredits && packCredits > 0 && (
                   <Link href="/cards/new" className={`${secondaryBtn} w-full text-xs`}>
                     Open Pack ({packCredits} ready) →
                   </Link>
@@ -474,17 +487,23 @@ export function TcgPackStore({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span className="text-xl font-black text-amber-400">{effectiveStandardPrice.toLocaleString()} P-Credits</span>
               {pCredits >= effectiveStandardPrice ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowStandardContents(false);
-                    handleBuyStandardPack();
-                  }}
-                  disabled={pending}
-                  className={primaryBtn}
-                >
-                  Buy Pack · {effectiveStandardPrice.toLocaleString()} P
-                </button>
+                standardAllowsCardCredits ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowStandardContents(false);
+                      handleBuyStandardPack();
+                    }}
+                    disabled={pending}
+                    className={primaryBtn}
+                  >
+                    Buy Pack · {effectiveStandardPrice.toLocaleString()} P
+                  </button>
+                ) : (
+                  <Link href="/cards/new" className={primaryBtn}>
+                    Choose car &amp; open · {effectiveStandardPrice.toLocaleString()} P
+                  </Link>
+                )
               ) : (
                 <button
                   type="button"

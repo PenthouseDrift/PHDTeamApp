@@ -32,6 +32,19 @@ export async function loadPackConfig(packId: string): Promise<PackConfig | null>
   return raw ? sanitizePackConfig(raw) : null;
 }
 
+/**
+ * Whether a card credit can open the Standard Pack. Yes unless an admin has switched it off, and yes if the setting can't
+ * be read, so the pack behaves as it always has.
+ */
+export async function standardPackAllowsCardCredits(): Promise<boolean> {
+  try {
+    return (await loadPackConfig(STANDARD_PACK_ID))?.allowCardCredits !== false;
+  } catch (error) {
+    console.error("[pack-config] could not read the Standard Pack card credit setting:", error);
+    return true;
+  }
+}
+
 /** Every saved config, by pack id. */
 export async function loadAllPackConfigs(): Promise<Record<string, PackConfig>> {
   const raw = (await redis.hgetall<Record<string, unknown>>(PACK_CONFIGS_KEY)) ?? {};

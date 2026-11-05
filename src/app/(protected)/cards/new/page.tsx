@@ -12,6 +12,7 @@ import { redis } from "@/lib/redis";
 import { MEMBER_CARD_ID_PATTERN } from "@/lib/member-card-store";
 import { getPCredits, getTcgStoreConfig, hydrateCustomPacks, parseCustomPack, tcgCustomPackKey } from "@/tcg/storage";
 import { getEffectivePrice } from "@/tcg/config";
+import { standardPackAllowsCardCredits } from "@/lib/pack-config-store";
 
 export const dynamic = "force-dynamic";
 // Drawing the card with AI runs under this route and can take a while.
@@ -42,12 +43,17 @@ export default async function NewCardPage({ searchParams }: { searchParams: Prom
   }
 
     // A Standard Pack: its price and the member's P-Credits, so the member can buy another one when their card credits run out.
+  // With card credit opening switched off for the Standard Pack, it is paid for in P-Credits when it is opened.
   const standardPack = customPack
     ? undefined
-    : await Promise.all([getTcgStoreConfig(), getPCredits(userId)]).then(([store, pCredits]) => ({
-        price: getEffectivePrice(store.standardPackPrice, store.standardPackSalePrice),
-        pCredits,
-      }));
+    : await Promise.all([getTcgStoreConfig(), getPCredits(userId), standardPackAllowsCardCredits()]).then(
+        ([store, pCredits, allowCardCredits]) => ({
+          price: getEffectivePrice(store.standardPackPrice, store.standardPackSalePrice),
+          pCredits,
+          allowCardCredits,
+        })
+      );
+  const standardPaidInPCredits = standardPack?.allowCardCredits === false;
 
   const [hash, carsResult, credits, myCards, initialSpecSheets, partCategories] = await Promise.all([
     getMemberHash(userId),
@@ -86,6 +92,10 @@ export default async function NewCardPage({ searchParams }: { searchParams: Prom
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
               This pack costs {customPack.price.toLocaleString()} P-Credits. You have {customPack.pCredits.toLocaleString()}.
               Choose your car, or let the pack use community cars.
+            </p>
+          ) : standardPack && standardPaidInPCredits ? (
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              The Standard Pack costs {standardPack.price.toLocaleString()} P-Credits. You have {standardPack.pCredits.toLocaleString()}.
             </p>
           ) : (
             <p className="text-xs text-zinc-500 dark:text-zinc-400">

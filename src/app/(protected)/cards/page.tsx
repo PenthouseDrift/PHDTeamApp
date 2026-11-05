@@ -21,6 +21,7 @@ import {
   withoutOdds,
 } from "@/tcg/storage";
 import { TcgApp } from "@/tcg/components/TcgApp";
+import { standardPackAllowsCardCredits } from "@/lib/pack-config-store";
 import { listTandemClashChallengesAction } from "@/tcg/challenges-actions";
 import type { TcgTab } from "@/tcg/types";
 
@@ -90,6 +91,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
     challengeData,
     rareCards,
     comingSoon,
+    standardAllowsCardCredits,
   ] = await Promise.all([
     listMyCards(),
     getCardCredits(userId),
@@ -104,6 +106,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
     listTandemClashChallengesAction(),
     getFeaturedShowcaseCards(12),
     getComingSoonCards(),
+    standardPackAllowsCardCredits(),
   ]);
 
   // The Clash tab is gone: Tandem Clash is on the game's Home page now, so old ?tab=clash links land there.
@@ -127,6 +130,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
           initialPCredits={pCredits}
           initialStandardPackPrice={storeConfig.standardPackPrice}
           initialStandardPackSalePrice={storeConfig.standardPackSalePrice ?? null}
+          initialStandardAllowsCardCredits={standardAllowsCardCredits}
           initialPCreditBundles={storeConfig.pCreditBundles}
           initialCustomPacks={customPacks.map(withoutOdds)}
           initialListings={listings}

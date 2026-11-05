@@ -21,7 +21,14 @@ import {
 import { MEMBER_ART_ZOOM, cardTitle, type MemberCard, type StoredMemberCard } from "@/lib/card-roll";
 import { CardArtError } from "@/lib/card-art-generate";
 import { applyVariant, rollPackCard } from "@/lib/pack-config";
-import { deletePackConfig, entryAvailable, loadPackConfig, loadRuntimeFor, rollPackBonus } from "@/lib/pack-config-store";
+import {
+  deletePackConfig,
+  entryAvailable,
+  loadPackConfig,
+  loadRuntimeFor,
+  rollPackBonus,
+  standardPackAllowsCardCredits,
+} from "@/lib/pack-config-store";
 import { buildBonusCard } from "@/lib/pack-bonus";
 import { rollAndDrawSlot, slotOverrides } from "@/lib/pack-draw";
 import { rollCarInitialDurability } from "@/lib/mechanical-faults";
@@ -480,6 +487,15 @@ export async function buyStandardPackWithPCredits(): Promise<
 > {
   const user = await currentUser();
   if (!user) return { success: false, error: "Please sign in to buy a pack." };
+
+  // With card credit opening switched off, a bought credit couldn't open the Standard Pack, so don't sell one. The pack
+  // is paid for with P-Credits when it is opened instead.
+  if (!(await standardPackAllowsCardCredits())) {
+    return {
+      success: false,
+      error: "The Standard Pack is paid for when you open it now. Choose “Open pack” to pay with P-Credits.",
+    };
+  }
 
   const storeConfig = await getTcgStoreConfig();
   const price = getEffectivePrice(storeConfig.standardPackPrice, storeConfig.standardPackSalePrice);

@@ -119,9 +119,10 @@ interface WizardProps {
   };
   /**
    * Opening a Standard Pack: its price and the member's P-Credits, so that when they run out of card credits they can
-   * buy another Standard Pack and open it straight away.
+   * buy another Standard Pack and open it straight away. With `allowCardCredits` false the pack can't be opened with a
+   * card credit at all: it is paid for with its price in P-Credits when it is opened.
    */
-  standardPack?: { price: number; pCredits: number };
+  standardPack?: { price: number; pCredits: number; allowCardCredits?: boolean };
 }
 
 /** What the form starts with: the garage defaults, replaced by the last pack's answers when there are any. */
@@ -239,6 +240,8 @@ function CardPackWizardForm({
   remembered,
 }: WizardProps & { remembered: RememberedPack | null }) {
   const [credits, setCredits] = useState(initialCredits);
+  // The Standard Pack with card credit opening switched off: paid for in P-Credits at the moment it is opened.
+  const payStandardWithPCredits = Boolean(!customPack && standardPack && standardPack.allowCardCredits === false);
   // What the member can still spend, kept up to date as packs are opened so "open another" shows the right choices.
   const [pBalance, setPBalance] = useState(customPack?.pCredits ?? standardPack?.pCredits ?? 0);
   const [cardCreditBalance, setCardCreditBalance] = useState(customPack?.cardCredits ?? 0);
@@ -442,6 +445,7 @@ function CardPackWizardForm({
             ...answers,
             carId: skipPersonalCar ? null : carId,
             parts: skipPersonalCar ? undefined : parts,
+            payWith: payStandardWithPCredits ? "pcredits" : "cardCredit",
           });
       if (res.success) {
         // Remember these answers so the next pack starts filled in if car was configured.
@@ -526,8 +530,29 @@ function CardPackWizardForm({
     });
   }
 
+  // ── Standard Pack paid in P-Credits, and the member can't cover it ──
+  if (mode === "form" && payStandardWithPCredits && standardPack && pBalance < standardPack.price) {
+    return (
+      <div className={`${panel} space-y-4 text-center`}>
+        <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">You need more P-Credits</h2>
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          The Standard Pack costs {standardPack.price.toLocaleString()} P-Credits, and you have {pBalance.toLocaleString()}. Top up your
+          P-Credits, then come back to open it.
+        </p>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Link href="/cards?tab=p-credits" className={primary}>
+            Get P-Credits
+          </Link>
+          <Link href="/cards" className={secondary}>
+            My cards
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   // ── No credits ──
-  if (mode === "form" && credits <= 0) {
+  if (mode === "form" && credits <= 0 && !payStandardWithPCredits) {
     return (
       <div className={`${panel} space-y-4 text-center`}>
         <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">You need a card credit</h2>
@@ -627,7 +652,10 @@ function CardPackWizardForm({
                   </p>
                 )}
                 <div className="flex flex-wrap justify-center gap-2">
-                  <Link href="/cards" className={credits > 0 ? secondary : primary}>
+                  <Link
+                    href="/cards"
+                    className={(payStandardWithPCredits ? Boolean(standardPack && pBalance >= standardPack.price) : credits > 0) ? secondary : primary}
+                  >
                     View my cards
                   </Link>
                                     {customPack && (
@@ -650,7 +678,18 @@ function CardPackWizardForm({
                       )}
                     </>
                   )}
-                  {!customPack && credits <= 0 && standardPack && standardPack.price > 0 && pBalance >= standardPack.price && (
+                  {payStandardWithPCredits && standardPack && pBalance >= standardPack.price && (
+                    <>
+                      {/* Paid for when it is opened, so another one is just another opening at the price. */}
+                      <button type="button" className={primary} onClick={() => open()} disabled={pending}>
+                        Open another with same settings · {standardPack.price.toLocaleString()} P-Credits
+                      </button>
+                      <button type="button" className={secondary} onClick={() => { setMode("form"); setStep(1); setCard(null); setError(null); }}>
+                        Change settings
+                      </button>
+                    </>
+                  )}
+                  {!customPack && !payStandardWithPCredits && credits <= 0 && standardPack && standardPack.price > 0 && pBalance >= standardPack.price && (
                     <>
                       <button type="button" className={primary} onClick={buyAnotherAndOpen} disabled={pending || buying}>
                         {buying ? "Buying…" : `Buy & open another · ${standardPack.price.toLocaleString()} P-Credits`}
@@ -660,7 +699,7 @@ function CardPackWizardForm({
                       </button>
                     </>
                   )}
-                  {credits > 0 && (
+                  {credits > 0 && !payStandardWithPCredits && (
                     <>
                       {/* Same answers as the pack just opened: straight to the next pack. */}
                       <button type="button" className={primary} onClick={() => open()} disabled={pending}>
@@ -1126,7 +1165,10 @@ function CardPackWizardForm({
                   </>
                 ) : (
                   <>
-                    It costs 1 card credit (you have {credits}). Every Standard Pack contains{" "}
+                    {payStandardWithPCredits && standardPack
+                      ? `It costs ${standardPack.price.toLocaleString()} P-Credits (you have ${pBalance.toLocaleString()}). If the pack can't be opened, you get them back.`
+                      : `It costs 1 card credit (you have ${credits}).`}{" "}
+                    Every Standard Pack contains{" "}
                 {skipPersonalCar ? (
                   <>
                     <strong>2 Community Car cards</strong>
@@ -1209,7 +1251,11 @@ function CardPackWizardForm({
         )}
         {skipPersonalCar ? (
           <button type="button" className={primary} disabled={pending} onClick={() => open()}>
-            {pending ? "Opening pack…" : "Open pack now (2 Community Cards)"}
+            {pending
+              ? "Opening pack…"
+              : payStandardWithPCredits && standardPack
+                ? `Open pack now · ${standardPack.price.toLocaleString()} P-Credits`
+                : "Open pack now (2 Community Cards)"}
           </button>
         ) : step < 5 ? (
           <button type="button" className={primary} disabled={!canNext} onClick={() => setStep((s) => (s + 1) as Step)}>
@@ -1217,7 +1263,11 @@ function CardPackWizardForm({
           </button>
         ) : (
           <button type="button" className={primary} disabled={pending || !driver.trim() || !photoUrl} onClick={() => open()}>
-            {pending ? "Opening pack…" : "Open my pack"}
+            {pending
+              ? "Opening pack…"
+              : payStandardWithPCredits && standardPack
+                ? `Open my pack · ${standardPack.price.toLocaleString()} P-Credits`
+                : "Open my pack"}
           </button>
         )}
       </div>
