@@ -1048,7 +1048,7 @@ export const UK_TRACK_CARD_SET: TrackCardDefinition[] = [
   {
     id: "track-02-asbo-rc",
     setNumber: 2,
-    name: "ASBO RC Drift Circuit",
+    name: "Velvet Hairpin Raceway",
     region: "UK · Smooth Coated Tarmac",
     ability: "UK VENUE · SMOOTH COATED TARMAC",
     effect: "High-speed flowing club layout known for sweeping outer arcs, coated tarmac grip, and close door-to-door tandem battles.",
@@ -1062,7 +1062,7 @@ export const UK_TRACK_CARD_SET: TrackCardDefinition[] = [
   {
     id: "track-03-slide-house",
     setNumber: 3,
-    name: "Slide House UK",
+    name: "Gloss Garage Hall",
     region: "Midlands · Polished Resin Floor",
     ability: "MIDLANDS VENUE · POLISHED RESIN FLOOR",
     effect: "Glass-smooth polished resin floor where smooth throttle control, precision angle, and clean transitions reign supreme.",
@@ -1076,7 +1076,7 @@ export const UK_TRACK_CARD_SET: TrackCardDefinition[] = [
   {
     id: "track-04-outlaw-rc",
     setNumber: 4,
-    name: "Outlaw RC Underground",
+    name: "Rustbucket Pit Lane",
     region: "North West · Raw Warehouse Touge",
     ability: "NORTH WEST VENUE · RAW WAREHOUSE TOUGE",
     effect: "Narrow underground warehouse circuit lined with concrete pillars, blind transitions, and raw touge intensity.",
@@ -1090,7 +1090,7 @@ export const UK_TRACK_CARD_SET: TrackCardDefinition[] = [
   {
     id: "track-05-soul-rc",
     setNumber: 5,
-    name: "Soul RC Championship Circuit",
+    name: "Neon Pinnacle Speedway",
     region: "UK · Competition P-Tile Arena",
     ability: "UK VENUE · COMPETITION P-TILE ARENA",
     effect: "Legendary UK competition P-tile arena. Flawless consistency demanding pinpoint clipping zone accuracy and tandem speed.",
@@ -1104,7 +1104,7 @@ export const UK_TRACK_CARD_SET: TrackCardDefinition[] = [
   {
     id: "track-06-sideways-rc",
     setNumber: 6,
-    name: "Sideways RC Club Track",
+    name: "Turbo Biscuit Bowl",
     region: "South · High-Bite Club Carpet",
     ability: "SOUTH VENUE · HIGH-BITE CLUB CARPET",
     effect: "High-traction club carpet venue packed with technical switchbacks, snappy transitions, and frantic bumper-to-bumper racing.",
@@ -1118,7 +1118,7 @@ export const UK_TRACK_CARD_SET: TrackCardDefinition[] = [
   {
     id: "track-07-apex-touge-uk",
     setNumber: 7,
-    name: "Apex Touge UK P-Tile",
+    name: "Cobalt Ridge Run",
     region: "Yorkshire · Technical P-Tile",
     ability: "YORKSHIRE VENUE · TECHNICAL P-TILE",
     effect: "Banked Yorkshire hairpins and technical elevation changes engineered to test maximum steering lock and chassis balance.",
@@ -1132,7 +1132,7 @@ export const UK_TRACK_CARD_SET: TrackCardDefinition[] = [
   {
     id: "track-08-scale-speed-uk",
     setNumber: 8,
-    name: "Scale Speed UK Diorama",
+    name: "Pocket Metropolis Loop",
     region: "UK · Scale Street Circuit",
     ability: "UK VENUE · SCALE STREET CIRCUIT",
     effect: "Ultra-realistic scale street circuit complete with street kerbs, lampposts, and unforgiving scale scenery.",
@@ -1146,7 +1146,7 @@ export const UK_TRACK_CARD_SET: TrackCardDefinition[] = [
   {
     id: "track-09-teesside-wet",
     setNumber: 9,
-    name: "North East Wet-Look Touge",
+    name: "Moonlit Drizzle Pass",
     region: "North East · Sealed Slick Tarmac",
     ability: "NORTH EAST VENUE · SEALED SLICK TARMAC",
     effect: "Sealed slick tarmac with a mirror glaze that tests driver throttle finesse and progressive weight transfer.",
@@ -1160,7 +1160,7 @@ export const UK_TRACK_CARD_SET: TrackCardDefinition[] = [
   {
     id: "track-10-midlands-stadium",
     setNumber: 10,
-    name: "Midlands Tandem Arena",
+    name: "Thunderclap Colosseum",
     region: "Midlands · Twin-Clip Championship",
     ability: "MIDLANDS VENUE · TWIN-CLIP CHAMPIONSHIP",
     effect: "Electric twin-clip stadium setup featuring massive viewing platforms and unforgiving clipping points built for showstopping drift battles.",
