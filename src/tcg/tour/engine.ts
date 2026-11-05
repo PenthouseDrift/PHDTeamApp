@@ -67,6 +67,8 @@ export interface RoundSkill {
   player: number[];
   rival: number[];
   walls: number;
+  /** Tyres burst during the drive. Missing on a Round driven before bursts existed. */
+  bursts?: number;
 }
 
 /**
@@ -349,7 +351,7 @@ export function finishRound(prepared: PreparedRound, skill: RoundSkill, input: R
         score: pScore,
         accuracy: pAcc,
         skillMultiplier: pMult,
-        notes: [`Your driving: ${Math.round(pAcc * 100)}% on the line, ×${pMult.toFixed(2)}`, ...c.player.notes],
+        notes: [`Your driving: ${Math.round(pAcc * 100)}% drift score, ×${pMult.toFixed(2)}`, ...c.player.notes],
       },
       rival: {
         carName: c.rival.carName,
@@ -358,7 +360,7 @@ export function finishRound(prepared: PreparedRound, skill: RoundSkill, input: R
         score: rScore,
         accuracy: rAcc,
         skillMultiplier: rMult,
-        notes: [`Their driving: ${Math.round(rAcc * 100)}% on the line, ×${rMult.toFixed(2)}`, ...c.rival.notes],
+        notes: [`Their driving: ${Math.round(rAcc * 100)}% drift score, ×${rMult.toFixed(2)}`, ...c.rival.notes],
       },
       winner,
     });
@@ -390,7 +392,9 @@ export function finishRound(prepared: PreparedRound, skill: RoundSkill, input: R
 
   // Condition: the car that drove wears; the others rest.
   const conditionAfter = { ...input.condition };
-  const after = clampCondition(prepared.playerCondition - wearFor(prepared.stance, config, playerFx.wearReduce));
+  // Driving too hard costs the car more: every burst tyre and every wall hit adds wear on top of the Round's normal wear.
+  const extraWear = (skill.bursts ?? 0) * t.burstWear + skill.walls * t.wallWear;
+  const after = clampCondition(prepared.playerCondition - wearFor(prepared.stance, config, playerFx.wearReduce) - extraWear);
   conditionAfter[car.id] = after;
 
   // Insurance turns a lost Round into no Strike.
@@ -438,7 +442,7 @@ export function finishRound(prepared: PreparedRound, skill: RoundSkill, input: R
     nearMiss,
     motion,
     insuranceUsed,
-    skill: { swing: t.skillSwing, pivot: t.skillPivot, walls: skill.walls },
+    skill: { swing: t.skillSwing, pivot: t.skillPivot, walls: skill.walls, bursts: skill.bursts ?? 0, extraWear },
   };
 
   return {

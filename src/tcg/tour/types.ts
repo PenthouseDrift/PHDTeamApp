@@ -100,7 +100,7 @@ export interface BattleLog {
   /** Whether the Strike was cancelled by an Insurance upgrade. */
   insuranceUsed: boolean;
   /** How the driving shaped the Round. */
-  skill: { swing: number; pivot: number; walls: number };
+  skill: { swing: number; pivot: number; walls: number; bursts?: number; extraWear?: number };
 }
 
 /** A Round worked out as far as the drive: everything except what the driving adds. Server only. */
@@ -138,6 +138,13 @@ export interface TourDriveSpec {
   rivalName: string;
   rivalKind: "ghost" | "bot";
   carName: string;
+  /** The chosen car's rarity and picture, so the drive can show it in its colours. Missing on drives started before the chase view. */
+  carTier?: FullArtTier;
+  carImageUrl?: string;
+  /** How much angle the car's tyres can take (0.42 to 0.85), from its condition and grip. The server works it out again itself. */
+  angleLimit?: number;
+  /** The tyre condition the limit was worked out from, 0 to 100, to show on screen. */
+  tyres?: number;
   /** Seconds the server expects the drive to take, at least. */
   seconds: number;
 }
@@ -329,6 +336,10 @@ export interface TourConfig {
     gambleMax: number;
     wearBase: number;
     wearAttack: number;
+    /** Extra condition lost for each burst tyre during the drive. */
+    burstWear: number;
+    /** Extra condition lost for each wall hit during the drive. */
+    wallWear: number;
     conditionFloorMultiplier: number;
     repairByRarity: Record<"bronze" | "silver" | "gold" | "legend" | "mythic", number>;
     ratingK: number;

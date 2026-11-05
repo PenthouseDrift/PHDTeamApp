@@ -44,6 +44,8 @@ export const DEFAULT_TOUR_CONFIG: TourConfig = {
     gambleMax: 6,
     wearBase: 18,
     wearAttack: 8,
+    burstWear: 15,
+    wallWear: 6,
     conditionFloorMultiplier: 0.8,
     repairByRarity: { bronze: 20, silver: 35, gold: 50, legend: 100, mythic: 100 },
     ratingK: 24,
@@ -155,6 +157,8 @@ export function sanitizeTourConfig(input: unknown): TourConfig {
       gambleMax: num(t.gambleMax, d.tuning.gambleMax, -30, 30),
       wearBase: num(t.wearBase, d.tuning.wearBase, 0, 100),
       wearAttack: num(t.wearAttack, d.tuning.wearAttack, 0, 100),
+      burstWear: num(t.burstWear, d.tuning.burstWear, 0, 100),
+      wallWear: num(t.wallWear, d.tuning.wallWear, 0, 100),
       conditionFloorMultiplier: num(t.conditionFloorMultiplier, d.tuning.conditionFloorMultiplier, 0.3, 1, false),
       repairByRarity: {
         bronze: num(rep.bronze, d.tuning.repairByRarity.bronze, 0, 100),

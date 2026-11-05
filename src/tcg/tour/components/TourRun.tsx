@@ -14,7 +14,7 @@ import { CATEGORY_LABEL, conditionColour, heading, muted, panel, pill, primaryBt
 /**
  * The Tour itself: the Pit Phase, Round setup (car and stance), the Round result and the Tour summary.
  * The server decides everything; this screen only sends choices and shows what comes back.
- * (The animated top-down replay replaces the text result in a later phase.)
+ * (The drive itself is played live on the DriveScreen, seen from behind the car.)
  */
 
 type Apply = (promise: Promise<ActionResult<TourRunView>>) => void;
@@ -366,8 +366,12 @@ function Result({ run, log, onNext, busy }: { run: TourRunView; log: BattleLog; 
       {hasDriving && skill && (
       <section className={`${panel} space-y-2`} aria-label="Your driving">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h4 className={heading}>Your driving: {Math.round(average * 100)}% on the line</h4>
-          {skill.walls > 0 && <span className="text-xs font-bold text-rose-600 dark:text-rose-400">{skill.walls} wall hit{skill.walls === 1 ? "" : "s"}</span>}
+          <h4 className={heading}>Your driving: {Math.round(average * 100)}% on the drift</h4>
+          <span className="flex flex-wrap gap-2 text-xs font-bold text-rose-600 dark:text-rose-400">
+            {(skill.bursts ?? 0) > 0 && <span>{skill.bursts} burst tyre{skill.bursts === 1 ? "" : "s"}</span>}
+            {skill.walls > 0 && <span>{skill.walls} wall hit{skill.walls === 1 ? "" : "s"}</span>}
+            {(skill.extraWear ?? 0) > 0 && <span>−{skill.extraWear}% condition from driving too hard</span>}
+          </span>
         </div>
         <ul className="flex flex-wrap gap-2">
           {log.corners.map((c, i) => (
@@ -377,7 +381,7 @@ function Result({ run, log, onNext, busy }: { run: TourRunView; log: BattleLog; 
           ))}
         </ul>
         <p className={muted}>
-          {Math.round(skill.pivot * 100)}% on the line changes nothing. Cleaner than that adds up to {Math.round(skill.swing * 100)}% to a corner&apos;s score; sloppier takes it off.
+          {Math.round(skill.pivot * 100)}% drift score changes nothing. Cleaner than that adds up to {Math.round(skill.swing * 100)}% to a corner&apos;s score; sloppier takes it off.
         </p>
       </section>
       )}

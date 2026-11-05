@@ -17,7 +17,7 @@ import { nextPrizeAfter, prizeForWins } from "./config";
 import { repairAmount } from "./condition";
 import { finishRound, prepareRound, type ResolveInput } from "./engine";
 import { RUN_SECONDS } from "./replay/course-timing";
-import { decodeTrace, prepareDrive, simulateDrive } from "./replay/drive-sim";
+import { angleLimit, decodeTrace, prepareDrive, simulateDrive } from "./replay/drive-sim";
 import { TOUR_LOANER_CARS, TOUR_LOANER_CREW } from "./loaners";
 import { addLadderPoints, addLedger, addNote, bumpDaily, bumpStat, bumpStatFloat, claimActiveSlot, claimOnce, clearNotes, daysBetween, endMarkKey, getActiveRunId, isOnEarlyAccessList, kitMarkKey, loadDaily, loadProfile, loadRun, loadTourConfig, pickGhost, recordDrive, releaseActiveSlot, saveGhost, saveRun, setActiveRun, takeNotes, ukDate, underRateLimit, updateProfile, withRunLock } from "./store";
 import { applyRatingDelta, ladderPoints } from "./rating";
@@ -614,6 +614,7 @@ export async function startDrive(user: TourUser, runId: string, carId: string, s
     if (!state.loadout.cars.some((c) => c.id === carId)) throw new Error("That car isn't in your loadout.");
 
     const opponent = state.opponent;
+    const chosenCar = state.loadout.cars.find((c) => c.id === carId);
     const prepared = prepareRound(resolveInput(state, config, carId, stance, opponent));
     const spec: TourDriveSpec = {
       round: state.round,
@@ -627,7 +628,11 @@ export async function startDrive(user: TourUser, runId: string, carId: string, s
       pivot: config.tuning.skillPivot,
       rivalName: opponent.name,
       rivalKind: opponent.kind,
-      carName: state.loadout.cars.find((c) => c.id === carId)?.name ?? "Your car",
+      carName: chosenCar?.name ?? "Your car",
+      carTier: chosenCar?.tier,
+      carImageUrl: chosenCar?.imageUrl,
+      angleLimit: angleLimit(prepared.playerCondition, Number(chosenCar?.stats?.grip)),
+      tyres: prepared.playerCondition,
       seconds: RUN_SECONDS,
     };
     const next: TourRunState = { ...state, step: "drive", drive: { carId, stance, startedAt: Date.now(), prepared, spec }, updatedAt: Date.now() };
@@ -661,12 +666,15 @@ async function finishDriveWith(user: TourUser, state: TourRunState, trace: Int8A
   const drive = state.drive!;
   const opponent = state.opponent!;
   const dc = prepareDrive(drive.spec.sectorIds);
-  const driven = simulateDrive(dc, forfeit ? new Int8Array(0) : trace);
+  // The grip limit comes from the car and its condition as the server knows them, never from the browser.
+  const driveCar = state.loadout.cars.find((c) => c.id === drive.carId);
+  const limit = angleLimit(drive.prepared.playerCondition, Number(driveCar?.stats?.grip));
+  const driven = simulateDrive(dc, forfeit ? new Int8Array(0) : trace, limit);
   const raw = driven.accuracy;
   const accuracy = raw.map((a) => Math.min(ACCURACY_CAP, a));
 
   const input = resolveInput(state, config, drive.carId, drive.stance, opponent);
-  const out = finishRound(drive.prepared, { player: accuracy, rival: rivalAccuracyOf(opponent, config), walls: driven.walls }, input);
+  const out = finishRound(drive.prepared, { player: accuracy, rival: rivalAccuracyOf(opponent, config), walls: driven.walls, bursts: driven.bursts }, input);
 
   // The Ghost for this Round: the team, the stance and the driving the member really chose.
   const car = state.loadout.cars.find((c) => c.id === drive.carId)!;
@@ -697,7 +705,7 @@ async function finishDriveWith(user: TourUser, state: TourRunState, trace: Int8A
     await recordDrive(user.id, average);
     await bumpStat("drives", 1);
     await bumpStatFloat("accuracy_sum", average);
-    await addLedger({ type: "drive", userId: user.id, runId: state.id, round: state.round, raw, walls: driven.walls, forfeit });
+    await addLedger({ type: "drive", userId: user.id, runId: state.id, round: state.round, raw, walls: driven.walls, bursts: driven.bursts, forfeit });
     const profile = await loadProfile(user.id, config.tuning.startRating);
     if (!profile.optOut) await saveGhost(ghost, config.tuning.ghostsPerRound);
     if (opponent.kind === "ghost" && opponent.ownerId) {

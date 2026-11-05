@@ -14,7 +14,7 @@ import { heading, muted, panel, pill, primaryBtn, secondaryBtn } from "./tour-ui
 
 const STEPS = [
   { icon: "🔧", title: "Bring cards, then pit", text: "Pick up to 4 cars, 4 crew and 3 repair kits (empty slots get loaners; a kit is only used up if you use it). Between Rounds take one random upgrade and repair worn cars. A car that races loses condition, so rotate your cars." },
-  { icon: "📱", title: "You steer the car", text: "Each Round you drive three corners. Tilt your phone like a steering wheel (or drag a finger, or use the arrow keys) to stay on the green racing line and go through the gates. How well you drive changes your score." },
+  { icon: "📱", title: "You set the drift angle", text: "Each Round you drift three corners. The car follows the line by itself. Tilt your phone (or drag a finger, or use the arrow keys) to hang the tail out: more angle scores more, but past your tyres' limit they burst or you hit the wall. Worn tyres have a lower limit. How well you drive changes your score." },
   { icon: "🎭", title: "Read the other driver", text: "Before you drive, secretly pick Attack, Hold or Gamble. Attack beats Hold, Hold beats Gamble, Gamble beats Attack. Most opponents are real members' saved teams, driving as well as they really did." },
   { icon: "🏆", title: "Win Rounds for prizes", text: "Lose all your strikes and the Tour ends. The more Rounds you win, the bigger the prize." },
 ];
@@ -163,7 +163,7 @@ export function TourTab({
         <p className="text-[11px] font-black uppercase tracking-widest text-amber-400">New game mode</p>
         <h2 className="text-2xl font-black">Tandem Tour</h2>
         <p className="mt-1 max-w-xl text-sm text-zinc-300">
-          A full run of up to {lobby.maxRounds} Rounds. Draft upgrades, manage your cars, then drive each Round yourself: tilt your phone to steer and hold the racing line. Good driving can beat a better car.
+          A full run of up to {lobby.maxRounds} Rounds. Draft upgrades, manage your cars, then drive each Round yourself: tilt your phone to set the drift angle and hold it just under your tyres&apos; limit. Good driving can beat a better car.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] font-black">
           <span className="rounded-full bg-white/10 px-2.5 py-1">📈 Rating {lobby.rating}</span>

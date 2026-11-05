@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { easeKeyboard, rollFromOrientation, steeringFromPointer, steeringFromRoll } from "./steering-math";
+import { nudgeKeyboard, rollFromOrientation, steeringFromPointer, steeringFromRoll } from "./steering-math";
 
 /**
- * Steering for the drive: tilt the phone, drag a finger, or use the arrow keys. `read()` gives the steering right now
- * (-1 to 1) and is called once per drive tick. The chosen mode, sensitivity and direction are remembered on the device.
+ * Controls for the drive: tilt the phone, drag a finger, or use the arrow keys. They set the drift angle of the car. `read()`
+ * gives the angle asked for right now (-1 to 1) and is called once per drive tick. The chosen mode, sensitivity and direction are remembered on the device.
  */
 
 export type ControlMode = "tilt" | "touch" | "keys";
@@ -102,6 +102,7 @@ export function useSteering() {
   const calibrate = useCallback(() => {
     if (rollRef.current !== null) neutralRef.current = rollRef.current;
     smoothRef.current = 0;
+    keyValueRef.current = 0;
   }, []);
 
   /** iPhone asks for permission to read motion, and only when a button is tapped. Other phones just work. */
@@ -137,8 +138,8 @@ export function useSteering() {
       return smoothRef.current;
     }
     if (m === "keys") {
-      const target = (keysRef.current.right ? 1 : 0) - (keysRef.current.left ? 1 : 0);
-      keyValueRef.current = easeKeyboard(keyValueRef.current, target, dt);
+      const direction = (keysRef.current.right ? 1 : 0) - (keysRef.current.left ? 1 : 0);
+      keyValueRef.current = nudgeKeyboard(keyValueRef.current, direction, dt);
       return flipRef.current ? -keyValueRef.current : keyValueRef.current;
     }
     return flipRef.current ? -touchRef.current : touchRef.current;

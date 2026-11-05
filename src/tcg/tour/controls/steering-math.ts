@@ -1,5 +1,5 @@
 /**
- * The maths behind tilt steering. Pure code, so it can be checked without a phone.
+ * The maths behind tilt control (the tilt sets the drift angle). Pure code, so it can be checked without a phone.
  *
  * A phone reports two tilt angles: `beta` (tipping toward or away from you) and `gamma` (left or right). How they map to
  * "turning a steering wheel" depends on how the phone is held. In portrait, tilting left or right is `gamma`. In landscape
@@ -50,10 +50,12 @@ export function steeringFromPointer(x: number, left: number, width: number): num
   return Math.max(-1, Math.min(1, (x - centre) / (width * 0.33)));
 }
 
-/** Move a keyboard "stick" toward its target: quick to turn in, quicker to come back to straight. */
-export function easeKeyboard(value: number, target: number, dtSeconds: number): number {
-  const rate = target === 0 || Math.sign(target) !== Math.sign(value) ? 7 : 4.5;
-  const step = rate * Math.max(0, Math.min(0.1, dtSeconds));
-  if (value < target) return Math.min(target, value + step);
-  return Math.max(target, value - step);
+/**
+ * The keyboard sets the drift angle by nudging it: hold an arrow to lean further that way, release to hold the angle where it
+ * is. Holding the other arrow brings it back, so flicking across between bends takes about a second.
+ */
+export const KEYBOARD_RATE = 1.8;
+export function nudgeKeyboard(value: number, direction: number, dtSeconds: number): number {
+  const step = KEYBOARD_RATE * Math.max(0, Math.min(0.1, dtSeconds));
+  return Math.max(-1, Math.min(1, value + direction * step));
 }

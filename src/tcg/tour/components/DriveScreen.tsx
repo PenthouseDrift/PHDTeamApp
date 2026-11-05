@@ -2,17 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSteering, type ControlMode } from "../controls/useSteering";
-import { themeFor } from "../replay/build-timeline";
-import { DT, Driver, TICKS, TRACK_WEIGHT, encodeTrace, gateList, idealOffset, prepareDrive } from "../replay/drive-sim";
-import { ReplayRenderer, type DriveView } from "../replay/renderer";
+import { ChaseRenderer, type DriveView } from "../replay/chase-renderer";
+import { carColourFromImage, tierColour } from "../replay/car-colour";
+import { DT, Driver, TICKS, angleLimit, encodeTrace, gateList, prepareDrive, type DriveStep } from "../replay/drive-sim";
+import { themeFor } from "../replay/theme";
 import { skillMultiplierFor } from "../skill";
 import type { TourDriveSpec } from "../types";
 import { heading, muted, panel, primaryBtn, secondaryBtn } from "./tour-ui";
 
 /**
- * The drive: steer your car round the three corners. The car drives itself forward; you steer (tilt the phone, drag a
- * finger, or use the arrow keys) to stay on the glowing racing line and pass through the gates. What you did is recorded and
- * sent to the server, which runs the same driving simulation to score it. Nothing here decides a result.
+ * The drive: a drift run through three corners, seen from behind your car. The car drives itself forward; you steer (tilt
+ * the phone, drag a finger, or use the arrow keys) to hold the green drift line, clip the cones and stay a hair off the
+ * wall without touching it. What you did is recorded and sent to the server, which runs the same driving simulation to
+ * score it. Nothing here decides a result.
  */
 
 const COUNTDOWN_SECONDS = 3;
@@ -41,9 +43,11 @@ export function DriveScreen({ spec, onFinish, sendFailed = false }: { spec: Tour
 
   const dc = useMemo(() => prepareDrive(spec.sectorIds), [spec.sectorIds]);
   const gates = useMemo(() => gateList(dc), [dc]);
+  // How much angle the tyres can take. The server works it out again itself; this copy is only for the warnings on screen.
+  const limit = spec.angleLimit ?? angleLimit(spec.tyres ?? 100, 12);
   const scene = useMemo(
-    () => ({ course: dc.course, theme: themeFor(spec.trackName), rivalKind: spec.rivalKind, names: { player: "You", rival: spec.rivalName } }),
-    [dc, spec.trackName, spec.rivalKind, spec.rivalName]
+    () => ({ course: dc.course, theme: themeFor(spec.trackName), rivalKind: spec.rivalKind, names: { player: "You", rival: spec.rivalName }, carColour: tierColour(spec.carTier) }),
+    [dc, spec.trackName, spec.rivalKind, spec.rivalName, spec.carTier]
   );
   // How many ticks count towards each corner, to turn the running totals into a share of the corner done.
   const cornerTicks = useMemo(() => {
@@ -77,12 +81,19 @@ export function DriveScreen({ spec, onFinish, sendFailed = false }: { spec: Tour
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
 
-    let renderer: ReplayRenderer;
+    let renderer: ChaseRenderer;
     try {
-      renderer = new ReplayRenderer(canvas, scene, `drive:${spec.round}:${spec.trackName}`);
+      renderer = new ChaseRenderer(canvas, scene, `drive:${spec.round}:${spec.trackName}`);
     } catch {
       const id = requestAnimationFrame(() => setFailed(true));
       return () => cancelAnimationFrame(id);
+    }
+    // Paint the car the colour of the card picked. It starts in the rarity colour until the picture has been read.
+    let unmounted = false;
+    if (spec.carImageUrl) {
+      void carColourFromImage(spec.carImageUrl).then((colour) => {
+        if (colour && !unmounted) renderer.setCarColour(colour);
+      });
     }
     const fit = () => {
       const r = wrap.getBoundingClientRect();
@@ -93,35 +104,33 @@ export function DriveScreen({ spec, onFinish, sendFailed = false }: { spec: Tour
     ro?.observe(wrap);
 
     // ── The drive state ──
-    let driver = new Driver(dc);
+    let driver = new Driver(dc, limit);
     const trace = new Int8Array(TICKS);
     let acc = 0;
-    let prev = { s: dc.s[0], e: 0 };
-    let cur = { s: dc.s[0], e: 0 };
-    let last = { ev: 0, u: 0, speed: dc.v[0], lineScore: 1, wall: false };
+    let prev = { s: dc.s[0], e: dc.ideal[0], a: 0 };
+    let cur = prev;
+    let last: DriveStep | null = null;
     const gateState: Array<"upcoming" | "hit" | "miss"> = gates.map(() => "upcoming");
+    const ticksIn = [0, 0, 0];
     let streak = 0;
     let wallFlash = 0;
+    let burstFlash = 0;
     let banner: Banner | null = null;
-    let leadGap = 0;
+    let lastWarn = -10_000;
+    let sweet = 0;
+    let lastSweet = -10_000;
     let lastCorner = -1;
     let cornersDone = 0;
-    const startedAt = { t: 0 };
     let raf = 0;
     let lastFrame = performance.now();
 
     const mult = (a: number) => skillMultiplierFor(a, spec.swing, spec.pivot);
-    const cornerAccuracy = (c: number) => {
-      const track = driver.scoreCount[c] > 0 ? driver.scoreSum[c] / driver.scoreCount[c] : 0.5;
-      const gatePart = driver.gatesSeen[c] > 0 ? driver.gatesHit[c] / driver.gatesSeen[c] : track;
-      return TRACK_WEIGHT * track + (1 - TRACK_WEIGHT) * gatePart;
-    };
     const standing = () => {
       let p = 0;
       let r = 0;
       for (let c = 0; c < 3; c++) {
-        const share = Math.min(1, driver.scoreCount[c] / cornerTicks[c]);
-        p += (spec.paceBase.player[c] ?? 0) * mult(cornerAccuracy(c)) * share;
+        const share = Math.min(1, ticksIn[c] / cornerTicks[c]);
+        p += (spec.paceBase.player[c] ?? 0) * mult(driver.cornerAccuracy(c, false)) * share;
         r += (spec.paceBase.rival[c] ?? 0) * mult(spec.rivalAccuracy[c] ?? spec.pivot) * share;
       }
       return { p, r };
@@ -142,9 +151,8 @@ export function DriveScreen({ spec, onFinish, sendFailed = false }: { spec: Tour
         const left = COUNTDOWN_SECONDS - (now - countdownStart.current) / 1000;
         countdown = left;
         if (left <= -0.6) {
-          driver = new Driver(dc);
+          driver = new Driver(dc, limit);
           acc = 0;
-          startedAt.t = now;
           setPhase("driving");
         }
       } else if (phaseNow === "driving" && !document.hidden) {
@@ -154,29 +162,52 @@ export function DriveScreen({ spec, onFinish, sendFailed = false }: { spec: Tour
           const k = driver.tick;
           trace[k] = Math.round(Math.max(-1, Math.min(1, cmd)) * 100);
           const step = driver.step(cmd);
+          last = step;
           prev = cur;
-          cur = { s: dc.s[Math.min(TICKS - 1, k)], e: step.e };
-          last = { ev: step.ev, u: step.u, speed: dc.v[Math.min(TICKS - 1, k)], lineScore: step.score, wall: step.wall };
-          streak = step.score > 0.8 ? streak + 1 : step.score < 0.5 ? 0 : streak;
+          cur = { s: dc.s[Math.min(TICKS - 1, k)], e: dc.ideal[Math.min(TICKS - 1, k)], a: step.a };
+          if (step.corner >= 0) ticksIn[step.corner]++;
+          streak = step.value > 0.8 ? streak + 1 : step.value < 0.4 ? 0 : streak;
+
           if (step.wall) {
             wallFlash = 1;
-            say("WALL!", "bad", now);
-            navigator.vibrate?.(35);
+            say("SPUN INTO THE WALL! Penalty", "bad", now);
+            navigator.vibrate?.([60, 30, 60]);
+          } else if (step.burst) {
+            burstFlash = 1;
+            say("TYRE BURST! Car damaged", "bad", now);
+            navigator.vibrate?.([90, 40, 90]);
+          } else if (step.lock === "none") {
+            if (step.r > 1 && now - lastWarn > 1400) {
+              lastWarn = now;
+              say("OVER THE LIMIT! Ease off", "bad", now);
+              navigator.vibrate?.(20);
+            } else if (step.strain > 0.4 && step.r <= 1 && now - lastWarn > 2200) {
+              lastWarn = now;
+              say("NEAR THE LIMIT", "neutral", now);
+              navigator.vibrate?.(8);
+            }
+            // Holding it right at the edge without going over earns a shout.
+            sweet = step.r >= 0.9 && step.r <= 1 ? sweet + 1 : 0;
+            if (sweet >= 24 && now - lastSweet > 3500) {
+              lastSweet = now;
+              say("MAX DRIFT!", "good", now);
+              sweet = 0;
+            }
           }
+          if (step.gateHit) navigator.vibrate?.(8);
           if (step.gateHit !== null) {
             const gi = gates.findIndex((g) => g.tick === k);
             if (gi >= 0) gateState[gi] = step.gateHit ? "hit" : "miss";
-            if (step.gateHit) navigator.vibrate?.(8);
           }
           // Corner announcements, and a word on how the corner went.
           const corner = dc.corner[k];
           if (corner !== lastCorner) {
-            if (lastCorner >= 0 && lastCorner < 3) {
+            if (lastCorner >= 0 && lastCorner < 3 && !step.wall && !step.burst) {
               cornersDone = lastCorner + 1;
-              const a = cornerAccuracy(lastCorner);
-              say(a >= 0.9 ? "PERFECT LINE!" : a >= 0.75 ? "Clean corner" : a >= 0.5 ? "Okay, keep it tight" : "Sloppy, recover!", a >= 0.75 ? "good" : a >= 0.5 ? "neutral" : "bad", now);
+              const a = driver.cornerAccuracy(lastCorner, false);
+              say(a >= 0.9 ? "PERFECT DRIFT!" : a >= 0.75 ? "Clean corner" : a >= 0.5 ? "Okay, give it more angle" : "Too tame, commit!", a >= 0.75 ? "good" : a >= 0.5 ? "neutral" : "bad", now);
             }
-            if (corner >= 0) say(`Corner ${corner + 1}: ${spec.sectorNames[corner] ?? ""}`, "neutral", now);
+            if (corner >= 0 && (!banner || now - banner.at > 1500)) say(`Corner ${corner + 1}: ${spec.sectorNames[corner] ?? ""}`, "neutral", now);
             lastCorner = corner;
           }
           acc -= DT;
@@ -190,27 +221,21 @@ export function DriveScreen({ spec, onFinish, sendFailed = false }: { spec: Tour
         }
       }
 
-      wallFlash = Math.max(0, wallFlash - dt * 2.5);
+      wallFlash = Math.max(0, wallFlash - dt * 1.8);
+      burstFlash = Math.max(0, burstFlash - dt * 1.4);
       const alpha = phaseNow === "driving" ? Math.min(1, acc / DT) : 1;
       const s = prev.s + (cur.s - prev.s) * alpha;
       const e = prev.e + (cur.e - prev.e) * alpha;
+      const angle = prev.a + (cur.a - prev.a) * alpha;
 
       const { p, r } = standing();
-      // The rival sits ahead or behind according to who is winning, so the race can be felt.
-      const targetGap = Math.max(-60, Math.min(60, (p - r) * 0.5));
-      leadGap += (targetGap - leadGap) * (1 - Math.exp(-dt * 3));
-      const rivalS = Math.max(0, s - leadGap);
-      const t = phaseNow === "driving" ? driver.tick * DT : 0;
       const corner = dc.corner[Math.min(TICKS - 1, driver.tick)];
-      const wobbleAmp = (1 - (spec.rivalAccuracy[Math.max(0, corner)] ?? spec.pivot)) * 9;
-      const rivalE = idealOffset(dc.course, rivalS) + Math.sin(t * 1.9 + spec.round) * wobbleAmp * (corner >= 0 ? 1 : 0.4);
-
-      const total = driver.scoreCount.reduce((a, b) => a + b, 0);
-      const accuracyNow = total > 0 ? [0, 1, 2].reduce((sum, c) => sum + cornerAccuracy(c) * driver.scoreCount[c], 0) / total : 1;
+      const tickNow = Math.min(TICKS - 1, driver.tick);
+      const total = driver.weightSum.reduce((a, b) => a + b, 0);
+      const accuracyNow = total > 0 ? [0, 1, 2].reduce((sum, c) => sum + driver.cornerAccuracy(c, false) * driver.weightSum[c], 0) / total : 1;
 
       const view: DriveView = {
-        player: { s, e, ev: last.ev, u: last.u, speed: last.speed, lineScore: last.lineScore, wall: last.wall },
-        rival: { s: rivalS, e: rivalE, speed: last.speed },
+        player: { s, e, angle, speed: dc.v[tickNow] },
         gates: gates.map((g, i) => ({ s: g.s, e: g.e, state: gateState[i] })),
         hud: {
           playerPoints: p,
@@ -219,11 +244,19 @@ export function DriveScreen({ spec, onFinish, sendFailed = false }: { spec: Tour
           streak,
           progress: driver.tick / TICKS,
           cornerIndex: Math.min(2, Math.max(0, phaseNow === "driving" || phaseNow === "finishing" ? Math.max(corner, cornersDone >= 3 ? 2 : 0) : 0)),
-          steer: phaseNow === "ready" || phaseNow === "countdown" ? st.read() : last.u,
+          angle: phaseNow === "ready" || phaseNow === "countdown" ? st.read() : angle,
+          limit,
+          lean: dc.dir[tickNow],
+          strain: last && phaseNow === "driving" ? last.strain : 0,
+          stress: last && phaseNow === "driving" ? last.stress : 0,
+          lock: last && phaseNow === "driving" ? last.lock : "none",
           countdown,
           banner: banner && (now - banner.at) / 1000 < 2 ? { text: banner.text, tone: banner.tone, age: (now - banner.at) / 1000 } : null,
           wallFlash,
-          gateFlash: 0,
+          burstFlash,
+          tyres: spec.tyres ?? 100,
+          // Points are worth between 1x and 4x depending on the angle held, nothing special while out of control.
+          multiplier: last && phaseNow === "driving" ? 1 + 3 * last.value : 1,
         },
       };
       renderer.renderDrive(view, dt);
@@ -231,13 +264,14 @@ export function DriveScreen({ spec, onFinish, sendFailed = false }: { spec: Tour
     raf = requestAnimationFrame(frame);
 
     return () => {
+      unmounted = true;
       cancelAnimationFrame(raf);
       ro?.disconnect();
       renderer.destroy();
     };
     // The drive is set up once for this spec; the live steering is read through a ref.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dc, scene, gates, spec]);
+  }, [dc, scene, gates, spec, limit]);
 
   if (failed) {
     return (
@@ -248,12 +282,12 @@ export function DriveScreen({ spec, onFinish, sendFailed = false }: { spec: Tour
     );
   }
 
-  const touchMode = steering.mode === "touch" && (phase === "countdown" || phase === "driving" || phase === "ready");
+  const touchMode = steering.mode === "touch" && (phase === "countdown" || phase === "driving");
 
   return (
-    <section className="space-y-3" aria-label="Drive">
+    <section aria-label="Drive">
       <div ref={wrapRef} className="relative h-[72vh] max-h-[680px] min-h-[420px] w-full touch-none select-none overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-lg">
-        <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" role="img" aria-label="Top-down view of your car on the track. Steer left and right to stay on the racing line." />
+        <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" role="img" aria-label="View from behind your car as it drifts the track. Tilt left or right to set the drift angle and keep it just under the limit." />
         {touchMode && <div className="absolute inset-0" {...steering.pointerHandlers} aria-hidden />}
         {phase === "finishing" && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/60" role="status">
@@ -269,71 +303,77 @@ export function DriveScreen({ spec, onFinish, sendFailed = false }: { spec: Tour
             )}
           </div>
         )}
-      </div>
-
-      {phase === "ready" && (
-        <div className={`${panel} space-y-3`}>
-          <div>
-            <h3 className={heading}>Ready to drive?</h3>
-            <p className={muted}>
-              Your car drives itself. Steer left and right to stay on the green racing line and go through the gates. Corners push you to the outside, so lean into
-              them. Better driving earns more points than a better car on its own.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2" role="group" aria-label="How you will steer">
-            {(["tilt", "touch", "keys"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                aria-pressed={steering.mode === m}
-                onClick={() => (m === "tilt" ? void steering.enableTilt() : steering.setMode(m))}
-                className={`min-h-11 rounded-xl border-2 px-4 text-sm font-black ${
-                  steering.mode === m ? "border-amber-500 bg-amber-500/10 text-zinc-900 dark:text-zinc-100" : "border-zinc-300 text-zinc-700 dark:border-zinc-700 dark:text-zinc-200"
-                }`}
-              >
-                {m === "tilt" ? "📱 " : m === "touch" ? "👆 " : "⌨️ "}
-                {MODE_LABEL[m]}
-              </button>
-            ))}
-          </div>
-
-          {steering.mode === "tilt" && (
-            <div className="space-y-2">
+        {phase === "ready" && (
+          <div className="absolute inset-0 z-10 flex touch-pan-y items-start overflow-y-auto bg-black/55 p-2 sm:items-center sm:p-4" role="dialog" aria-label="Ready to drive">
+            <div className={`${panel} mx-auto w-full max-w-xl space-y-3 !bg-white/95 shadow-2xl dark:!bg-zinc-900/95`}>
+            <div>
+              <h3 className={heading}>Ready to drive?</h3>
               <p className={muted}>
-                {steering.permission === "denied"
-                  ? "Motion access was refused. Allow it in your browser settings, or use the touch slider."
-                  : steering.needsPermission && steering.permission !== "granted"
-                    ? "Tap Tilt phone to allow motion. Your phone will ask once."
-                    : steering.tiltSeen
-                      ? "Tilt your phone left and right, like a steering wheel. Hold it how you like, then press Set straight."
-                      : "Waiting for your phone's motion sensor… If nothing moves, use the touch slider."}
+                Your car follows the drift line by itself. Tilt toward the bend to hang the tail out: more angle means a bigger multiplier (×1 up to ×4 at your limit). Near the
+                limit the screen glows and shakes. A little over and a tyre bursts. Way over and you hit the wall. Flick across between corners.
               </p>
-              <div className="flex flex-wrap items-center gap-2">
-                <button type="button" className={secondaryBtn} onClick={steering.calibrate} disabled={!steering.tiltSeen}>
-                  Set straight
-                </button>
-                <label className="flex items-center gap-2 text-xs font-bold text-zinc-700 dark:text-zinc-200">
-                  <input type="checkbox" className="h-4 w-4 accent-amber-500" checked={steering.flip} onChange={(e) => steering.setFlip(e.target.checked)} />
-                  Reverse left and right
-                </label>
-              </div>
+              <p className={muted}>
+                {spec.tyres !== undefined && spec.angleLimit !== undefined
+                  ? `Your tyres are at ${Math.round(spec.tyres)}%, so your grip limit is ${Math.round(spec.angleLimit * 100)}% of full tilt. Worn tyres lower it.`
+                  : "Worn tyres and a low grip stat lower your limit."}
+              </p>
             </div>
-          )}
-          {steering.mode === "touch" && <p className={muted}>Put a finger on the screen and slide left or right. The middle is straight.</p>}
-          {steering.mode === "keys" && <p className={muted}>Use the ← and → arrow keys (or A and D).</p>}
 
-          <label className="flex items-center gap-3 text-xs font-bold text-zinc-700 dark:text-zinc-200">
-            Sensitivity
-            <input type="range" min={0.5} max={2} step={0.1} value={steering.sensitivity} onChange={(e) => steering.setSensitivity(Number(e.target.value))} className="w-40 accent-amber-500" aria-label="Steering sensitivity" />
-            <span className={muted}>{steering.sensitivity.toFixed(1)}×</span>
-          </label>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="How you will steer">
+              {(["tilt", "touch", "keys"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  aria-pressed={steering.mode === m}
+                  onClick={() => (m === "tilt" ? void steering.enableTilt() : steering.setMode(m))}
+                  className={`min-h-11 rounded-xl border-2 px-4 text-sm font-black ${
+                    steering.mode === m ? "border-amber-500 bg-amber-500/10 text-zinc-900 dark:text-zinc-100" : "border-zinc-300 text-zinc-700 dark:border-zinc-700 dark:text-zinc-200"
+                  }`}
+                >
+                  {m === "tilt" ? "📱 " : m === "touch" ? "👆 " : "⌨️ "}
+                  {MODE_LABEL[m]}
+                </button>
+              ))}
+            </div>
 
-          <button type="button" className={primaryBtn} onClick={begin}>
-            🏁 Start the drive
-          </button>
-        </div>
-      )}
+            {steering.mode === "tilt" && (
+              <div className="space-y-2">
+                <p className={muted}>
+                  {steering.permission === "denied"
+                    ? "Motion access was refused. Allow it in your browser settings, or use the touch slider."
+                    : steering.needsPermission && steering.permission !== "granted"
+                      ? "Tap Tilt phone to allow motion. Your phone will ask once."
+                      : steering.tiltSeen
+                        ? "Tilt your phone left and right to set the drift angle. Hold it how you like, then press Set straight."
+                        : "Waiting for your phone's motion sensor… If nothing moves, use the touch slider."}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" className={secondaryBtn} onClick={steering.calibrate} disabled={!steering.tiltSeen}>
+                    Set straight
+                  </button>
+                  <label className="flex items-center gap-2 text-xs font-bold text-zinc-700 dark:text-zinc-200">
+                    <input type="checkbox" className="h-4 w-4 accent-amber-500" checked={steering.flip} onChange={(e) => steering.setFlip(e.target.checked)} />
+                    Reverse left and right
+                  </label>
+                </div>
+              </div>
+            )}
+            {steering.mode === "touch" && <p className={muted}>Put a finger on the screen and slide left or right to set the angle. The middle is no angle. Slide back to the middle to straighten up.</p>}
+            {steering.mode === "keys" && <p className={muted}>Hold ← or → (or A and D) to lean further that way. Let go to hold the angle. Hold the other arrow to bring it back.</p>}
+
+            <label className="flex items-center gap-3 text-xs font-bold text-zinc-700 dark:text-zinc-200">
+              Sensitivity
+              <input type="range" min={0.5} max={2} step={0.1} value={steering.sensitivity} onChange={(e) => steering.setSensitivity(Number(e.target.value))} className="w-40 accent-amber-500" aria-label="Steering sensitivity" />
+              <span className={muted}>{steering.sensitivity.toFixed(1)}×</span>
+            </label>
+
+            <button type="button" className={primaryBtn} onClick={begin}>
+              🏁 Start the drive
+            </button>
+          </div>
+          </div>
+        )}
+      </div>
     </section>
   );
 }

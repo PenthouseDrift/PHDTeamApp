@@ -18,7 +18,7 @@ import { DEFAULT_TOUR_CONFIG, prizeForWins } from "@/tcg/tour/config";
 import { finishRound, prepareRound } from "@/tcg/tour/engine";
 import { makeRng, between, type Rng } from "@/tcg/tour/rng";
 import { autopilotTrace } from "@/tcg/tour/replay/autopilot";
-import { prepareDrive, simulateDrive } from "@/tcg/tour/replay/drive-sim";
+import { angleLimit, prepareDrive, simulateDrive } from "@/tcg/tour/replay/drive-sim";
 import { applyContinue, applyPick, applyRoundResult, createRunState, tourIsOver } from "@/tcg/tour/run-logic";
 import { counterTo } from "@/tcg/tour/stance";
 import { getUpgradeDef } from "@/tcg/tour/upgrades";
@@ -76,11 +76,12 @@ function playTour(tier: FullArtTier, skill: number, seed: string, config: TourCo
       dc = prepareDrive(prepared.sectors.map((s) => s.id));
       courseCache.set(key, dc);
     }
-    const driven = simulateDrive(dc, autopilotTrace(dc, skill, `${seed}:${state.round}`));
+    const limit = angleLimit(prepared.playerCondition, Number(car.stats.grip));
+    const driven = simulateDrive(dc, autopilotTrace(dc, skill, `${seed}:${state.round}`, limit), limit);
     const accuracy = driven.accuracy.map((a) => Math.min(ACCURACY_CAP, a));
     accSum += accuracy.reduce((s, a) => s + a, 0) / 3;
     accN++;
-    const out = finishRound(prepared, { player: accuracy, rival: opponent.accuracy, walls: driven.walls }, input);
+    const out = finishRound(prepared, { player: accuracy, rival: opponent.accuracy, walls: driven.walls, bursts: driven.bursts }, input);
     state = applyRoundResult(state, out, opponent, stance, 0);
     if (tourIsOver(state)) return { wins: state.wins, accuracy: accSum / accN };
     state = applyContinue(state, config, 0);

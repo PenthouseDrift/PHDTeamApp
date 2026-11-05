@@ -354,6 +354,8 @@ export function TourAdmin({ initial }: { initial: TourAdminData }) {
           <Num id="t-k-gmax" label="Gamble swing, highest" value={draft.tuning.gambleMax} min={-30} max={30} onChange={(v) => setTuning("gambleMax", v)} />
           <Num id="t-k-wear" label="Wear per Round" value={draft.tuning.wearBase} min={0} max={100} onChange={(v) => setTuning("wearBase", v)} />
           <Num id="t-k-wear-a" label="Extra wear for Attack" value={draft.tuning.wearAttack} min={0} max={100} onChange={(v) => setTuning("wearAttack", v)} />
+          <Num id="t-k-burst" label="Wear per burst tyre" value={draft.tuning.burstWear} min={0} max={100} onChange={(v) => setTuning("burstWear", v)} help="Extra condition lost when a tyre bursts because the member pushed past the grip limit." />
+          <Num id="t-k-wall" label="Wear per wall hit" value={draft.tuning.wallWear} min={0} max={100} onChange={(v) => setTuning("wallWear", v)} help="Extra condition lost when the car spins into the wall. The corner score also takes a penalty." />
           <Num id="t-k-floor" label="Score at 0% condition (×)" value={draft.tuning.conditionFloorMultiplier} min={0.3} max={1} step={0.05} onChange={(v) => setTuning("conditionFloorMultiplier", v)} help="0.8 means a wrecked car scores 80%." />
           {(["bronze", "silver", "gold", "legend", "mythic"] as const).map((t) => (
             <Num key={t} id={`t-k-rep-${t}`} label={`Repair kit restores (${t})`} value={draft.tuning.repairByRarity[t]} min={0} max={100} onChange={(v) => setTuning("repairByRarity", { ...draft.tuning.repairByRarity, [t]: v })} />
@@ -455,7 +457,7 @@ export function TourAdmin({ initial }: { initial: TourAdminData }) {
             </tbody>
           </table>
         </div>
-        <p className={hint}>Taken = entry prices and rerolls. Paid out = P-Credit prizes and streak rewards. Pack credits are not counted here. Avg line = how close members stayed to the racing line; use it to set the neutral accuracy. Completion rate: {totals.started > 0 ? `${Math.round((totals.completed / totals.started) * 100)}%` : "-"}.</p>
+        <p className={hint}>Taken = entry prices and rerolls. Paid out = P-Credit prizes and streak rewards. Pack credits are not counted here. Avg line = the average drift score members earned; use it to set the neutral accuracy. Completion rate: {totals.started > 0 ? `${Math.round((totals.completed / totals.started) * 100)}%` : "-"}.</p>
       </section>
 
       {/* ── Stuck Tours ── */}
