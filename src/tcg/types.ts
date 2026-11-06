@@ -13,6 +13,7 @@ import type { PackConfig } from "@/lib/pack-config";
 export type TcgTab =
   | "home"
   | "tour"
+  | "campaign"
   | "collection"
   | "store"
   | "marketplace"

@@ -122,6 +122,35 @@ export function peerRivalBuilder(tier: FullArtTier, ownedCars: number, ownedCrew
     return { carPool: cars, crewPool: crew, skill };
   };
 }
+/** A player with one car of each rarity listed and `ownedCrew` Crew cards rolled with the real pack odds. */
+export function playerFromTiers(tiers: FullArtTier[], ownedCrew: number) {
+  return (rng: Rng): Player => {
+    const cars = tiers.map((t) => carCard(rng, t, "player"));
+    const crew = Array.from({ length: ownedCrew }, () => crewCardFromDef(rollCrewCardDefinition(rng, CREW_CARD_SET), "player"))
+      .sort((a, b) => crewRank(b) - crewRank(a))
+      .slice(0, 3);
+    while (crew.length < 3) crew.push(STARTER_LOANER_CREW_CARDS[crew.length]);
+    return { cars, crew };
+  };
+}
+
+/** A member's collection: cars of mixed rarity as packs hand them out, and Crew cards. */
+export function memberCollection(rng: Rng, cars: number, crew: number, tierOdds: Array<[FullArtTier, number]>) {
+  const pickTier = (): FullArtTier => {
+    const total = tierOdds.reduce((s, [, w]) => s + w, 0);
+    let r = rng() * total;
+    for (const [t, w] of tierOdds) {
+      r -= w;
+      if (r <= 0) return t;
+    }
+    return tierOdds[0][0];
+  };
+  return {
+    cars: Array.from({ length: cars }, () => carCard(rng, pickTier(), "member")),
+    crew: Array.from({ length: crew }, () => crewCardFromDef(rollCrewCardDefinition(rng, CREW_CARD_SET), "member")),
+  };
+}
+
 export type PlayerKind = "casual" | "good";
 export type RivalKind = "old" | "ai";
 
@@ -150,7 +179,9 @@ export interface SimConfig {
    * Builds the rival for each battle instead of the settings above. Used to test a real challenge: it gives the
    * cars and Crew the rival chooses from and how well it plays.
    */
-  rivalBuilder?: (rng: Rng) => { carPool: MemberCard[]; crewPool: MemberCard[]; skill: number };
+  rivalBuilder?: (rng: Rng, player: Player) => { carPool: MemberCard[]; crewPool: MemberCard[]; skill: number };
+  /** Builds the player's cars and Crew instead of rolling `ownedCars` of `tier`. Used to test mixed collections. */
+  playerBuilder?: (rng: Rng) => Player;
 
   /**
    * Play the finale (see finale.ts) on every corner, after both Crew cards are down, as the game now does. On by
@@ -182,7 +213,7 @@ const byPowerDesc = (a: MemberCard, b: MemberCard) => getCardPower(b) - getCardP
 const TIER_RANK: Record<string, number> = { bronze: 0, silver: 1, gold: 2, legend: 3, mythic: 3 };
 const crewRank = (c: MemberCard) => TIER_RANK[c.tier] ?? 0;
 
-interface Player {
+export interface Player {
   cars: MemberCard[];
   crew: MemberCard[];
 }
@@ -207,7 +238,7 @@ export interface SimResult {
 }
 
 export function simulateBattle(cfg: SimConfig, rng: Rng): SimResult {
-  const player = makePlayer(rng, cfg);
+  const player = cfg.playerBuilder ? cfg.playerBuilder(rng) : makePlayer(rng, cfg);
 
   // The roulette: track and corner types. Debuffs are chosen corner by corner below.
   const track = rollUkTrackCard(UK_TRACK_CARD_SET, rng);
@@ -227,7 +258,7 @@ export function simulateBattle(cfg: SimConfig, rng: Rng): SimResult {
   let rivalCrew: Trio<MemberCard>;
   let rivalSkill = cfg.skill;
   if (cfg.rivalBuilder) {
-    const built = cfg.rivalBuilder(rng);
+    const built = cfg.rivalBuilder(rng, player);
     rivalSkill = built.skill;
     const arranged = arrangeRival({ cars: built.carPool, crew: built.crewPool, ctx, playerCars: player.cars, skill: built.skill, rng });
     rivalCars = arranged.cars;

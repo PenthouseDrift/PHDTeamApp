@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 
 export interface GameNavItem {
@@ -32,6 +32,7 @@ export function GameBottomNav({
   onSelect: (id: string) => void;
 }) {
   const mounted = useSyncExternalStore(noSubscription, () => true, () => false);
+  const bar = useRef<HTMLElement>(null);
   // How tall the main tab bar is (it includes the phone's safe area), so this bar sits exactly on top of it.
   const [offset, setOffset] = useState(56);
 
@@ -43,13 +44,20 @@ export function GameBottomNav({
     return () => observer.disconnect();
   }, [mounted]);
 
+  // With many sections the bar scrolls sideways; keep the current one in view.
+  useEffect(() => {
+    const current = bar.current?.querySelector<HTMLElement>('[aria-current="page"]');
+    current?.scrollIntoView({ inline: "center", block: "nearest" });
+  }, [active, mounted]);
+
   if (!mounted) return null;
 
   return createPortal(
     <nav
+      ref={bar}
       aria-label="DriftClash sections"
-      style={{ bottom: offset, gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
-      className="fixed inset-x-0 z-30 grid border-t border-amber-500/30 bg-zinc-950/95 px-1 shadow-[0_-8px_20px_rgba(0,0,0,0.35)] backdrop-blur-sm md:hidden"
+      style={{ bottom: offset }}
+      className="fixed inset-x-0 z-30 flex overflow-x-auto overscroll-x-contain border-t border-amber-500/30 bg-zinc-950/95 px-1 shadow-[0_-8px_20px_rgba(0,0,0,0.35)] backdrop-blur-sm [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden"
     >
       {items.map((item) => {
         const isActive = item.id === active;
@@ -60,7 +68,7 @@ export function GameBottomNav({
             onClick={() => onSelect(item.id)}
             aria-current={isActive ? "page" : undefined}
             aria-label={item.badge ? `${item.label}, ${item.badge}` : item.label}
-            className={`relative flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 rounded-lg py-1.5 text-[10px] font-black transition-colors ${
+            className={`relative flex min-h-[3.25rem] min-w-[4.25rem] flex-1 basis-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-black transition-colors ${
               isActive ? "text-amber-400" : "text-zinc-400"
             }`}
           >

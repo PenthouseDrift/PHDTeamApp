@@ -33,6 +33,12 @@ const TourTab = dynamic(() => import("@/tcg/tour/components/TourTab").then((m) =
   loading: () => <p className="text-xs text-zinc-500" role="status">Loading Tandem Tour…</p>,
 });
 
+// Drift Campaign (admin only for now) is loaded the same way.
+const CampaignTab = dynamic(() => import("@/tcg/campaign/components/CampaignTab").then((m) => m.CampaignTab), {
+  ssr: false,
+  loading: () => <p className="text-xs text-zinc-500" role="status">Loading Drift Campaign…</p>,
+});
+
 const TABS: Array<{
   id: TcgTab;
   label: string;
@@ -58,6 +64,12 @@ const TABS: Array<{
     label: "Tour",
     shortLabel: "Tour",
     icon: "🏎️",
+  },
+  {
+    id: "campaign",
+    label: "Campaign",
+    shortLabel: "Cup",
+    icon: "🏆",
   },
   {
     id: "collection",
@@ -164,7 +176,7 @@ export function TcgApp({
   }, [initialTab]);
 
   // The same sections and badges as the header panel, for the bar fixed to the bottom of a phone screen.
-  const visibleTabs = TABS.filter((t) => t.id !== "tour" || hasTourAccess);
+  const visibleTabs = TABS.filter((t) => (t.id !== "tour" || hasTourAccess) && (t.id !== "campaign" || isAdmin));
   const navItems: GameNavItem[] = visibleTabs.map((t) => ({
     id: t.id,
     label: t.label,
@@ -397,6 +409,17 @@ export function TcgApp({
           onKitsUsed={(ids) => setCards((prev) => prev.filter((c) => !ids.includes(c.id)))}
         />
       )}
+
+      {tab === "campaign" && isAdmin && <CampaignTab
+          cards={cards}
+          pCredits={pCredits}
+          onPCreditsChange={setPCredits}
+          onKitUsed={(kitId) => setCards((prev) => prev.filter((c) => c.id !== kitId))}
+          onCardsWorn={(worn) => {
+            const byId = new Map(worn.map((c) => [c.id, c]));
+            setCards((prev) => prev.map((c) => byId.get(c.id) ?? c));
+          }}
+        />}
 
       {tab === "collection" && (
         <div className="space-y-4">

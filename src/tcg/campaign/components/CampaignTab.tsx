@@ -1,0 +1,727 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FullArtCard } from "@/components/cards/FullArtCard";
+import type { MemberCard } from "@/lib/card-roll";
+import type { ActionResult } from "@/types";
+import { isCarBroken } from "@/lib/mechanical-faults";
+import { DriftClashArena } from "@/tcg/components/DriftClashArena";
+import {
+  beginCampaignRoundAction,
+  getCampaignAction,
+  payCampaignEntryAction,
+  rerollCampaignCarsAction,
+  repairCampaignCarAction,
+  serviceCampaignCarAction,
+  reportCampaignResultAction,
+  startCampaignAction,
+  withdrawCampaignAction,
+  withdrawCampaignDraftAction,
+} from "../actions";
+import { CAMPAIGN_ROUNDS, CARS_TO_PICK, prizeFor } from "../config";
+import { bestCrewFor } from "../garage";
+import type { CampaignBattle, CampaignDraft, CampaignView, EntryChoice } from "../types";
+import { Bracket } from "./Bracket";
+import { CardCarousel } from "./CardCarousel";
+import { ActionDock, DockSpacer, dockDanger, dockPrimary, dockSecondary } from "./ActionDock";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { Disclosure } from "./Disclosure";
+import { FlowHeader } from "./FlowHeader";
+import { NextUpCard } from "./NextUpCard";
+import { CampaignSkeleton } from "./Skeleton";
+import { EntryStep } from "./EntryStep";
+import { PrizeLadder } from "./PrizeLadder";
+import { CarFooter, CautionTape, needsRepair } from "./CarStatus";
+
+/**
+ * Drift Campaign (admin only): a six-round knockout cup. Pick three cars once, then beat one driver per round to stay in.
+ * Each battle is the normal Tandem Clash arena. A loss ends the run; win round six to be champion.
+ */
+
+const panel = "rounded-2xl border border-zinc-800 bg-zinc-900 p-4 text-zinc-100 shadow-sm sm:p-5";
+const secondaryBtn =
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 px-4 text-xs font-black uppercase tracking-wide text-zinc-200 transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50";
+
+/**
+ * Runs a server action and turns a thrown error (a dropped connection, or a dev server that has not picked up a new
+ * action yet) into an ordinary failure, so the screen can say so instead of waiting forever.
+ */
+async function safely<T>(call: () => Promise<ActionResult<T>>): Promise<ActionResult<T>> {
+  try {
+    return await call();
+  } catch (e) {
+    console.error("[campaign] server action failed:", e);
+    return {
+      success: false,
+      error: "Could not reach the campaign server. If the dev server was running when this feature was added, restart it and reload.",
+    };
+  }
+}
+
+type Busy = null | "loading" | "dealing" | "rerolling" | "building" | "beginning" | "withdrawing";
+type SaveState = "idle" | "saving" | "saved" | "failed";
+type Ask = { title: string; body: string; confirmLabel: string; danger?: boolean; run: () => void };
+type Result = { won: boolean; playerCorners: number; opponentCorners: number };
+
+export function CampaignTab({
+  cards,
+  onCardsWorn,
+  onKitUsed,
+  pCredits,
+  onPCreditsChange,
+}: {
+  cards: MemberCard[];
+  /** The member's P-Credit balance, for the entry fee. */
+  pCredits: number;
+  /** Called with the new balance when the cup charges an entry fee or pays a prize. Pass a stable function. */
+  onPCreditsChange?: (balance: number) => void;
+  /** Called with the id of a Maintenance kit that was used up, so the deck no longer lists it. */
+  onKitUsed?: (kitId: string) => void;
+  /** Called with the cars after a battle has worn them, so the rest of the game shows the new durability. */
+  onCardsWorn?: (cars: MemberCard[]) => void;
+}) {
+  // Choosing cars from the member's own deck, before a cup starts.
+  // Step 1 is the entry (fee and prizes), step 2 is choosing the cars. Null when neither is open.
+  const [stage, setStage] = useState<null | "entry" | "cars">(null);
+  // The six cars dealt from the member's deck to choose three from.
+  const [offer, setOffer] = useState<MemberCard[]>([]);
+  const [rerollsLeft, setRerollsLeft] = useState(0);
+  // The entry already paid for the cars being picked. Set while a paid entry is waiting for its cup to start.
+  const [paidEntry, setPaidEntry] = useState<CampaignDraft["entry"] | null>(null);
+  const crewPreview = useMemo(() => bestCrewFor(cards), [cards]);
+  const [view, setView] = useState<CampaignView | null>(null);
+  // How the next cup is entered: a free test cup (the default, so nothing is spent by accident) or one of the fees.
+  const [entry, setEntry] = useState<EntryChoice>("test");
+  const applyView = useCallback(
+    (next: CampaignView | null) => {
+      setView(next);
+      if (next?.balance !== undefined) onPCreditsChange?.(next.balance);
+    },
+    [onPCreditsChange]
+  );
+  const [busy, setBusy] = useState<Busy>("loading");
+  const [error, setError] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [battle, setBattle] = useState<CampaignBattle | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const pendingRef = useRef<Result | null>(null);
+  const [working, setWorking] = useState<string | null>(null);
+  // A question waiting for a yes or no. Shown as a modal, never as a browser alert.
+  // Tells the car carousel to scroll to a card (tapping a tray slot or a card at the edge).
+  const [focus, setFocus] = useState<{ index: number; tick: number } | null>(null);
+  const jumpTo = useCallback((index: number) => setFocus((prev) => ({ index, tick: (prev?.tick ?? 0) + 1 })), []);
+  const [ask, setAsk] = useState<Ask | null>(null);
+  const closeAsk = useCallback(() => setAsk(null), []);
+  const dialog = ask ? (
+    <ConfirmDialog
+      title={ask.title}
+      body={ask.body}
+      confirmLabel={ask.confirmLabel}
+      danger={ask.danger}
+      onCancel={closeAsk}
+      onConfirm={() => {
+        const run = ask.run;
+        setAsk(null);
+        run();
+      }}
+    />
+  ) : null;
+
+  useEffect(() => {
+    let alive = true;
+    safely(() => getCampaignAction()).then((res) => {
+      if (!alive) return;
+      if (res.success) {
+        applyView(res.data.view);
+        // A paid entry that was left part way through: back to picking cars with the same six.
+        if (res.data.draft) openDraft(res.data.draft);
+      } else setError(res.error);
+      setBusy(null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [applyView]);
+
+  async function start() {
+    setBusy("building");
+    setError(null);
+    const res = await safely(() => startCampaignAction(picked));
+    if (res.success) {
+      applyView(res.data);
+      setStage(null);
+      setPicked([]);
+      setOffer([]);
+      setPaidEntry(null);
+    } else setError(res.error);
+    setBusy(null);
+  }
+
+  async function beginRound() {
+    setBusy("beginning");
+    setError(null);
+    const res = await safely(() => beginCampaignRoundAction());
+    if (res.success) {
+      pendingRef.current = null;
+      setSaveState("idle");
+      setView(res.data.view);
+      setBattle(res.data);
+    } else {
+      setError(res.error);
+    }
+    setBusy(null);
+  }
+
+  const submitResult = useCallback(async (result: Result) => {
+    pendingRef.current = result;
+    setSaveState("saving");
+    const res = await safely(() => reportCampaignResultAction(result));
+    if (res.success) {
+      applyView(res.data);
+      onCardsWorn?.(res.data.cars);
+      setSaveState("saved");
+      setError(null);
+    } else {
+      setSaveState("failed");
+      setError(res.error);
+    }
+  }, [onCardsWorn, applyView]);
+
+  function closeBattle() {
+    setBattle(null);
+    setSaveState("idle");
+    pendingRef.current = null;
+  }
+
+  function leaveBattle() {
+    if (saveState === "saving") return;
+    if (saveState === "saved") {
+      closeBattle();
+      return;
+    }
+    setAsk({
+      title: "Leave the battle?",
+      body: "Leaving counts as a loss and knocks you out of the cup. You keep the prize for the rounds you have already won.",
+      confirmLabel: "Leave the battle",
+      danger: true,
+      run: () => void runLeaveBattle(),
+    });
+  }
+
+  async function runLeaveBattle() {
+    closeBattle();
+    setBusy("withdrawing");
+    const res = await safely(() => withdrawCampaignAction());
+    if (res.success) applyView(res.data);
+    else setError(res.error);
+    setBusy(null);
+  }
+
+  function togglePick(id: string) {
+    setPicked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= CARS_TO_PICK ? prev : [...prev, id]));
+  }
+
+  /** Show a paid entry's six cars and the re-rolls left, ready for picking. */
+  function openDraft(draft: CampaignDraft) {
+    setPaidEntry(draft.entry);
+    setOffer(draft.offer.cars);
+    setRerollsLeft(draft.offer.rerollsLeft);
+    setPicked([]);
+    setStage("cars");
+  }
+
+  /** Step 1 done: take the entry fee, then deal the six cars. */
+  function payEntry() {
+    setAsk(
+      entry === "test"
+        ? {
+            title: "Start a free test cup?",
+            body: "A test cup costs nothing and pays no prize, however far you get.",
+            confirmLabel: "Start test cup",
+            run: () => void runPayEntry(),
+          }
+        : {
+            title: `Pay 🪙 ${entry} to enter?`,
+            body: `The entry is taken now, then you choose your cars. If you withdraw before the cup starts, the 🪙 ${entry} entry is lost.`,
+            confirmLabel: `Pay 🪙 ${entry}`,
+            run: () => void runPayEntry(),
+          }
+    );
+  }
+
+  async function runPayEntry() {
+    setBusy("dealing");
+    setError(null);
+    const res = await safely(() => payCampaignEntryAction(entry));
+    if (res.success) {
+      if (res.data.balance !== undefined) onPCreditsChange?.(res.data.balance);
+      openDraft(res.data.draft);
+    } else {
+      setError(res.error);
+    }
+    setBusy(null);
+  }
+
+  /** Leave a paid entry before the cup starts. The fee is lost and the member starts again from the entry step. */
+  function withdrawDraft() {
+    const fee = paidEntry?.fee ?? 0;
+    setAsk({
+      title: "Withdraw from the cup?",
+      body:
+        fee > 0
+          ? `Your 🪙 ${fee} entry is lost and you start again from the beginning. A new entry means a new fee.`
+          : "This free test cup ends and you start again from the beginning.",
+      confirmLabel: fee > 0 ? "Withdraw, lose entry" : "Withdraw",
+      danger: true,
+      run: () => void runWithdrawDraft(),
+    });
+  }
+
+  async function runWithdrawDraft() {
+    setBusy("withdrawing");
+    setError(null);
+    const res = await safely(() => withdrawCampaignDraftAction());
+    if (res.success) {
+      setStage(null);
+      setPaidEntry(null);
+      setOffer([]);
+      setPicked([]);
+      setView(null);
+    } else {
+      setError(res.error);
+    }
+    setBusy(null);
+  }
+
+  async function reroll() {
+    setBusy("rerolling");
+    setError(null);
+    const res = await safely(() => rerollCampaignCarsAction());
+    if (res.success) {
+      setOffer(res.data.cars);
+      setRerollsLeft(res.data.rerollsLeft);
+      setPicked([]);
+      jumpTo(0);
+    } else {
+      setError(res.error);
+    }
+    setBusy(null);
+  }
+
+  /** Repair a broken car (matching kit) or service a worn one (any kit). Works on the dealt six and on the cup's cars. */
+  async function fixCar(carId: string, kitId: string, mode: "repair" | "service") {
+    setWorking(carId);
+    setError(null);
+    const res = await safely(() =>
+      mode === "repair"
+        ? repairCampaignCarAction({ carId, maintenanceCardId: kitId })
+        : serviceCampaignCarAction({ carId, maintenanceCardId: kitId })
+    );
+    if (res.success) {
+      const { car, view: nextView } = res.data;
+      if (nextView) setView(nextView);
+      setOffer((prev) => prev.map((c) => (c.id === car.id ? car : c)));
+      onCardsWorn?.([car]);
+      onKitUsed?.(kitId);
+    } else {
+      setError(res.error);
+    }
+    setWorking(null);
+  }
+
+  function withdraw() {
+    const prize = view && view.entry.fee > 0 ? view.prize : 0;
+    setAsk({
+      title: "Withdraw from the cup?",
+      body:
+        view?.entry.kind === "test"
+          ? "You will be out of this test cup. It pays no prize."
+          : `You will be out of the cup and keep the prize for the rounds you have won (🪙 ${prize.toLocaleString()}).`,
+      confirmLabel: "Withdraw",
+      danger: true,
+      run: () => void runWithdraw(),
+    });
+  }
+
+  async function runWithdraw() {
+    setBusy("withdrawing");
+    const res = await safely(() => withdrawCampaignAction());
+    if (res.success) applyView(res.data);
+    else setError(res.error);
+    setBusy(null);
+  }
+
+  // ── The battle ────────────────────────────────────────────────────────────
+  if (battle && view) {
+    const nextLabel =
+      view.status === "active"
+        ? `Continue to ${CAMPAIGN_ROUNDS[view.currentRound]?.name ?? "the next round"}`
+        : view.status === "champion"
+          ? "👑 Collect the trophy"
+          : "See the bracket";
+    return (
+      <>
+        <DriftClashArena
+          key={`${battle.view.id}-${battle.round.round}`}
+          cards={[...battle.cars, ...battle.crew]}
+          initialOpponent={battle.opponent}
+          hasEarlyAccess
+          isAdmin
+          onOpenStoreTab={() => undefined}
+          campaign={{
+            opponent: battle.opponent,
+            roundLabel: battle.round.name,
+            onResult: submitResult,
+            continueLabel:
+              saveState === "saving" ? "Saving result…" : saveState === "failed" ? "Retry saving result" : nextLabel,
+            continueDisabled: saveState === "saving" || saveState === "idle",
+            onContinue: () => {
+              if (saveState === "failed" && pendingRef.current) void submitResult(pendingRef.current);
+              else if (saveState === "saved") closeBattle();
+            },
+            onExit: () => void leaveBattle(),
+            maintenance:
+              saveState === "saved" ? ([...view.rounds].reverse().find((r) => r.result)?.result?.maintenance ?? null) : null,
+          }}
+        />
+        {dialog}
+      </>
+    );
+  }
+
+  // ── Everything else ─────────────────────────────────────────────────────────
+  const status = view?.status;
+  const active = Boolean(view && view.status === "active");
+  const idle = busy !== "loading" && stage === null && !active; // no cup running: the start or finished screen
+  const anyBroken = Boolean(view?.cars.some((c) => isCarBroken(c)));
+  const nextRound = view && active ? view.rounds[view.currentRound] : undefined;
+  const entryPaidText = paidEntry && paidEntry.fee > 0 ? `Entry paid 🪙 ${paidEntry.fee}` : "Free test cup";
+  const working_ = busy !== null || working !== null;
+  const step: 0 | 1 | 2 | undefined = stage === "entry" ? 0 : stage === "cars" ? 1 : active ? 2 : undefined;
+  const subtitle =
+    busy === "building"
+      ? "Building your rivals…"
+      : stage === "entry"
+        ? "Choose how you enter"
+        : stage === "cars"
+          ? `Pick ${CARS_TO_PICK} of your ${offer.length} cars`
+          : active && view
+            ? `Round ${Math.min(view.currentRound + 1, CAMPAIGN_ROUNDS.length)} of ${CAMPAIGN_ROUNDS.length}${view.entry.fee > 0 ? ` · entry 🪙 ${view.entry.fee}` : " · test cup"}`
+            : "6 rounds · lose once and you are out";
+
+  /** What winning the current round pays, for the "next up" card. */
+  const nextPrize = view && nextRound && view.entry.fee > 0 ? `🪙 ${prizeFor(view.entry.fee, nextRound.round).toLocaleString()}` : null;
+
+  return (
+    <section aria-label="Drift Campaign" className="space-y-3">
+      <FlowHeader subtitle={subtitle} balance={pCredits} step={step} />
+
+      {error && (
+        <p role="alert" className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-3 text-sm font-bold text-rose-300">
+          {error}
+        </p>
+      )}
+      {view?.note && (
+        <p role="status" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm font-bold text-amber-200">
+          {view.note}
+        </p>
+      )}
+
+      {busy === "loading" && <CampaignSkeleton />}
+
+      {busy === "building" && (
+        <div role="status" className={`${panel} flex items-center gap-3`}>
+          <span aria-hidden className="inline-block animate-spin text-2xl">
+            ⚙️
+          </span>
+          <p className="text-sm font-bold text-zinc-200">
+            Building your six rivals and testing each one against your cars. This takes up to twenty seconds.
+          </p>
+        </div>
+      )}
+
+      {/* No cup running: how it works (first time) or how the last one ended, then the bracket. */}
+      {idle && (
+        <>
+          {!view && (
+            <section className={panel} aria-label="How it works">
+              <h3 className="text-sm font-black uppercase tracking-wide text-zinc-300">How it works</h3>
+              <ol className="mt-2.5 space-y-2.5 text-sm">
+                {[
+                  ["💳", "Choose an entry", "Pay once. The bigger the entry, the bigger the prizes."],
+                  ["🃏", "Pick 3 of 6 cars", "Dealt from your own deck. Re-roll up to 3 times."],
+                  ["🏆", "Beat 6 drivers", "Each round pays more. Lose once and you are out."],
+                ].map(([icon, title, text]) => (
+                  <li key={title} className="flex items-start gap-3">
+                    <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-zinc-800 text-lg">
+                      {icon}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block font-black text-white">{title}</span>
+                      <span className="block text-xs text-zinc-400">{text}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+          {status === "champion" && (
+            <div className="rounded-2xl border-2 border-amber-400/70 bg-gradient-to-b from-amber-950/70 to-zinc-950 p-4 text-center text-white">
+              <p className="text-4xl" aria-hidden>
+                👑
+              </p>
+              <h3 className="text-xl font-black uppercase">Drift Champion</h3>
+              <p className="text-sm text-zinc-300">You beat all six drivers. The cup is yours.</p>
+              <PrizeLine view={view} />
+            </div>
+          )}
+          {status === "eliminated" && (
+            <div className="rounded-2xl border-2 border-rose-500/50 bg-gradient-to-b from-rose-950/60 to-zinc-950 p-4 text-center text-white">
+              <p className="text-4xl" aria-hidden>
+                {view?.endedBy === "withdrew" ? "🏳️" : "😤"}
+              </p>
+              <h3 className="text-xl font-black uppercase">
+                {view?.endedBy === "withdrew" ? "Withdrawn" : view?.endedBy === "left-track" ? "Left the track" : "Knocked out"}
+              </h3>
+              <p className="text-sm text-zinc-300">
+                {view?.endedBy === "withdrew"
+                  ? `You pulled out after ${view.wins} round${view.wins === 1 ? "" : "s"}.`
+                  : `You went out in ${view?.rounds.find((r) => r.state === "lost")?.name ?? "the cup"}.`}
+              </p>
+              <PrizeLine view={view} />
+            </div>
+          )}
+          {view && <PrizeLadder compact fee={view.entry.fee} wins={view.wins} test={view.entry.kind === "test"} />}
+          <Bracket rounds={view?.rounds ?? null} status={view?.status} fee={view?.entry.fee} />
+          <DockSpacer />
+          <ActionDock label="Campaign actions">
+            <button type="button" className={dockPrimary} onClick={() => setStage("entry")} disabled={busy !== null}>
+              {view?.endedBy === "withdrew" ? "↺ Reset campaign" : view ? "🏁 Start a new campaign" : "🏁 Enter the cup"}
+            </button>
+          </ActionDock>
+        </>
+      )}
+
+      {/* Step 1: the entry fee and what each round pays, before any cars are picked. */}
+      {busy !== "loading" && stage === "entry" && (
+        <>
+          <EntryStep entry={entry} onEntry={setEntry} pCredits={pCredits} />
+          <DockSpacer />
+          <ActionDock label="Entry actions">
+            <button type="button" className={dockSecondary} onClick={() => setStage(null)} disabled={busy !== null}>
+              Back
+            </button>
+            <button type="button" className={dockPrimary} onClick={payEntry} disabled={busy !== null}>
+              {busy === "dealing" ? "Paying…" : entry === "test" ? "Start free test →" : `Pay 🪙 ${entry} →`}
+            </button>
+          </ActionDock>
+        </>
+      )}
+
+      {/* Step 2: three of six cars dealt at random from the member's own deck. */}
+      {busy !== "loading" && stage === "cars" && (
+        <>
+          <div className="flex items-center justify-between gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 pl-3.5">
+            <p className="min-w-0 truncate text-xs font-bold text-amber-100">
+              {entryPaidText}
+              {paidEntry && paidEntry.fee > 0 && ` · top prize 🪙 ${prizeFor(paidEntry.fee, CAMPAIGN_ROUNDS.length).toLocaleString()}`}
+            </p>
+            <button
+              type="button"
+              className="min-h-11 shrink-0 px-3.5 text-xs font-black uppercase text-rose-300 underline decoration-rose-300/50 underline-offset-2"
+              onClick={withdrawDraft}
+              disabled={busy !== null}
+            >
+              Withdraw{paidEntry && paidEntry.fee > 0 ? " (entry lost)" : ""}
+            </button>
+          </div>
+
+          <section className={`${panel} !px-0 !pb-3`} aria-label="Choose your cars">
+            <div className="flex items-center justify-between gap-2 px-3.5">
+              <div className="min-w-0">
+                <h3 className="text-base font-black leading-tight">Pick {CARS_TO_PICK} of {offer.length}</h3>
+                <p className="text-[11px] text-zinc-400">Swipe to browse, then tap Pick.</p>
+              </div>
+              <button
+                type="button"
+                onClick={reroll}
+                disabled={busy !== null || working !== null || rerollsLeft <= 0}
+                className={secondaryBtn}
+                aria-label={`Re-roll your cars, ${rerollsLeft} left`}
+              >
+                {busy === "rerolling" ? "Dealing…" : `🎲 Re-roll · ${rerollsLeft}`}
+              </button>
+            </div>
+
+            {/* The six cars in a row to swipe through, one in the middle at a time, like opening a pack. */}
+            <CardCarousel label="Your six cars" focusIndex={focus}>
+              {offer.map((car, i) => {
+                const on = picked.includes(car.id);
+                const full = picked.length >= CARS_TO_PICK;
+                return (
+                  <div key={car.id} className="space-y-2" onClick={() => jumpTo(i)}>
+                    <div className={`relative rounded-2xl transition ${on ? "ring-4 ring-amber-400" : ""}`}>
+                      <FullArtCard card={car} className="drop-shadow-2xl" />
+                      {needsRepair(car, CAMPAIGN_ROUNDS.length) && <CautionTape />}
+                      {on && (
+                        <span className="absolute left-2 top-2 z-30 rounded-full bg-amber-400 px-2.5 py-0.5 text-xs font-black text-black shadow">
+                          ✓ Pick {picked.indexOf(car.id) + 1}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        togglePick(car.id);
+                      }}
+                      disabled={!on && full}
+                      aria-pressed={on}
+                      className={`inline-flex min-h-12 w-full items-center justify-center rounded-xl px-3 text-sm font-black uppercase tracking-wide shadow transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 ${
+                        on ? "border border-zinc-600 bg-zinc-800 text-zinc-100 hover:bg-zinc-700" : "bg-amber-500 text-black hover:bg-amber-400"
+                      }`}
+                    >
+                      {on ? "Remove from picks" : full ? "Picks full: remove one" : "Pick this car"}
+                    </button>
+                    <CarFooter
+                      car={car}
+                      ahead={CAMPAIGN_ROUNDS.length}
+                      deck={cards}
+                      disabled={busy !== null || working !== null}
+                      working={working === car.id}
+                      onRepair={(kitId) => fixCar(car.id, kitId, "repair")}
+                      onService={(kitId) => fixCar(car.id, kitId, "service")}
+                    />
+                  </div>
+                );
+              })}
+            </CardCarousel>
+          </section>
+
+          <Disclosure title="Your Crew cards" hint={`Your best 3 come with you${crewPreview.some((c) => c.id.startsWith("loaner-")) ? ", topped up with loaners" : ""}`}>
+            <ul className="grid max-w-md grid-cols-3 gap-2">
+              {crewPreview.map((c) => (
+                <li key={c.id}>
+                  <FullArtCard card={c} className="drop-shadow" />
+                </li>
+              ))}
+            </ul>
+          </Disclosure>
+          <Disclosure title="Good to know">
+            <ul className="list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-zinc-300">
+              <li>The cup is up to {CAMPAIGN_ROUNDS.length} battles and every car plays every battle.</li>
+              <li>
+                A car marked <span className="font-black text-yellow-300">needs repair</span> will break down before the cup is over. Repair it with a
+                Maintenance kit from your deck.
+              </li>
+              <li>Re-rolls are kept on your profile and come back with your next entry.</li>
+            </ul>
+          </Disclosure>
+
+          <DockSpacer />
+          <ActionDock label="Choose your cars">
+            <ol className="flex shrink-0 gap-1.5" aria-label="Your picks">
+              {Array.from({ length: CARS_TO_PICK }, (_, slot) => {
+                const index = offer.findIndex((c) => c.id === picked[slot]);
+                const car = index >= 0 ? offer[index] : null;
+                return (
+                  <li key={slot}>
+                    {car ? (
+                      <button
+                        type="button"
+                        onClick={() => jumpTo(index)}
+                        aria-label={`Show ${car.name}, pick ${slot + 1}`}
+                        className="relative block h-12 w-9 overflow-hidden rounded-lg ring-2 ring-amber-400"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={car.imageUrl} alt="" className="h-full w-full object-cover" />
+                        <span className="absolute inset-x-0 bottom-0 bg-black/70 text-center text-[10px] font-black text-amber-300">{slot + 1}</span>
+                      </button>
+                    ) : (
+                      <span className="flex h-12 w-9 items-center justify-center rounded-lg border-2 border-dashed border-zinc-600 text-[11px] font-black text-zinc-500">
+                        {slot + 1}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+            <button type="button" className={dockPrimary} onClick={start} disabled={working_ || picked.length !== CARS_TO_PICK}>
+              {busy === "building" ? "Building…" : picked.length === CARS_TO_PICK ? "Start the cup" : `Pick ${CARS_TO_PICK - picked.length} more`}
+            </button>
+          </ActionDock>
+        </>
+      )}
+
+      {/* A cup under way: who is next, then your cars. The full bracket is one tap away. */}
+      {busy !== "loading" && view && active && nextRound && (
+        <>
+          <NextUpCard round={nextRound} prize={nextPrize} blocked={anyBroken ? "Repair your cars to play" : null} />
+          <PrizeLadder compact fee={view.entry.fee} wins={view.wins} test={view.entry.kind === "test"} />
+
+          <section className={`${panel} !p-3`} aria-label="Your cars">
+            <h3 className="text-sm font-black uppercase tracking-wide text-zinc-300">Your cars</h3>
+            <ul className="mt-2.5 grid grid-cols-3 gap-2.5">
+              {view.cars.map((car) => (
+                <li key={car.id} className="space-y-1.5">
+                  <div className="relative rounded-2xl">
+                    <FullArtCard card={car} className="drop-shadow" />
+                    {needsRepair(car, Math.max(1, CAMPAIGN_ROUNDS.length - view.currentRound)) && <CautionTape />}
+                  </div>
+                  <CarFooter
+                    car={car}
+                    ahead={Math.max(1, CAMPAIGN_ROUNDS.length - view.currentRound)}
+                    deck={cards}
+                    disabled={busy !== null || working !== null}
+                    working={working === car.id}
+                    onRepair={(kitId) => fixCar(car.id, kitId, "repair")}
+                    onService={(kitId) => fixCar(car.id, kitId, "service")}
+                  />
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2.5 text-[11px] leading-relaxed text-zinc-400">
+              Every battle costs each car one battle of durability. A car that breaks down cannot play until it is repaired.
+            </p>
+          </section>
+
+          <Disclosure title="Your Crew cards">
+            <ul className="grid max-w-md grid-cols-3 gap-2">
+              {view.crew.map((c) => (
+                <li key={c.id}>
+                  <FullArtCard card={c} className="drop-shadow" />
+                </li>
+              ))}
+            </ul>
+          </Disclosure>
+          <Disclosure title="Full bracket" hint="All six rounds and what they pay">
+            <Bracket rounds={view.rounds} status={view.status} fee={view.entry.fee} />
+          </Disclosure>
+
+          <DockSpacer />
+          <ActionDock label="Cup actions">
+            <button type="button" className={dockDanger} onClick={withdraw} disabled={busy !== null}>
+              Withdraw
+            </button>
+            <button type="button" className={dockPrimary} onClick={beginRound} disabled={busy !== null || working !== null || anyBroken}>
+              {busy === "beginning" ? "Starting…" : anyBroken ? "🔧 Repair to play" : `⚔️ Play ${nextRound.name}`}
+            </button>
+          </ActionDock>
+        </>
+      )}
+      {dialog}
+    </section>
+  );
+}
+
+/** Shows what a finished cup paid. */
+function PrizeLine({ view }: { view: CampaignView | null }) {
+  if (!view) return null;
+  if (view.entry.kind === "test") return <p className="mt-2 text-xs font-bold text-zinc-400">Test cup: no prize.</p>;
+  const paid = view.payout ?? 0;
+  return (
+    <p className={`mt-2 text-sm font-black ${paid > 0 ? "text-emerald-300" : "text-zinc-400"}`}>
+      {paid > 0 ? `🪙 +${paid} P-Credits prize` : "No prize this time"} <span className="font-bold text-zinc-500">(entry {view.entry.fee})</span>
+    </p>
+  );
+}

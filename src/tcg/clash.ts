@@ -27,6 +27,8 @@ import {
   getCollectorProgress,
   optimizeLineupForTrack,
 } from "./progression";
+import { isCarBroken } from "@/lib/mechanical-faults";
+import { matchCars, matchCrew, profileOf, targetsFor, type PlayerProfile } from "./opponent-matching";
 import { getPCredits, grantPCredits } from "./storage";
 import type {
   ClashOpponent,
@@ -494,12 +496,103 @@ function isPlainCarCard(card: Pick<MemberCard, "cardType" | "crewCardId" | "name
   return !card.cardType && !card.crewCardId && !isCrewCard(card);
 }
 
+/** A member's car and Crew cards (not archived), newest first, de-duplicated. */
+async function loadCollection(userId: string, requireImage = true): Promise<{ cars: MemberCard[]; crew: MemberCard[] }> {
+  const ids = ((await redis.zrange(memberCardsIndexKey(userId), 0, 199, { rev: true })) as string[]) || [];
+  if (ids.length === 0) return { cars: [], crew: [] };
+  const rows = await redis.mget(...ids.map((id) => memberCardKey(String(id))));
+  const cars = new Map<string, MemberCard>();
+  const crew = new Map<string, MemberCard>();
+  for (const row of rows) {
+    const parsed = parseStoredCard(row);
+    if (!parsed || parsed.archived || parsed.userId !== userId) continue;
+    if (requireImage && !parsed.imageUrl) continue;
+    if (isCrewCard(parsed)) crew.set(parsed.id, publicCard(parsed));
+    else if (isPlainCarCard(parsed)) cars.set(parsed.id, publicCard(parsed));
+  }
+  return { cars: [...cars.values()], crew: [...crew.values()] };
+}
+
+const RIVAL_TITLES = ["Tandem Challenger", "P-Tile Specialist", "Night Touge Runner", "Outer-Clip Hunter", "Penthouse Contender"];
+/** How many members are looked at to find the closest match to the player. */
+const MATCH_CANDIDATES = 6;
+
+/** Put an opponent together from three matched cars and three matched Crew cards. */
+function assembleOpponent(args: { idPrefix: string; driverName: string; teamName: string; title: string; cars: MemberCard[]; crew: MemberCard[] }): ClashOpponent {
+  const crew = args.crew.slice(0, 3) as [MemberCard, MemberCard, MemberCard];
+  const lead = crew[0] ?? STARTER_LOANER_CREW_CARD;
+  const cars = optimizeLineupForTrack(args.cars.slice(0, 3) as [MemberCard, MemberCard, MemberCard], CLASH_TRACK_CONDITIONS[0], lead);
+  const crewPower = cars.reduce((sum, c) => sum + getCardPower(c), 0) + crew.reduce((sum, c) => sum + getCardPower(c), 0);
+  return {
+    id: `${args.idPrefix}_${Date.now()}_${randomInt(1000, 9999)}`,
+    driverName: args.driverName,
+    teamName: args.teamName,
+    title: args.title,
+    crewPower,
+    cards: cars,
+    crewCard: lead,
+    crewCards: crew,
+  };
+}
+
+/**
+ * An opponent built to the player's strength (see opponent-matching.ts): among a few members, the one whose collection fits
+ * the player's three cars best, with any gap filled by a generated car. Returns null when there is no member to use.
+ */
+async function pickMatchedOpponent(profile: PlayerProfile, candidateIds: string[]): Promise<ClashOpponent | null> {
+  const targets = targetsFor(profile, Math.random);
+  let best: { userId: string; match: ReturnType<typeof matchCars>; crew: MemberCard[]; lead: MemberCard } | null = null;
+  for (const userId of candidateIds.slice(0, MATCH_CANDIDATES)) {
+    const col = await loadCollection(userId).catch(() => null);
+    if (!col || col.cars.length === 0) continue;
+    const lead = [...col.cars].sort((a, b) => getCardPower(b) - getCardPower(a))[0];
+    const match = matchCars(targets, col.cars, Math.random, { driver: lead.driver?.trim() || "PHD Rival", team: lead.team?.trim() || "Community Crew" });
+    if (!best || match.fit < best.match.fit) best = { userId, match, crew: col.crew, lead };
+    // A member with real cards that all fit closely can't be beaten, so stop looking.
+    if (match.generated === 0 && match.fit <= 0.08) break;
+  }
+  if (!best) return null;
+
+  const memberHash = await redis.hmget<Record<string, unknown>>(`member:${best.userId}`, "nickname", "name").catch(() => null);
+  const nickname = typeof memberHash?.nickname === "string" ? memberHash.nickname.trim() : "";
+  const fullName = typeof memberHash?.name === "string" ? memberHash.name.trim() : "";
+  return assembleOpponent({
+    idPrefix: "opp",
+    driverName: nickname || fullName || best.lead.driver?.trim() || "PHD Rival",
+    teamName: best.lead.team?.trim() || "Community Crew",
+    title: RIVAL_TITLES[randomInt(0, RIVAL_TITLES.length)],
+    cars: best.match.cars,
+    crew: matchCrew(profile.crewTiers, best.crew, Math.random),
+  });
+}
+
+/** The same, from one of the built-in bosses, for when no member has a car to use. */
+function pickMatchedBoss(profile: PlayerProfile): ClashOpponent {
+  const boss = FALLBACK_BOSS_CREWS[randomInt(0, FALLBACK_BOSS_CREWS.length)];
+  const match = matchCars(targetsFor(profile, Math.random), boss.cards, Math.random, { driver: boss.driverName, team: boss.teamName });
+  return assembleOpponent({
+    idPrefix: "boss",
+    driverName: boss.driverName,
+    teamName: boss.teamName,
+    title: boss.title,
+    cars: match.cars,
+    crew: matchCrew(profile.crewTiers, boss.crewCards ?? [], Math.random),
+  });
+}
+
 export async function pickClashOpponent(excludeUserId?: string): Promise<ClashOpponent> {
+  let profile: PlayerProfile | null = null;
   try {
     // If excludeUserId was not provided, try to extract current user session
     if (!excludeUserId) {
       const session = await auth();
       excludeUserId = session?.user?.id;
+    }
+
+    // How strong the player is, so the opponent can be built to match. Without a collection to read, the old pick is used.
+    if (excludeUserId) {
+      const mine = await loadCollection(excludeUserId, false).catch(() => null);
+      profile = mine ? profileOf(mine.cars.filter((car) => !isCarBroken(car)), mine.crew) : null;
     }
 
     await ensureCommunityPool();
@@ -531,6 +624,11 @@ export async function pickClashOpponent(excludeUserId?: string): Promise<ClashOp
       const rivalUserIds = Array.from(rivalUserMap.keys());
 
       // If at least 1 genuine rival user exists (never the player):
+      if (rivalUserIds.length > 0 && profile) {
+        const matched = await pickMatchedOpponent(profile, rivalUserIds.slice().sort(() => Math.random() - 0.5));
+        if (matched) return matched;
+      }
+
       if (rivalUserIds.length > 0) {
         // Shuffle rival user candidates so all eligible community members get turns
         const shuffledRivalUserIds = rivalUserIds.slice().sort(() => Math.random() - 0.5);
@@ -655,7 +753,8 @@ export async function pickClashOpponent(excludeUserId?: string): Promise<ClashOp
     console.error("[driftClash] pickClashOpponent error:", error);
   }
 
-  // Fallback when no other community drivers exist: Pick a random Boss from the expanded FALLBACK_BOSS_CREWS pool!
+  // Fallback when no other community drivers exist: a built-in boss, built to the player's strength when it is known.
+  if (profile) return pickMatchedBoss(profile);
   const boss = FALLBACK_BOSS_CREWS[randomInt(0, FALLBACK_BOSS_CREWS.length)];
   const bossCrewCards = boss.crewCards ?? STARTER_LOANER_CREW_CARDS;
   const leadBossCrewCard = bossCrewCards[0] ?? STARTER_LOANER_CREW_CARD;

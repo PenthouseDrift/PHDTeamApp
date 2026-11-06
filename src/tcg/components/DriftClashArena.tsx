@@ -68,6 +68,7 @@ import type { ClashGameCardsConfig } from "@/tcg/storage";
 import type { ClashOpponent, ClashPlayerStats } from "@/tcg/types";
 import { ClashHowToPlayModal, type HowToPlayTab } from "./ClashHowToPlayModal";
 import { ClashChallengesView } from "./ClashChallengesView";
+import type { ArenaCampaignHook } from "@/tcg/campaign/types";
 import {
   CASUAL_AI_SKILL,
   NEUTRAL_DEBUFF,
@@ -870,7 +871,10 @@ export function DriftClashArena({
   onOpenStoreTab,
   lobbyTab,
   onLobbyTabChange,
+  campaign,
 }: {
+  /** Set by the Drift Campaign (admin only) to play one fixed battle. Leave out for the normal game. */
+  campaign?: ArenaCampaignHook;
   cards: MemberCard[];
   initialOpponent: ClashOpponent;
   initialStats?: ClashPlayerStats;
@@ -1130,7 +1134,7 @@ export function DriftClashArena({
 
   // Guard against playing against oneself in casual lobby (never override challenge cups)
   useEffect(() => {
-    if (activeChallenge) return;
+    if (activeChallenge || campaign) return;
     if (!cards || cards.length === 0) return;
     const playerCardIdSet = new Set(cards.map((c) => c.id));
     const playerUserId = cards.find((c) => Boolean(c.userId))?.userId;
@@ -1146,7 +1150,7 @@ export function DriftClashArena({
         })
         .catch(() => null);
     }
-  }, [cards, opponent.cards, activeChallenge]);
+  }, [cards, opponent.cards, activeChallenge, campaign]);
 
   // Step 1 Loadout state: 3 Car IDs + 3 Crew IDs
   const [selectedCarIds, setSelectedCarIds] = useState<[string, string, string]>(() =>
@@ -1531,6 +1535,24 @@ export function DriftClashArena({
     }
   }
 
+  // Drift Campaign: the battle starts as soon as the arena opens, with the campaign's rival and the cars and Crew it was given.
+  // Safe to run twice (React dev mode does): the roulette simply restarts.
+  useEffect(() => {
+    if (!campaign) return;
+    clearTimers();
+    // This effect starts the battle on opening; there is nothing to derive these from during render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setActiveChallenge(null);
+    setOpponent(campaign.opponent);
+    setSelectedCarIds(pickTopThreeIds(usableCarCards));
+    setSelectedCrewIds(pickTopThreeIds(usableCrewCards));
+    setLoadoutSection("cars");
+    setBattleBanner(null);
+    handleStartTrackRoulette(null);
+    // Only on opening: the campaign gives a fresh arena (a new key) for each round.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function handleRequestReplayChallenge(challenge: TandemClashChallenge) {
     if (challenge.entryCostPCredits > 0) {
       setChallengeReplayConfirm(challenge);
@@ -1597,7 +1619,8 @@ export function DriftClashArena({
 
     startTransition(async () => {
       // In challenge cups, the opponent is strictly configured for the cup spec; only casual lobby randomizes rival
-      const oppPromise = !effectiveChallenge ? findNewClashOpponentAction().catch(() => null) : null;
+      // The campaign also brings its own rival, so it never asks for a random one.
+      const oppPromise = !effectiveChallenge && !campaign ? findNewClashOpponentAction().catch(() => null) : null;
       await new Promise((r) => setTimeout(r, totalSpinTime));
       if (oppPromise) {
         const oppRes = await oppPromise;
@@ -2140,6 +2163,12 @@ export function DriftClashArena({
     });
     setPhase("verdict");
 
+    // Drift Campaign: the cup records the result. No P-Credits, streaks or car wear for these battles.
+    if (campaign) {
+      campaign.onResult({ won, playerCorners, opponentCorners });
+      return;
+    }
+
     startTransition(async () => {
       if (activeChallenge) {
         const res = await completeChallengeBattleAction({
@@ -2277,7 +2306,12 @@ export function DriftClashArena({
   // ── LOBBY VIEW ─────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4">
-      {arenaLobbyTab === "challenges" ? (
+      {campaign ? (
+        // The campaign opens straight into the battle; this only shows for a moment, or if the stage is closed.
+        <p className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-sm font-bold text-zinc-300" role="status">
+          Setting up the battle…
+        </p>
+      ) : arenaLobbyTab === "challenges" ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 p-2">
             <button
@@ -2968,7 +3002,7 @@ export function DriftClashArena({
                             : "Final Judge Verdict"}
                   </span>
                   <h2 className="text-xs font-black text-white sm:text-sm">
-                    Penthouse Tandem Clash
+                    {campaign ? `Drift Campaign · ${campaign.roundLabel}` : "Penthouse Tandem Clash"}
                   </h2>
                 </div>
               </div>
@@ -2998,6 +3032,10 @@ export function DriftClashArena({
                   onClick={() => {
                     clearTimers();
                     setPickerModalTarget(null);
+                    if (campaign) {
+                      campaign.onExit();
+                      return;
+                    }
                     setPhase("lobby");
                   }}
                   className="rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-bold text-zinc-300 hover:bg-zinc-800"
@@ -5486,6 +5524,44 @@ export function DriftClashArena({
                       })}
                     </div>
 
+                    {/* Drift Campaign: what this battle cost the cars (the normal game's wear, applied to your real cards) */}
+                    {campaign?.maintenance && (
+                      <div className="rounded-3xl border border-amber-500/40 bg-zinc-900/90 p-4 text-left shadow-lg space-y-2.5">
+                        <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                          <span className="text-xs font-black uppercase tracking-wider text-amber-400">🔧 Maintenance</span>
+                          <span className="text-[10px] font-bold text-zinc-400">Each car lost 1 battle of durability</span>
+                        </div>
+                        <ul className="space-y-1.5">
+                          {campaign.maintenance.cars.map((c) => (
+                            <li key={c.id} className="flex items-center justify-between gap-3 text-xs">
+                              <span className="truncate font-bold text-zinc-200">{c.name}</span>
+                              <span className={`shrink-0 font-black tabular-nums ${c.broken ? "text-rose-400" : "text-emerald-400"}`}>
+                                {c.broken
+                                  ? "Needs repair"
+                                  : c.remaining !== null
+                                    ? `${c.remaining}${c.max !== null ? `/${c.max}` : ""} battles left`
+                                    : "worn"}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                        {campaign.maintenance.events.map((ev, i) => (
+                          <p
+                            key={i}
+                            className={`rounded-2xl border p-2.5 text-[11px] font-bold ${
+                              ev.type === "fault"
+                                ? "border-rose-500/40 bg-rose-500/10 text-rose-200"
+                                : "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                            }`}
+                          >
+                            {ev.type === "fault"
+                              ? `${ev.faultIcon || "⚠️"} ${ev.cardName} broke down: ${ev.faultName}. Repair it with a ${ev.faultName} kit before the next battle.`
+                              : `✅ ${ev.cardName} finished its repair and has ${ev.freshBattles} fresh battles.`}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+
                     {/* Pit Garage Status & Mechanical Report */}
                     {pitReport.length > 0 && (
                       <div className="rounded-3xl border border-amber-500/40 bg-zinc-900/90 p-4 space-y-2.5 text-left shadow-lg">
@@ -5527,7 +5603,16 @@ export function DriftClashArena({
                     )}
 
                     <div className="sticky bottom-0 z-40 -mx-3.5 sm:-mx-6 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)] bg-gradient-to-t from-black via-zinc-950/95 to-transparent backdrop-blur-md shadow-[0_-10px_25px_rgba(0,0,0,0.8)] flex flex-wrap items-center justify-center gap-3">
-                      {activeChallenge ? (
+                      {campaign ? (
+                        <button
+                          type="button"
+                          onClick={campaign.onContinue}
+                          disabled={campaign.continueDisabled}
+                          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-6 text-sm font-black uppercase text-black shadow-lg hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100"
+                        >
+                          {campaign.continueLabel}
+                        </button>
+                      ) : activeChallenge ? (
                         <>
                           {completedChallengeIds.includes(activeChallenge.id) ||
                           challengeWonCelebration?.challengeCompleted ? (
@@ -5594,7 +5679,7 @@ export function DriftClashArena({
                           <span>🔒 Early Access Required</span>
                         </button>
                       )}
-                      {!activeChallenge && (
+                      {!activeChallenge && !campaign && (
                         <button
                           type="button"
                           onClick={() => setPhase("lobby")}

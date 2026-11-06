@@ -37,6 +37,7 @@ interface CardsPageProps {
 const VALID_TABS: TcgTab[] = [
   "home",
   "tour",
+  "campaign",
   "collection",
   "store",
   "marketplace",
@@ -116,7 +117,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
   // The Clash tab is gone: Tandem Clash is on the game's Home page now, so old ?tab=clash links land there.
   const requestedTab = (params.tab === "clash" ? "home" : params.tab) as TcgTab | undefined;
   const initialTab: TcgTab =
-    requestedTab && VALID_TABS.includes(requestedTab)
+    requestedTab && VALID_TABS.includes(requestedTab) && (requestedTab !== "campaign" || session.user.role === "admin")
       ? requestedTab
       : checkoutConfirmed
         ? "p-credits"
