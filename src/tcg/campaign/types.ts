@@ -161,9 +161,14 @@ export interface CampaignBattle {
   crew: MemberCard[];
 }
 
+/** The rarity a dealt slot rolled. Mythic cards sit in the legend slot. */
+export type RolledTier = "bronze" | "silver" | "gold" | "legend";
+
 /** The six cars dealt to choose three from. */
 export interface CampaignOffer {
   cars: MemberCard[];
+  /** The rarity each slot rolled, in the same order as `cars`. A car can differ from its roll when the deck had none of that rarity left. */
+  rolls: RolledTier[];
   /** Extra deals left. Stored on the member's profile. */
   rerollsLeft: number;
 }

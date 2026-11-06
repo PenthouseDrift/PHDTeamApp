@@ -67,14 +67,14 @@ export function ClashFinaleRoulette({ mode, cornerNumber, onDone }: ClashFinaleR
 
   const info = FINALE_MODE_INFO[mode];
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-md animate-in fade-in duration-200">
       <div
         role="status"
         aria-live="polite"
         className="w-full max-w-lg rounded-3xl border-2 border-cyan-400/70 bg-zinc-950 p-4 text-center shadow-[0_0_60px_rgba(34,211,238,0.35)] sm:p-6"
       >
         <div className="inline-flex items-center gap-1.5 rounded-full border border-cyan-400/60 bg-cyan-500/15 px-3 py-1">
-          <span className="text-[10px] font-black uppercase tracking-wider text-cyan-300 sm:text-[11px]">
+          <span className="text-[11px] font-black uppercase tracking-wider text-cyan-300">
             Corner {cornerNumber} · Drawing the final showdown
           </span>
         </div>
@@ -85,16 +85,16 @@ export function ClashFinaleRoulette({ mode, cornerNumber, onDone }: ClashFinaleR
             return (
               <div
                 key={m}
-                className={`flex flex-col items-center gap-1 rounded-2xl border-2 px-2 py-4 transition-all duration-75 ${
+                className={`flex min-h-[7rem] flex-col items-center justify-center gap-1 rounded-2xl border-2 px-1.5 py-4 transition-all duration-75 ${
                   isWinner
-                    ? "scale-110 border-amber-400 bg-amber-500/20 shadow-[0_0_35px_rgba(245,158,11,0.7)]"
+                    ? "scale-105 border-amber-400 bg-amber-500/20 shadow-[0_0_35px_rgba(245,158,11,0.7)]"
                     : isLit
                       ? "border-cyan-300 bg-cyan-500/20 shadow-[0_0_25px_rgba(34,211,238,0.5)]"
                       : "border-zinc-800 bg-zinc-900/60 opacity-60"
                 }`}
               >
                 <span className="text-3xl">{FINALE_MODE_INFO[m].icon}</span>
-                <span className="text-[10px] font-black uppercase leading-tight tracking-wider text-white sm:text-xs">
+                <span className="text-[11px] font-black uppercase leading-tight tracking-wider text-white sm:text-xs">
                   {FINALE_MODE_INFO[m].title}
                 </span>
               </div>

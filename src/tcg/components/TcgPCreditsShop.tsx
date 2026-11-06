@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { EmbeddedCheckout } from "@/components/marketplace/EmbeddedCheckout";
 import { FULL_ART_TIERS } from "@/lib/full-art-card";
 import {
@@ -13,6 +13,7 @@ import {
 } from "@/tcg/config";
 import { createPCreditsCheckout, getMyTcgBalances } from "@/tcg/actions";
 import type { PCreditBundle } from "@/tcg/types";
+import { useToast } from "@/tcg/ui/Toast";
 
 const EMBEDDED = process.env.NEXT_PUBLIC_SUMUP_EMBEDDED !== "false";
 
@@ -36,6 +37,7 @@ export function TcgPCreditsShop({
   onOpenMarketplaceTab: () => void;
   onOpenCollectionTab: () => void;
 }) {
+  const toast = useToast();
   const [pending, startTransition] = useTransition();
   const [activeBundleId, setActiveBundleId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +51,28 @@ export function TcgPCreditsShop({
     url?: string;
   } | null>(null);
 
+  // Stable callbacks: EmbeddedCheckout re-mounts its card form whenever these change identity.
+  const closeCheckout = useCallback(() => setEmbedded(null), []);
+  const handlePaid = useCallback(async () => {
+    try {
+      const latest = await getMyTcgBalances();
+      onPCreditsChange(latest.pCredits);
+    } catch {
+      toast("Payment received. Pull to refresh to update your balance.", "info");
+    }
+  }, [onPCreditsChange, toast]);
+
+  // The bundle with the lowest price per credit, for the "Best value" cue.
+  const bestValueId = useMemo(() => {
+    if (bundles.length < 2) return null;
+    let best: { id: string; per: number } | null = null;
+    for (const b of bundles) {
+      const per = getEffectivePrice(b.priceGbp, b.salePriceGbp) / b.pCredits;
+      if (Number.isFinite(per) && per > 0 && (!best || per < best.per)) best = { id: b.id, per };
+    }
+    return best?.id ?? null;
+  }, [bundles]);
+
   function handleBuyBundle(bundle: PCreditBundle) {
     setError(null);
     setActiveBundleId(bundle.id);
@@ -57,6 +81,7 @@ export function TcgPCreditsShop({
         const res = await createPCreditsCheckout(bundle.id);
         if (!res.success) {
           setError(res.error);
+          toast(res.error, "error");
           setActiveBundleId(null);
           return;
         }
@@ -75,7 +100,9 @@ export function TcgPCreditsShop({
           window.location.href = res.data.url;
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not start SumUp checkout");
+        const message = err instanceof Error ? err.message : "Could not start SumUp checkout";
+        setError(message);
+        toast(message, "error");
         setActiveBundleId(null);
       }
     });
@@ -90,15 +117,8 @@ export function TcgPCreditsShop({
           currency={embedded.currency}
           email={embedded.email}
           hostedUrl={embedded.url}
-          onCancel={() => setEmbedded(null)}
-          onPaid={async () => {
-            try {
-              const latest = await getMyTcgBalances();
-              onPCreditsChange(latest.pCredits);
-            } catch {
-              /* ignore */
-            }
-          }}
+          onCancel={closeCheckout}
+          onPaid={handlePaid}
           label={`${embedded.bundleName} (${embedded.pCredits.toLocaleString()} P-Credits)`}
           successTitle="P-Credits Added!"
           successBody={(ref) =>
@@ -111,37 +131,19 @@ export function TcgPCreditsShop({
         />
       )}
 
-      {/* Hero Balance Card */}
-      <section className="overflow-hidden rounded-3xl border border-amber-500/40 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-6 text-zinc-100 shadow-lg">
-        <div className="flex flex-wrap items-center justify-between gap-6">
-          <div className="space-y-1.5">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-amber-300">
-              🪙 Penthouse TCG Currency
-            </span>
-            <h2 className="text-3xl font-black tracking-tight sm:text-4xl">
-              {pCredits.toLocaleString()} <span className="text-amber-400">P-Credits</span>
-            </h2>
-            <p className="max-w-lg text-xs text-zinc-400">
-              Use P-Credits to buy Standard Packs, exclusive Custom Set Packs, or trade cards with other members on the Marketplace.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2.5">
-            <button
-              type="button"
-              onClick={onOpenStoreTab}
-              className="min-h-11 rounded-xl bg-amber-500 px-4 text-xs font-black text-black hover:bg-amber-400"
-            >
-              Spend in Pack Store
-            </button>
-            <button
-              type="button"
-              onClick={onOpenMarketplaceTab}
-              className="min-h-11 rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-xs font-bold text-zinc-100 hover:bg-zinc-800"
-            >
-              Browse Marketplace
-            </button>
-          </div>
+      {/* Compact balance header */}
+      <section className="flex items-center justify-between gap-4 rounded-2xl border border-amber-500/40 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black px-4 py-3 text-zinc-100 shadow-lg sm:px-6 sm:py-4">
+        <div className="min-w-0">
+          <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-300">
+            <span aria-hidden>🪙 </span>Your balance
+          </span>
+          <h2 className="truncate text-2xl font-black tracking-tight sm:text-3xl">
+            {pCredits.toLocaleString()} <span className="text-amber-400">P-Credits</span>
+          </h2>
         </div>
+        <p className="hidden max-w-sm text-xs text-zinc-400 md:block">
+          Use P-Credits to buy Standard Packs, exclusive Custom Set Packs, or trade cards with other members on the Marketplace.
+        </p>
       </section>
 
       {error && (
@@ -157,17 +159,15 @@ export function TcgPCreditsShop({
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-100">
-              Purchase P-Credits
-            </h3>
+            <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Purchase P-Credits</h3>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Instant top-up via embedded SumUp checkout. Pay securely with Card, Apple Pay, or Google Pay.
+              Instant top-up with secure checkout. Pay with Card, Apple Pay, or Google Pay.
             </p>
           </div>
           {isAdmin && (
             <Link
               href="/admin/driftclash/packs"
-              className="inline-flex min-h-10 items-center justify-center rounded-xl border border-zinc-300 px-3.5 text-xs font-bold text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
+              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-zinc-300 px-3.5 text-xs font-bold text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
             >
               ⚙️ Edit P-Credit Prices &amp; Sales
             </Link>
@@ -180,49 +180,57 @@ export function TcgPCreditsShop({
             const bundleOnSale = isOnSale(bundle.priceGbp, bundle.salePriceGbp);
             const effectiveGbp = getEffectivePrice(bundle.priceGbp, bundle.salePriceGbp);
             const discountPct = getSaleDiscountPct(bundle.priceGbp, bundle.salePriceGbp);
+            const perPound = effectiveGbp > 0 ? Math.round(bundle.pCredits / effectiveGbp) : 0;
+            const isBest = bundle.id === bestValueId;
 
             return (
               <div
                 key={bundle.id}
-                className={`relative flex flex-col justify-between rounded-2xl border p-5 shadow-sm transition-all ${
+                className={`relative flex items-center gap-3 rounded-2xl border p-4 shadow-sm motion-safe:transition-all sm:flex-col sm:items-stretch sm:justify-between sm:p-5 ${
                   bundleOnSale
                     ? "border-rose-500/60 bg-white ring-1 ring-rose-500/20 hover:border-rose-500 dark:border-rose-500/50 dark:bg-zinc-900"
                     : "border-zinc-200 bg-white hover:border-amber-500/60 dark:border-zinc-800 dark:bg-zinc-900"
                 }`}
               >
+                {isBest && (
+                  <span className="absolute -top-2.5 left-4 rounded-full bg-emerald-500 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-black shadow">
+                    ★ Best value
+                  </span>
+                )}
                 {bundleOnSale ? (
-                  <span className="absolute -top-2.5 right-4 rounded-full bg-gradient-to-r from-rose-600 to-amber-500 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-white shadow">
+                  <span className="absolute -top-2.5 right-4 rounded-full bg-gradient-to-r from-rose-600 to-amber-500 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-white shadow">
                     🔥 Sale · {discountPct}% Off
                   </span>
                 ) : bundle.badge ? (
-                  <span className="absolute -top-2.5 right-4 rounded-full bg-amber-500 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-black shadow">
+                  <span className="absolute -top-2.5 right-4 rounded-full bg-amber-500 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-black shadow">
                     {bundle.badge}
                   </span>
                 ) : null}
 
-                <div className="space-y-2">
-                  <p className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-                    {bundle.name}
-                  </p>
-                  <p className="text-2xl font-black text-zinc-900 dark:text-zinc-100">
+                <div className="min-w-0 flex-1 space-y-1 sm:flex-none sm:space-y-2">
+                  <p className="truncate text-xs font-bold uppercase tracking-wider text-zinc-400">{bundle.name}</p>
+                  <p className="text-xl font-black text-zinc-900 dark:text-zinc-100 sm:text-2xl">
                     {bundle.pCredits.toLocaleString()}{" "}
-                    <span className="text-sm font-extrabold text-amber-500">P-Credits</span>
+                    <span className="text-sm font-extrabold text-amber-500">P</span>
                   </p>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{bundle.description}</p>
+                  {perPound > 0 && (
+                    <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                      {perPound.toLocaleString()} P per £1
+                    </p>
+                  )}
+                  <p className="line-clamp-2 text-xs text-zinc-500 dark:text-zinc-400">{bundle.description}</p>
                 </div>
 
-                <div className="mt-5 space-y-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-xs font-semibold text-zinc-500">Price</span>
+                <div className="w-[8.5rem] shrink-0 space-y-2 sm:w-auto sm:border-t sm:border-zinc-100 sm:pt-4 sm:dark:border-zinc-800">
+                  <div className="flex items-baseline justify-end gap-1.5 sm:justify-between">
+                    <span className="hidden text-xs font-semibold text-zinc-500 sm:inline">Price</span>
                     {bundleOnSale ? (
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-xs font-bold text-zinc-400 line-through">
-                          £{bundle.priceGbp.toFixed(2)}
-                        </span>
+                      <span className="flex items-baseline gap-1.5">
+                        <span className="text-xs font-bold text-zinc-400 line-through">£{bundle.priceGbp.toFixed(2)}</span>
                         <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">
                           £{effectiveGbp.toFixed(2)}
                         </span>
-                      </div>
+                      </span>
                     ) : (
                       <span className="text-lg font-black text-zinc-900 dark:text-zinc-100">
                         £{effectiveGbp.toFixed(2)}
@@ -233,28 +241,35 @@ export function TcgPCreditsShop({
                     type="button"
                     onClick={() => handleBuyBundle(bundle)}
                     disabled={pending}
-                    className="min-h-11 w-full rounded-xl bg-amber-500 px-4 text-xs font-black text-black transition-colors hover:bg-amber-400 disabled:opacity-50"
+                    aria-label={`Buy ${bundle.name}, ${bundle.pCredits.toLocaleString()} P-Credits for £${effectiveGbp.toFixed(2)}`}
+                    className="gx-tap inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-amber-500 px-3 text-sm font-black text-black transition-colors hover:bg-amber-400 disabled:opacity-50"
                   >
-                    {isBuying ? (
-                      "Opening Checkout…"
-                    ) : bundleOnSale ? (
-                      <span>
-                        Buy on Sale ·{" "}
-                        <span className="line-through opacity-60">£{bundle.priceGbp.toFixed(2)}</span>{" "}
-                        £{effectiveGbp.toFixed(2)}
-                      </span>
-                    ) : (
-                      `Buy · £${effectiveGbp.toFixed(2)}`
-                    )}
+                    {isBuying ? "Opening…" : bundleOnSale ? "Buy on sale" : "Buy"}
                   </button>
-                  <p className="text-[10px] text-center font-medium text-zinc-400">
-                    Card · Pay · GPay
-                  </p>
+                  <p className="hidden text-center text-[11px] font-medium text-zinc-400 sm:block">Card · Pay · GPay</p>
                 </div>
               </div>
             );
           })}
         </div>
+      </section>
+
+      {/* Where else to spend or earn */}
+      <section aria-label="Shortcuts" className="grid grid-cols-2 gap-2.5">
+        <button
+          type="button"
+          onClick={onOpenStoreTab}
+          className="gx-tap min-h-12 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-bold text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+        >
+          Spend in Pack Store
+        </button>
+        <button
+          type="button"
+          onClick={onOpenMarketplaceTab}
+          className="gx-tap min-h-12 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-bold text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+        >
+          Browse Marketplace
+        </button>
       </section>
 
       {/* Quick Sell & Trading Rates Info */}
@@ -271,7 +286,7 @@ export function TcgPCreditsShop({
           <button
             type="button"
             onClick={onOpenCollectionTab}
-            className="min-h-10 rounded-xl border border-zinc-300 px-3.5 text-xs font-bold text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
+            className="gx-tap min-h-12 w-full rounded-xl border border-zinc-300 px-4 text-sm font-bold text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:w-auto"
           >
             Go to My Cards →
           </button>
@@ -289,7 +304,7 @@ export function TcgPCreditsShop({
               <span className="mt-0.5 block text-lg font-black text-amber-600 dark:text-amber-400">
                 {QUICK_SELL_PRICES[tier.id]} P-Credits
               </span>
-              <span className="text-[10px] text-zinc-400">Instant Quick Sell</span>
+              <span className="text-[11px] text-zinc-400">Instant Quick Sell</span>
             </li>
           ))}
         </ul>

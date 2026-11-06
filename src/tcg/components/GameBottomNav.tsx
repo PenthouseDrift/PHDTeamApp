@@ -33,6 +33,8 @@ export function GameBottomNav({
 }) {
   const mounted = useSyncExternalStore(noSubscription, () => true, () => false);
   const bar = useRef<HTMLElement>(null);
+  // Whether there are more sections to the right, to show a fade at the edge of the bar.
+  const [moreRight, setMoreRight] = useState(false);
   // How tall the main tab bar is (it includes the phone's safe area), so this bar sits exactly on top of it.
   const [offset, setOffset] = useState(56);
 
@@ -44,10 +46,15 @@ export function GameBottomNav({
     return () => observer.disconnect();
   }, [mounted]);
 
+  const measureScroll = () => {
+    const el = bar.current;
+    if (el) setMoreRight(el.scrollWidth - el.clientWidth - el.scrollLeft > 4);
+  };
   // With many sections the bar scrolls sideways; keep the current one in view.
   useEffect(() => {
     const current = bar.current?.querySelector<HTMLElement>('[aria-current="page"]');
     current?.scrollIntoView({ inline: "center", block: "nearest" });
+    measureScroll();
   }, [active, mounted]);
 
   if (!mounted) return null;
@@ -55,9 +62,10 @@ export function GameBottomNav({
   return createPortal(
     <nav
       ref={bar}
+      onScroll={measureScroll}
       aria-label="DriftClash sections"
       style={{ bottom: offset }}
-      className="fixed inset-x-0 z-30 flex overflow-x-auto overscroll-x-contain border-t border-amber-500/30 bg-zinc-950/95 px-1 shadow-[0_-8px_20px_rgba(0,0,0,0.35)] backdrop-blur-sm [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden"
+      className="gx-fade-up fixed inset-x-0 z-30 flex overflow-x-auto overscroll-x-contain border-t border-amber-500/30 bg-zinc-950/95 px-1 shadow-[0_-8px_20px_rgba(0,0,0,0.35)] backdrop-blur-sm [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden"
     >
       {items.map((item) => {
         const isActive = item.id === active;
@@ -68,7 +76,7 @@ export function GameBottomNav({
             onClick={() => onSelect(item.id)}
             aria-current={isActive ? "page" : undefined}
             aria-label={item.badge ? `${item.label}, ${item.badge}` : item.label}
-            className={`relative flex min-h-[3.25rem] min-w-[4.25rem] flex-1 basis-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-black transition-colors ${
+            className={`relative flex min-h-[3.25rem] min-w-[4.25rem] flex-1 basis-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] font-black transition-colors ${
               isActive ? "text-amber-400" : "text-zinc-400"
             }`}
           >
@@ -77,7 +85,7 @@ export function GameBottomNav({
               {item.icon}
               {item.badge && (
                 <span
-                  className={`absolute -right-3.5 -top-1.5 rounded-full px-1 text-[9px] font-extrabold leading-4 ${
+                  className={`absolute -right-3.5 -top-1.5 rounded-full px-1 text-[10px] font-extrabold leading-4 ${
                     item.urgent ? "bg-emerald-500 text-black" : "bg-zinc-700 text-zinc-100"
                   }`}
                 >
@@ -89,6 +97,12 @@ export function GameBottomNav({
           </button>
         );
       })}
+      {moreRight && (
+        <span
+          aria-hidden
+          className="pointer-events-none sticky right-0 -ml-8 w-8 shrink-0 bg-gradient-to-l from-zinc-950 to-transparent"
+        />
+      )}
     </nav>,
     document.body
   );

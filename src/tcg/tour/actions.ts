@@ -42,6 +42,18 @@ export async function getTourAccess(): Promise<boolean> {
   }
 }
 
+/** True when Tandem Tour is only visible to this member because they are an admin (it is not switched on for members yet). */
+export async function getTourAdminPreview(): Promise<boolean> {
+  try {
+    const user = await currentUser();
+    if (!user) return false;
+    const access = await service.getAccess(user);
+    return access.ok && access.reason !== null;
+  } catch {
+    return false;
+  }
+}
+
 export async function getTourLobby(): Promise<ActionResult<TourLobbyView>> {
   return run((user) => service.getLobby(user));
 }

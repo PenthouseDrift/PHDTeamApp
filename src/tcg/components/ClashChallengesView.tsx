@@ -21,6 +21,7 @@ import {
   listAdminChallengeCandidateCardsAction,
 } from "../challenges-actions";
 import { useUtcMidnightCountdown } from "../hooks/useUtcCountdown";
+import { RowsSkeleton, Spinner } from "../ui/Shimmer";
 
 export interface ClashChallengesViewProps {
   userCards: MemberCard[];
@@ -30,6 +31,8 @@ export interface ClashChallengesViewProps {
   completedChallengeIds?: string[];
   onSelectChallenge: (challenge: TandemClashChallenge) => void;
   onPCreditsChange?: (balance: number) => void;
+  /** The challenge being entered right now. Its button shows a spinner and every other Enter button is disabled. */
+  enteringId?: string | null;
 }
 
 export function ClashChallengesView({
@@ -40,6 +43,7 @@ export function ClashChallengesView({
   completedChallengeIds = [],
   onSelectChallenge,
   onPCreditsChange,
+  enteringId = null,
 }: ClashChallengesViewProps) {
   const utcCountdown = useUtcMidnightCountdown();
   const [challenges, setChallenges] = useState<TandemClashChallenge[]>([]);
@@ -87,6 +91,11 @@ export function ClashChallengesView({
     { cardId: "crew-28-vip-judge-box", tier: "gold" },
   ]);
   const [candidateSearch, setCandidateSearch] = useState("");
+  // Inline replacements for alert() and confirm() (admin only).
+  const [formError, setFormError] = useState<string | null>(null);
+  const [adminError, setAdminError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; isSystem: boolean } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   // Load challenges from server
@@ -121,6 +130,15 @@ export function ClashChallengesView({
       setCompletedIds((prev) => Array.from(new Set([...prev, ...completedChallengeIds])));
     }
   }, [completedChallengeIds]);
+
+  useEffect(() => {
+    if (!showAdminModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowAdminModal(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showAdminModal]);
 
   const openAdminCreateModal = async (challengeToEdit?: TandemClashChallenge) => {
     if (challengeToEdit) {
@@ -191,6 +209,7 @@ export function ClashChallengesView({
         { cardId: "crew-28-vip-judge-box", tier: "gold" },
       ]);
     }
+    setFormError(null);
     setShowAdminModal(true);
 
     if (adminCandidateCards.length === 0) {
@@ -235,9 +254,10 @@ export function ClashChallengesView({
 
   const handleSaveChallenge = () => {
     if (!formTitle.trim()) {
-      alert("Please provide a challenge title.");
+      setFormError("Please provide a challenge title.");
       return;
     }
+    setFormError(null);
 
     startTransition(async () => {
       const input = buildInput();
@@ -247,21 +267,31 @@ export function ClashChallengesView({
         setShowAdminModal(false);
         await loadChallenges();
       } else {
-        alert(res.error || "Failed to save challenge.");
+        setFormError(res.error || "Failed to save challenge.");
       }
     });
   };
 
-  const handleDeleteChallenge = async (challengeId: string, isSystem = false) => {
-    const msg = isSystem
-      ? "Reset this built-in challenge back to factory default settings?"
-      : "Are you sure you want to delete this custom challenge?";
-    if (!confirm(msg)) return;
-    const res = await deleteAdminChallengeAction(challengeId);
-    if (res.success) {
-      await loadChallenges();
-    } else {
-      alert(res.error || "Failed to update challenge.");
+  /** Asks "Delete? Yes / No" on the card itself; nothing is sent until Yes. */
+  const handleDeleteChallenge = (challengeId: string, isSystem = false) => {
+    setAdminError(null);
+    setPendingDelete({ id: challengeId, isSystem });
+  };
+
+  const confirmDeleteChallenge = async () => {
+    if (!pendingDelete || deleting) return;
+    setDeleting(true);
+    try {
+      const res = await deleteAdminChallengeAction(pendingDelete.id);
+      if (res.success) {
+        setPendingDelete(null);
+        await loadChallenges();
+      } else {
+        setAdminError(res.error || "Failed to update challenge.");
+        setPendingDelete(null);
+      }
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -285,7 +315,7 @@ export function ClashChallengesView({
         <div className="relative z-10 flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-1.5 max-w-xl">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-3 py-0.5 text-xs font-black uppercase tracking-wider text-amber-300">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-3 py-1 text-xs font-black uppercase tracking-wider text-amber-300">
                 <span>🏆</span> Tandem Clash Series
               </span>
               <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold text-emerald-400">
@@ -298,7 +328,7 @@ export function ClashChallengesView({
             <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
               Tandem Clash Challenges &amp; Tournaments
             </h2>
-            <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
+            <p className="text-sm text-zinc-400 leading-relaxed">
               Compete under strict rarity specs and power caps. Face off against championship cup builds to win daily P-Credit rewards!
             </p>
           </div>
@@ -308,7 +338,7 @@ export function ClashChallengesView({
               <button
                 type="button"
                 onClick={() => openAdminCreateModal()}
-                className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-[0_0_20px_rgba(168,85,247,0.35)] hover:scale-[1.02] active:scale-[0.98] transition-all"
+                className="gx-tap inline-flex min-h-11 items-center gap-2 rounded-2xl bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-[0_0_20px_rgba(168,85,247,0.35)] [touch-action:manipulation] hover:scale-[1.02] transition-all"
               >
                 <span>➕</span> Create Custom Challenge
               </button>
@@ -317,9 +347,15 @@ export function ClashChallengesView({
               type="button"
               onClick={loadChallenges}
               disabled={loading}
-              className="rounded-2xl border border-zinc-700 bg-zinc-900/80 px-3.5 py-2.5 text-xs font-bold text-zinc-300 hover:bg-zinc-800 transition-colors"
+              className="gx-tap inline-flex min-h-11 items-center gap-2 rounded-2xl border border-zinc-700 bg-zinc-900/80 px-4 py-2.5 text-xs font-bold text-zinc-300 transition-colors [touch-action:manipulation] hover:bg-zinc-800 disabled:opacity-70"
             >
-              {loading ? "..." : "🔄 Refresh"}
+              {loading ? (
+                <>
+                  <Spinner className="h-4 w-4" /> Refreshing
+                </>
+              ) : (
+                "🔄 Refresh"
+              )}
             </button>
           </div>
         </div>
@@ -330,15 +366,20 @@ export function ClashChallengesView({
       </div>
 
       {/* Challenges List Grid */}
+      {adminError && (
+        <p role="alert" className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-3 text-center text-sm font-bold text-rose-300">
+          {adminError}
+        </p>
+      )}
       {loading && challenges.length === 0 ? (
-        <div className="rounded-3xl border border-zinc-800 bg-zinc-950/60 p-12 text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-amber-500 border-t-transparent mb-3" />
-          <p className="text-xs font-bold uppercase tracking-wider text-zinc-400">
-            Scouting Challenger series and community leaderboards...
-          </p>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <RowsSkeleton rows={2} rowClassName="h-72 rounded-3xl" label="Loading challenges" />
+          <div className="hidden md:block">
+            <RowsSkeleton rows={2} rowClassName="h-72 rounded-3xl" label="Loading more challenges" />
+          </div>
         </div>
       ) : errorMsg ? (
-        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-center text-rose-300 text-xs font-bold">
+        <div className="rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-center text-rose-300 text-sm font-bold">
           {errorMsg}
         </div>
       ) : (
@@ -369,58 +410,86 @@ export function ClashChallengesView({
                       <span>{theme.icon}</span> {challenge.badge || challenge.title}
                     </span>
 
-                    <div className="flex items-center gap-1.5">
-                      {isCompleted && (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/50 bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-300 tabular-nums">
-                          ✓ Played Today · ⏳ {utcCountdown}
+                    {isCompleted && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/50 bg-emerald-500/20 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-emerald-300 tabular-nums">
+                        ✓ Played Today · ⏳ {utcCountdown}
+                      </span>
+                    )}
+                  </div>
+
+                  {isAdmin &&
+                    (pendingDelete?.id === challenge.id ? (
+                      <div
+                        role="alertdialog"
+                        aria-label="Confirm"
+                        className="flex flex-wrap items-center gap-2 rounded-2xl border border-rose-500/40 bg-rose-950/40 p-2"
+                      >
+                        <span className="flex-1 text-sm font-bold text-rose-200">
+                          {pendingDelete.isSystem ? "Reset to factory defaults?" : "Delete?"}
                         </span>
-                      )}
-                      {isAdmin && (
-                        <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={deleting}
+                          onClick={confirmDeleteChallenge}
+                          className="gx-tap inline-flex min-h-11 min-w-[4.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-rose-500 px-4 text-sm font-black text-white [touch-action:manipulation] disabled:opacity-60"
+                        >
+                          {deleting ? <Spinner className="h-4 w-4" /> : "Yes"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={deleting}
+                          onClick={() => setPendingDelete(null)}
+                          className="gx-tap min-h-11 min-w-[4.5rem] cursor-pointer rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-sm font-bold text-zinc-200 [touch-action:manipulation]"
+                        >
+                          No
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => openAdminCreateModal(challenge)}
+                          className="gx-tap min-h-11 cursor-pointer rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-xs font-bold text-zinc-300 [touch-action:manipulation] hover:text-white"
+                        >
+                          Edit
+                        </button>
+                        {challenge.isSystem ? (
                           <button
                             type="button"
-                            onClick={() => openAdminCreateModal(challenge)}
-                            className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px] font-bold text-zinc-300 hover:text-white"
+                            onClick={() => handleDeleteChallenge(challenge.id, true)}
+                            className="gx-tap min-h-11 min-w-11 cursor-pointer rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm font-bold text-zinc-400 [touch-action:manipulation] hover:text-white"
+                            title="Reset built-in cup to factory defaults"
+                            aria-label="Reset built-in cup to factory defaults"
                           >
-                            Edit
+                            ↺
                           </button>
-                          {challenge.isSystem ? (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteChallenge(challenge.id, true)}
-                              className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px] font-bold text-zinc-400 hover:text-white"
-                              title="Reset built-in cup to factory defaults"
-                            >
-                              ↺
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteChallenge(challenge.id, false)}
-                              className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-400 hover:bg-rose-500/20"
-                              title="Delete custom challenge"
-                            >
-                              ✕
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteChallenge(challenge.id, false)}
+                            className="gx-tap min-h-11 min-w-11 cursor-pointer rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 text-sm font-bold text-rose-400 [touch-action:manipulation] hover:bg-rose-500/20"
+                            title="Delete custom challenge"
+                            aria-label="Delete custom challenge"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))}
 
                   <div>
                     <h3 className="text-lg font-black text-white">{challenge.title}</h3>
-                    <p className={`text-xs font-bold ${theme.accentTextClass}`}>
+                    <p className={`text-sm font-bold ${theme.accentTextClass}`}>
                       {challenge.subtitle}
                     </p>
-                    <p className="mt-1.5 text-xs text-zinc-400 leading-relaxed line-clamp-2">
+                    <p className="mt-1.5 text-sm text-zinc-400 leading-relaxed line-clamp-2">
                       {challenge.description}
                     </p>
                   </div>
 
                   {/* Restrictions & Rule Pills */}
                   <div className="flex flex-wrap gap-1.5 pt-1">
-                    <span className="rounded-xl border border-zinc-800 bg-zinc-950/70 px-2.5 py-1 text-[10px] font-black uppercase text-zinc-300">
+                    <span className="rounded-xl border border-zinc-800 bg-zinc-950/70 px-2.5 py-1 text-[11px] font-black uppercase text-zinc-300">
                       Rarity:{" "}
                       <span className={theme.accentTextClass}>
                         {challenge.allowedRarity === "any"
@@ -430,7 +499,7 @@ export function ClashChallengesView({
                     </span>
 
                     {challenge.maxTotalScore && (
-                      <span className="rounded-xl border border-zinc-800 bg-zinc-950/70 px-2.5 py-1 text-[10px] font-black uppercase text-zinc-300">
+                      <span className="rounded-xl border border-zinc-800 bg-zinc-950/70 px-2.5 py-1 text-[11px] font-black uppercase text-zinc-300">
                         Power Cap:{" "}
                         <span className="text-amber-300">Max {challenge.maxTotalScore} PTS</span>
                       </span>
@@ -442,7 +511,7 @@ export function ClashChallengesView({
                 <div className="mt-5 space-y-3 border-t border-zinc-800/80 pt-3.5">
                   <div className="flex items-center justify-between text-xs">
                     <div>
-                      <span className="block text-[10px] font-bold uppercase text-zinc-500">
+                      <span className="block text-[11px] font-bold uppercase text-zinc-500">
                         Entry Fee
                       </span>
                       <span className="font-black text-white">
@@ -453,7 +522,7 @@ export function ClashChallengesView({
                     </div>
 
                     <div className="text-right">
-                      <span className="block text-[10px] font-bold uppercase text-zinc-500">
+                      <span className="block text-[11px] font-bold uppercase text-zinc-500">
                         Victory Reward
                       </span>
                       <span className="font-black text-emerald-400 text-sm">
@@ -463,7 +532,7 @@ export function ClashChallengesView({
                   </div>
 
                   {/* Player qualification status */}
-                  <div className="flex items-center justify-between text-[11px] px-1">
+                  <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-1 text-xs">
                     <span
                       className={`font-bold ${
                         hasEnoughCars ? "text-emerald-400" : "text-amber-400"
@@ -482,28 +551,42 @@ export function ClashChallengesView({
                   </div>
 
                   {/* Enter Button */}
-                  <button
-                    type="button"
-                    disabled={isCompleted || !userCanAfford || !hasEnoughCars}
-                    onClick={() => onSelectChallenge(challenge)}
-                    className={`min-h-11 w-full rounded-2xl px-4 py-2.5 text-xs font-black uppercase tracking-wider shadow-lg transition-all ${
-                      isCompleted
-                        ? "border border-emerald-500/40 bg-emerald-950/60 text-emerald-300 cursor-not-allowed opacity-90 shadow-none"
-                        : !userCanAfford || !hasEnoughCars
-                        ? "border border-zinc-800 bg-zinc-900 text-zinc-500 cursor-not-allowed opacity-50 shadow-none"
-                        : `bg-gradient-to-r text-white ${theme.buttonClass} active:scale-[0.98]`
-                    }`}
-                  >
-                    <span>
-                      {isCompleted
-                        ? `✓ Already Played Today (Resets in ${utcCountdown})`
-                        : !hasEnoughCars
-                        ? `🔒 Need 3 ${challenge.allowedRarity !== "any" ? challenge.allowedRarity.toUpperCase() : "Eligible"} Cars (${qualifyingCars.length}/3 Available)`
-                        : challenge.entryCostPCredits > 0
-                        ? `⚡ Enter Cup (${challenge.entryCostPCredits}P)`
-                        : "⚡ Enter Challenge"}
-                    </span>
-                  </button>
+                  {(() => {
+                    const isEntering = enteringId === challenge.id;
+                    const otherEntering = enteringId != null && !isEntering;
+                    return (
+                      <button
+                        type="button"
+                        disabled={isCompleted || !userCanAfford || !hasEnoughCars || enteringId != null}
+                        aria-busy={isEntering}
+                        onClick={() => onSelectChallenge(challenge)}
+                        className={`gx-tap flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-black uppercase tracking-wider shadow-lg transition-all [touch-action:manipulation] focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+                          isCompleted
+                            ? "border border-emerald-500/40 bg-emerald-950/60 text-emerald-300 cursor-not-allowed opacity-90 shadow-none"
+                            : !userCanAfford || !hasEnoughCars
+                            ? "border border-zinc-800 bg-zinc-900 text-zinc-500 cursor-not-allowed opacity-50 shadow-none"
+                            : `bg-gradient-to-r text-white ${theme.buttonClass} ${otherEntering ? "cursor-not-allowed opacity-50" : ""} ${isEntering ? "cursor-wait" : ""}`
+                        }`}
+                      >
+                        {isEntering ? (
+                          <>
+                            <Spinner className="h-4 w-4" />
+                            <span>Entering…</span>
+                          </>
+                        ) : (
+                          <span>
+                            {isCompleted
+                              ? `✓ Already Played Today (Resets in ${utcCountdown})`
+                              : !hasEnoughCars
+                              ? `🔒 Need 3 ${challenge.allowedRarity !== "any" ? challenge.allowedRarity.toUpperCase() : "Eligible"} Cars (${qualifyingCars.length}/3 Available)`
+                              : challenge.entryCostPCredits > 0
+                              ? `⚡ Enter Cup (${challenge.entryCostPCredits}P)`
+                              : "⚡ Enter Challenge"}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
             );
@@ -514,14 +597,15 @@ export function ClashChallengesView({
       {/* ── ADMIN CHALLENGE CREATOR / EDITOR MODAL ───────────────────────── */}
       {showAdminModal && (
         <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-3 sm:p-5 backdrop-blur-md overflow-y-auto"
+          className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/80 p-0 backdrop-blur-md sm:items-center sm:p-5"
           role="dialog"
           aria-modal="true"
+          aria-label="Challenge editor"
         >
-          <div className="w-full max-w-2xl rounded-3xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6 text-white shadow-2xl space-y-4 my-auto max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+          <div className="max-h-[94dvh] w-full max-w-2xl overflow-y-auto overscroll-contain rounded-t-3xl border border-zinc-800 bg-zinc-950 text-white shadow-2xl sm:rounded-3xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-800 bg-zinc-950 px-5 pb-3 pt-5">
               <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-purple-400">
+                <span className="text-[11px] font-black uppercase tracking-wider text-purple-400">
                   Track Admin Console
                 </span>
                 <h3 className="text-lg font-black text-white">
@@ -531,14 +615,15 @@ export function ClashChallengesView({
               <button
                 type="button"
                 onClick={() => setShowAdminModal(false)}
-                className="rounded-xl border border-zinc-800 bg-zinc-900 p-2 text-zinc-400 hover:text-white"
+                aria-label="Close"
+                className="gx-tap flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-400 [touch-action:manipulation] hover:text-white"
               >
                 ✕
               </button>
             </div>
 
             {/* Form Fields */}
-            <div className="space-y-4 text-xs">
+            <div className="space-y-4 px-5 py-4 text-sm">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold uppercase text-zinc-400 mb-1">
@@ -549,7 +634,7 @@ export function ClashChallengesView({
                     value={formTitle}
                     onChange={(e) => setFormTitle(e.target.value)}
                     placeholder="e.g. Midnight Wangan Cup"
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white placeholder-zinc-500 focus:border-purple-500 focus:outline-none"
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white placeholder-zinc-500 focus:border-purple-500 focus:outline-none min-h-11 text-base"
                   />
                 </div>
                 <div>
@@ -561,7 +646,7 @@ export function ClashChallengesView({
                     value={formSubtitle}
                     onChange={(e) => setFormSubtitle(e.target.value)}
                     placeholder="e.g. Gold Tier Only · High RPM Battle"
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white placeholder-zinc-500 focus:border-purple-500 focus:outline-none"
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white placeholder-zinc-500 focus:border-purple-500 focus:outline-none min-h-11 text-base"
                   />
                 </div>
               </div>
@@ -575,7 +660,7 @@ export function ClashChallengesView({
                   value={formDescription}
                   onChange={(e) => setFormDescription(e.target.value)}
                   placeholder="Describe the lore and challenge constraints for drivers..."
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white placeholder-zinc-500 focus:border-purple-500 focus:outline-none"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white placeholder-zinc-500 focus:border-purple-500 focus:outline-none min-h-11 text-base"
                 />
               </div>
 
@@ -589,7 +674,7 @@ export function ClashChallengesView({
                     value={formBadge}
                     onChange={(e) => setFormBadge(e.target.value)}
                     placeholder="e.g. GOLD ONLY · MAX 80 PTS"
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white placeholder-zinc-500 focus:border-purple-500 focus:outline-none"
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white placeholder-zinc-500 focus:border-purple-500 focus:outline-none min-h-11 text-base"
                   />
                 </div>
                 <div>
@@ -613,7 +698,7 @@ export function ClashChallengesView({
                         key={t}
                         type="button"
                         onClick={() => setFormTheme(t)}
-                        className={`rounded-lg border py-1 text-[10px] font-black uppercase transition-all ${
+                        className={`min-h-11 cursor-pointer rounded-lg border py-1 text-[11px] font-black uppercase transition-all [touch-action:manipulation] ${
                           formTheme === t
                             ? "border-white bg-white/20 text-white shadow-sm"
                             : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700"
@@ -633,13 +718,13 @@ export function ClashChallengesView({
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-zinc-400 mb-1">
+                    <label className="block text-[11px] font-bold uppercase text-zinc-400 mb-1">
                       Required Car Rarity
                     </label>
                     <select
                       value={formRarity}
                       onChange={(e) => setFormRarity(e.target.value as ChallengeRarityFilter)}
-                      className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white focus:border-purple-500 focus:outline-none"
+                      className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white focus:border-purple-500 focus:outline-none min-h-11 text-base"
                     >
                       <option value="any">Open (Any Rarity Allowed)</option>
                       <option value="bronze">Bronze Only</option>
@@ -650,7 +735,7 @@ export function ClashChallengesView({
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-zinc-400 mb-1">
+                    <label className="block text-[11px] font-bold uppercase text-zinc-400 mb-1">
                       Max Total Score (out of 100)
                     </label>
                     <input
@@ -663,10 +748,10 @@ export function ClashChallengesView({
                           ? "Unlimited (All cards of tier allowed)"
                           : "Leave blank for unlimited"
                       }
-                      className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white placeholder-zinc-500 focus:border-purple-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white placeholder-zinc-500 focus:border-purple-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed min-h-11 text-base"
                     />
                     {editingChallenge?.isSystem && (
-                      <span className="text-[9px] text-zinc-500 block mt-1">
+                      <span className="text-[11px] text-zinc-500 block mt-1">
                         Built-in cups allow all cars matching the rarity tier.
                       </span>
                     )}
@@ -681,7 +766,7 @@ export function ClashChallengesView({
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-zinc-400 mb-1">
+                    <label className="block text-[11px] font-bold uppercase text-zinc-400 mb-1">
                       Entry Cost (P-Credits)
                     </label>
                     <input
@@ -689,11 +774,11 @@ export function ClashChallengesView({
                       min="0"
                       value={formEntryFee}
                       onChange={(e) => setFormEntryFee(e.target.value)}
-                      className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white focus:border-purple-500 focus:outline-none"
+                      className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white focus:border-purple-500 focus:outline-none min-h-11 text-base"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-zinc-400 mb-1">
+                    <label className="block text-[11px] font-bold uppercase text-zinc-400 mb-1">
                       Victory Reward (P-Credits)
                     </label>
                     <input
@@ -701,7 +786,7 @@ export function ClashChallengesView({
                       min="0"
                       value={formReward}
                       onChange={(e) => setFormReward(e.target.value)}
-                      className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white focus:border-purple-500 focus:outline-none"
+                      className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-white focus:border-purple-500 focus:outline-none min-h-11 text-base"
                     />
                   </div>
                 </div>
@@ -718,7 +803,7 @@ export function ClashChallengesView({
 
               {/* Rival Selection Mode */}
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3 space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="block text-[11px] font-black uppercase text-cyan-400">
                     Rival Team Generation
                   </span>
@@ -726,7 +811,7 @@ export function ClashChallengesView({
                     <button
                       type="button"
                       onClick={() => setFormRivalMode("auto")}
-                      className={`rounded-lg px-2.5 py-1 text-[10px] font-black uppercase transition-all ${
+                      className={`min-h-11 cursor-pointer rounded-lg px-3 py-1 text-[11px] font-black uppercase transition-all [touch-action:manipulation] ${
                         formRivalMode === "auto"
                           ? "bg-cyan-500 text-black shadow-sm"
                           : "text-zinc-400 hover:text-white"
@@ -737,7 +822,7 @@ export function ClashChallengesView({
                     <button
                       type="button"
                       onClick={() => setFormRivalMode("custom")}
-                      className={`rounded-lg px-2.5 py-1 text-[10px] font-black uppercase transition-all ${
+                      className={`min-h-11 cursor-pointer rounded-lg px-3 py-1 text-[11px] font-black uppercase transition-all [touch-action:manipulation] ${
                         formRivalMode === "custom"
                           ? "bg-cyan-500 text-black shadow-sm"
                           : "text-zinc-400 hover:text-white"
@@ -752,36 +837,36 @@ export function ClashChallengesView({
                   <div className="space-y-3 pt-1">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <div>
-                        <label className="block text-[9px] font-bold uppercase text-zinc-500 mb-1">
+                        <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1">
                           Driver Name
                         </label>
                         <input
                           type="text"
                           value={formDriverName}
                           onChange={(e) => setFormDriverName(e.target.value)}
-                          className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-white"
+                          className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-white min-h-11 text-base"
                         />
                       </div>
                       <div>
-                        <label className="block text-[9px] font-bold uppercase text-zinc-500 mb-1">
+                        <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1">
                           Team Name
                         </label>
                         <input
                           type="text"
                           value={formTeamName}
                           onChange={(e) => setFormTeamName(e.target.value)}
-                          className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-white"
+                          className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-white min-h-11 text-base"
                         />
                       </div>
                       <div>
-                        <label className="block text-[9px] font-bold uppercase text-zinc-500 mb-1">
+                        <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-1">
                           Rival Title
                         </label>
                         <input
                           type="text"
                           value={formRivalTitle}
                           onChange={(e) => setFormRivalTitle(e.target.value)}
-                          className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-white"
+                          className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-white min-h-11 text-base"
                         />
                       </div>
                     </div>
@@ -789,11 +874,11 @@ export function ClashChallengesView({
                     {/* Selected 3 Rival Cars */}
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[10px] font-black uppercase text-zinc-400">
+                        <span className="text-[11px] font-black uppercase text-zinc-400">
                           Selected Rival Cars ({formSelectedCardIds.length} / 3)
                         </span>
                         {formSelectedCardIds.length === 3 && (
-                          <span className="text-emerald-400 font-bold text-[10px]">✓ Ready</span>
+                          <span className="text-emerald-400 font-bold text-[11px]">✓ Ready</span>
                         )}
                       </div>
                       <div className="grid grid-cols-3 gap-2">
@@ -805,7 +890,7 @@ export function ClashChallengesView({
                               key={slotIdx}
                               className="rounded-xl border border-zinc-800 bg-zinc-950 p-2 text-center"
                             >
-                              <span className="block text-[9px] font-bold uppercase text-zinc-500">
+                              <span className="block text-[11px] font-bold uppercase text-zinc-500">
                                 Car #{slotIdx + 1}
                               </span>
                               {cardInfo ? (
@@ -813,7 +898,7 @@ export function ClashChallengesView({
                                   <span className="block truncate font-black text-white text-[11px]">
                                     {cardInfo.name}
                                   </span>
-                                  <span className="block text-[10px] text-amber-400">
+                                  <span className="block text-[11px] text-amber-400">
                                     {cardInfo.tier.toUpperCase()} · {cardInfo.totalScore} PTS
                                   </span>
                                   <button
@@ -823,13 +908,13 @@ export function ClashChallengesView({
                                         prev.filter((id) => id !== cardId)
                                       )
                                     }
-                                    className="mt-1 text-[9px] text-rose-400 hover:underline"
+                                    className="mt-1 min-h-11 cursor-pointer px-2 text-xs text-rose-400 hover:underline"
                                   >
                                     Remove
                                   </button>
                                 </div>
                               ) : (
-                                <span className="block py-2 text-[10px] italic text-zinc-600">
+                                <span className="block py-2 text-[11px] italic text-zinc-600">
                                   Empty
                                 </span>
                               )}
@@ -846,21 +931,21 @@ export function ClashChallengesView({
                         placeholder="Search member & set cards to add..."
                         value={candidateSearch}
                         onChange={(e) => setCandidateSearch(e.target.value)}
-                        className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-[11px] text-white"
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-white min-h-11 text-base"
                       />
                       <div className="max-h-40 overflow-y-auto space-y-1 rounded-xl border border-zinc-800 bg-zinc-950 p-1.5">
                         {loadingCandidates ? (
-                          <p className="p-2 text-center text-zinc-500">Loading cards...</p>
+                          <p role="status" className="flex items-center justify-center gap-2 p-2 text-center text-zinc-400"><Spinner className="h-4 w-4" /> Loading cards…</p>
                         ) : filteredCandidates.slice(0, 50).map((cand) => {
                           const isSelected = formSelectedCardIds.includes(cand.id);
                           return (
                             <div
                               key={cand.id}
-                              className="flex items-center justify-between rounded-lg px-2 py-1 hover:bg-zinc-900"
+                              className="flex items-center justify-between gap-2 rounded-lg px-2 py-1 hover:bg-zinc-900"
                             >
                               <div>
-                                <span className="font-bold text-white text-[11px]">{cand.name}</span>
-                                <span className="ml-2 text-[10px] text-zinc-400">
+                                <span className="font-bold text-white text-xs">{cand.name}</span>
+                                <span className="ml-2 text-[11px] text-zinc-400">
                                   {cand.tier} · {cand.totalScore} PTS {cand.isSetCard && "· Set"}
                                 </span>
                               </div>
@@ -870,7 +955,7 @@ export function ClashChallengesView({
                                 onClick={() =>
                                   setFormSelectedCardIds((prev) => [...prev, cand.id])
                                 }
-                                className="rounded px-2 py-0.5 text-[10px] font-bold bg-zinc-800 text-zinc-200 hover:bg-purple-600 hover:text-white disabled:opacity-30"
+                                className="min-h-11 shrink-0 cursor-pointer rounded-lg px-3 text-xs font-bold bg-zinc-800 text-zinc-200 hover:bg-purple-600 hover:text-white disabled:opacity-30"
                               >
                                 {isSelected ? "Selected" : "+ Add"}
                               </button>
@@ -883,10 +968,10 @@ export function ClashChallengesView({
                     {/* Rival Crew Advantages & Rarity Selection */}
                     <div className="pt-3 border-t border-zinc-800/80 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase text-cyan-400">
+                        <span className="text-[11px] font-black uppercase text-cyan-400">
                           ⚡ Rival Crew Advantage Cards &amp; Rarity (3 Cards)
                         </span>
-                        <span className="text-[9px] text-zinc-500">
+                        <span className="text-[11px] text-zinc-500">
                           Choose 3 advantages &amp; their pull rarity tier
                         </span>
                       </div>
@@ -901,7 +986,7 @@ export function ClashChallengesView({
                               key={slotIdx}
                               className="rounded-xl border border-zinc-800 bg-zinc-950 p-2.5 space-y-1.5"
                             >
-                              <span className="block text-[9px] font-bold uppercase text-zinc-500">
+                              <span className="block text-[11px] font-bold uppercase text-zinc-500">
                                 Crew #{slotIdx + 1}
                               </span>
                               <select
@@ -914,7 +999,7 @@ export function ClashChallengesView({
                                     return copy;
                                   });
                                 }}
-                                className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-[11px] text-white focus:border-cyan-500 focus:outline-none truncate"
+                                className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-white focus:border-cyan-500 focus:outline-none truncate min-h-11 text-base"
                               >
                                 {CREW_CARD_SET.map((c) => (
                                   <option key={c.id} value={c.id}>
@@ -923,7 +1008,7 @@ export function ClashChallengesView({
                                 ))}
                               </select>
                               <div>
-                                <label className="block text-[8px] font-bold uppercase text-zinc-500 mb-0.5">
+                                <label className="block text-[11px] font-bold uppercase text-zinc-500 mb-0.5">
                                   Rarity Tier
                                 </label>
                                 <select
@@ -936,7 +1021,7 @@ export function ClashChallengesView({
                                       return copy;
                                     });
                                   }}
-                                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-[10px] font-black uppercase text-amber-300 focus:border-cyan-500 focus:outline-none"
+                                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 font-black uppercase text-amber-300 focus:border-cyan-500 focus:outline-none min-h-11 text-base"
                                 >
                                   <option value="bronze">🥉 Bronze Tier</option>
                                   <option value="silver">🥈 Silver Tier</option>
@@ -961,11 +1046,17 @@ export function ClashChallengesView({
             </div>
 
             {/* Actions */}
-            <div className="flex items-center justify-end gap-2 border-t border-zinc-800 pt-3">
+            <div className="gx-safe-b sticky bottom-0 z-10 border-t border-zinc-800 bg-zinc-950 px-5 pt-3">
+              {formError && (
+                <p role="alert" className="mb-2 text-sm font-bold text-rose-400">
+                  {formError}
+                </p>
+              )}
+              <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setShowAdminModal(false)}
-                className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-xs font-bold text-zinc-400 hover:text-white"
+                className="gx-tap min-h-12 cursor-pointer rounded-xl border border-zinc-800 bg-zinc-900 px-5 text-sm font-bold text-zinc-300 [touch-action:manipulation] hover:text-white"
               >
                 Cancel
               </button>
@@ -973,10 +1064,17 @@ export function ClashChallengesView({
                 type="button"
                 disabled={isPending}
                 onClick={handleSaveChallenge}
-                className="rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 px-5 py-2 text-xs font-black uppercase tracking-wider text-white shadow-lg hover:opacity-90 disabled:opacity-50"
+                className="gx-tap inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 px-6 text-sm font-black uppercase tracking-wider text-white shadow-lg [touch-action:manipulation] hover:opacity-90 disabled:opacity-50"
               >
-                {isPending ? "Saving..." : "Save Challenge"}
+                {isPending ? (
+                  <>
+                    <Spinner className="h-4 w-4" /> Saving…
+                  </>
+                ) : (
+                  "Save Challenge"
+                )}
               </button>
+              </div>
             </div>
           </div>
         </div>

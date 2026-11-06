@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { FullArtCard } from "@/components/cards/FullArtCard";
 import type { FullArtCardData } from "@/lib/full-art-card";
 import { rarityLabel } from "@/lib/card-roll";
 import { getPackContentsAction } from "@/tcg/actions";
 import type { PackContents, PackContentsTier } from "@/tcg/pack-contents";
+import { BottomSheet } from "@/tcg/ui/BottomSheet";
+import { CardGridSkeleton, Shimmer } from "@/tcg/ui/Shimmer";
 
 /** A stand-in for a card whose picture isn't known until the pack is opened. */
 function MysteryTile({ tier }: { tier: PackContentsTier["tier"] }) {
@@ -41,9 +43,16 @@ function ZoomableCard({ card, onZoom }: { card: FullArtCardData; onZoom: (card: 
   );
 }
 
+/**
+ * How many card viewers are open. The pack window behind a viewer listens for Escape too (and runs first, because it was
+ * opened first), so it checks this and leaves itself open while a card is being viewed.
+ */
+let openLightboxes = 0;
+
 /** One card shown large over everything else. Closes on a tap anywhere, the Close button or Escape. */
 function CardLightbox({ card, onClose }: { card: FullArtCardData; onClose: () => void }) {
   useEffect(() => {
+    openLightboxes += 1;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         // Only this window closes, not the pack window behind it.
@@ -52,13 +61,16 @@ function CardLightbox({ card, onClose }: { card: FullArtCardData; onClose: () =>
       }
     };
     window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      openLightboxes -= 1;
+    };
   }, [onClose]);
 
   if (typeof document === "undefined") return null;
   return createPortal(
     <div
-      className="fixed inset-0 z-[10000] flex flex-col items-center justify-center gap-3 bg-black/90 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[10001] flex flex-col items-center justify-center gap-3 bg-black/90 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={card.name}
@@ -67,7 +79,8 @@ function CardLightbox({ card, onClose }: { card: FullArtCardData; onClose: () =>
       <button
         type="button"
         onClick={onClose}
-        className="absolute right-4 top-4 min-h-10 rounded-xl border border-zinc-600 bg-zinc-900 px-4 text-xs font-bold text-zinc-100 hover:bg-zinc-800"
+        style={{ top: "max(1rem, env(safe-area-inset-top))", right: "max(1rem, env(safe-area-inset-right))" }}
+        className="gx-tap absolute flex h-11 min-w-11 items-center justify-center rounded-xl border border-zinc-600 bg-zinc-900 px-4 text-xs font-bold text-zinc-100 hover:bg-zinc-800"
       >
         Close
       </button>
@@ -195,8 +208,14 @@ export function PackContentsView({ packId, fallback }: { packId: string; fallbac
   const current = state && state.packId === packId ? state : null;
   return (
     <div>
+      {!current && (
+        <div className="space-y-4">
+          <Shimmer className="h-4 w-2/3" />
+          <Shimmer className="h-3 w-1/2" />
+          <CardGridSkeleton count={4} className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4" label="Loading what's in this pack" />
+        </div>
+      )}
       <div role="status" aria-live="polite">
-        {!current && <p className="text-sm text-zinc-400">Loading what&apos;s in this pack…</p>}
         {current?.error && <p className="mb-3 text-sm font-bold text-red-400">{current.error}</p>}
       </div>
       {current?.contents && <ContentsBody contents={current.contents} />}
@@ -219,39 +238,15 @@ export function PackContentsModal({
   footer?: ReactNode;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+  // A card viewer opened from inside this window takes the Escape key first; this window stays open behind it.
+  const close = useCallback(() => {
+    if (openLightboxes > 0) return;
+    onClose();
   }, [onClose]);
 
-  if (typeof document === "undefined") return null;
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[9999] flex h-[100dvh] w-screen items-stretch justify-center overscroll-contain sm:items-center sm:p-6"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`What's in ${title}`}
-    >
-      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
-      <div className="relative z-10 flex h-full w-full flex-col space-y-5 overflow-y-auto bg-zinc-950 p-5 text-zinc-100 shadow-2xl sm:h-auto sm:max-h-[92dvh] sm:max-w-4xl sm:rounded-3xl sm:border sm:border-amber-500/30 sm:p-7">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-zinc-800 pb-4">
-          <div>
-            {eyebrow && <span className="text-xs font-bold uppercase tracking-widest text-amber-400">{eyebrow}</span>}
-            <h3 className="text-2xl font-black">{title}</h3>
-          </div>
-          <button type="button" onClick={onClose} className="min-h-10 rounded-xl border border-zinc-700 px-4 text-xs font-bold hover:bg-zinc-800">
-            Close
-          </button>
-        </div>
-        <div className="flex-1">
-          <PackContentsView packId={packId} />
-        </div>
-        {footer && <div className="border-t border-zinc-800 pt-4">{footer}</div>}
-      </div>
-    </div>,
-    document.body
+  return (
+    <BottomSheet title={title} subtitle={eyebrow} onClose={close} footer={footer} size="full" fullHeight>
+      <PackContentsView packId={packId} />
+    </BottomSheet>
   );
 }

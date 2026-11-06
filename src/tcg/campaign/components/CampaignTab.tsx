@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { FullArtCard } from "@/components/cards/FullArtCard";
 import type { MemberCard } from "@/lib/card-roll";
 import type { ActionResult } from "@/types";
@@ -18,11 +18,13 @@ import {
   withdrawCampaignAction,
   withdrawCampaignDraftAction,
 } from "../actions";
-import { CAMPAIGN_ROUNDS, CARS_TO_PICK, prizeFor } from "../config";
+import { CAMPAIGN_ROUNDS, CARS_TO_PICK, MIN_BRONZE_CARS, prizeFor } from "../config";
+import { deckProblem, tierSlotOf } from "../deal";
 import { bestCrewFor } from "../garage";
-import type { CampaignBattle, CampaignDraft, CampaignView, EntryChoice } from "../types";
+import type { CampaignBattle, CampaignDraft, CampaignView, EntryChoice, RolledTier } from "../types";
 import { Bracket } from "./Bracket";
 import { CardCarousel } from "./CardCarousel";
+import { ROLL_STYLE } from "./rolls";
 import { ActionDock, DockSpacer, dockDanger, dockPrimary, dockSecondary } from "./ActionDock";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Disclosure } from "./Disclosure";
@@ -58,6 +60,9 @@ async function safely<T>(call: () => Promise<ActionResult<T>>): Promise<ActionRe
   }
 }
 
+/** How long the deal plays: six face-down cards fly in, turn over one by one, hold as a fan, then spread into the carousel. */
+const DEAL_REVEAL_MS = 4500;
+
 type Busy = null | "loading" | "dealing" | "rerolling" | "building" | "beginning" | "withdrawing";
 type SaveState = "idle" | "saving" | "saved" | "failed";
 type Ask = { title: string; body: string; confirmLabel: string; danger?: boolean; run: () => void };
@@ -69,8 +74,11 @@ export function CampaignTab({
   onKitUsed,
   pCredits,
   onPCreditsChange,
+  onBack,
 }: {
   cards: MemberCard[];
+  /** Shows a "← Play" button in the top row, next to Withdraw while the cars are being chosen. */
+  onBack?: () => void;
   /** The member's P-Credit balance, for the entry fee. */
   pCredits: number;
   /** Called with the new balance when the cup charges an entry fee or pays a prize. Pass a stable function. */
@@ -85,10 +93,18 @@ export function CampaignTab({
   const [stage, setStage] = useState<null | "entry" | "cars">(null);
   // The six cars dealt from the member's deck to choose three from.
   const [offer, setOffer] = useState<MemberCard[]>([]);
+  // The rarity each of the six slots rolled, in the same order as `offer`.
+  const [rolls, setRolls] = useState<RolledTier[]>([]);
+  // True while the freshly dealt cars are flying in, before the picker opens.
+  const [revealing, setRevealing] = useState(false);
+  // Changes with every new deal, so the carousel starts again from the first card and the animation replays.
+  const [dealKey, setDealKey] = useState(0);
   const [rerollsLeft, setRerollsLeft] = useState(0);
   // The entry already paid for the cars being picked. Set while a paid entry is waiting for its cup to start.
   const [paidEntry, setPaidEntry] = useState<CampaignDraft["entry"] | null>(null);
   const crewPreview = useMemo(() => bestCrewFor(cards), [cards]);
+  // Entering needs a minimum number of bronze cars; the server checks this again before taking the fee.
+  const deckIssue = useMemo(() => deckProblem(cards), [cards]);
   const [view, setView] = useState<CampaignView | null>(null);
   // How the next cup is entered: a free test cup (the default, so nothing is spent by accident) or one of the fees.
   const [entry, setEntry] = useState<EntryChoice>("test");
@@ -110,6 +126,22 @@ export function CampaignTab({
   // Tells the car carousel to scroll to a card (tapping a tray slot or a card at the edge).
   const [focus, setFocus] = useState<{ index: number; tick: number } | null>(null);
   const jumpTo = useCallback((index: number) => setFocus((prev) => ({ index, tick: (prev?.tick ?? 0) + 1 })), []);
+  // When cars are dealt, scroll down so the whole deal is on screen.
+  const carsSectionRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!revealing) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    carsSectionRef.current?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+  }, [revealing, dealKey]);
+
+  // The deal animation lasts about this long (see .deal-slide in globals.css); after that the card details fade in.
+  useEffect(() => {
+    if (!revealing) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const timer = window.setTimeout(() => setRevealing(false), reduced ? 1500 : DEAL_REVEAL_MS);
+    return () => window.clearTimeout(timer);
+  }, [revealing, dealKey]);
+
   const [ask, setAsk] = useState<Ask | null>(null);
   const closeAsk = useCallback(() => setAsk(null), []);
   const dialog = ask ? (
@@ -152,6 +184,7 @@ export function CampaignTab({
       setStage(null);
       setPicked([]);
       setOffer([]);
+      setRolls([]);
       setPaidEntry(null);
     } else setError(res.error);
     setBusy(null);
@@ -223,8 +256,11 @@ export function CampaignTab({
 
   /** Show a paid entry's six cars and the re-rolls left, ready for picking. */
   function openDraft(draft: CampaignDraft) {
+    setRevealing(true);
+    setDealKey((k) => k + 1);
     setPaidEntry(draft.entry);
     setOffer(draft.offer.cars);
+    setRolls(draft.offer.rolls);
     setRerollsLeft(draft.offer.rerollsLeft);
     setPicked([]);
     setStage("cars");
@@ -285,6 +321,7 @@ export function CampaignTab({
       setStage(null);
       setPaidEntry(null);
       setOffer([]);
+      setRolls([]);
       setPicked([]);
       setView(null);
     } else {
@@ -299,9 +336,11 @@ export function CampaignTab({
     const res = await safely(() => rerollCampaignCarsAction());
     if (res.success) {
       setOffer(res.data.cars);
+      setRolls(res.data.rolls);
       setRerollsLeft(res.data.rerollsLeft);
       setPicked([]);
-      jumpTo(0);
+      setRevealing(true);
+      setDealKey((k) => k + 1);
     } else {
       setError(res.error);
     }
@@ -414,6 +453,33 @@ export function CampaignTab({
 
   return (
     <section aria-label="Drift Campaign" className="space-y-3">
+      {/* Back to the Play page, and (while choosing cars on a paid entry) the way out of the cup. */}
+      {(onBack || (stage === "cars" && busy !== "loading")) && (
+        <div className="flex items-center justify-between gap-2">
+          {onBack ? (
+            <button
+              type="button"
+              onClick={onBack}
+              className="gx-tap inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-zinc-300 bg-white px-3 text-xs font-black uppercase tracking-wider text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              <span aria-hidden>←</span> Play
+            </button>
+          ) : (
+            <span />
+          )}
+          {stage === "cars" && busy !== "loading" && (
+            <button
+              type="button"
+              className="min-h-11 shrink-0 px-1 text-xs font-black uppercase text-rose-400 underline decoration-rose-400/50 underline-offset-2 disabled:opacity-50"
+              onClick={withdrawDraft}
+              disabled={busy !== null}
+            >
+              Withdraw{paidEntry && paidEntry.fee > 0 ? " (entry lost)" : ""}
+            </button>
+          )}
+        </div>
+      )}
+
       <FlowHeader subtitle={subtitle} balance={pCredits} step={step} />
 
       {error && (
@@ -422,7 +488,7 @@ export function CampaignTab({
         </p>
       )}
       {view?.note && (
-        <p role="status" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm font-bold text-amber-200">
+        <p role="status" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm font-bold text-amber-900 dark:text-amber-200">
           {view.note}
         </p>
       )}
@@ -449,7 +515,7 @@ export function CampaignTab({
               <ol className="mt-2.5 space-y-2.5 text-sm">
                 {[
                   ["💳", "Choose an entry", "Pay once. The bigger the entry, the bigger the prizes."],
-                  ["🃏", "Pick 3 of 6 cars", "Dealt from your own deck. Re-roll up to 3 times."],
+                  ["🃏", "Pick 3 of 6 cars", `Dealt from your own deck across bronze to legend. You need ${MIN_BRONZE_CARS} bronze cars to enter. Re-roll up to 3 times.`],
                   ["🏆", "Beat 6 drivers", "Each round pays more. Lose once and you are out."],
                 ].map(([icon, title, text]) => (
                   <li key={title} className="flex items-start gap-3">
@@ -494,8 +560,13 @@ export function CampaignTab({
           {view && <PrizeLadder compact fee={view.entry.fee} wins={view.wins} test={view.entry.kind === "test"} />}
           <Bracket rounds={view?.rounds ?? null} status={view?.status} fee={view?.entry.fee} />
           <DockSpacer />
+          {deckIssue && (
+            <p role="status" className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs font-bold text-amber-900 dark:text-amber-100">
+              {deckIssue}
+            </p>
+          )}
           <ActionDock label="Campaign actions">
-            <button type="button" className={dockPrimary} onClick={() => setStage("entry")} disabled={busy !== null}>
+            <button type="button" className={dockPrimary} onClick={() => setStage("entry")} disabled={busy !== null || deckIssue !== null}>
               {view?.endedBy === "withdrew" ? "↺ Reset campaign" : view ? "🏁 Start a new campaign" : "🏁 Enter the cup"}
             </button>
           </ActionDock>
@@ -521,22 +592,14 @@ export function CampaignTab({
       {/* Step 2: three of six cars dealt at random from the member's own deck. */}
       {busy !== "loading" && stage === "cars" && (
         <>
-          <div className="flex items-center justify-between gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 pl-3.5">
-            <p className="min-w-0 truncate text-xs font-bold text-amber-100">
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5">
+            <p className="min-w-0 truncate text-xs font-bold text-amber-900 dark:text-amber-100">
               {entryPaidText}
               {paidEntry && paidEntry.fee > 0 && ` · top prize 🪙 ${prizeFor(paidEntry.fee, CAMPAIGN_ROUNDS.length).toLocaleString()}`}
             </p>
-            <button
-              type="button"
-              className="min-h-11 shrink-0 px-3.5 text-xs font-black uppercase text-rose-300 underline decoration-rose-300/50 underline-offset-2"
-              onClick={withdrawDraft}
-              disabled={busy !== null}
-            >
-              Withdraw{paidEntry && paidEntry.fee > 0 ? " (entry lost)" : ""}
-            </button>
           </div>
 
-          <section className={`${panel} !px-0 !pb-3`} aria-label="Choose your cars">
+          <section ref={carsSectionRef} className={`${panel} scroll-mt-16 !px-0 !pb-3`} aria-label="Choose your cars">
             <div className="flex items-center justify-between gap-2 px-3.5">
               <div className="min-w-0">
                 <h3 className="text-base font-black leading-tight">Pick {CARS_TO_PICK} of {offer.length}</h3>
@@ -545,7 +608,7 @@ export function CampaignTab({
               <button
                 type="button"
                 onClick={reroll}
-                disabled={busy !== null || working !== null || rerollsLeft <= 0}
+                disabled={busy !== null || working !== null || revealing || rerollsLeft <= 0}
                 className={secondaryBtn}
                 aria-label={`Re-roll your cars, ${rerollsLeft} left`}
               >
@@ -554,15 +617,47 @@ export function CampaignTab({
             </div>
 
             {/* The six cars in a row to swipe through, one in the middle at a time, like opening a pack. */}
+            {/* On a new deal the six cards fly in as a stack, fan out for a moment, then spread into the carousel. A tap skips it. */}
+            <div
+              key={dealKey}
+              style={{ "--step": "calc(min(16rem, 62vw) + 1rem)" } as CSSProperties}
+              onClickCapture={(e) => {
+                if (!revealing) return;
+                e.stopPropagation();
+                setRevealing(false);
+              }}
+            >
             <CardCarousel label="Your six cars" focusIndex={focus}>
               {offer.map((car, i) => {
                 const on = picked.includes(car.id);
                 const full = picked.length >= CARS_TO_PICK;
+                const rolled = rolls[i];
+                const got = tierSlotOf(car);
+                // While the deal plays, everything but the card itself stays hidden; it fades in once the cards have landed.
+                const extra = revealing ? "opacity-0" : "transition-opacity duration-500";
+                const mid = (offer.length - 1) / 2;
+                const slideStyle = { "--i": i, "--fan-x": `${(i - mid) * 22}px`, "--fan-r": `${(i - mid) * 9}deg` } as CSSProperties;
                 return (
-                  <div key={car.id} className="space-y-2" onClick={() => jumpTo(i)}>
-                    <div className={`relative rounded-2xl transition ${on ? "ring-4 ring-amber-400" : ""}`}>
-                      <FullArtCard card={car} className="drop-shadow-2xl" />
-                      {needsRepair(car, CAMPAIGN_ROUNDS.length) && <CautionTape />}
+                  <div key={car.id} style={slideStyle} className={`space-y-2 ${revealing ? "deal-slide" : ""}`} onClick={() => jumpTo(i)}>
+                    {rolled && (
+                      <p className={`${extra} text-center text-[11px] font-black uppercase tracking-wide text-zinc-400`}>
+                        Slot {i + 1} · rolled <span className={ROLL_STYLE[rolled].chip.split(" ").pop()}>{ROLL_STYLE[rolled].label}</span>
+                        {got !== rolled && <span className="text-zinc-500"> · none left, dealt {ROLL_STYLE[got].label}</span>}
+                      </p>
+                    )}
+                    <div className={`relative rounded-2xl transition [perspective:1000px] ${on ? "ring-4 ring-amber-400" : ""}`}>
+                      {/* The car is face down when it arrives and turns over once the fan is made, one card at a time. */}
+                      <div className={revealing ? "deal-front" : undefined}>
+                        <FullArtCard card={car} className="drop-shadow-2xl" />
+                      </div>
+                      {revealing && (
+                        <div aria-hidden className="deal-back absolute inset-0 z-20 overflow-hidden rounded-2xl border-2 border-amber-400/70 bg-gradient-to-br from-zinc-800 via-zinc-950 to-black shadow-2xl">
+                          <div className="absolute inset-2 rounded-xl border border-dashed border-amber-400/40" />
+                          <div className="absolute inset-0 bg-[repeating-linear-gradient(135deg,transparent_0_10px,rgba(251,191,36,0.06)_10px_20px)]" />
+                          <span className="absolute inset-0 flex items-center justify-center text-6xl font-black italic text-amber-400/80 drop-shadow">P</span>
+                        </div>
+                      )}
+                      {!revealing && needsRepair(car, CAMPAIGN_ROUNDS.length) && <CautionTape />}
                       {on && (
                         <span className="absolute left-2 top-2 z-30 rounded-full bg-amber-400 px-2.5 py-0.5 text-xs font-black text-black shadow">
                           ✓ Pick {picked.indexOf(car.id) + 1}
@@ -577,25 +672,28 @@ export function CampaignTab({
                       }}
                       disabled={!on && full}
                       aria-pressed={on}
-                      className={`inline-flex min-h-12 w-full items-center justify-center rounded-xl px-3 text-sm font-black uppercase tracking-wide shadow transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 ${
+                      className={`${extra} inline-flex min-h-12 w-full items-center justify-center rounded-xl px-3 text-sm font-black uppercase tracking-wide shadow transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 ${
                         on ? "border border-zinc-600 bg-zinc-800 text-zinc-100 hover:bg-zinc-700" : "bg-amber-500 text-black hover:bg-amber-400"
                       }`}
                     >
                       {on ? "Remove from picks" : full ? "Picks full: remove one" : "Pick this car"}
                     </button>
-                    <CarFooter
-                      car={car}
-                      ahead={CAMPAIGN_ROUNDS.length}
-                      deck={cards}
-                      disabled={busy !== null || working !== null}
-                      working={working === car.id}
-                      onRepair={(kitId) => fixCar(car.id, kitId, "repair")}
-                      onService={(kitId) => fixCar(car.id, kitId, "service")}
-                    />
+                    <div className={extra}>
+                      <CarFooter
+                        car={car}
+                        ahead={CAMPAIGN_ROUNDS.length}
+                        deck={cards}
+                        disabled={busy !== null || working !== null}
+                        working={working === car.id}
+                        onRepair={(kitId) => fixCar(car.id, kitId, "repair")}
+                        onService={(kitId) => fixCar(car.id, kitId, "service")}
+                      />
+                    </div>
                   </div>
                 );
               })}
             </CardCarousel>
+            </div>
           </section>
 
           <Disclosure title="Your Crew cards" hint={`Your best 3 come with you${crewPreview.some((c) => c.id.startsWith("loaner-")) ? ", topped up with loaners" : ""}`}>

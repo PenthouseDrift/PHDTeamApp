@@ -194,78 +194,81 @@ export function ClashFinaleResult({
   const yourTotal = Math.round(playerScoreBefore + (playerScoreAfter - playerScoreBefore) * progress);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/85 p-3 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200 sm:items-center">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/85 backdrop-blur-md animate-in fade-in duration-200 sm:items-center sm:p-4">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="finale-result-title"
-        className="relative my-auto w-full max-w-lg rounded-3xl border-2 border-cyan-400/70 bg-zinc-950 p-4 text-center shadow-[0_0_60px_rgba(34,211,238,0.35)] sm:p-6"
+        className="relative flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border-2 border-b-0 border-cyan-400/70 bg-zinc-950 text-center shadow-[0_0_60px_rgba(34,211,238,0.35)] sm:max-h-[90dvh] sm:rounded-3xl sm:border-b-2"
       >
-        <div className="inline-flex items-center gap-1.5 rounded-full border border-cyan-400/60 bg-cyan-500/15 px-3 py-1">
-          <span className="text-xs" aria-hidden>
-            {info.icon}
-          </span>
-          <span className="text-[10px] font-black uppercase tracking-wider text-cyan-300 sm:text-[11px]">
-            Corner {cornerNumber} · {info.title} result
-          </span>
-        </div>
-        <h3 id="finale-result-title" className="mt-2 text-lg font-black uppercase tracking-tight text-white sm:text-xl">
-          Comparison
-        </h3>
-
-        <div className="mt-3 grid grid-cols-[1.1fr_1fr_1fr] gap-x-2 px-2 text-[10px] font-black uppercase tracking-wider text-zinc-500">
-          <span className="text-left">&nbsp;</span>
-          <span className="text-amber-300">You</span>
-          <span className="text-rose-300">Rival</span>
-        </div>
-        <ul className="mt-1 space-y-1.5" aria-live="polite">
-          {rows.map((row, i) => {
-            const shown = i < shownRows;
-            return (
-              <li
-                key={`${row.label}-${i}`}
-                className={`grid grid-cols-[1.1fr_1fr_1fr] items-center gap-x-2 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-2 py-2 transition-all duration-300 ${
-                  shown ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
-                }`}
-                aria-hidden={!shown}
-              >
-                <span className="text-left text-[11px] font-black uppercase leading-tight tracking-wide text-zinc-300">{row.label}</span>
-                <Cell value={row.you} sub={row.youSub} pts={row.youPts} tone="you" win={row.youPts > row.rivalPts} />
-                <Cell value={row.rival} sub={row.rivalSub} pts={row.rivalPts} tone="rival" win={row.rivalPts > row.youPts} />
-              </li>
-            );
-          })}
-        </ul>
-
-        <div
-          className={`mt-4 rounded-2xl border-2 border-amber-400/50 bg-amber-500/10 p-3 transition-opacity duration-300 ${
-            tallyStarted ? "opacity-100" : "opacity-30"
-          }`}
-        >
-          <p className="text-[10px] font-black uppercase tracking-wider text-amber-300">Finale points</p>
-          <div className="mt-1 grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-3xl font-black text-amber-300">{signed(youPts)}</p>
-              <p className="text-[10px] font-bold text-zinc-400">
-                Your corner score <span className="text-sm font-black text-white">{yourTotal}</span>
-              </p>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-3 sm:px-6">
+          <div className="gx-safe-t sm:pt-6">
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-cyan-400/60 bg-cyan-500/15 px-3 py-1">
+              <span className="text-xs" aria-hidden>
+                {info.icon}
+              </span>
+              <span className="text-[11px] font-black uppercase tracking-wider text-cyan-300">
+                Corner {cornerNumber} · {info.title} result
+              </span>
             </div>
-            <div>
-              <p className="text-3xl font-black text-rose-300">{signed(rivalPts)}</p>
-              <p className="text-[10px] font-bold text-zinc-500">Rival total revealed next</p>
+            <h3 id="finale-result-title" className="mt-2 text-lg font-black uppercase tracking-tight text-white sm:text-xl">
+              Comparison
+            </h3>
+          </div>
+          <div className="mt-3 grid grid-cols-[1.1fr_1fr_1fr] gap-x-2 px-2 text-[11px] font-black uppercase tracking-wider text-zinc-400">
+            <span className="text-left">&nbsp;</span>
+            <span className="text-amber-300">You</span>
+            <span className="text-rose-300">Rival</span>
+          </div>
+          <ul className="mt-1 space-y-1.5" aria-live="polite">
+            {rows.map((row, i) => {
+              const shown = i < shownRows;
+              return (
+                <li
+                  key={`${row.label}-${i}`}
+                  className={`grid grid-cols-[1.1fr_1fr_1fr] items-center gap-x-2 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-2 py-2 transition-all duration-300 ${
+                    shown ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
+                  }`}
+                  aria-hidden={!shown}
+                >
+                  <span className="text-left text-[11px] font-black uppercase leading-tight tracking-wide text-zinc-300">{row.label}</span>
+                  <Cell value={row.you} sub={row.youSub} pts={row.youPts} tone="you" win={row.youPts > row.rivalPts} />
+                  <Cell value={row.rival} sub={row.rivalSub} pts={row.rivalPts} tone="rival" win={row.rivalPts > row.youPts} />
+                </li>
+              );
+            })}
+          </ul>
+          <div
+            className={`mt-4 rounded-2xl border-2 border-amber-400/50 bg-amber-500/10 p-3 transition-opacity duration-300 ${
+              tallyStarted ? "opacity-100" : "opacity-30"
+            }`}
+          >
+            <p className="text-[11px] font-black uppercase tracking-wider text-amber-300">Finale points</p>
+            <div className="mt-1 grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-3xl font-black tabular-nums text-amber-300">{signed(youPts)}</p>
+                <p className="text-[11px] font-bold text-zinc-300">
+                  Your corner score <span className="text-sm font-black tabular-nums text-white">{yourTotal}</span>
+                </p>
+              </div>
+              <div>
+                <p className="text-3xl font-black tabular-nums text-rose-300">{signed(rivalPts)}</p>
+                <p className="text-[11px] font-bold text-zinc-400">Rival total revealed next</p>
+              </div>
             </div>
           </div>
         </div>
-
-        <button
-          type="button"
-          autoFocus
-          onClick={finish}
-          className="mt-4 flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-6 py-3 text-xs font-black uppercase tracking-wider text-white shadow-[0_0_30px_rgba(245,158,11,0.6)] transition-all hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:scale-[0.98] sm:text-sm"
-        >
-          <span>Reveal the rival</span>
-          <span aria-hidden>→</span>
-        </button>
+        <div className="gx-safe-b shrink-0 border-t border-zinc-800 bg-zinc-950 px-4 pt-3 sm:px-6 sm:pb-5">
+          <button
+            type="button"
+            autoFocus
+            onClick={finish}
+            className="gx-tap flex min-h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-6 py-3 text-xs font-black uppercase tracking-wider text-white shadow-[0_0_30px_rgba(245,158,11,0.6)] transition-all [touch-action:manipulation] hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:scale-[0.98] sm:text-sm"
+          >
+            <span>Reveal the rival</span>
+            <span aria-hidden>→</span>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -288,10 +291,10 @@ function Cell({
   return (
     <span className="flex flex-col items-center gap-0.5">
       <span className={`text-xl font-black ${win ? colour : "text-zinc-300"}`}>{value}</span>
-      {sub && <span className="text-[9px] font-bold text-zinc-500">{sub}</span>}
+      {sub && <span className="text-[11px] font-bold text-zinc-400">{sub}</span>}
       {pts !== 0 && (
         <span
-          className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
+          className={`rounded-full px-2 py-0.5 text-[11px] font-black ${
             pts > 0 ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"
           }`}
         >

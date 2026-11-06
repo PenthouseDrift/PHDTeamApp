@@ -118,21 +118,21 @@ export function ClashRevealPanel({ result, cornerNumber, level, winnerStage }: C
           onClick={handleBarClick}
           aria-expanded={!collapsed}
           aria-controls={bodyId}
-          className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-2xl px-3 py-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+          className="gx-tap flex min-h-[44px] w-full cursor-pointer items-center justify-between gap-2 rounded-2xl px-3 py-2 text-left [touch-action:manipulation] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
         >
-          <span className="text-[10px] font-black uppercase tracking-wider text-cyan-300">
+          <span className="text-[11px] font-black uppercase tracking-wider text-cyan-300">
             🔍 Corner {cornerNumber} · Every buff &amp; debuff
           </span>
           <span className="flex items-center gap-2">
             {totalsShown && (
-              <span className="text-[11px] font-black">
+              <span className="text-sm font-black">
                 <span className="text-amber-300">{result.playerScore}</span>
                 <span className="mx-1 text-zinc-500">–</span>
                 <span className="text-rose-300">{result.rivalScore}</span>
               </span>
             )}
             <span
-              className={`text-[10px] text-cyan-300 transition-transform duration-500 ${collapsed ? "rotate-180" : ""}`}
+              className={`text-xs text-cyan-300 transition-transform duration-500 ${collapsed ? "rotate-180" : ""}`}
               aria-hidden
             >
               ▼
@@ -151,8 +151,8 @@ export function ClashRevealPanel({ result, cornerNumber, level, winnerStage }: C
           }`}
         >
           <div className="min-h-0 overflow-hidden">
-            <div className="max-h-[60vh] overflow-y-auto px-2.5 pb-2.5" inert={collapsed}>
-              <p className="flex flex-wrap items-center justify-center gap-x-3 text-[9px] font-bold text-zinc-500">
+            <div className="max-h-[min(60dvh,22rem)] overflow-y-auto overscroll-contain px-2.5 pb-2.5" inert={collapsed}>
+              <p className="flex flex-wrap items-center justify-center gap-x-3 text-[11px] font-bold text-zinc-400">
                 <span>
                   <span aria-hidden>⚡</span> Crew
                 </span>
@@ -170,9 +170,9 @@ export function ClashRevealPanel({ result, cornerNumber, level, winnerStage }: C
                   const mine = pStages.final[stat];
                   const theirs = rStages.final[stat];
                   return (
-                    <li key={stat} className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-1.5 rounded-xl bg-zinc-900/70 px-1.5 py-1">
+                    <li key={stat} className="grid grid-cols-[1fr_auto_1fr] items-center gap-x-1.5 rounded-xl bg-zinc-900/70 px-1.5 py-1.5">
                       <StatCell stages={pStages} stat={stat} names={pNames} tone="you" win={rivalShown && mine > theirs} />
-                      <span className="w-10 text-center text-[8px] font-black uppercase tracking-wider text-zinc-500">{FINALE_STAT_LABEL[stat]}</span>
+                      <span className="w-12 text-center text-[11px] font-black uppercase tracking-wider text-zinc-400">{FINALE_STAT_LABEL[stat]}</span>
                       {rivalShown ? (
                         <StatCell stages={rStages} stat={stat} names={rNames} tone="rival" win={theirs > mine} animate />
                       ) : (
@@ -219,10 +219,10 @@ function StatCell({
   return (
     <span className={`flex flex-col items-center ${animate ? "animate-in zoom-in-90 fade-in duration-300" : ""}`}>
       <span className="flex items-baseline gap-1">
-        <span className="text-[9px] font-bold text-zinc-500" aria-label={`base ${stages.base[stat]}`}>
+        <span className="text-[11px] font-bold text-zinc-400" aria-label={`base ${stages.base[stat]}`}>
           {stages.base[stat]}
         </span>
-        <span className="text-[9px] text-zinc-600" aria-hidden>
+        <span className="text-[11px] text-zinc-500" aria-hidden>
           →
         </span>
         <span className={`text-lg font-black leading-none ${win ? colour : "text-zinc-200"}`} aria-label={`final ${stages.final[stat]}`}>
@@ -231,14 +231,14 @@ function StatCell({
       </span>
       <span className="flex flex-wrap items-center justify-center gap-0.5">
         {deltas.length === 0 ? (
-          <span className="text-[8px] font-bold text-zinc-600">no changes</span>
+          <span className="text-[11px] font-bold text-zinc-500">no changes</span>
         ) : (
           deltas.map((d) => (
             <span
               key={d.key}
               title={d.title}
               aria-label={`${d.title}: ${signed(d.value)}`}
-              className={`rounded-full px-1 py-px text-[8px] font-black ${
+              className={`rounded-full px-1.5 py-px text-[11px] font-black ${
                 d.value > 0 ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"
               }`}
             >
@@ -267,17 +267,17 @@ function ScoreColumn({
   return (
     <div className="rounded-xl bg-zinc-900/70 p-1.5 text-center">
       <p className={`text-base font-black leading-none ${colour}`}>{total} PTS</p>
-      <p className="mt-0.5 text-[8px] font-bold text-zinc-400">
+      <p className="mt-0.5 text-[11px] font-bold text-zinc-400">
         Stats <span className="font-black text-zinc-200">{parts.statScore}</span>
       </p>
-      <p className="mx-auto max-w-[11rem] text-[7px] font-bold leading-tight text-zinc-500">{parts.statFormula}</p>
+      <p className="mx-auto max-w-full overflow-x-auto whitespace-nowrap font-mono text-[10px] font-bold leading-tight text-zinc-400 no-scrollbar">{parts.statFormula}</p>
       <span className="mt-0.5 flex flex-wrap items-center justify-center gap-0.5">
         {lines.map((l) => (
           <span
             key={l.key}
             title={l.title}
             aria-label={`${l.title}: ${signed(l.value)}`}
-            className={`rounded-full px-1 py-px text-[8px] font-black ${
+            className={`rounded-full px-1.5 py-px text-[11px] font-black ${
               l.value > 0 ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"
             }`}
           >
