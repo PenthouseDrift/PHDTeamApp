@@ -319,6 +319,17 @@ export async function addLedger(entry: Record<string, unknown>): Promise<void> {
   await redis.ltrim(K.ledger, 0, 4999);
 }
 
+/** The newest entries of the audit ledger (the most recent 5000 are kept), newest first. For reports. */
+export async function loadLedger(): Promise<Array<Record<string, unknown> & { at: number; type: string }>> {
+  const rows = (await redis.lrange(K.ledger, 0, 4999)) as unknown[];
+  const out: Array<Record<string, unknown> & { at: number; type: string }> = [];
+  for (const raw of rows) {
+    const e = parseJson<Record<string, unknown>>(raw);
+    if (e && typeof e.at === "number" && typeof e.type === "string") out.push(e as Record<string, unknown> & { at: number; type: string });
+  }
+  return out;
+}
+
 export async function bumpStat(field: string, by: number): Promise<void> {
   const key = K.stats(ukDate());
   await redis.hincrby(key, field, by);
