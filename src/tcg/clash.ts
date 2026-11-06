@@ -30,6 +30,8 @@ import {
 import { isCarBroken } from "@/lib/mechanical-faults";
 import { matchCars, matchCrew, profileOf, targetsFor, type PlayerProfile } from "./opponent-matching";
 import { getPCredits, grantPCredits } from "./storage";
+import { gameXpFor, getGameXpProgress, type GameXpBreakdown } from "./game-xp";
+import { addGameXp, ensureGameXpBackfilled } from "./game-xp-store";
 import type {
   ClashOpponent,
   ClashPlayerStats,
@@ -469,12 +471,25 @@ export async function getPlayerClashStats(userId: string): Promise<ClashPlayerSt
       redis.get(clashDailyWinKey(userId, today)),
     ]);
 
+    const wins = Math.max(0, Number(rawStats?.wins) || 0);
+    const losses = Math.max(0, Number(rawStats?.losses) || 0);
+    let gameXp = Math.max(0, Number(rawStats?.gameXp) || 0);
+
+    // One-time catch-up: Drift XP came after some drivers had already played, so the first time their stats are read they
+    // are given XP for the games they had on record (see ensureGameXpBackfilled).
+    try {
+      gameXp = await ensureGameXpBackfilled(userId, { wins, losses, gameXp, alreadyDone: Boolean(rawStats?.gameXpBackfilled) });
+    } catch (error) {
+      console.error("[driftClash] Drift XP catch-up failed:", error);
+    }
+
     return {
-      wins: Math.max(0, Number(rawStats?.wins) || 0),
-      losses: Math.max(0, Number(rawStats?.losses) || 0),
+      wins,
+      losses,
       streak: Math.max(0, Number(rawStats?.streak) || 0),
       bestStreak: Math.max(0, Number(rawStats?.bestStreak) || 0),
       dailyWinClaimed: Boolean(dailyClaimed),
+      gameXp,
     };
   } catch (error) {
     console.error("[driftClash] getPlayerClashStats error:", error);
@@ -484,6 +499,7 @@ export async function getPlayerClashStats(userId: string): Promise<ClashPlayerSt
       streak: 0,
       bestStreak: 0,
       dailyWinClaimed: false,
+      gameXp: 0,
     };
   }
 }
@@ -856,9 +872,15 @@ export async function getHazardGarageSamplesAction(): Promise<HazardGarageSample
 export async function completeClashBattleAction(input: {
   won: boolean;
   playedCarCardIds?: string[];
+  /** The two sides' points totals and the corners the player won. They set the Drift XP, and are capped (see game-xp.ts). */
+  playerTotalScore?: number;
+  opponentTotalScore?: number;
+  playerCorners?: number;
 }): Promise<
   ActionResult<{
     stats: ClashPlayerStats;
+    /** The Drift XP this game paid, split into its parts. */
+    xp: GameXpBreakdown;
     rewardGranted: number;
     streakBonusGranted: number;
     pCredits: number;
@@ -903,6 +925,15 @@ export async function completeClashBattleAction(input: {
       bestStreak: nextBestStreak,
       updatedAt: Date.now(),
     });
+
+    // Drift XP: the margin of the win, plus a bonus for a clean sweep. A loss still pays a little for playing.
+    const xp = gameXpFor({
+      won: input.won,
+      playerTotal: input.playerTotalScore,
+      opponentTotal: input.opponentTotalScore,
+      playerCorners: input.playerCorners,
+    });
+    const nextGameXp = await addGameXp(userId, xp.total);
 
     let rewardGranted = 0;
     let streakBonusGranted = 0;
@@ -1052,7 +1083,9 @@ export async function completeClashBattleAction(input: {
           streak: nextStreak,
           bestStreak: nextBestStreak,
           dailyWinClaimed,
+          gameXp: nextGameXp,
         },
+        xp,
         rewardGranted,
         streakBonusGranted,
         pCredits,
@@ -1110,7 +1143,7 @@ export async function getDriftClashLeaderboard(
             "customAvatar",
             "image"
           ),
-          redis.hmget<Record<string, unknown>>(clashStatsKey(uid), "wins"),
+          redis.hmget<Record<string, unknown>>(clashStatsKey(uid), "wins", "losses", "gameXp", "gameXpBackfilled"),
         ]);
 
         const nickname =
@@ -1130,6 +1163,19 @@ export async function getDriftClashLeaderboard(
             : null;
 
         const clashWins = Math.max(0, Number(clashHash?.wins) || 0);
+        const clashLosses = Math.max(0, Number(clashHash?.losses) || 0);
+        // Drivers who played before Drift XP existed are caught up here too, so the board is right before they next open the game.
+        let driftXp = Math.max(0, Number(clashHash?.gameXp) || 0);
+        try {
+          driftXp = await ensureGameXpBackfilled(uid, {
+            wins: clashWins,
+            losses: clashLosses,
+            gameXp: driftXp,
+            alreadyDone: Boolean(clashHash?.gameXpBackfilled),
+          });
+        } catch (error) {
+          console.error("[driftClash] Drift XP catch-up failed for the leaderboard:", error);
+        }
         const packsOpened = packsOpenedByUser.get(uid) ?? userCards.length;
         const progress = getCollectorProgress(userCards, clashWins, packsOpened);
 
@@ -1154,6 +1200,8 @@ export async function getDriftClashLeaderboard(
           rankIcon: progress.rankIcon,
           packsOpened,
           clashWins,
+          driftXp,
+          driftLevel: getGameXpProgress(driftXp).level,
           topCard: best
             ? {
                 carName: best.name,
@@ -1165,13 +1213,21 @@ export async function getDriftClashLeaderboard(
       })
     );
 
-    return entries
-      .sort((a, b) => {
-        if (b.collectorPower !== a.collectorPower) return b.collectorPower - a.collectorPower;
-        if (b.mythicCount !== a.mythicCount) return b.mythicCount - a.mythicCount;
-        return b.totalCards - a.totalCards;
-      })
-      .slice(0, limit);
+    // The board can be sorted four ways, so keep the top drivers of each (someone with little power can still lead on Drift XP).
+    const byPower = (a: DriftClashLeaderboardEntry, b: DriftClashLeaderboardEntry) => {
+      if (b.collectorPower !== a.collectorPower) return b.collectorPower - a.collectorPower;
+      if (b.mythicCount !== a.mythicCount) return b.mythicCount - a.mythicCount;
+      return b.totalCards - a.totalCards;
+    };
+    const rankings: Array<(a: DriftClashLeaderboardEntry, b: DriftClashLeaderboardEntry) => number> = [
+      byPower,
+      (a, b) => b.mythicCount - a.mythicCount || b.legendCount - a.legendCount || byPower(a, b),
+      (a, b) => b.clashWins - a.clashWins || byPower(a, b),
+      (a, b) => b.driftXp - a.driftXp || b.clashWins - a.clashWins || byPower(a, b),
+    ];
+    const keep = new Map<string, DriftClashLeaderboardEntry>();
+    for (const rank of rankings) for (const e of [...entries].sort(rank).slice(0, limit)) keep.set(e.userId, e);
+    return Array.from(keep.values()).sort(byPower);
   } catch (error) {
     console.error("[driftClash] getDriftClashLeaderboard error:", error);
     return [];

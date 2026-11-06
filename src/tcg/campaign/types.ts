@@ -1,4 +1,5 @@
 import type { MemberCard } from "@/lib/card-roll";
+import type { GameXpBreakdown } from "../game-xp";
 import type { ClashOpponent } from "@/tcg/types";
 
 /** A card face (picture and name) taken from the art pool. Stats are generated separately. */
@@ -133,6 +134,9 @@ export interface CampaignView {
   endedBy?: "withdrew" | "left-track";
   /** The member's P-Credit balance, sent when this action changed it. */
   balance?: number;
+  /** Sent after a round's result is saved: the Drift XP it paid (match, clean sweep and round bonus), and the new total. */
+  xp?: GameXpBreakdown;
+  gameXp?: number;
 }
 
 /**
@@ -143,13 +147,16 @@ export interface CampaignView {
 export interface ArenaCampaignHook {
   opponent: ClashOpponent;
   roundLabel: string;
-  onResult: (result: { won: boolean; playerCorners: number; opponentCorners: number }) => void;
+  onResult: (result: { won: boolean; playerCorners: number; opponentCorners: number; playerTotalScore: number; opponentTotalScore: number }) => void;
   continueLabel: string;
   continueDisabled: boolean;
   onContinue: () => void;
   onExit: () => void;
   /** Shown on the verdict once the result is saved: what this battle cost the cars. */
   maintenance?: CampaignMaintenance | null;
+  /** Shown on the verdict once the result is saved: the Drift XP this round paid, and the driver's new total. */
+  xp?: GameXpBreakdown | null;
+  gameXp?: number;
 }
 
 /** What the browser needs to play one round in the arena. */

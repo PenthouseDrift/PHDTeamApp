@@ -20,7 +20,9 @@ import {
 } from "@/lib/member-card-store";
 import { MEMBER_ART_ZOOM, cardTitle, type MemberCard, type StoredMemberCard } from "@/lib/card-roll";
 import { CardArtError } from "@/lib/card-art-generate";
-import { applyVariant, rollPackCard } from "@/lib/pack-config";
+import { STANDARD_PACK_ID, applyVariant, emptyPackConfig, rollPackCard, rollStatsForTier } from "@/lib/pack-config";
+import type { FullArtCardData } from "@/lib/full-art-card";
+import type { PackConfig } from "@/lib/pack-config";
 import {
   deletePackConfig,
   entryAvailable,
@@ -67,6 +69,7 @@ import {
 } from "./storage";
 import { buildPackContents, type PackContents } from "./pack-contents";
 import { buildPackExtraCards } from "./pack-extras";
+import { simulateOnePack } from "./pack-simulate";
 import type {
   PCreditBundle,
   TcgCustomPack,
@@ -730,6 +733,149 @@ export async function buyAndOpenCustomPack(
       success: false,
       error: error instanceof Error ? error.message : "Failed to open custom pack",
     };
+  }
+}
+
+/**
+ * Admin only, for development. Open a pack to see the opening and the cards, without keeping anything: nobody is charged,
+ * nothing is saved to the collection, the community pool or the member's pack count, and the AI is never asked for a
+ * picture. It rolls the same way a real pack does (see `simulateOnePack`). A card a real pack would draw from the member's
+ * car photo comes back as a placeholder in the rarity that was rolled, so the reveal (and the Legend animation) can be tried.
+ * `guaranteeLegend` makes sure one car card is a Legend. Works for the Standard Pack (`standard`) and any custom pack.
+ */
+export async function previewOpenPackAction(
+  packId: string,
+  options?: { guaranteeLegend?: boolean }
+): Promise<ActionResult<{ cards: MemberCard[]; packName: string }>> {
+  const user = await currentUser();
+  if (!user || user.role !== "admin") return { success: false, error: "Only admins can preview a pack opening." };
+
+  try {
+    const isStandard = packId === STANDARD_PACK_ID;
+    if (!isStandard && !MEMBER_CARD_ID_PATTERN.test(packId)) return { success: false, error: "Invalid pack." };
+
+    let packName = "Penthouse Standard Pack";
+    // The Standard Pack with no setup saved rolls its default rarities, which `simulateOnePack` handles from an empty setup.
+    let config: PackConfig | null = (await loadPackConfig(STANDARD_PACK_ID)) ?? emptyPackConfig(STANDARD_PACK_ID);
+    let cardsPerPack = 2;
+    let legacyList: TcgCustomPackWithCards["setList"] = [];
+    if (!isStandard) {
+      const rawPack = parseCustomPack(await redis.get(tcgCustomPackKey(packId)));
+      if (!rawPack) return { success: false, error: "That pack doesn't exist." };
+      const [hydrated] = await hydrateCustomPacks([rawPack]);
+      if (!hydrated) return { success: false, error: "That pack can't be previewed." };
+      packName = hydrated.name;
+      config = hydrated.config ?? null;
+      cardsPerPack = Math.max(1, Math.min(3, hydrated.cardsPerPack || 1));
+      legacyList = hydrated.setList;
+    }
+
+    const now = Date.now();
+    const base = {
+      userId: user.id,
+      ownerName: user.name,
+      styleIds: [] as string[],
+      kept: false,
+      rerolled: false,
+      referenceUrl: "",
+      packName,
+    };
+    const fromSet = (source: FullArtCardData, i: number, extra: Partial<StoredMemberCard> = {}): StoredMemberCard => ({
+      ...base,
+      id: `preview-${randomUUID()}`,
+      createdAt: now + i,
+      name: source.name,
+      ability: source.ability,
+      effect: source.effect,
+      tier: source.tier,
+      stats: source.stats,
+      imageUrl: source.imageUrl,
+      imageZoom: source.imageZoom,
+      imageX: source.imageX,
+      imageY: source.imageY,
+      driver: source.driver,
+      team: source.team,
+      ...slotOverrides({ style: null, fixed: source as FullArtCardData & { id: string } }),
+      ...extra,
+    });
+
+    const pulled: StoredMemberCard[] = [];
+    if (config) {
+      const slots = await simulateOnePack({ config, cardsPerPack });
+      slots.forEach((slot, i) => {
+        if (slot.kind === "set") {
+          pulled.push(fromSet(slot.card, i));
+        } else if (slot.kind === "bonus") {
+          pulled.push(fromSet(slot.card, i, { bonus: true, featured: true }));
+        } else if (slot.kind === "crew" || slot.kind === "repair") {
+          // Built by the same code as a real pack's Crew and Repair Kit cards, then made into a throwaway copy.
+          const extra = slot.card as unknown as StoredMemberCard;
+          pulled.push({ ...extra, id: `preview-${randomUUID()}`, userId: user.id, ownerName: user.name, kept: false, createdAt: now + i });
+        } else {
+          // Drawn from a car photo in a real pack: a placeholder in the rarity that was rolled.
+          pulled.push({
+            ...base,
+            id: `preview-${randomUUID()}`,
+            createdAt: now + i,
+            name: slot.styleName ? `${slot.styleName} card` : "Your car",
+            ability: "Drawn from your car photo in a real pack",
+            effect: "Dev preview placeholder",
+            tier: slot.tier,
+            stats: rollStatsForTier(slot.tier, rng),
+            imageUrl: "/logo.png",
+            imageZoom: 100,
+            imageX: 50,
+            imageY: 50,
+            driver: "Preview",
+            team: "Dev",
+          });
+        }
+      });
+    } else {
+      // An old pack with no setup of its own: cards are picked from its set list by weight, as buyAndOpenCustomPack does.
+      const total = legacyList.reduce((sum, item) => sum + item.weight, 0);
+      if (legacyList.length === 0 || total <= 0) return { success: false, error: "This pack doesn't have any cards in its set list yet." };
+      for (let i = 0; i < cardsPerPack; i++) {
+        let r = rng() * total;
+        let picked = legacyList[legacyList.length - 1].card;
+        for (const entry of legacyList) {
+          if (r < entry.weight) {
+            picked = entry.card;
+            break;
+          }
+          r -= entry.weight;
+        }
+        pulled.push(fromSet(picked, i, { featured: true }));
+      }
+    }
+
+    if (pulled.length === 0) return { success: false, error: "Nothing came out of that pack. Check its setup." };
+
+    // Guarantee a Legend car card, for trying out the Legend reveal: if the roll didn't give one, the first car card is made
+    // a Legend (with stats to fit). Only this throwaway preview copy changes.
+    if (options?.guaranteeLegend) {
+      const isCar = (c: StoredMemberCard) => c.cardType !== "crew" && c.cardType !== "maintenance";
+      const hasLegend = pulled.some((c) => isCar(c) && (c.tier === "legend" || c.tier === "mythic"));
+      const target = pulled.find(isCar);
+      if (!hasLegend && target) {
+        target.tier = "legend";
+        target.stats = rollStatsForTier("legend", rng);
+        // The card may be a lower rarity set card with its own frame colours (a copper border, say). Drop those so the
+        // preview card gets the standard Legend frame instead of a Legend badge on a bronze-looking card.
+        target.customBorderColor = undefined;
+        target.customStatLabelColor = undefined;
+        target.customStatValueColor = undefined;
+        target.customBottomBarBgColor = undefined;
+        target.customBottomBarBorderColor = undefined;
+        target.customFrameEffect = undefined;
+        target.customFrameShine = undefined;
+        target.customFlameColor = undefined;
+      }
+    }
+    return { success: true, data: { cards: pulled.map(publicCard), packName } };
+  } catch (error) {
+    console.error("[tcg] previewOpenPackAction failed:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Could not preview that pack." };
   }
 }
 

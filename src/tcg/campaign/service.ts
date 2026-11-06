@@ -10,6 +10,8 @@ import { loadArtPool } from "./art-pool";
 import { calibrate } from "./calibrate";
 import { CAMPAIGN_ROUNDS, CARS_TO_PICK, ENTRY_FEES, OFFER_SIZE, prizeFor, REROLLS_PER_CUP, RIVAL_POOL_SIZE } from "./config";
 import { dealOffer, deckProblem, tierSlotOf, type DealtSlot } from "./deal";
+import { gameXpFor } from "../game-xp";
+import { addGameXp } from "../game-xp-store";
 import { bestCrewFor, isCampaignCar } from "./garage";
 import { bestTierOf, personaFor, pickArt, profileFor, showcaseTiersFor, toOpponent } from "./generate";
 import {
@@ -525,7 +527,7 @@ export async function serviceCar(userId: string, carId: string, maintenanceCardI
 /** The arena finished a battle. Records the win or loss and moves the cup on. */
 export async function reportResult(
   userId: string,
-  input: { won: boolean; playerCorners: number; opponentCorners: number }
+  input: { won: boolean; playerCorners: number; opponentCorners: number; playerTotalScore?: number; opponentTotalScore?: number }
 ): Promise<CampaignView> {
   return withUserLock(userId, async () => {
     const run = await loadActiveRun(userId);
@@ -559,7 +561,23 @@ export async function reportResult(
     applyResult(run, result);
     const balance = await settle(userId, run);
     await saveRun(run);
-    return toView(run, undefined, balance);
+
+    // Drift XP for the round: the match itself (its margin and any clean sweep) plus a bonus for each round won. It is paid
+    // after the result is saved, and only once per round, since a round can only be reported while its battle is open.
+    const xp = gameXpFor({
+      won: result.won,
+      playerTotal: input.playerTotalScore,
+      opponentTotal: input.opponentTotalScore,
+      playerCorners: result.playerCorners,
+      campaignRound: result.round,
+    });
+    let gameXp: number | undefined;
+    try {
+      gameXp = await addGameXp(userId, xp.total);
+    } catch (error) {
+      console.error("[campaign] could not add Drift XP:", error);
+    }
+    return { ...toView(run, undefined, balance), ...(gameXp !== undefined ? { xp, gameXp } : {}) };
   });
 }
 

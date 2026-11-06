@@ -129,6 +129,8 @@ export interface ClashPlayerStats {
   streak: number;
   bestStreak: number;
   dailyWinClaimed: boolean;
+  /** Drift XP earned from playing games (see game-xp.ts). Stored in the same hash. */
+  gameXp: number;
 }
 
 /** A 3-card rival car crew + 3 Crew Advantage Cards pulled from the shared community pool for Clash Arena. */
@@ -167,6 +169,9 @@ export interface DriftClashLeaderboardEntry {
   rankIcon: string;
   packsOpened: number;
   clashWins: number;
+  /** Drift XP from playing games, and the Drift level it makes (see game-xp.ts). */
+  driftXp: number;
+  driftLevel: number;
   topCard: {
     carName: string;
     tier: FullArtTier;

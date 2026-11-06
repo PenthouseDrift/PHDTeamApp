@@ -20,6 +20,7 @@ import {
 } from "../actions";
 import { CAMPAIGN_ROUNDS, CARS_TO_PICK, MIN_BRONZE_CARS, prizeFor } from "../config";
 import { deckProblem, tierSlotOf } from "../deal";
+import type { GameXpBreakdown } from "../../game-xp";
 import { bestCrewFor } from "../garage";
 import type { CampaignBattle, CampaignDraft, CampaignView, EntryChoice, RolledTier } from "../types";
 import { Bracket } from "./Bracket";
@@ -66,11 +67,12 @@ const DEAL_REVEAL_MS = 4500;
 type Busy = null | "loading" | "dealing" | "rerolling" | "building" | "beginning" | "withdrawing";
 type SaveState = "idle" | "saving" | "saved" | "failed";
 type Ask = { title: string; body: string; confirmLabel: string; danger?: boolean; run: () => void };
-type Result = { won: boolean; playerCorners: number; opponentCorners: number };
+type Result = { won: boolean; playerCorners: number; opponentCorners: number; playerTotalScore?: number; opponentTotalScore?: number };
 
 export function CampaignTab({
   cards,
   onCardsWorn,
+  onGameXp,
   onKitUsed,
   pCredits,
   onPCreditsChange,
@@ -87,6 +89,8 @@ export function CampaignTab({
   onKitUsed?: (kitId: string) => void;
   /** Called with the cars after a battle has worn them, so the rest of the game shows the new durability. */
   onCardsWorn?: (cars: MemberCard[]) => void;
+  /** Called with the driver's new Drift XP total after a round pays XP, so the bar in the header moves. */
+  onGameXp?: (total: number) => void;
 }) {
   // Choosing cars from the member's own deck, before a cup starts.
   // Step 1 is the entry (fee and prizes), step 2 is choosing the cars. Null when neither is open.
@@ -120,6 +124,8 @@ export function CampaignTab({
   const [picked, setPicked] = useState<string[]>([]);
   const [battle, setBattle] = useState<CampaignBattle | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  // The Drift XP the round just played paid, shown on its verdict.
+  const [roundXp, setRoundXp] = useState<{ xp: GameXpBreakdown; total: number } | null>(null);
   const pendingRef = useRef<Result | null>(null);
   const [working, setWorking] = useState<string | null>(null);
   // A question waiting for a yes or no. Shown as a modal, never as a browser alert.
@@ -212,16 +218,21 @@ export function CampaignTab({
     if (res.success) {
       applyView(res.data);
       onCardsWorn?.(res.data.cars);
+      if (res.data.xp && res.data.gameXp !== undefined) {
+        setRoundXp({ xp: res.data.xp, total: res.data.gameXp });
+        onGameXp?.(res.data.gameXp);
+      }
       setSaveState("saved");
       setError(null);
     } else {
       setSaveState("failed");
       setError(res.error);
     }
-  }, [onCardsWorn, applyView]);
+  }, [onCardsWorn, onGameXp, applyView]);
 
   function closeBattle() {
     setBattle(null);
+    setRoundXp(null);
     setSaveState("idle");
     pendingRef.current = null;
   }
@@ -421,6 +432,8 @@ export function CampaignTab({
             onExit: () => void leaveBattle(),
             maintenance:
               saveState === "saved" ? ([...view.rounds].reverse().find((r) => r.result)?.result?.maintenance ?? null) : null,
+            xp: saveState === "saved" ? (roundXp?.xp ?? null) : null,
+            gameXp: roundXp?.total,
           }}
         />
         {dialog}

@@ -5,15 +5,16 @@ import { rarityLabel } from "@/lib/card-roll";
 import type { DriftClashLeaderboardEntry } from "@/tcg/types";
 import { useBottomChromeHeight } from "@/tcg/ui/useBottomChrome";
 
-type LeaderboardSort = "power" | "mythics" | "wins";
+type LeaderboardSort = "power" | "mythics" | "wins" | "drift";
 
 const SORT_TABS: { id: LeaderboardSort; label: string; icon: string }[] = [
+  { id: "drift", label: "Drift", icon: "🏁" },
   { id: "power", label: "Power", icon: "⚡" },
   { id: "mythics", label: "Rare cards", icon: "💎" },
   { id: "wins", label: "Wins", icon: "⚔️" },
 ];
 
-/** The three numbers shown for a collector, in the order they are listed. */
+/** The numbers shown for a collector, in the order they are listed. */
 function statsFor(entry: DriftClashLeaderboardEntry): Record<LeaderboardSort, { label: string; value: string; tone: string }> {
   return {
     power: {
@@ -30,6 +31,11 @@ function statsFor(entry: DriftClashLeaderboardEntry): Record<LeaderboardSort, { 
       label: "Clash wins",
       value: `⚔️ ${entry.clashWins.toLocaleString()}`,
       tone: "text-emerald-600 dark:text-emerald-400",
+    },
+    drift: {
+      label: "Drift level",
+      value: `🏁 Lv ${entry.driftLevel} · ${entry.driftXp.toLocaleString()} XP`,
+      tone: "text-cyan-600 dark:text-cyan-400",
     },
   };
 }
@@ -48,6 +54,44 @@ function medalClass(rank: number): string {
         : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300";
 }
 
+/** A driver's picture, or their initial when they have none or it won't load. */
+function Avatar({ url, name }: { url: string | null; name: string }) {
+  // Remembers which address failed, so a new picture gets its own try.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+  if (url && failedUrl !== url) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={url}
+        alt=""
+        width={40}
+        height={40}
+        loading="lazy"
+        decoding="async"
+        referrerPolicy="no-referrer"
+        onError={() => setFailedUrl(url)}
+        className="h-10 w-10 shrink-0 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-sm font-black text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+    >
+      {initials || "?"}
+    </span>
+  );
+}
+
 export function DriftClashLeaderboard({
   entries,
   currentUserId,
@@ -55,7 +99,7 @@ export function DriftClashLeaderboard({
   entries: DriftClashLeaderboardEntry[];
   currentUserId: string;
 }) {
-  const [sortBy, setSortBy] = useState<LeaderboardSort>("power");
+  const [sortBy, setSortBy] = useState<LeaderboardSort>("drift");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const rowRefs = useRef(new Map<string, HTMLLIElement>());
   const chromeHeight = useBottomChromeHeight();
@@ -69,6 +113,11 @@ export function DriftClashLeaderboard({
         return b.collectorPower - a.collectorPower;
       }
       if (sortBy === "wins") {
+        if (b.clashWins !== a.clashWins) return b.clashWins - a.clashWins;
+        return b.collectorPower - a.collectorPower;
+      }
+      if (sortBy === "drift") {
+        if (b.driftXp !== a.driftXp) return b.driftXp - a.driftXp;
         if (b.clashWins !== a.clashWins) return b.clashWins - a.clashWins;
         return b.collectorPower - a.collectorPower;
       }
@@ -98,7 +147,7 @@ export function DriftClashLeaderboard({
         </span>
         <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-100 sm:text-2xl">🏆 DriftClash Hall of Fame</h2>
         <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          Live rankings by deck power, Mythic &amp; Legend pulls, and Tandem Clash wins.
+          Live rankings by Drift level, deck power, Mythic &amp; Legend pulls and Tandem Clash wins.
         </p>
       </section>
 
@@ -106,7 +155,7 @@ export function DriftClashLeaderboard({
       <div
         role="group"
         aria-label="Rank collectors by"
-        className="sticky gx-sticky-top z-[35] grid grid-cols-3 gap-1.5 rounded-2xl border border-zinc-800 bg-zinc-950/95 p-1.5 shadow-lg backdrop-blur"
+        className="sticky gx-sticky-top z-[35] grid grid-cols-4 gap-1.5 rounded-2xl border border-zinc-800 bg-zinc-950/95 p-1.5 shadow-lg backdrop-blur"
       >
         {SORT_TABS.map((tab) => {
           const active = sortBy === tab.id;
@@ -116,7 +165,7 @@ export function DriftClashLeaderboard({
               type="button"
               aria-pressed={active}
               onClick={() => setSortBy(tab.id)}
-              className={`gx-tap min-h-11 rounded-xl px-2 text-sm font-black transition-colors ${
+              className={`gx-tap min-h-11 rounded-xl px-1 text-xs font-black transition-colors sm:px-2 sm:text-sm ${
                 active ? "bg-amber-500 text-black shadow-sm" : "bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
               }`}
             >
@@ -184,25 +233,7 @@ export function DriftClashLeaderboard({
                       {medalFor(rank)}
                     </span>
 
-                    {entry.avatarUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={entry.avatarUrl}
-                        alt=""
-                        width={40}
-                        height={40}
-                        loading="lazy"
-                        decoding="async"
-                        className="h-10 w-10 shrink-0 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
-                      />
-                    ) : (
-                      <span
-                        aria-hidden
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-sm font-black text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-                      >
-                        {entry.driverName.slice(0, 1).toUpperCase()}
-                      </span>
-                    )}
+                    <Avatar url={entry.avatarUrl} name={entry.driverName} />
 
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1.5">
@@ -216,7 +247,7 @@ export function DriftClashLeaderboard({
                         )}
                       </span>
                       <span className="block truncate text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 sm:text-xs">
-                        Lv.{entry.level} · {others.join(" · ")}
+                        Collector Lv.{entry.level} · {others.join(" · ")}
                       </span>
                     </span>
 
@@ -241,7 +272,7 @@ export function DriftClashLeaderboard({
 
                   {open && (
                     <div id={panelId} className="space-y-2.5 border-t border-zinc-200/70 px-3 pb-3 pt-3 dark:border-zinc-800">
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                         {SORT_TABS.map((t) => (
                           <div
                             key={t.id}

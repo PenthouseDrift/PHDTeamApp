@@ -78,12 +78,16 @@ export async function reportCampaignResultAction(input: {
   won: boolean;
   playerCorners: number;
   opponentCorners: number;
+  playerTotalScore?: number;
+  opponentTotalScore?: number;
 }): Promise<ActionResult<CampaignView>> {
   return run((userId) =>
     service.reportResult(userId, {
       won: Boolean(input?.won),
       playerCorners: Number(input?.playerCorners),
       opponentCorners: Number(input?.opponentCorners),
+      playerTotalScore: Number(input?.playerTotalScore),
+      opponentTotalScore: Number(input?.opponentTotalScore),
     })
   );
 }

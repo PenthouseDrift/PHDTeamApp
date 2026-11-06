@@ -69,6 +69,7 @@ import {
   type EvaluatedCornerResult,
   type TrackBreakdown,
 } from "@/tcg/progression";
+import { getGameXpProgress, type GameXpBreakdown } from "@/tcg/game-xp";
 import type { ClashGameCardsConfig } from "@/tcg/storage";
 import type { ClashOpponent, ClashPlayerStats } from "@/tcg/types";
 import { ClashHowToPlayModal, type HowToPlayTab } from "./ClashHowToPlayModal";
@@ -716,6 +717,9 @@ type PendingBattleSave = {
   playerCorners: number;
   opponentCorners: number;
   tiedCorners: number;
+  /** The two sides' points totals, which set the Drift XP. */
+  playerTotalScore: number;
+  opponentTotalScore: number;
   playedCarCardIds: string[];
   challenge: TandemClashChallenge | null;
 };
@@ -897,6 +901,8 @@ export function DriftClashArena({
   onOpenStoreTab,
   lobbyTab,
   onLobbyTabChange,
+  autoStart,
+  onLeave,
   campaign,
 }: {
   /** Set by the Drift Campaign (admin only) to play one fixed battle. Leave out for the normal game. */
@@ -917,6 +923,13 @@ export function DriftClashArena({
   /** Which lobby view shows. Leave it out and the arena keeps this itself. */
   lobbyTab?: "quick" | "challenges";
   onLobbyTabChange?: (tab: "quick" | "challenges") => void;
+  /**
+   * Start a normal game as soon as the arena opens, skipping this lobby. Pass a number that changes each time a game should
+   * start (the Play page's Tandem Clash button does). Ignored for challenges and the campaign.
+   */
+  autoStart?: number;
+  /** Where "Back to Lobby" and leaving a normal game go. The Play page passes this, since it is the real lobby. */
+  onLeave?: () => void;
 }) {
   const startingStats = initialStats ?? initialClashStats ?? {
     wins: 0,
@@ -924,6 +937,7 @@ export function DriftClashArena({
     streak: 0,
     bestStreak: 0,
     dailyWinClaimed: false,
+    gameXp: 0,
   };
 
   // Mode switcher: "quick" for standard match, "challenges" for cups & tournaments
@@ -1297,6 +1311,8 @@ export function DriftClashArena({
     tiedCorners: number;
     rewardGranted: number;
     streakBonusGranted: number;
+    /** The Drift XP this game paid, once the server has it. */
+    xp: GameXpBreakdown | null;
   } | null>(null);
 
   const [, startTransition] = useTransition();
@@ -1497,6 +1513,26 @@ export function DriftClashArena({
       return next;
     });
     setPickerModalTarget(null);
+  }
+
+  // Opened from the Play page's Tandem Clash button: go straight to picking cars instead of showing this lobby first.
+  const autoStartedRef = useRef(0);
+  useEffect(() => {
+    if (!autoStart || autoStart === autoStartedRef.current) return;
+    autoStartedRef.current = autoStart;
+    if (campaign || !hasEarlyAccess || phase !== "lobby" || arenaLobbyTab !== "quick") return;
+    handleLaunchGame();
+    // Runs once per new autoStart value; the handler is recreated every render and reads the latest state itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart]);
+
+  /** Leave a normal game: back to the Play page when there is one, otherwise to this lobby. */
+  function backToLobby() {
+    if (onLeave && !activeChallenge && !campaign) {
+      onLeave();
+      return;
+    }
+    setPhase("lobby");
   }
 
   // Launch Step 1: Select 3 Car Cards & 3 Crew Cards (Quick Standard Match)
@@ -2216,12 +2252,13 @@ export function DriftClashArena({
       tiedCorners,
       rewardGranted: 0,
       streakBonusGranted: 0,
+      xp: null,
     });
     setPhase("verdict");
 
     // Drift Campaign: the cup records the result. No P-Credits, streaks or car wear for these battles.
     if (campaign) {
-      campaign.onResult({ won, playerCorners, opponentCorners });
+      campaign.onResult({ won, playerCorners, opponentCorners, playerTotalScore, opponentTotalScore });
       return;
     }
 
@@ -2231,6 +2268,8 @@ export function DriftClashArena({
       playerCorners,
       opponentCorners,
       tiedCorners,
+      playerTotalScore,
+      opponentTotalScore,
       playedCarCardIds: [...selectedCarIds],
       challenge: activeChallenge,
     });
@@ -2240,7 +2279,13 @@ export function DriftClashArena({
   async function submitBattleSave(save: PendingBattleSave) {
     pendingSaveRef.current = save;
     setSaveState("saving");
-    const { won, playerCorners, opponentCorners, tiedCorners, playedCarCardIds, challenge } = save;
+    const { won, playerCorners, opponentCorners, tiedCorners, playerTotalScore, opponentTotalScore, playedCarCardIds, challenge } = save;
+    const levelBefore = getGameXpProgress(clashStats.gameXp).level;
+    /** Tell the player when this game took them up a Drift level. */
+    const announceLevelUp = (nextXp: number) => {
+      const after = getGameXpProgress(nextXp).level;
+      if (after > levelBefore) toast(`🏁 Drift level ${after}!`, "success");
+    };
 
     // Update car durability immediately in state.
     const applyCarWear = (updatedCars?: MemberCard[]) => {
@@ -2271,9 +2316,13 @@ export function DriftClashArena({
           challengeId: challenge.id,
           won,
           playedCarCardIds,
+          playerTotalScore,
+          opponentTotalScore,
+          playerCorners,
         });
         if (!res.success) throw new Error(res.error || "Could not save the result.");
         setClashStats(res.data.stats);
+        announceLevelUp(res.data.stats.gameXp);
         setBattleBanner({
           won,
           playerCorners,
@@ -2281,6 +2330,7 @@ export function DriftClashArena({
           tiedCorners,
           rewardGranted: res.data.rewardGranted,
           streakBonusGranted: 0,
+          xp: res.data.xp,
         });
         setChallengeWonCelebration({
           challengeTitle: challenge.title,
@@ -2300,9 +2350,13 @@ export function DriftClashArena({
         const res = await completeClashBattleAction({
           won,
           playedCarCardIds,
+          playerTotalScore,
+          opponentTotalScore,
+          playerCorners,
         });
         if (!res.success) throw new Error(res.error || "Could not save the result.");
         setClashStats(res.data.stats);
+        announceLevelUp(res.data.stats.gameXp);
         setBattleBanner({
           won,
           playerCorners,
@@ -2310,6 +2364,7 @@ export function DriftClashArena({
           tiedCorners,
           rewardGranted: res.data.rewardGranted,
           streakBonusGranted: res.data.streakBonusGranted,
+          xp: res.data.xp,
         });
         setPitReport(res.data.faultEvents ?? []);
         setInternalPCredits(res.data.pCredits);
@@ -2375,7 +2430,7 @@ export function DriftClashArena({
       campaign.onExit();
       return;
     }
-    setPhase("lobby");
+    backToLobby();
   }
 
   /** Leaving a match in progress loses it, so ask first. The lineup, the track roll and the verdict can be left freely. */
@@ -2575,8 +2630,8 @@ export function DriftClashArena({
                   <span>🔒 Early Access Required</span>
                 </button>
               )}
-              <button type="button" onClick={() => setPhase("lobby")} className={`${footerSecondaryCls} w-full`}>
-                Back to Lobby
+              <button type="button" onClick={backToLobby} className={`${footerSecondaryCls} w-full`}>
+                {onLeave && !activeChallenge ? "Back to Play" : "Back to Lobby"}
               </button>
             </>
           )}
@@ -5497,6 +5552,47 @@ export function DriftClashArena({
                           </span>
                         </div>
                       )}
+
+                      {/* Drift XP earned from this game, with the bar it fills */}
+                      {(battleBanner.xp ?? campaign?.xp) &&
+                        (() => {
+                          const xp = (battleBanner.xp ?? campaign?.xp) as GameXpBreakdown;
+                          const drift = getGameXpProgress(Math.max(clashStats.gameXp, campaign?.gameXp ?? 0));
+                          const parts: Array<[string, number]> = [
+                            [battleBanner.won ? "Win and margin" : "Played", xp.match],
+                            ["Clean sweep", xp.sweep],
+                            ["Challenge", xp.challenge],
+                          ];
+                          return (
+                            <div className="mt-3 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-left" role="status">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-[11px] font-black uppercase tracking-widest text-emerald-300">⭐ Drift XP</p>
+                                <p className="text-lg font-black tabular-nums text-white">+{xp.total}</p>
+                              </div>
+                              <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] font-bold text-emerald-100/90">
+                                {parts
+                                  .filter(([, n]) => n > 0)
+                                  .map(([label, n]) => (
+                                    <li key={label}>
+                                      {label} +{n}
+                                    </li>
+                                  ))}
+                              </ul>
+                              <div className="mt-2 flex items-center gap-2">
+                                <span className="shrink-0 text-[11px] font-black uppercase text-emerald-300">Lv {drift.level}</span>
+                                <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-zinc-800">
+                                  <span
+                                    className="block h-full rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400 transition-[width] duration-700"
+                                    style={{ width: `${drift.progressPct}%` }}
+                                  />
+                                </span>
+                                <span className="shrink-0 text-[11px] font-bold tabular-nums text-zinc-400">
+                                  {drift.intoLevel}/{drift.forLevel}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })()}
 
                       {/* Which track this was decided on */}
                       {activeTrackDef && (

@@ -10,6 +10,7 @@ import type { ComingSoonCard } from "@/lib/coming-soon";
 import type { ShowcaseRareCard } from "@/tcg/storage";
 import { P_CREDIT_BUNDLES } from "@/tcg/config";
 import { DAILY_CLASH_WIN_REWARD_PCREDITS, getCollectorProgress } from "@/tcg/progression";
+import { getGameXpProgress } from "@/tcg/game-xp";
 import type {
   ClashOpponent,
   ClashPlayerStats,
@@ -168,6 +169,8 @@ export function TcgApp({
   const [clashStats, setClashStats] = useState<ClashPlayerStats>(initialClashStats);
   // Which view the play section on Home is showing: the two play buttons, or the full challenges list.
   const [lobbyTab, setLobbyTab] = useState<"quick" | "challenges">("quick");
+  // Goes up each time Tandem Clash is opened from the Play page, so the arena starts a game instead of showing its lobby.
+  const [autoStart, setAutoStart] = useState(0);
   // On a phone the player's stats (cards by rarity, power, wins) fold away under the level bar; tap the bar to open them.
   const [hudOpen, setHudOpen] = useState(false);
   // Sticky filter and wallet bars stick just under whatever covers the top of the page; this measures how far that reaches.
@@ -195,6 +198,7 @@ export function TcgApp({
     setSynced({ initialTab, initialCards, initialPackCredits, initialPCredits, initialListings, initialClashStats });
   }
 
+  const drift = useMemo(() => getGameXpProgress(clashStats.gameXp), [clashStats.gameXp]);
   const progress = useMemo(
     () => getCollectorProgress(cards, clashStats.wins, cards.length),
     [cards, clashStats.wins]
@@ -221,6 +225,7 @@ export function TcgApp({
     (mode: PlayMode) => {
       if (mode === "quick" || mode === "challenges") {
         setLobbyTab(mode);
+        if (mode === "quick") setAutoStart((n) => n + 1);
         selectTab("clash");
       } else {
         selectTab(mode);
@@ -274,6 +279,18 @@ export function TcgApp({
                 </span>
                 <span className="shrink-0 text-[11px] font-bold tabular-nums text-zinc-400">
                   {progress.xp.toLocaleString()}/{progress.nextLevelXp.toLocaleString()} XP
+                </span>
+              </span>
+              {/* Drift XP: earned from playing games (margin of wins, clean sweeps, challenges, campaign rounds) */}
+              <span className="mt-1 flex items-center gap-2" role="img" aria-label={`Drift level ${drift.level}, ${drift.intoLevel} of ${drift.forLevel} XP`}>
+                <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-zinc-800">
+                  <span
+                    className="block h-full rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400 transition-[width] duration-700"
+                    style={{ width: `${drift.progressPct}%` }}
+                  />
+                </span>
+                <span className="shrink-0 text-[10px] font-bold uppercase tabular-nums text-emerald-300">
+                  Drift Lv {drift.level} · {drift.intoLevel}/{drift.forLevel}
                 </span>
               </span>
             </span>
@@ -452,6 +469,8 @@ export function TcgApp({
               onOpenStoreTab={() => selectTab("store")}
               lobbyTab={lobbyTab}
               onLobbyTabChange={setLobbyTab}
+              autoStart={autoStart}
+              onLeave={() => selectTab("play")}
             />
           )}
         </TcgHome>
@@ -469,6 +488,7 @@ export function TcgApp({
 
       {view === "campaign" && <CampaignTab
           onBack={() => selectTab("play")}
+          onGameXp={(total) => setClashStats((prev) => ({ ...prev, gameXp: total }))}
           cards={cards}
           pCredits={pCredits}
           onPCreditsChange={setPCredits}

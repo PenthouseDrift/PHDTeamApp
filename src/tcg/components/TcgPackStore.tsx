@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { FullArtCard } from "@/components/cards/FullArtCard";
 import { PackOpening, splitStorePackCards } from "@/components/member-cards/PackOpening";
 import { rarityLabel, type MemberCard } from "@/lib/card-roll";
-import { buyAndOpenCustomPack, buyStandardPackWithPCredits } from "@/tcg/actions";
+import { buyAndOpenCustomPack, buyStandardPackWithPCredits, previewOpenPackAction } from "@/tcg/actions";
 import { PackArt } from "@/tcg/components/PackArt";
 import { PackContentsModal, PackContentsView } from "@/tcg/components/PackContentsView";
 import { getEffectivePrice, getSaleDiscountPct, isOnSale } from "@/tcg/config";
@@ -78,9 +78,15 @@ export function TcgPackStore({
     packName: string;
     cards: MemberCard[];
     revealed: boolean;
-    /** The pack that was opened, so the reveal can offer to open another one. */
-    pack: TcgCustomPackWithCards;
+    /** The pack that was opened, so the reveal can offer to open another one. Not set for a dev preview. */
+    pack: TcgCustomPackWithCards | null;
+    /** Set for an admin's dev preview: the cards are not kept, and the pack that was previewed. */
+    preview?: { packId: string };
   } | null>(null);
+  /** The pack an admin is rolling a dev preview of, so its button shows it is busy. */
+  const [previewing, setPreviewing] = useState<string | null>(null);
+  /** Dev preview option: make sure the pack gives a Legend car card, to try the Legend reveal. Shared by every pack. */
+  const [guaranteeLegend, setGuaranteeLegend] = useState(false);
 
   const standardOnSale = isOnSale(standardPackPrice, standardPackSalePrice);
   const effectiveStandardPrice = getEffectivePrice(standardPackPrice, standardPackSalePrice);
@@ -146,6 +152,29 @@ export function TcgPackStore({
     });
   }
 
+  /** Admin dev tool: open a pack to watch the reveal. Nothing is charged, saved or kept. */
+  async function handlePreviewPack(packId: string) {
+    if (previewing) return;
+    setError(null);
+    setPreviewing(packId);
+    try {
+      const res = await previewOpenPackAction(packId, { guaranteeLegend });
+      if (res.success) {
+        buzz(20);
+        setOpeningState({ packName: res.data.packName, cards: res.data.cards, revealed: false, pack: null, preview: { packId } });
+      } else {
+        setError(res.error);
+        toast(res.error, "error");
+      }
+    } catch {
+      const text = "Could not preview that pack.";
+      setError(text);
+      toast(text, "error");
+    } finally {
+      setPreviewing(null);
+    }
+  }
+
   const isBuying = (id: string, via: PendingBuy["via"] = "pcredits") => pendingBuy?.id === id && pendingBuy.via === via;
 
   return (
@@ -204,7 +233,7 @@ export function TcgPackStore({
         </div>
       )}
 
-      {/* Packs: the Standard Pack first (it is what most players buy), then the store packs, all the same kind of tile */}
+      {/* Packs: the store packs first, then the Standard Pack last, all the same kind of tile */}
       <section className="space-y-4">
         <div>
           <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Packs</h3>
@@ -214,91 +243,6 @@ export function TcgPackStore({
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {/* The Standard Pack */}
-          <PackTile onSale={standardOnSale}>
-            <div className="space-y-3">
-              <ArtFrame onSale={standardOnSale}>
-                <div className="w-24 sm:w-28">
-                  <PackArt
-                    name="Standard Pack"
-                    variant="standard"
-                    cardsLabel="4 CARDS"
-                    extraLabel="+ RARE CHANCE"
-                    discountPct={standardOnSale ? standardDiscountPct : 0}
-                  />
-                </div>
-                <span className="absolute left-3 top-3 z-20 rounded-full bg-amber-500 px-2.5 py-0.5 text-[11px] font-black text-black">
-                  4 Cards / Pack
-                </span>
-                {standardOnSale && <SalePill pct={standardDiscountPct} />}
-              </ArtFrame>
-
-              {standardAllowsCardCredits && (
-                <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full border border-amber-400/40 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-black text-amber-700 dark:text-amber-300">
-                    You have {packCredits} unopened
-                  </span>
-                </div>
-              )}
-
-              <div className="space-y-1">
-                <TitleAndPrice
-                  name="Penthouse Standard Pack"
-                  price={standardPackPrice}
-                  effectivePrice={effectiveStandardPrice}
-                  onSale={standardOnSale}
-                />
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  1 custom AI card of your car, 1 community car card, 1 Tactical Crew Card for Clash Arena and 1 Repair Kit, plus a
-                  chance at a rare Bonus Set Card.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
-              {!standardAllowsCardCredits && pCredits >= effectiveStandardPrice && (
-                // Paid for when it is opened: the member picks their car in the wizard, which charges the price.
-                <Link href="/cards/new" className={buyBtn}>
-                  Choose car &amp; open · {effectiveStandardPrice.toLocaleString()} P
-                </Link>
-              )}
-              {(standardAllowsCardCredits || pCredits < effectiveStandardPrice) && (
-                <button
-                  type="button"
-                  onClick={handleBuyStandardPack}
-                  disabled={pending || pCredits < effectiveStandardPrice}
-                  className={buyBtn}
-                >
-                  {isBuying(STANDARD_ID) ? (
-                    "Purchasing…"
-                  ) : pCredits < effectiveStandardPrice ? (
-                    `Need ${effectiveStandardPrice.toLocaleString()} P`
-                  ) : standardOnSale ? (
-                    <span>
-                      Buy · <span className="line-through opacity-60">{standardPackPrice.toLocaleString()}</span>{" "}
-                      {effectiveStandardPrice.toLocaleString()} P
-                    </span>
-                  ) : (
-                    `Buy Pack · ${effectiveStandardPrice.toLocaleString()} P`
-                  )}
-                </button>
-              )}
-              {standardAllowsCardCredits && packCredits > 0 && (
-                <Link href="/cards/new" className={outlineBtn}>
-                  Open Pack ({packCredits} ready) →
-                </Link>
-              )}
-              {pCredits < effectiveStandardPrice && (
-                <button type="button" onClick={onOpenPCreditsTab} className={`${outlineBtn} border-amber-500/50 text-amber-700 dark:text-amber-300`}>
-                  Need {(effectiveStandardPrice - pCredits).toLocaleString()} more P-Credits
-                </button>
-              )}
-              <button type="button" onClick={() => setShowStandardContents(true)} className={ghostBtn}>
-                What&apos;s in the pack?
-              </button>
-            </div>
-          </PackTile>
-
           {customPacks.map((pack) => {
             const packOnSale = isOnSale(pack.price, pack.salePrice);
             const effectivePrice = getEffectivePrice(pack.price, pack.salePrice);
@@ -446,10 +390,97 @@ export function TcgPackStore({
                   <button type="button" onClick={() => setInspectPack(pack)} className={ghostBtn}>
                     What&apos;s in the pack?
                   </button>
+                  {isAdmin && <DevPreviewButton busy={previewing === pack.id} disabled={previewing !== null} guaranteeLegend={guaranteeLegend} onGuaranteeChange={setGuaranteeLegend} onClick={() => handlePreviewPack(pack.id)} />}
                 </div>
               </PackTile>
             );
           })}
+
+          {/* The Standard Pack */}
+          <PackTile onSale={standardOnSale}>
+            <div className="space-y-3">
+              <ArtFrame onSale={standardOnSale}>
+                <div className="w-24 sm:w-28">
+                  <PackArt
+                    name="Standard Pack"
+                    variant="standard"
+                    cardsLabel="4 CARDS"
+                    extraLabel="+ RARE CHANCE"
+                    discountPct={standardOnSale ? standardDiscountPct : 0}
+                  />
+                </div>
+                <span className="absolute left-3 top-3 z-20 rounded-full bg-amber-500 px-2.5 py-0.5 text-[11px] font-black text-black">
+                  4 Cards / Pack
+                </span>
+                {standardOnSale && <SalePill pct={standardDiscountPct} />}
+              </ArtFrame>
+
+              {standardAllowsCardCredits && (
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-full border border-amber-400/40 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-black text-amber-700 dark:text-amber-300">
+                    You have {packCredits} unopened
+                  </span>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <TitleAndPrice
+                  name="Penthouse Standard Pack"
+                  price={standardPackPrice}
+                  effectivePrice={effectiveStandardPrice}
+                  onSale={standardOnSale}
+                />
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  1 custom AI card of your car, 1 community car card, 1 Tactical Crew Card for Clash Arena and 1 Repair Kit, plus a
+                  chance at a rare Bonus Set Card.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
+              {!standardAllowsCardCredits && pCredits >= effectiveStandardPrice && (
+                // Paid for when it is opened: the member picks their car in the wizard, which charges the price.
+                <Link href="/cards/new" className={buyBtn}>
+                  Choose car &amp; open · {effectiveStandardPrice.toLocaleString()} P
+                </Link>
+              )}
+              {(standardAllowsCardCredits || pCredits < effectiveStandardPrice) && (
+                <button
+                  type="button"
+                  onClick={handleBuyStandardPack}
+                  disabled={pending || pCredits < effectiveStandardPrice}
+                  className={buyBtn}
+                >
+                  {isBuying(STANDARD_ID) ? (
+                    "Purchasing…"
+                  ) : pCredits < effectiveStandardPrice ? (
+                    `Need ${effectiveStandardPrice.toLocaleString()} P`
+                  ) : standardOnSale ? (
+                    <span>
+                      Buy · <span className="line-through opacity-60">{standardPackPrice.toLocaleString()}</span>{" "}
+                      {effectiveStandardPrice.toLocaleString()} P
+                    </span>
+                  ) : (
+                    `Buy Pack · ${effectiveStandardPrice.toLocaleString()} P`
+                  )}
+                </button>
+              )}
+              {standardAllowsCardCredits && packCredits > 0 && (
+                <Link href="/cards/new" className={outlineBtn}>
+                  Open Pack ({packCredits} ready) →
+                </Link>
+              )}
+              {pCredits < effectiveStandardPrice && (
+                <button type="button" onClick={onOpenPCreditsTab} className={`${outlineBtn} border-amber-500/50 text-amber-700 dark:text-amber-300`}>
+                  Need {(effectiveStandardPrice - pCredits).toLocaleString()} more P-Credits
+                </button>
+              )}
+              <button type="button" onClick={() => setShowStandardContents(true)} className={ghostBtn}>
+                What&apos;s in the pack?
+              </button>
+              {isAdmin && <DevPreviewButton busy={previewing === STANDARD_ID} disabled={previewing !== null} guaranteeLegend={guaranteeLegend} onGuaranteeChange={setGuaranteeLegend} onClick={() => handlePreviewPack(STANDARD_ID)} />}
+            </div>
+          </PackTile>
         </div>
       </section>
 
@@ -664,7 +695,9 @@ export function TcgPackStore({
             {/* my-auto centres this when it is shorter than the screen and lets it start at the top (never clipped) when it is taller */}
             <div className="mx-auto my-auto w-full max-w-xl space-y-3 px-4 pb-4 pt-2">
               <div className="text-zinc-100">
-                <p className="text-xs font-bold uppercase tracking-widest text-amber-400">Pack</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-amber-400">
+                  {openingState.preview ? "🧪 Dev preview · not kept" : "Pack"}
+                </p>
                 <h3 className="text-lg font-black">{openingState.packName}</h3>
               </div>
 
@@ -679,7 +712,34 @@ export function TcgPackStore({
               />
             </div>
 
+            {openingState.revealed && openingState.preview && (
+              <div className="gx-safe-b sticky bottom-0 z-10 mt-auto border-t border-zinc-800 bg-zinc-950/95 px-4 pt-3 backdrop-blur">
+                <div className="mx-auto w-full max-w-xl space-y-2">
+                  <p role="status" className="text-center text-xs font-bold text-amber-300">
+                    🧪 Dev preview. These cards were not saved and nothing was charged.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => setOpeningState(null)} className={stageBtn}>
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const id = openingState.preview?.packId;
+                        setOpeningState(null);
+                        if (id) void handlePreviewPack(id);
+                      }}
+                      className={buyBtn}
+                    >
+                      Preview again
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {openingState.revealed &&
+              openingState.pack &&
               (() => {
                 // Another of the same pack, paid for with P-Credits or a pack credit, whichever the member has.
                 const again = openingState.pack;
@@ -735,6 +795,43 @@ export function TcgPackStore({
           </div>,
           document.body
         )}
+    </div>
+  );
+}
+
+/** Admin only: opens the pack for the reveal without charging for it or keeping the cards. */
+function DevPreviewButton({
+  onClick,
+  busy,
+  disabled,
+  guaranteeLegend,
+  onGuaranteeChange,
+}: {
+  onClick: () => void;
+  busy: boolean;
+  disabled: boolean;
+  guaranteeLegend: boolean;
+  onGuaranteeChange: (next: boolean) => void;
+}) {
+  return (
+    <div className="space-y-1.5 rounded-xl border border-dashed border-fuchsia-500/60 bg-fuchsia-500/5 p-2">
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        className="gx-tap inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-fuchsia-600 px-4 text-sm font-bold text-white transition-colors hover:bg-fuchsia-500 disabled:opacity-50"
+      >
+        {busy ? "Rolling a preview…" : "🧪 Dev preview · open, don’t keep"}
+      </button>
+      <label className="flex min-h-9 cursor-pointer items-center justify-center gap-2 text-xs font-bold text-fuchsia-800 dark:text-fuchsia-200">
+        <input
+          type="checkbox"
+          checked={guaranteeLegend}
+          onChange={(e) => onGuaranteeChange(e.target.checked)}
+          className="h-4 w-4 accent-fuchsia-600"
+        />
+        Guarantee a Legend car card
+      </label>
     </div>
   );
 }

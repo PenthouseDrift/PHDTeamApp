@@ -48,6 +48,8 @@ import {
   type TandemClashChallenge,
 } from "./challenges-types";
 import { getUtcMidnightCountdown } from "./progression";
+import { gameXpFor, type GameXpBreakdown } from "./game-xp";
+import { addGameXp } from "./game-xp-store";
 import type { ClashOpponent, ClashPlayerStats } from "./types";
 
 function todayUtc(): string {
@@ -514,9 +516,14 @@ export async function completeChallengeBattleAction(input: {
   challengeId: string;
   won: boolean;
   playedCarCardIds?: string[];
+  playerTotalScore?: number;
+  opponentTotalScore?: number;
+  playerCorners?: number;
 }): Promise<
   ActionResult<{
     won: boolean;
+    /** The Drift XP this game paid: the game itself, plus the challenge's tier bonus on its first win of the day. */
+    xp: GameXpBreakdown;
     rewardGranted: number;
     pCredits: number;
     challengeCompleted: boolean;
@@ -538,12 +545,12 @@ export async function completeChallengeBattleAction(input: {
     const userId = session?.user?.id;
     if (!userId) return { success: false, error: "Authentication required" };
 
-    const { challengeId, won, playedCarCardIds = [] } = input;
+    const { challengeId, won, playedCarCardIds = [], playerTotalScore, opponentTotalScore, playerCorners } = input;
 
     const challenge = await getChallengeById(challengeId);
 
     // 1. Process Clash battle result + streak + durability wear via clash core action
-    const battleRes = await completeClashBattleAction({ won, playedCarCardIds });
+    const battleRes = await completeClashBattleAction({ won, playedCarCardIds, playerTotalScore, opponentTotalScore, playerCorners });
     if (!battleRes.success) {
       return { success: false, error: battleRes.error };
     }
@@ -551,6 +558,8 @@ export async function completeChallengeBattleAction(input: {
     let pCredits = battleRes.data.pCredits;
     let rewardGranted = battleRes.data.rewardGranted + battleRes.data.streakBonusGranted;
     let challengeCompleted = false;
+    let xp = battleRes.data.xp;
+    let stats = battleRes.data.stats;
 
     // 2. Award Challenge P-Credits if won and mark as completed for today
     const today = todayUtc();
@@ -589,6 +598,14 @@ export async function completeChallengeBattleAction(input: {
           rewardGranted += challenge.rewardPCredits;
           pCredits = await grantPCredits(userId, challenge.rewardPCredits);
         }
+
+        // Drift XP for the challenge, by its tier (the card rarity it is for). Paid with the prize, so once a day.
+        const bonus = gameXpFor({ won: true, challengeTier: challenge.allowedRarity }).challenge;
+        if (bonus > 0) {
+          const total = await addGameXp(userId, bonus);
+          xp = { ...xp, challenge: bonus, total: xp.total + bonus };
+          stats = { ...stats, gameXp: total };
+        }
       }
     }
 
@@ -602,7 +619,8 @@ export async function completeChallengeBattleAction(input: {
         rewardGranted,
         pCredits,
         challengeCompleted,
-        stats: battleRes.data.stats,
+        stats,
+        xp,
         faultEvents: battleRes.data.faultEvents,
         updatedCars: battleRes.data.updatedCars ?? [],
       },

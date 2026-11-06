@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
+import { Fragment, useCallback, useState, useSyncExternalStore, useTransition } from "react";
 import ImageUploader from "@/components/ui/ImageUploader";
 import { PackOpening, bestCardOf, splitStorePackCards } from "@/components/member-cards/PackOpening";
 import { ChassisSelector } from "@/components/cars/ChassisSelector";
@@ -389,14 +389,6 @@ function CardPackWizardForm({
           ? !partsTooLong
           : true;
 
-  const resultRef = useRef<HTMLDivElement>(null);
-  // On small screens the card fills the view, so bring the result text and buttons into sight once revealed.
-  useEffect(() => {
-    if (!revealed || !resultRef.current) return;
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    resultRef.current.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
-  }, [revealed]);
-
   const onRevealed = useCallback(() => setRevealed(true), []);
 
     function open(payOverride?: "pcredits" | "cardCredit") {
@@ -614,7 +606,7 @@ function CardPackWizardForm({
         )}
 
         {revealed && card && bestPull && (
-          <div ref={resultRef} className={`${panel} scroll-mt-20 space-y-4`}>
+          <div className={`${panel} space-y-4`}>
             <div className="text-center">
               <p className="text-xs font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
                 {bestPull === card ? (card.bonus ? "Community Car Card #1" : "You pulled a") : bestPull === featured ? "🔥 Rare Bonus Drop" : "Your best pull"}

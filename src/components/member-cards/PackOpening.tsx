@@ -122,6 +122,66 @@ function CardBack() {
   );
 }
 
+/**
+ * The reveal timeline, in seconds. The cards come out of the pack face down and fan out, turn over one at a time with the best
+ * card last (the burst goes off as it turns), hold for a beat, then spread into the row you swipe through. Every card gets its
+ * own delays as CSS variables (see .pd-* in globals.css).
+ */
+const DEAL = { rise: 0.7, riseGap: 0.09, flipGap: 0.28, backTurn: 0.22, frontTurn: 0.28, heroBackTurn: 0.3, heroFrontTurn: 0.5, hold: 0.7, spread: 0.8, spreadGap: 0.07 };
+/** A Legend (or Mythic) pull gets a longer build-up before the card turns, a slower turn, and more time to enjoy it. */
+const LEGEND = { build: 1.6, backTurn: 0.55, frontTurn: 1, hold: 2.2 };
+
+function dealPlan(count: number, heroIndex: number, legendary: boolean) {
+  const mid = (count - 1) / 2;
+  const flipsStart = (count - 1) * DEAL.riseGap + DEAL.rise + 0.25;
+  // The best card turns last. The others turn in the order they sit.
+  let others = 0;
+  const ranks = Array.from({ length: count }, (_, i) => (i === heroIndex ? count - 1 : others++));
+  const build = legendary ? LEGEND.build : 0;
+  const heroBackTurn = legendary ? LEGEND.backTurn : DEAL.heroBackTurn;
+  const heroFrontTurn = legendary ? LEGEND.frontTurn : DEAL.heroFrontTurn;
+  const heroBack = flipsStart + (count - 1) * DEAL.flipGap + build;
+  const heroEnd = heroBack + heroBackTurn + heroFrontTurn;
+  const spreadStart = heroEnd + (legendary ? LEGEND.hold : DEAL.hold);
+  const end = spreadStart + (count - 1) * DEAL.spreadGap + DEAL.spread;
+  const styles = ranks.map((rank, i) => {
+    const isHero = i === heroIndex;
+    const backAt = isHero ? heroBack : flipsStart + rank * DEAL.flipGap;
+    const backTurn = isHero ? heroBackTurn : DEAL.backTurn;
+    return {
+      "--k": heroIndex - i,
+      "--fan-x": `${(i - mid) * 22}px`,
+      "--fan-r": `${(i - mid) * 9}deg`,
+      "--in-delay": `${(i * DEAL.riseGap).toFixed(2)}s`,
+      "--back-delay": `${backAt.toFixed(2)}s`,
+      "--back-dur": `${backTurn}s`,
+      "--front-delay": `${(backAt + backTurn).toFixed(2)}s`,
+      "--front-dur": `${isHero ? heroFrontTurn : DEAL.frontTurn}s`,
+      "--spread-delay": `${(spreadStart + i * DEAL.spreadGap).toFixed(2)}s`,
+    } as CSSProperties;
+  });
+  const burstAt = heroBack + heroBackTurn + 0.1;
+  return {
+    styles,
+    end,
+    burstAt,
+    // Legend pulls only: when the build-up starts and how long it lasts, and when the card is face up.
+    chargeAt: heroBack - build,
+    chargeFor: build,
+    auraAt: heroBack + heroBackTurn,
+  };
+}
+
+/** Gold, white and rainbow flecks that rain down over a Legend pull. [left %, delay s, fall s, size rem, colour, drift px] */
+const CONFETTI: Array<[number, number, number, number, string, number]> = Array.from({ length: 34 }, (_, i) => [
+  (i * 29 + 7) % 100,
+  ((i * 13) % 17) * 0.09,
+  2.4 + ((i * 7) % 6) * 0.3,
+  0.35 + ((i * 5) % 4) * 0.12,
+  ["#ffd75e", "#ffffff", "#7df9ff", "#ff7ad9", "#a78bfa", "#fbbf24"][i % 6],
+  ((i * 17) % 9 - 4) * 12,
+]);
+
 export function PackOpening({
   ready,
   card,
@@ -181,6 +241,8 @@ export function PackOpening({
   const heroIndex = Math.max(0, hero ? slides.indexOf(hero) : 0);
   const scroller = useRef<HTMLDivElement>(null);
   const [slide, setSlide] = useState(0);
+  const legendPull = hero?.tier === "legend" || hero?.tier === "mythic";
+  const plan = dealPlan(slides.length, heroIndex, legendPull);
 
   // The row starts on the best card, so the flip happens there. The scroll event this causes updates the counter and arrows.
   useLayoutEffect(() => {
@@ -231,6 +293,8 @@ export function PackOpening({
   // finished by itself or the member tapped Skip.
   const [done, setDone] = useState(false);
   const [skipped, setSkipped] = useState(false);
+  // The cards deal out of the pack face down. Skipping, or reduced motion, uses the simpler reveal below.
+  const dealt = !reduced && !skipped;
   const doneRef = useRef(false);
   const complete = () => {
     if (doneRef.current) return;
@@ -248,7 +312,7 @@ export function PackOpening({
       : stage === "opening"
         ? 1250
         : stage === "revealed"
-          ? 1800
+          ? Math.round(plan.end * 1000) + 300
           : 0;
     if (!ms) return;
     const t = setTimeout(() => {
@@ -256,7 +320,18 @@ export function PackOpening({
       else if (stage === "revealed") complete();
     }, ms);
     return () => clearTimeout(t);
-  }, [stage, reduced]);
+  }, [stage, reduced, plan.end]);
+
+  // A Legend pull buzzes the phone as the card turns: a rising knock, then one long pulse.
+  useEffect(() => {
+    if (anim !== "revealed" || !dealt || !legendPull) return;
+    if (typeof navigator === "undefined" || !("vibrate" in navigator)) return;
+    const t = setTimeout(() => navigator.vibrate([40, 50, 40, 50, 40, 50, 220]), plan.burstAt * 1000);
+    return () => {
+      clearTimeout(t);
+      navigator.vibrate(0);
+    };
+  }, [anim, dealt, legendPull, plan.burstAt]);
 
   /** Skip the rest of the show: the card is shown straight away and the follow-up buttons appear. */
   const skip = () => {
@@ -335,7 +410,7 @@ export function PackOpening({
   // The burst, rays and sparks are those of the best card in the pack.
   const info = hero ? tierInfo(hero.tier) : null;
   const glow = info?.palette.glow ?? "#fbbf24";
-  const isLegend = hero?.tier === "legend" || hero?.tier === "mythic";
+  const isLegend = legendPull;
   const sparks = hero ? SPARK_COUNT[hero.tier] : 0;
 
   const showPack = stage === "landed" || stage === "opening";
@@ -352,9 +427,19 @@ export function PackOpening({
 
   return (
     <div
-      className="pc-stage"
+      className={`pc-stage ${dealt && legendPull && anim === "revealed" ? "pl-shake" : ""}`}
       // On short phones the stage may not be taller than the screen, or the buttons around it would be pushed off.
-      style={{ "--pc-glow": glow, minHeight: "min(30rem, 62dvh)", height: "min(76dvh, 36rem)" } as CSSProperties}
+      style={
+        {
+          "--pc-glow": glow,
+          minHeight: "min(30rem, 62dvh)",
+          height: "min(76dvh, 36rem)",
+          "--pl-at": `${plan.burstAt.toFixed(2)}s`,
+          "--pl-charge-at": `${plan.chargeAt.toFixed(2)}s`,
+          "--pl-charge-for": `${plan.chargeFor}s`,
+          "--pl-aura-at": `${plan.auraAt.toFixed(2)}s`,
+        } as CSSProperties
+      }
     >
       <div className="pc-track" aria-hidden />
 
@@ -402,7 +487,7 @@ export function PackOpening({
                 <div className={`pc-tear-piece ${tearing ? "pc-tear-bottom-open" : ""}`} style={{ clipPath: BOTTOM_CLIP }} aria-hidden>
                   {pack}
                 </div>
-                <div className="pc-tear-gap" aria-hidden />
+                <div className={`pc-tear-gap ${tearing ? "pc-tear-gap-off" : ""}`} aria-hidden />
                 <div className={`pc-tear-piece pc-tear-top ${tearing ? "pc-tear-top-gone" : ""}`} style={{ clipPath: TOP_CLIP }} aria-hidden>
                   {pack}
                 </div>
@@ -490,9 +575,37 @@ export function PackOpening({
               )
               .join("")}
           </span>
-          <div className={`pc-rays ${isLegend ? "pc-rays-rainbow" : ""}`} aria-hidden style={hero?.tier === "bronze" ? { display: "none" } : undefined} />
-          <div className="pc-burst" aria-hidden />
-          <div className="pc-burst pc-burst-2" aria-hidden />
+          {legendPull && dealt && (
+            <>
+              {/* The room goes dark while the card charges, then lights up when it turns */}
+              <div className="pl-dim" aria-hidden />
+              <div className="pl-beams" aria-hidden />
+              <div className="pl-ring" aria-hidden />
+              <div className="pl-ring pl-ring-2" aria-hidden />
+              <div className="pl-ring pl-ring-3" aria-hidden />
+              <div className="pl-flash" aria-hidden />
+              {CONFETTI.map(([left, delay, fall, size, color, drift], i) => (
+                <span
+                  key={i}
+                  className="pl-confetti"
+                  aria-hidden
+                  style={{ left: `${left}%`, width: `${size}rem`, height: `${size * 1.6}rem`, background: color, "--d": `${delay}s`, "--fall": `${fall}s`, "--drift": `${drift}px` } as CSSProperties}
+                />
+              ))}
+            </>
+          )}
+          {legendPull && (
+            <div className={`pl-banner ${dealt ? "" : "pl-banner-static"}`} aria-hidden>
+              <span>★ {hero?.tier === "mythic" ? "Mythic" : "Legendary"} pull ★</span>
+            </div>
+          )}
+          <div
+            className={`pc-rays ${isLegend ? "pc-rays-rainbow" : ""}`}
+            aria-hidden
+            style={{ ...(hero?.tier === "bronze" ? { display: "none" } : null), ...(dealt ? { animationDelay: `${plan.burstAt + 0.1}s, 0s` } : null) }}
+          />
+          <div className="pc-burst" aria-hidden style={dealt ? { animationDelay: `${plan.burstAt}s` } : undefined} />
+          <div className="pc-burst pc-burst-2" aria-hidden style={dealt ? { animationDelay: `${plan.burstAt + 0.25}s` } : undefined} />
           {SPARKS.slice(0, sparks).map(([l, t, d], i) => (
             <span key={i} className="pc-spark" aria-hidden style={{ left: `${l}%`, top: `${t}%`, "--d": `${d}s` } as CSSProperties} />
           ))}
@@ -500,6 +613,7 @@ export function PackOpening({
           <div
             ref={scroller}
             className="pc-carousel"
+            style={{ "--step": "calc(min(17rem, 62vw) + 1rem)", ...(dealt && !done ? { pointerEvents: "none" } : null) } as CSSProperties}
             onScroll={onScroll}
             tabIndex={0}
             role="group"
@@ -516,8 +630,27 @@ export function PackOpening({
             }}
           >
             {slides.map((c, i) => (
-              <div key={c.id} className="pc-slide" role="group" aria-roledescription="slide" aria-label={`Card ${i + 1} of ${slides.length}`}>
-                {i === heroIndex && skipped ? (
+              <div
+                key={c.id}
+                className="pc-slide"
+                role="group"
+                aria-roledescription="slide"
+                aria-label={`Card ${i + 1} of ${slides.length}`}
+                style={dealt ? { position: "relative", zIndex: i === heroIndex ? slides.length + 1 : i } : undefined}
+              >
+                {dealt ? (
+                  <div className="pd-slide" style={plan.styles[i]}>
+                    {/* A Legend card shakes and glows harder while the others are already turned, then keeps a pulsing aura. */}
+                    <div className={`relative [perspective:1000px] ${legendPull && i === heroIndex ? "pl-charge" : ""}`}>
+                      <div className="pd-front">
+                        <FullArtCard card={c} className="drop-shadow-2xl" />
+                      </div>
+                      <div aria-hidden className="pd-back pointer-events-none absolute inset-0 z-20">
+                        <CardBack />
+                      </div>
+                    </div>
+                  </div>
+                ) : i === heroIndex && skipped ? (
                   <FullArtCard card={c} className="drop-shadow-2xl" />
                 ) : i === heroIndex ? (
                   <div className="pc-rise">
@@ -544,7 +677,7 @@ export function PackOpening({
           {slides.length > 1 && (
             <div
               className="pc-slide-in absolute inset-x-0 bottom-[4%] z-10 flex items-center justify-center gap-3"
-              style={skipped ? { animation: "none" } : undefined}
+              style={skipped ? { animation: "none" } : dealt ? { animationDelay: `${plan.end}s` } : undefined}
             >
               <button
                 type="button"
