@@ -81,6 +81,17 @@ export const P_CREDIT_BUNDLES: PCreditBundle[] = [
 ];
 
 /**
+ * The default description of a bundle, with the P-Credit amount it really sells. The built-in text names the default amount
+ * ("1,000 P-Credits for..."), so when an admin changes the amount in the TCG Store settings the text would otherwise still
+ * show the old number.
+ */
+export function describeBundle(def: PCreditBundle, pCredits: number): string {
+  const was = def.pCredits.toLocaleString("en-GB");
+  const now = pCredits.toLocaleString("en-GB");
+  return def.description.includes(was) ? def.description.replace(was, now) : def.description;
+}
+
+/**
  * Returns the Quick Sell payout in P-Credits.
  * Accepts either:
  * - A FullArtTier string (with optional isBroken boolean)

@@ -24,7 +24,7 @@ import { entryRefs, loadAllPackConfigs, loadPackConfig, loadRuntimeFor } from "@
 import { ALL_TIERS, type PackStyle } from "@/lib/pack-styles";
 import { loadPackStyles } from "@/lib/pack-styles-store";
 import { RARITY_RANK, type MemberCard } from "@/lib/card-roll";
-import { DEFAULT_STANDARD_PACK_PRICE, P_CREDIT_BUNDLES, isOnSale } from "./config";
+import { DEFAULT_STANDARD_PACK_PRICE, P_CREDIT_BUNDLES, describeBundle, isOnSale } from "./config";
 import type {
   PCreditBundle,
   TcgCustomPack,
@@ -242,10 +242,11 @@ function sanitizePCreditBundles(rawBundles: unknown): PCreditBundle[] {
       priceGbp,
       salePriceGbp,
       badge: typeof custom.badge === "string" ? custom.badge.trim().slice(0, 24) || undefined : def.badge,
+      // The built-in text names the default amount, so unless the admin wrote their own, it follows the amount actually sold.
       description:
-        typeof custom.description === "string" && custom.description.trim()
+        typeof custom.description === "string" && custom.description.trim() && custom.description.trim() !== def.description
           ? custom.description.trim().slice(0, 140)
-          : def.description,
+          : describeBundle(def, pCredits),
     };
   });
 }
