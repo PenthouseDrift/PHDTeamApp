@@ -76,7 +76,7 @@ export const FINALE_MODE_INFO: Record<FinaleMode, { icon: string; title: string;
     icon: "⏱️",
     title: "Perfect Drift",
     blurb:
-      "Stop the marker in the green zone. The closer you land, the more points you score, and better grip and steer are worth more. Every full pass of the marker takes 1 point off, and at 0 the run ends by itself with nothing.",
+      "Stop the marker in the green zone. The closer you land, the more points you score, and better grip and steer are worth more. The marker starts very fast and slows down, but every full pass takes 1 point off, and at 0 the run ends by itself with nothing.",
   },
   allocation: {
     icon: "🎛️",
@@ -169,6 +169,22 @@ export function timingAccuracy(position: number): number {
   const dist = Math.abs(clamp(position, 0, 1) - 0.5);
   const GREEN_HALF_WIDTH = 0.03;
   return clamp(1 - Math.max(0, dist - GREEN_HALF_WIDTH) / (0.5 - GREEN_HALF_WIDTH), 0, 1);
+}
+
+/** Seconds the marker takes to cross the bar on the first pass: very quick. */
+export const TIMING_FIRST_PASS_SECONDS = 0.45;
+/** Seconds it takes on the last pass before the points run out: the slowest it gets. */
+export const TIMING_LAST_PASS_SECONDS = 1.4;
+
+/**
+ * How long the marker takes to cross the bar on a given pass (0 is the first). It starts fast and slows down with every
+ * pass, as the points come off, so a late stop is easier to land but is worth less. `totalPasses` is how many passes there
+ * are before the points run out (the run's maximum points).
+ */
+export function timingPassSeconds(pass: number, totalPasses: number): number {
+  const last = Math.max(1, totalPasses - 1);
+  const t = clamp(pass / last, 0, 1);
+  return TIMING_FIRST_PASS_SECONDS + (TIMING_LAST_PASS_SECONDS - TIMING_FIRST_PASS_SECONDS) * t;
 }
 
 /**

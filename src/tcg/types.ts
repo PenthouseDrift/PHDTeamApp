@@ -11,7 +11,11 @@ import type { PackConfig } from "@/lib/pack-config";
  */
 
 export type TcgTab =
+  // "home" is the game's landing page. "play" lists every game mode; "clash" (Tandem Clash and challenges),
+  // "tour" and "campaign" are the modes it opens, and are not separate entries in the game navigation.
   | "home"
+  | "play"
+  | "clash"
   | "tour"
   | "campaign"
   | "collection"

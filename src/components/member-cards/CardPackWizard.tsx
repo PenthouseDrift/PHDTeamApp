@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import ImageUploader from "@/components/ui/ImageUploader";
-import { PackOpening, splitStorePackCards } from "@/components/member-cards/PackOpening";
+import { PackOpening, bestCardOf, splitStorePackCards } from "@/components/member-cards/PackOpening";
 import { ChassisSelector } from "@/components/cars/ChassisSelector";
 import { keepCard, openCardPack, rerollCard } from "@/actions/member-cards";
 import { buyStandardPackWithPCredits, openCustomPackWithCar } from "@/tcg/actions";
@@ -253,6 +253,8 @@ function CardPackWizardForm({
   const [specSheets, setSpecSheets] = useState<CarSpecSheet[]>(initialSpecSheets);
   const [activeSpecId, setActiveSpecId] = useState<string | null>(null);
   const [specSavedMsg, setSpecSavedMsg] = useState<string | null>(null);
+  // Shown by the Save button at the bottom of the wizard, where the member just pressed it.
+  const [specSaveNote, setSpecSaveNote] = useState<string | null>(null);
   const [savingSpec, startSpecTransition] = useTransition();
   const [start] = useState(() => startingAnswers(cars, defaultName, remembered, initialSpecSheets));
   const categories = partCategories && partCategories.length > 0 ? partCategories : PART_CATEGORIES;
@@ -345,6 +347,7 @@ function CardPackWizardForm({
 
   function handleSaveCurrentAsSpecSheet() {
     setSpecSavedMsg(null);
+    setSpecSaveNote(null);
     startSpecTransition(async () => {
       const sheetName = car?.name || chassis.trim() || "My Car Setup";
       const res = await saveSpecSheet({
@@ -360,7 +363,7 @@ function CardPackWizardForm({
       if (res.success) {
         setSpecSheets(res.data.sheets);
         setActiveSpecId(res.data.sheet.id);
-        setSpecSavedMsg(`Saved "${res.data.sheet.name}" to your spec sheets.`);
+        setSpecSaveNote(`Saved "${res.data.sheet.name}" to your spec sheets.`);
       } else {
         setError(res.error);
       }
@@ -586,6 +589,8 @@ function CardPackWizardForm({
   if (mode === "pack") {
     // Nothing left to decide once a card is final: after its one re-roll, or always while re-rolling is off.
     const finalCard = card?.rerolled || !REROLL_ENABLED;
+    // The text about the pull is about the best car card in the pack, the one the opening builds up to.
+    const bestPull = bestCardOf([card, bonus, featured, ...extras]) ?? card;
     return (
       <div className="space-y-4">
         <PackOpening
@@ -608,15 +613,20 @@ function CardPackWizardForm({
           </p>
         )}
 
-        {revealed && card && (
+        {revealed && card && bestPull && (
           <div ref={resultRef} className={`${panel} scroll-mt-20 space-y-4`}>
             <div className="text-center">
               <p className="text-xs font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
-                {card.bonus ? "Community Car Card #1" : "You pulled a"}
+                {bestPull === card ? (card.bonus ? "Community Car Card #1" : "You pulled a") : bestPull === featured ? "🔥 Rare Bonus Drop" : "Your best pull"}
               </p>
-              <p className="text-2xl font-black text-zinc-900 dark:text-zinc-100">{rarityLabel(card.tier)} card</p>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">{card.name}</p>
-              {bonus && (
+              <p className="text-2xl font-black text-zinc-900 dark:text-zinc-100">{rarityLabel(bestPull.tier)} card</p>
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">{bestPull.name}</p>
+              {bestPull !== card && (
+                <p className="mt-2 text-sm font-bold text-zinc-700 dark:text-zinc-300">
+                  + {card.bonus ? "Community Car Card #1" : "Your card"}: {rarityLabel(card.tier)} {card.name}
+                </p>
+              )}
+              {bonus && bestPull !== bonus && (
                 <p className="mt-2 text-sm font-bold text-amber-600 dark:text-amber-400">
                   + Community Car Card {card.bonus ? "#2" : ""}: {rarityLabel(bonus.tier)} {bonus.name}
                 </p>
@@ -626,7 +636,7 @@ function CardPackWizardForm({
                   + Tactical Crew Card: {crew.crewIcon ?? "⚡"} {rarityLabel(crew.tier)} {crew.name} ({crew.ability})
                 </p>
               )}
-              {featured && (
+              {featured && bestPull !== featured && (
                 <p className="mt-2 text-sm font-black text-rose-600 dark:text-rose-400">
                   🔥 Rare Bonus Drop! A {rarityLabel(featured.tier)} card, {featured.name}, was also in your pack!
                 </p>
@@ -752,17 +762,9 @@ function CardPackWizardForm({
           <div>
             <h2 className="text-sm font-black text-zinc-900 dark:text-zinc-100">Saved Spec Sheets</h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Tap a spec sheet to auto-fill your car, chassis, photo and parts, or save your current fields as a new spec sheet.
+              Tap a spec sheet to auto-fill your car, chassis, photo and parts. Use &quot;Save as spec sheet&quot; at the bottom to keep your current setup.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleSaveCurrentAsSpecSheet}
-            disabled={savingSpec || (!chassis.trim() && !car && !description.trim())}
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-bold text-amber-700 transition-colors hover:bg-amber-500/20 disabled:opacity-40 dark:text-amber-300"
-          >
-            {savingSpec ? "Saving…" : "+ Save current setup as spec sheet"}
-          </button>
         </div>
 
         {specSheets.length === 0 ? (
@@ -1241,7 +1243,12 @@ function CardPackWizardForm({
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-2">
+      {specSaveNote && (
+        <p role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+          ✓ {specSaveNote}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center justify-between gap-2">
         {step > 1 ? (
           <button type="button" className={secondary} onClick={() => setStep((s) => (s - 1) as Step)}>
             Back
@@ -1249,6 +1256,26 @@ function CardPackWizardForm({
         ) : (
           <span />
         )}
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          {/* Keep this car setup for next time. Not offered when the member is not making a car of their own. */}
+          {!skipPersonalCar && (
+            <button
+              type="button"
+              onClick={handleSaveCurrentAsSpecSheet}
+              disabled={savingSpec || pending || (!chassis.trim() && !car && !description.trim())}
+              className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-xl border border-amber-500/50 bg-amber-500/10 px-3.5 text-sm font-bold text-amber-700 transition-colors hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-40 dark:text-amber-300"
+            >
+              <span aria-hidden>💾</span>
+              {savingSpec ? (
+                "Saving…"
+              ) : (
+                <>
+                  <span className="sm:hidden">Save spec</span>
+                  <span className="hidden sm:inline">Save as spec sheet</span>
+                </>
+              )}
+            </button>
+          )}
         {skipPersonalCar ? (
           <button type="button" className={primary} disabled={pending} onClick={() => open()}>
             {pending
@@ -1270,6 +1297,7 @@ function CardPackWizardForm({
                 : "Open my pack"}
           </button>
         )}
+        </div>
       </div>
     </div>
   );

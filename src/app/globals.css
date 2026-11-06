@@ -928,3 +928,176 @@ body {
 .animate-winner-pulse {
   animation: clash-winner-pulse 1.3s ease-in-out infinite;
 }
+
+/* ── DriftClash mobile kit (src/tcg/ui) ─────────────────────────────────────────────────────────────────────────── */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+/* Content that sticks under the fixed top bar. Matches .pwa-protected-content's top padding. */
+.gx-sticky-top {
+  /* A sticky bar is placed from inside the scrolling area's top padding, and the app reserves room for its fixed header with
+     exactly that padding, so 0 puts the bar right under the header. useStickyTopOffset (src/tcg/ui/useBottomChrome.ts)
+     adds whatever reaches further than the padding. */
+  top: calc(var(--gx-sticky-top, 0px) + 0.25rem);
+}
+.gx-safe-b {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}
+.gx-safe-t {
+  padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
+}
+/* Off-screen items in a long list skip layout and paint until they are near the screen. */
+.gx-cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 22rem;
+}
+@keyframes gx-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.gx-shimmer {
+  background: linear-gradient(100deg, rgba(63, 63, 70, 0.45) 30%, rgba(113, 113, 122, 0.4) 50%, rgba(63, 63, 70, 0.45) 70%);
+  background-size: 200% 100%;
+  animation: gx-shimmer 1.4s linear infinite;
+}
+@keyframes gx-sheet-in {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes gx-pop-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes gx-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes gx-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes gx-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes gx-bar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(260%); }
+}
+.gx-sheet {
+  animation: gx-sheet-in 0.28s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+@media (min-width: 640px) {
+  .gx-sheet {
+    animation: gx-pop-in 0.2s ease-out both;
+  }
+}
+.gx-backdrop {
+  animation: gx-fade 0.2s ease-out both;
+}
+.gx-fade-up {
+  animation: gx-fade-up 0.28s ease-out both;
+}
+.gx-tab-enter {
+  animation: gx-fade-up 0.22s ease-out both;
+}
+.gx-spinner {
+  animation: gx-spin 0.8s linear infinite;
+}
+.gx-bar {
+  animation: gx-bar 1.2s ease-in-out infinite;
+}
+/* A press you can feel on touch screens. */
+.gx-tap {
+  transition: transform 0.12s ease, background-color 0.15s ease;
+}
+.gx-tap:active {
+  transform: scale(0.97);
+}
+@media (prefers-reduced-motion: reduce) {
+  .gx-shimmer, .gx-sheet, .gx-backdrop, .gx-fade-up, .gx-tab-enter, .gx-spinner, .gx-bar {
+    animation: none !important;
+  }
+  .gx-tap:active {
+    transform: none;
+  }
+}
+
+/* A bar that fills from the left when it first appears (the XP bar). */
+/* Drift Campaign deal. The six cards of a deal sit on top of each other where the first card is (--i is the card's place in
+   the row, --step the distance between cards). They fly in from the right one by one into a fan, hold, then spread out into
+   their places in the carousel. */
+@keyframes deal-in {
+  0% {
+    opacity: 1;
+    transform: translate(calc(var(--step) * var(--i) * -1 + var(--fan-x) + 95vw), -6%) rotate(calc(var(--fan-r) + 40deg)) scale(0.7);
+  }
+  70% {
+    transform: translate(calc(var(--step) * var(--i) * -1 + var(--fan-x) - 2%), 1%) rotate(calc(var(--fan-r) - 3deg)) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(calc(var(--step) * var(--i) * -1 + var(--fan-x)), 0) rotate(var(--fan-r)) scale(0.92);
+  }
+}
+@keyframes deal-spread {
+  from {
+    transform: translate(calc(var(--step) * var(--i) * -1 + var(--fan-x)), 0) rotate(var(--fan-r)) scale(0.92);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes deal-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+/* The cards arrive face down. Each one turns over in turn: the back turns edge-on and away, then the car turns up. */
+@keyframes deal-back-away {
+  from { transform: rotateY(0deg); opacity: 1; }
+  99% { opacity: 1; }
+  to { transform: rotateY(90deg); opacity: 0; }
+}
+@keyframes deal-front-turn {
+  from { transform: rotateY(-90deg); opacity: 0; }
+  to { transform: rotateY(0deg); opacity: 1; }
+}
+.deal-slide {
+  transform-origin: 50% 50%;
+  animation:
+    deal-in 0.7s cubic-bezier(0.2, 0.85, 0.3, 1) calc(var(--i) * 110ms) both,
+    deal-spread 0.8s cubic-bezier(0.3, 0.8, 0.3, 1) calc(3.2s + var(--i) * 70ms) forwards;
+}
+.deal-back {
+  animation: deal-back-away 0.25s ease-in calc(1.5s + var(--i) * 190ms) forwards;
+}
+.deal-front {
+  animation: deal-front-turn 0.3s ease-out calc(1.75s + var(--i) * 190ms) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .deal-slide {
+    animation: deal-fade 0.5s calc(var(--i) * 120ms) both;
+  }
+  .deal-back {
+    display: none;
+  }
+  .deal-front {
+    animation: none;
+  }
+}
+
+@keyframes gx-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.gx-grow {
+  transform-origin: left center;
+  animation: gx-grow 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gx-grow {
+    animation: none;
+  }
+}

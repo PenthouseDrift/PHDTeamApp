@@ -28,6 +28,17 @@ export const CARS_TO_PICK = 3;
 /** How many random cars from the player's deck are dealt for them to choose those three from. */
 export const OFFER_SIZE = 6;
 /**
+ * A member needs at least this many bronze car cards to enter the cup. It keeps the deck from being emptied of
+ * everything but a few good cars before entering.
+ */
+export const MIN_BRONZE_CARS = 6;
+/**
+ * How likely each rarity is for each of the six dealt slots, as relative weights (bronze, silver, gold, legend; Mythic
+ * counts as legend). Each slot rolls its rarity first, then takes a car of that rarity from the member's deck. Where the
+ * deck has no car of that rarity left, the next best rarity is used instead (see deal.ts).
+ */
+export const OFFER_TIER_WEIGHTS = [40, 30, 20, 10] as const;
+/**
  * Extra deals of six a member gets, on top of the first. They are stored on the member's campaign profile, not on a cup, so
  * reloading or leaving the picker does not refill them. They refill when a cup ends, however it ends (won, lost,
  * withdrawn), since every cup is a new entry.

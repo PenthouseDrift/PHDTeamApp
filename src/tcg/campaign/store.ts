@@ -1,6 +1,6 @@
 import { redis } from "@/lib/redis";
 import { REROLLS_PER_CUP, RUN_TTL_SECONDS } from "./config";
-import type { CampaignEntry, CampaignRun } from "./types";
+import type { CampaignEntry, CampaignRun, RolledTier } from "./types";
 
 /**
  * Redis storage for the Drift Campaign. A run is one JSON value; each member has at most one current run, found
@@ -56,19 +56,37 @@ export async function withUserLock<T>(userId: string, fn: () => Promise<T>): Pro
 // Long, because the six belong to a paid entry: they must not expire and hand out a free re-deal.
 const OFFER_TTL_SECONDS = 60 * 60 * 24 * 30;
 
-export async function loadOffer(userId: string): Promise<string[]> {
+const ROLLED_TIERS: RolledTier[] = ["bronze", "silver", "gold", "legend"];
+
+/** The dealt cars with the rarity each slot rolled. A deal saved before rolls were recorded has no roll (null). */
+export async function loadOfferSlots(userId: string): Promise<Array<{ id: string; rolled: RolledTier | null }>> {
   const raw = await redis.get(K.offer(userId));
   if (!raw) return [];
   try {
-    const ids = typeof raw === "string" ? JSON.parse(raw) : raw;
-    return Array.isArray(ids) ? ids.map(String) : [];
+    const parsed: unknown = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((entry) => {
+      if (entry && typeof entry === "object" && "id" in entry) {
+        const rolled = (entry as { rolled?: unknown }).rolled;
+        return {
+          id: String((entry as { id: unknown }).id),
+          rolled: ROLLED_TIERS.includes(rolled as RolledTier) ? (rolled as RolledTier) : null,
+        };
+      }
+      return { id: String(entry), rolled: null };
+    });
   } catch {
     return [];
   }
 }
 
-export async function saveOffer(userId: string, ids: string[]): Promise<void> {
-  await redis.set(K.offer(userId), JSON.stringify(ids), { ex: OFFER_TTL_SECONDS });
+/** Just the ids of the dealt cars. */
+export async function loadOffer(userId: string): Promise<string[]> {
+  return (await loadOfferSlots(userId)).map((s) => s.id);
+}
+
+export async function saveOffer(userId: string, slots: Array<{ id: string; rolled: RolledTier }>): Promise<void> {
+  await redis.set(K.offer(userId), JSON.stringify(slots), { ex: OFFER_TTL_SECONDS });
 }
 
 export async function clearOffer(userId: string): Promise<void> {

@@ -9,14 +9,16 @@ import { mulberry32 } from "../battle-sim";
 import { loadArtPool } from "./art-pool";
 import { calibrate } from "./calibrate";
 import { CAMPAIGN_ROUNDS, CARS_TO_PICK, ENTRY_FEES, OFFER_SIZE, prizeFor, REROLLS_PER_CUP, RIVAL_POOL_SIZE } from "./config";
+import { dealOffer, deckProblem, tierSlotOf, type DealtSlot } from "./deal";
 import { bestCrewFor, isCampaignCar } from "./garage";
-import { bestTierOf, personaFor, pickArt, profileFor, showcaseTiersFor, toOpponent, tierRank } from "./generate";
+import { bestTierOf, personaFor, pickArt, profileFor, showcaseTiersFor, toOpponent } from "./generate";
 import {
   claimPayout,
   clearOffer,
   clearTicket,
   loadActiveRun,
   loadOffer,
+  loadOfferSlots,
   loadRerollsLeft,
   loadTicket,
   releasePayout,
@@ -186,30 +188,16 @@ async function loadMemberCards(userId: string): Promise<MemberCard[]> {
     });
 }
 
-/** Six random cars from the member's deck, picked with a fair shuffle. */
-function shuffled<T>(items: T[]): T[] {
-  const out = items.slice();
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = randomInt(0, i + 1);
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
+/**
+ * Six cars from the member's deck: each slot rolls a rarity, then takes a car of that rarity (the next best one if there is
+ * none). See deal.ts. Every deal starts from the whole deck, so a re-roll can deal a car again.
+ */
+function dealSix(cars: MemberCard[]): DealtSlot[] {
+  return dealOffer(cars, (max) => randomInt(0, max));
 }
 
-/**
- * Six random cars, with a floor on quality: if the deck has any silver-or-better car, at least one is in the six. Without
- * this a deck of mostly bronze cars could deal six bronzes while a silver sat unused. `avoid` keeps a re-roll from dealing
- * the old six again when the deck is big enough.
- */
-function dealSix(cars: MemberCard[], avoid: string[] = []): MemberCard[] {
-  const fresh = cars.filter((c) => !avoid.includes(c.id));
-  const pool = fresh.length >= Math.min(OFFER_SIZE, cars.length) ? fresh : cars;
-  const dealt = shuffled(pool).slice(0, OFFER_SIZE);
-  if (!dealt.some((c) => tierRank(c.tier) >= 1)) {
-    const strong = pool.filter((c) => tierRank(c.tier) >= 1 && !dealt.includes(c));
-    if (strong.length > 0 && dealt.length > 0) dealt[dealt.length - 1] = strong[randomInt(0, strong.length)];
-  }
-  return dealt;
+function toOffer(slots: DealtSlot[], rerollsLeft: number): CampaignOffer {
+  return { cars: slots.map((s) => s.car), rolls: slots.map((s) => s.rolled), rerollsLeft };
 }
 
 /**
@@ -220,11 +208,16 @@ async function currentOffer(userId: string): Promise<CampaignOffer> {
   const cars = (await loadMemberCards(userId)).filter(isCampaignCar);
   if (cars.length < CARS_TO_PICK) throw new Error(`You need at least ${CARS_TO_PICK} car cards in your deck to enter the cup.`);
   const rerollsLeft = await loadRerollsLeft(userId);
-  const saved = (await loadOffer(userId)).map((id) => cars.find((c) => c.id === id)).filter((c): c is MemberCard => Boolean(c));
-  if (saved.length >= Math.min(OFFER_SIZE, cars.length)) return { cars: saved, rerollsLeft };
+  const saved: DealtSlot[] = [];
+  for (const slot of await loadOfferSlots(userId)) {
+    const car = cars.find((c) => c.id === slot.id);
+    // A deal saved before rolls were recorded shows the rarity the car has.
+    if (car) saved.push({ car, rolled: slot.rolled ?? tierSlotOf(car) });
+  }
+  if (saved.length >= Math.min(OFFER_SIZE, cars.length)) return toOffer(saved, rerollsLeft);
   const dealt = dealSix(cars);
-  await saveOffer(userId, dealt.map((c) => c.id));
-  return { cars: dealt, rerollsLeft };
+  await saveOffer(userId, dealt.map((s) => ({ id: s.car.id, rolled: s.rolled })));
+  return toOffer(dealt, rerollsLeft);
 }
 
 /** A paid entry that is waiting for its cars to be picked, if the member has one. Lets the tab pick up where it left off. */
@@ -263,7 +256,10 @@ export async function payEntry(userId: string, choice: EntryChoice, isAdmin: boo
     }
 
     // Check the deck can play before taking any money.
-    const cars = (await loadMemberCards(userId)).filter(isCampaignCar);
+    const owned = await loadMemberCards(userId);
+    const problem = deckProblem(owned);
+    if (problem) throw new Error(problem);
+    const cars = owned.filter(isCampaignCar);
     if (cars.length < CARS_TO_PICK) throw new Error(`You need at least ${CARS_TO_PICK} car cards in your deck to enter the cup.`);
 
     let balance: number | undefined;
@@ -302,9 +298,9 @@ export async function withdrawDraft(userId: string): Promise<boolean> {
 }
 
 /**
- * Deal a different six, using one of the member's re-rolls (up to three per paid entry). The count lives on their profile and
- * is only ever spent here; it comes back only with a new entry. If the deck has enough other cars, none of the old six are
- * dealt again.
+ * Throw away the six and deal again, using one of the member's re-rolls (up to three per paid entry). The count lives on their
+ * profile and is only ever spent here; it comes back only with a new entry. The new deal rolls every slot again from the
+ * whole deck, so a car dealt before can come back if its rarity is rolled.
  */
 export async function rerollCars(userId: string): Promise<CampaignOffer> {
   return withUserLock(userId, async () => {
@@ -315,12 +311,12 @@ export async function rerollCars(userId: string): Promise<CampaignOffer> {
     if (rerollsLeft <= 0) throw new Error("You have no re-rolls left for this entry.");
 
     const cars = (await loadMemberCards(userId)).filter(isCampaignCar);
-    const dealt = dealSix(cars, previous);
+    const dealt = dealSix(cars);
 
     // Spend the re-roll first, so a failure after this point can never hand out a free one.
     await saveRerollsLeft(userId, rerollsLeft - 1);
-    await saveOffer(userId, dealt.map((c) => c.id));
-    return { cars: dealt, rerollsLeft: rerollsLeft - 1 };
+    await saveOffer(userId, dealt.map((s) => ({ id: s.car.id, rolled: s.rolled })));
+    return toOffer(dealt, rerollsLeft - 1);
   });
 }
 

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { FullArtCard } from "@/components/cards/FullArtCard";
 import { tierInfo } from "@/lib/full-art-card";
-import type { MemberCard } from "@/lib/card-roll";
+import { RARITY_RANK, type MemberCard } from "@/lib/card-roll";
 import { PackArt } from "@/tcg/components/PackArt";
 
 /**
@@ -25,6 +25,20 @@ export function splitStorePackCards(cards: MemberCard[]): {
     // Any card after the third, such as the pack's bonus pull, then the Crew and Repair Kit cards.
     extras: [...main.slice(3), ...cards.filter(isUtility)],
   };
+}
+
+/**
+ * The best card of a pack, which the reveal builds up to and the text about the pull is written for. Only the car cards
+ * compete: a pack's Crew and Repair Kit cards come with every pack, so they would otherwise often outrank the car. On a tie
+ * the earlier card wins, so the member's own car comes before the bonus cards.
+ */
+export function bestCardOf(cards: Array<MemberCard | null | undefined>): MemberCard | null {
+  let best: MemberCard | null = null;
+  for (const c of cards) {
+    if (!c || c.cardType === "crew" || c.cardType === "maintenance") continue;
+    if (!best || RARITY_RANK[c.tier] > RARITY_RANK[best.tier]) best = c;
+  }
+  return best;
 }
 
 /**
@@ -162,8 +176,20 @@ export function PackOpening({
         ...extras,
       ]
     : [];
+  // The reveal is built around the best card in the pack: it is the one that rises and flips, in its own colours.
+  const hero = bestCardOf(slides) ?? card;
+  const heroIndex = Math.max(0, hero ? slides.indexOf(hero) : 0);
   const scroller = useRef<HTMLDivElement>(null);
   const [slide, setSlide] = useState(0);
+
+  // The row starts on the best card, so the flip happens there. The scroll event this causes updates the counter and arrows.
+  useLayoutEffect(() => {
+    if (anim !== "revealed") return;
+    const el = scroller.current;
+    const target = el?.children[heroIndex] as HTMLElement | undefined;
+    if (!el || !target) return;
+    el.scrollTo({ left: target.offsetLeft - (el.clientWidth - target.clientWidth) / 2, behavior: "instant" });
+  }, [anim, heroIndex]);
 
   /** Which card is in the middle, worked out from how far the carousel has scrolled. */
   const onScroll = () => {
@@ -201,6 +227,18 @@ export function PackOpening({
     return () => clearInterval(t);
   }, [stage]);
 
+  // The follow-up buttons are shown by the parent once this has been called. It only ever runs once, whether the sequence
+  // finished by itself or the member tapped Skip.
+  const [done, setDone] = useState(false);
+  const [skipped, setSkipped] = useState(false);
+  const doneRef = useRef(false);
+  const complete = () => {
+    if (doneRef.current) return;
+    doneRef.current = true;
+    setDone(true);
+    revealed.current();
+  };
+
   // loading -> landed -> (tear) -> opening -> revealed -> done
   useEffect(() => {
     const ms = reduced
@@ -215,10 +253,18 @@ export function PackOpening({
     if (!ms) return;
     const t = setTimeout(() => {
       if (stage === "opening") setAnim("revealed");
-      else if (stage === "revealed") revealed.current();
+      else if (stage === "revealed") complete();
     }, ms);
     return () => clearTimeout(t);
   }, [stage, reduced]);
+
+  /** Skip the rest of the show: the card is shown straight away and the follow-up buttons appear. */
+  const skip = () => {
+    if (stage !== "opening" && stage !== "revealed") return;
+    setSkipped(true);
+    setAnim("revealed");
+    complete();
+  };
 
   // ── Tearing the pack open ──
   const tearRef = useRef<HTMLDivElement>(null);
@@ -286,10 +332,11 @@ export function PackOpening({
     finishTear();
   };
 
-  const info = card ? tierInfo(card.tier) : null;
+  // The burst, rays and sparks are those of the best card in the pack.
+  const info = hero ? tierInfo(hero.tier) : null;
   const glow = info?.palette.glow ?? "#fbbf24";
-  const isLegend = card?.tier === "legend" || card?.tier === "mythic";
-  const sparks = card ? SPARK_COUNT[card.tier] : 0;
+  const isLegend = hero?.tier === "legend" || hero?.tier === "mythic";
+  const sparks = hero ? SPARK_COUNT[hero.tier] : 0;
 
   const showPack = stage === "landed" || stage === "opening";
   const tearing = stage === "opening";
@@ -304,8 +351,23 @@ export function PackOpening({
   } as CSSProperties;
 
   return (
-    <div className="pc-stage" style={{ "--pc-glow": glow } as CSSProperties}>
+    <div
+      className="pc-stage"
+      // On short phones the stage may not be taller than the screen, or the buttons around it would be pushed off.
+      style={{ "--pc-glow": glow, minHeight: "min(30rem, 62dvh)", height: "min(76dvh, 36rem)" } as CSSProperties}
+    >
       <div className="pc-track" aria-hidden />
+
+      {/* Skip: the card fade-in and the timer before the next buttons appear take a few seconds, so this lets the member move on. */}
+      {(stage === "opening" || stage === "revealed") && !done && (
+        <button
+          type="button"
+          onClick={skip}
+          className="absolute right-2 top-2 z-30 inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-amber-400/40 bg-black/50 px-4 text-xs font-bold text-amber-200/90 backdrop-blur-sm hover:bg-black/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
+        >
+          Skip
+        </button>
+      )}
 
       {/* Loading: no pack yet, just a car drifting round a ring */}
       {stage === "loading" && (
@@ -406,9 +468,10 @@ export function PackOpening({
       {anim === "revealed" && card && (
         <>
           <span className="sr-only" role="status">
+            {hero && hero !== card ? `Your best card is a ${info?.label} card: ${hero.name}. ` : ""}
             {card.bonus
-              ? `You got a ${info?.label} community card: ${card.name}.`
-              : `You got a ${info?.label} card: ${card.name}.`}
+              ? `You got a ${tierInfo(card.tier).label} community card: ${card.name}.`
+              : `You got a ${tierInfo(card.tier).label} card: ${card.name}.`}
             {bonus
               ? card.bonus
                 ? ` Your pack also had a second ${tierInfo(bonus.tier).label} community card: ${bonus.name}.`
@@ -427,13 +490,13 @@ export function PackOpening({
               )
               .join("")}
           </span>
-          <div className={`pc-rays ${isLegend ? "pc-rays-rainbow" : ""}`} aria-hidden style={card.tier === "bronze" ? { display: "none" } : undefined} />
+          <div className={`pc-rays ${isLegend ? "pc-rays-rainbow" : ""}`} aria-hidden style={hero?.tier === "bronze" ? { display: "none" } : undefined} />
           <div className="pc-burst" aria-hidden />
           <div className="pc-burst pc-burst-2" aria-hidden />
           {SPARKS.slice(0, sparks).map(([l, t, d], i) => (
             <span key={i} className="pc-spark" aria-hidden style={{ left: `${l}%`, top: `${t}%`, "--d": `${d}s` } as CSSProperties} />
           ))}
-          {/* The cards in a row you can swipe through. The first one rises and flips over; the others fade in after it. */}
+          {/* The cards in a row you can swipe through. The best one rises and flips over; the others fade in after it. */}
           <div
             ref={scroller}
             className="pc-carousel"
@@ -454,7 +517,9 @@ export function PackOpening({
           >
             {slides.map((c, i) => (
               <div key={c.id} className="pc-slide" role="group" aria-roledescription="slide" aria-label={`Card ${i + 1} of ${slides.length}`}>
-                {i === 0 ? (
+                {i === heroIndex && skipped ? (
+                  <FullArtCard card={c} className="drop-shadow-2xl" />
+                ) : i === heroIndex ? (
                   <div className="pc-rise">
                     <div className="pc-flip">
                       <div className="pc-flip-inner">
@@ -468,7 +533,7 @@ export function PackOpening({
                     </div>
                   </div>
                 ) : (
-                  <div className="pc-slide-in">
+                  <div className="pc-slide-in" style={skipped ? { animation: "none" } : undefined}>
                     <FullArtCard card={c} className="drop-shadow-2xl" />
                   </div>
                 )}
@@ -477,7 +542,10 @@ export function PackOpening({
           </div>
 
           {slides.length > 1 && (
-            <div className="pc-slide-in absolute inset-x-0 bottom-[4%] z-10 flex items-center justify-center gap-3">
+            <div
+              className="pc-slide-in absolute inset-x-0 bottom-[4%] z-10 flex items-center justify-center gap-3"
+              style={skipped ? { animation: "none" } : undefined}
+            >
               <button
                 type="button"
                 onClick={() => goTo(slide - 1)}

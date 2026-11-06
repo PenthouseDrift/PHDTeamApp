@@ -23,7 +23,7 @@ import {
 import { TcgApp } from "@/tcg/components/TcgApp";
 import { standardPackAllowsCardCredits } from "@/lib/pack-config-store";
 import { listTandemClashChallengesAction } from "@/tcg/challenges-actions";
-import { getTourAccess } from "@/tcg/tour/actions";
+import { getTourAccess, getTourAdminPreview } from "@/tcg/tour/actions";
 import type { TcgTab } from "@/tcg/types";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +36,8 @@ interface CardsPageProps {
 
 const VALID_TABS: TcgTab[] = [
   "home",
+  "play",
+  "clash",
   "tour",
   "campaign",
   "collection",
@@ -96,6 +98,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
     comingSoon,
     standardAllowsCardCredits,
     hasTourAccess,
+    tourAdminPreview,
   ] = await Promise.all([
     listMyCards(),
     getCardCredits(userId),
@@ -112,10 +115,11 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
     getComingSoonCards(),
     standardPackAllowsCardCredits(),
     getTourAccess(),
+    getTourAdminPreview(),
   ]);
 
-  // The Clash tab is gone: Tandem Clash is on the game's Home page now, so old ?tab=clash links land there.
-  const requestedTab = (params.tab === "clash" ? "home" : params.tab) as TcgTab | undefined;
+  // ?tab=clash opens Tandem Clash itself. The Play page (?tab=play) lists it with the other game modes.
+  const requestedTab = params.tab as TcgTab | undefined;
   const initialTab: TcgTab =
     requestedTab && VALID_TABS.includes(requestedTab) && (requestedTab !== "campaign" || session.user.role === "admin")
       ? requestedTab
@@ -148,6 +152,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
           initialRareCards={rareCards}
           initialComingSoon={comingSoon}
           hasTourAccess={hasTourAccess}
+          tourAdminPreview={tourAdminPreview}
           checkoutConfirmed={checkoutConfirmed}
         />
       </div>

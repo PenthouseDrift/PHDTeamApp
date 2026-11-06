@@ -1254,6 +1254,21 @@ export interface TrackBreakdown {
   badges: TrackBreakdownBadge[];
 }
 
+/**
+ * The stat points a track gives one car. When the track's buff has a condition (a rarity, a low stat and so on) the stats
+ * only go to cars that meet it, matching the track's own wording. Without a condition every car gets them.
+ */
+export function trackStatBuffs(
+  card: MemberCard,
+  trackCard?: TrackCardDefinition | null
+): { drift: number; accel: number; grip: number; steer: number } {
+  const r = trackCard?.rules ?? {};
+  const applies = !r.buffCondition || computeTrackBreakdown({ card, trackCard }).buffConditionMet;
+  return applies
+    ? { drift: r.driftBuff ?? 0, accel: r.accelBuff ?? 0, grip: r.gripBuff ?? 0, steer: r.steerBuff ?? 0 }
+    : { drift: 0, accel: 0, grip: 0, steer: 0 };
+}
+
 export function computeTrackBreakdown(params: {
   card: MemberCard;
   trackCard?: TrackCardDefinition | null;
@@ -1271,13 +1286,6 @@ export function computeTrackBreakdown(params: {
   const rawSteer = stats.steer;
   const rawTotal = rawDrift + rawAccel + rawGrip + rawSteer;
   const rawMap = { drift: rawDrift, accel: rawAccel, grip: rawGrip, steer: rawSteer };
-
-  // 1. Stat Buffs
-  const statBuffParts: string[] = [];
-  if (tRules.driftBuff && tRules.driftBuff > 0) statBuffParts.push(`+${tRules.driftBuff} DRIFT`);
-  if (tRules.accelBuff && tRules.accelBuff > 0) statBuffParts.push(`+${tRules.accelBuff} ACCEL`);
-  if (tRules.gripBuff && tRules.gripBuff > 0) statBuffParts.push(`+${tRules.gripBuff} GRIP`);
-  if (tRules.steerBuff && tRules.steerBuff > 0) statBuffParts.push(`+${tRules.steerBuff} STEER`);
 
   // 2. Conditional Buff Points
   let buffConditionMet = false;
@@ -1330,6 +1338,15 @@ export function computeTrackBreakdown(params: {
     if (buffConditionMet) {
       buffPoints = bc.bonusPoints;
     }
+  }
+
+  // 1b. Stat Buffs. A track whose buff has a condition ("Bronze & Silver cars gain ...") only gives the stats to cars that meet it.
+  const statBuffParts: string[] = [];
+  if (!tRules.buffCondition || buffConditionMet) {
+    if (tRules.driftBuff && tRules.driftBuff > 0) statBuffParts.push(`+${tRules.driftBuff} DRIFT`);
+    if (tRules.accelBuff && tRules.accelBuff > 0) statBuffParts.push(`+${tRules.accelBuff} ACCEL`);
+    if (tRules.gripBuff && tRules.gripBuff > 0) statBuffParts.push(`+${tRules.gripBuff} GRIP`);
+    if (tRules.steerBuff && tRules.steerBuff > 0) statBuffParts.push(`+${tRules.steerBuff} STEER`);
   }
 
   // 3. Track Hazard Debuff
@@ -1604,11 +1621,11 @@ function evaluateDriverOnCorner(params: {
   const afterCrew: CornerFinalStats = { drift, accel, grip, steer };
 
   // 3. UK Track Card Stat Buffs
-  const tRules = trackCard.rules ?? {};
-  if (tRules.driftBuff) drift = Math.min(25, drift + tRules.driftBuff);
-  if (tRules.accelBuff) accel = Math.min(25, accel + tRules.accelBuff);
-  if (tRules.gripBuff) grip = Math.min(25, grip + tRules.gripBuff);
-  if (tRules.steerBuff) steer = Math.min(25, steer + tRules.steerBuff);
+  const trackBuffs = trackStatBuffs(myCard, trackCard);
+  drift = Math.min(25, drift + trackBuffs.drift);
+  accel = Math.min(25, accel + trackBuffs.accel);
+  grip = Math.min(25, grip + trackBuffs.grip);
+  steer = Math.min(25, steer + trackBuffs.steer);
   const afterTrack: CornerFinalStats = { drift, accel, grip, steer };
 
   // 4. Random Corner Debuff Stat Penalties (Applied to both, reduced by Crew debuffShield!)

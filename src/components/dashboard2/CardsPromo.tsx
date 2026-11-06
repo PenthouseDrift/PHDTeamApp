@@ -38,24 +38,24 @@ export function CardsPromo({ credits }: { credits: number }) {
         </div>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
+        {/* The Play page lists every way to play: Tandem Clash, challenges and the other game modes. */}
         <Link
-          // "Open a card pack" goes to the Pack Store, where every pack (Standard and store packs) can be opened with credits or P-Credits.
-          href={has ? "/cards?tab=store" : "/cards"}
-          className="inline-flex min-h-11 items-center justify-center rounded-xl bg-amber-500 px-5 text-sm font-black text-black transition-colors hover:bg-amber-400"
-        >
-          {has ? "Open a card pack" : "See my cards"}
-        </Link>
-        {/* Straight to the Deck, where Tandem Clash starts. */}
-        <Link
-          href="/cards"
-          className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-amber-400/60 bg-amber-500/15 px-5 text-sm font-black text-amber-300 transition-colors hover:bg-amber-500/25"
+          href="/cards?tab=play"
+          className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-5 text-sm font-black text-black transition-colors hover:bg-amber-400"
         >
           <span aria-hidden="true">▶</span>
           Play now
         </Link>
+        <Link
+          // "Open a card pack" goes to the Pack Store, where every pack (Standard and store packs) can be opened with credits or P-Credits.
+          href={has ? "/cards?tab=store" : "/cards?tab=collection"}
+          className="inline-flex min-h-11 items-center justify-center rounded-xl border border-amber-400/60 bg-amber-500/15 px-5 text-sm font-black text-amber-300 transition-colors hover:bg-amber-500/25"
+        >
+          {has ? "Open a card pack" : "See my cards"}
+        </Link>
         {has && (
           <Link
-            href="/cards"
+            href="/cards?tab=collection"
             className="inline-flex min-h-11 items-center justify-center rounded-xl border border-zinc-600 px-5 text-sm font-bold text-zinc-100 transition-colors hover:bg-zinc-800"
           >
             My cards
