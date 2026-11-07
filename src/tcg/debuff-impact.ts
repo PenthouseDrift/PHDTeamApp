@@ -220,7 +220,7 @@ export function ringAccuracy(radius: number): number {
 // stronger the gusts. Different from Lock On in every way: it is about holding steady, not about one well-timed tap.
 
 /** Seconds a brace lasts. */
-export const BRACE_SECONDS = 4;
+export const BRACE_SECONDS = 5;
 /** The safe zone is the middle of the track, this far either side of the centre (the track is 0 to 1). */
 export const BRACE_ZONE_HALF = 0.13;
 /** How hard a counter-steer pushes the marker (track widths per second, per second). */

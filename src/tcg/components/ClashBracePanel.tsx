@@ -27,6 +27,9 @@ const RESULT_MS = 1000;
 const MAX_FRAME_SECONDS = 0.05;
 /** How much of the real wind the practice uses: off, half, three quarters, or the real thing. */
 const PRACTICE_WIND_LEVELS = [0, 0.5, 0.75, 1] as const;
+/** After Start, the game counts down 3, 2, 1 (this long each) before the wind begins. */
+const COUNTDOWN_STEPS = 3;
+const COUNTDOWN_STEP_MS = 700;
 
 function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -67,7 +70,8 @@ const steerClass =
 export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSkip }: ClashBracePanelProps) {
   const reducedMotion = usePrefersReducedMotion();
   const [footerEl, setFooterEl] = useState<HTMLDivElement | null>(null);
-  const [state, setState] = useState<"ready" | "running" | "done">("ready");
+  const [state, setState] = useState<"ready" | "countdown" | "running" | "done">("ready");
+  const [count, setCount] = useState(COUNTDOWN_STEPS);
   const [marker, setMarker] = useState<BraceState>(BRACE_START);
   const [gust, setGust] = useState(0);
   const [elapsed, setElapsed] = useState(0);
@@ -171,9 +175,19 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
     []
   );
 
-  // Arrow keys (or A and D) counter-steer, for keyboards. They work in practice too.
+  // 3, 2, 1, then the game starts. The marker waits in the middle with no wind, and the timer has not started.
   useEffect(() => {
-    if (state !== "running" && state !== "ready") return;
+    if (state !== "countdown") return;
+    const timer = window.setTimeout(() => {
+      if (count > 1) setCount(count - 1);
+      else setState("running");
+    }, COUNTDOWN_STEP_MS);
+    return () => window.clearTimeout(timer);
+  }, [state, count]);
+
+  // Arrow keys (or A and D) counter-steer, for keyboards. They work in practice and through the countdown too.
+  useEffect(() => {
+    if (state === "done") return;
     const dirOf = (e: KeyboardEvent): -1 | 1 | 0 =>
       e.key === "ArrowLeft" || e.key === "a" || e.key === "A" ? -1 : e.key === "ArrowRight" || e.key === "d" || e.key === "D" ? 1 : 0;
     const down = (e: KeyboardEvent) => {
@@ -205,15 +219,15 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
     if (inputRef.current === dir) inputRef.current = 0;
   }, []);
 
-  /** Start the game. Anything still held from practice is let go, so the game starts with no push. */
+  /** Press Start: a short 3, 2, 1 first, so the player is ready with a thumb on each button when the wind begins. */
   const start = () => {
-    inputRef.current = 0;
-    setState("running");
+    setCount(COUNTDOWN_STEPS);
+    setState("countdown");
   };
 
-  // Before the game the track shows the practice marker; once it starts, the real one.
-  const shownMarker = state === "ready" ? practice : marker;
-  const shownGust = state === "ready" ? practiceGust : gust;
+  // Before the game the track shows the practice marker; in the countdown the marker waits in the middle; then the real one.
+  const shownMarker = state === "ready" ? practice : state === "countdown" ? BRACE_START : marker;
+  const shownGust = state === "ready" ? practiceGust : state === "countdown" ? 0 : gust;
   const inZoneNow = braceInZone(shownMarker.x);
   const blocked = result === null ? 0 : Math.round(defenceShare(result) * 100);
   const verdict = result === null ? "" : `Held ${Math.round(result * 100)}% of the time · blocked ${blocked}% of the debuff`;
@@ -296,12 +310,25 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
                 ◀ wind
               </span>
               <span className="min-w-14 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-center text-zinc-200">
-                {state === "ready" ? "Practice" : state === "done" ? "Done" : `${timeLeft.toFixed(1)}s`}
+                {state === "ready" ? "Practice" : state === "countdown" ? "Get ready" : state === "done" ? "Done" : `${timeLeft.toFixed(1)}s`}
               </span>
               <span className={shownGust > 0.15 ? "text-sky-300" : "text-zinc-700"} style={{ opacity: shownGust > 0.15 ? Math.min(1, Math.abs(shownGust)) : 1 }}>
                 wind ▶
               </span>
             </div>
+
+            {/* The countdown: a big number, so it can be seen from the corner of the eye while the thumbs find the buttons. */}
+            {state === "countdown" && (
+              <div className="mt-4" aria-live="assertive">
+                <p
+                  key={count}
+                  className="text-7xl font-black leading-none text-cyan-200 drop-shadow-[0_0_24px_rgba(34,211,238,0.8)] motion-safe:animate-in motion-safe:zoom-in-150 motion-safe:duration-300"
+                >
+                  {count}
+                </p>
+                <p className="mt-2 text-[11px] font-bold text-zinc-400">Thumbs on Left and Right. The wind starts at zero.</p>
+              </div>
+            )}
 
             {/* Practice, before the game: the marker above is live. Nothing here is scored. */}
             {state === "ready" && (
@@ -355,7 +382,7 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
                     </button>
                   </div>
                 )}
-                {state === "running" && steerButtons("min-h-20")}
+                {(state === "countdown" || state === "running") && steerButtons("min-h-20")}
                 {state === "done" && (
                   <button type="button" disabled className={`${confirmClass} min-h-14`}>
                     Braced
