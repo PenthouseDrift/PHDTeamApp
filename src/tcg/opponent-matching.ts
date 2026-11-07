@@ -31,6 +31,12 @@ export const MATCH_TOLERANCE = 0.1;
 export const MATCH_TOLERANCE_FLAT = 3;
 /** Cost added to a member's fit for each generated car, so real cards are preferred when they fit as well. */
 export const GENERATED_PENALTY = 0.05;
+/**
+ * A rival who really owns a card between the handicapped target and the player's own level fields the strongest such card, so
+ * it faces you with the best it really has up to your level, not a weaker one just because the handicap points lower. It never
+ * fields a card above your level. This much leeway above your level is allowed, so a card a hair over still counts.
+ */
+export const FULL_STRENGTH_LEEWAY = 0.03;
 
 const SECTOR_IDS = CLASH_SECTOR_POOL.map((s) => s.id);
 
@@ -160,16 +166,34 @@ export interface CarMatch {
 }
 
 /**
- * Choose three cars for the targets (points, strongest first). For each target the closest unused real car is used if it
- * is near enough, otherwise one is generated.
+ * Choose three cars for the targets (points, strongest first). `levels` are the player's own points for the same three cars,
+ * in the same order. For each one:
+ *   - if the member owns unused real cards between the (handicapped) target and the player's level, the strongest of them is
+ *     fielded as it is: a member who really has cards that good faces you with them, never a weaker card just because the
+ *     handicap points lower. A card above your level is never used this way;
+ *   - otherwise the closest unused real car to the target is used if it is near enough;
+ *   - otherwise one is generated.
  */
-export function matchCars(targets: number[], owned: MemberCard[], rng: Rng, persona: Persona): CarMatch {
+export function matchCars(targets: number[], owned: MemberCard[], rng: Rng, persona: Persona, levels?: number[]): CarMatch {
   const pool = owned.map((card) => ({ card, points: carPoints(card) }));
   const used = new Set<string>();
   const cars: MemberCard[] = [];
   let fit = 0;
   let generated = 0;
-  for (const target of [...targets].sort((a, b) => b - a)) {
+  const slots = targets.map((target, i) => ({ target, level: levels?.[i] })).sort((a, b) => b.target - a.target);
+  for (const { target, level } of slots) {
+    if (level !== undefined) {
+      let atLevel: (typeof pool)[number] | null = null;
+      for (const p of pool) {
+        if (used.has(p.card.id) || p.points < target || p.points > level * (1 + FULL_STRENGTH_LEEWAY)) continue;
+        if (!atLevel || p.points > atLevel.points) atLevel = p;
+      }
+      if (atLevel) {
+        used.add(atLevel.card.id);
+        cars.push(atLevel.card);
+        continue;
+      }
+    }
     let best: (typeof pool)[number] | null = null;
     for (const p of pool) {
       if (used.has(p.card.id)) continue;

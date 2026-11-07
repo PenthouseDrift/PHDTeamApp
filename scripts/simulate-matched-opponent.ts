@@ -34,7 +34,7 @@ let lastDetail = "";
 function newRival(rng: () => number, player: Player) {
   const m = memberCollection(rng, 12, 8, ODDS);
   const profile = profileOf(player.cars, player.crew)!;
-  const match = matchCars(targetsFor(profile, rng, Number(process.env.STRENGTH) || undefined), m.cars, rng, { driver: "Rival", team: "Team" });
+  const match = matchCars(targetsFor(profile, rng, Number(process.env.STRENGTH) || undefined), m.cars, rng, { driver: "Rival", team: "Team" }, process.env.NO_LEVELS ? undefined : profile.carPoints);
   const crew = matchCrew(profile.crewTiers, m.crew, rng);
   if (!lastDetail) lastDetail = `player ${profile.carPoints.map((p) => p.toFixed(0)).join("/")} -> rival ${match.cars.map((c) => carPoints(c).toFixed(0) + c.tier[0]).join("/")} (${match.generated} generated)`;
   return { carPool: match.cars, crewPool: crew, skill: 1 };

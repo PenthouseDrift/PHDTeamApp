@@ -27,7 +27,6 @@ import {
   getCollectorProgress,
   optimizeLineupForTrack,
 } from "./progression";
-import { isCarBroken } from "@/lib/mechanical-faults";
 import { matchCars, matchCrew, profileOf, targetsFor, type PlayerProfile } from "./opponent-matching";
 import { loadArtPoolCached } from "./campaign/art-pool";
 import { matchFacesToTiers } from "./campaign/generate";
@@ -595,7 +594,7 @@ async function pickMatchedOpponent(profile: PlayerProfile, candidateIds: string[
     const col = await loadCollection(userId).catch(() => null);
     if (!col || col.cars.length === 0) continue;
     const lead = [...col.cars].sort((a, b) => getCardPower(b) - getCardPower(a))[0];
-    const match = matchCars(targets, col.cars, Math.random, { driver: lead.driver?.trim() || "PHD Rival", team: lead.team?.trim() || "Community Crew" });
+    const match = matchCars(targets, col.cars, Math.random, { driver: lead.driver?.trim() || "PHD Rival", team: lead.team?.trim() || "Community Crew" }, profile.carPoints);
     if (!best || match.fit < best.match.fit) best = { userId, match, crew: col.crew, lead };
     // A member with real cards that all fit closely can't be beaten, so stop looking.
     if (match.generated === 0 && match.fit <= 0.08) break;
@@ -618,7 +617,7 @@ async function pickMatchedOpponent(profile: PlayerProfile, candidateIds: string[
 /** The same, from one of the built-in bosses, for when no member has a car to use. */
 async function pickMatchedBoss(profile: PlayerProfile, avoidImages: Set<string>): Promise<ClashOpponent> {
   const boss = FALLBACK_BOSS_CREWS[randomInt(0, FALLBACK_BOSS_CREWS.length)];
-  const match = matchCars(targetsFor(profile, Math.random), boss.cards, Math.random, { driver: boss.driverName, team: boss.teamName });
+  const match = matchCars(targetsFor(profile, Math.random), boss.cards, Math.random, { driver: boss.driverName, team: boss.teamName }, profile.carPoints);
   return assembleOpponent({
     idPrefix: "boss",
     driverName: boss.driverName,
@@ -643,7 +642,8 @@ export async function pickClashOpponent(excludeUserId?: string): Promise<ClashOp
     // How strong the player is, so the opponent can be built to match. Without a collection to read, the old pick is used.
     if (excludeUserId) {
       const mine = await loadCollection(excludeUserId, false).catch(() => null);
-      profile = mine ? profileOf(mine.cars.filter((car) => !isCarBroken(car)), mine.crew) : null;
+      // Every car counts, including ones in for repair: having your best cards in the garage must not make the rival easier.
+      profile = mine ? profileOf(mine.cars, mine.crew) : null;
       avoidImages = new Set((mine?.cars ?? []).map((car) => car.imageUrl).filter(Boolean));
     }
 
