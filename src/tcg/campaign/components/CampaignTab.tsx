@@ -452,7 +452,7 @@ export function CampaignTab({
   const step: 0 | 1 | 2 | undefined = stage === "entry" ? 0 : stage === "cars" ? 1 : active ? 2 : undefined;
   const subtitle =
     busy === "building"
-      ? "Building your rivals…"
+      ? "Building your first rival…"
       : stage === "entry"
         ? "Choose how you enter"
         : stage === "cars"
@@ -514,7 +514,7 @@ export function CampaignTab({
             ⚙️
           </span>
           <p className="text-sm font-bold text-zinc-200">
-            Building your six rivals and testing each one against your cars. This takes up to twenty seconds.
+            Building your first rival and testing it against your cars. This takes a few seconds.
           </p>
         </div>
       )}

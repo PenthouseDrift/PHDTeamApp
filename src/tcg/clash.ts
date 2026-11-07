@@ -795,6 +795,21 @@ export async function pickClashOpponent(excludeUserId?: string): Promise<ClashOp
   };
 }
 
+/**
+ * The rival for the Tandem Clash lobby, picked when the Clash screen opens rather than on every page load (picking one
+ * reads and scores a lot of cards). Any signed-in member can have one, as before; entering a match is what needs early access.
+ */
+export async function loadClashOpponentAction(): Promise<ActionResult<ClashOpponent>> {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) return { success: false, error: "Please sign in to battle." };
+    return { success: true, data: await pickClashOpponent(session.user.id) };
+  } catch (error) {
+    console.error("[driftClash] loadClashOpponentAction error:", error);
+    return { success: false, error: "Could not find a rival crew." };
+  }
+}
+
 export async function findNewClashOpponentAction(): Promise<ActionResult<ClashOpponent>> {
   try {
     const session = await auth();
@@ -867,6 +882,22 @@ export async function getHazardGarageSamplesAction(): Promise<HazardGarageSample
     console.error("[driftClash] getHazardGarageSamplesAction error:", error);
     return [];
   }
+}
+
+/** Whether a stored card is one a battle can change: a car that raced, or a car with a repair under way. */
+function changesAfterBattle(row: unknown, played: Set<string>): boolean {
+  let raw = row;
+  if (typeof raw === "string") {
+    try {
+      raw = JSON.parse(raw);
+    } catch {
+      return false;
+    }
+  }
+  if (!raw || typeof raw !== "object") return false;
+  const card = raw as { id?: unknown; fault?: { battlesRemaining?: unknown } | null };
+  if (typeof card.id === "string" && played.has(card.id)) return true;
+  return Boolean(card.fault && Number(card.fault.battlesRemaining) > 0);
 }
 
 export async function completeClashBattleAction(input: {
@@ -997,6 +1028,9 @@ export async function completeClashBattleAction(input: {
         const rows = await redis.mget(...userCardIds.map((id) => memberCardKey(String(id))));
 
         for (const row of rows) {
+          // Only a car that raced, or one with a repair under way, changes after a battle. The rest are skipped without
+          // the full read (which, for Crew cards, builds their picture), since a member can own hundreds.
+          if (!changesAfterBattle(row, playedSet)) continue;
           const c = parseStoredCard(row);
           if (!c || c.userId !== userId) continue;
           if (

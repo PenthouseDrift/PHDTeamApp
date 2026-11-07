@@ -182,7 +182,24 @@ function isAlreadyOptimizedWebp(url: string): boolean {
   }
 }
 
-async function scanAllStoredCardRecords() {
+type StoredCardScan = Awaited<ReturnType<typeof readAllStoredCardRecords>>;
+let storedCardScan: { at: number; scan: StoredCardScan } | null = null;
+/** Optimising a library saves hundreds of images one after another; each used to rescan every stored card. */
+const SCAN_REUSE_MS = 60_000;
+
+/**
+ * Every stored card that uses an unoptimised picture. `fresh` always reads the database; otherwise a scan from the last
+ * minute is reused. A reused scan only says WHICH cards to look at: saveOptimizedCardImage reads those cards again before
+ * changing them, so a card that changed in the meantime is never overwritten with old data.
+ */
+async function scanAllStoredCardRecords(options: { fresh?: boolean } = {}) {
+  if (!options.fresh && storedCardScan && Date.now() - storedCardScan.at < SCAN_REUSE_MS) return storedCardScan.scan;
+  const scan = await readAllStoredCardRecords();
+  storedCardScan = { at: Date.now(), scan };
+  return scan;
+}
+
+async function readAllStoredCardRecords() {
   const [memberIds, fullArtIds, origIds] = await Promise.all([
     redis.zrange(ALL_MEMBER_CARDS_INDEX, 0, -1) as Promise<string[]>,
     redis.zrange("fullart:index", 0, -1) as Promise<string[]>,
@@ -234,7 +251,7 @@ async function scanAllStoredCardRecords() {
 export async function listUnoptimizedCardImages(): Promise<ActionResult<UnoptimizedCardsScanResult>> {
   try {
     if (!(await requireAdmin())) return { success: false, error: "Only admins can optimise card images" };
-    const { recordsByUrl } = await scanAllStoredCardRecords();
+    const { recordsByUrl } = await scanAllStoredCardRecords({ fresh: true });
     const urls = [...recordsByUrl.keys()];
     let totalCardsToUpdate = 0;
     for (const list of recordsByUrl.values()) totalCardsToUpdate += list.length;
@@ -267,7 +284,24 @@ export async function saveOptimizedCardImage(input: {
     }
 
     const { recordsByUrl, protectedReferenceUrls } = await scanAllStoredCardRecords();
-    const cards = recordsByUrl.get(oldUrl) ?? [];
+    // The scan says which cards use this picture; each is read again now so only its picture changes.
+    const known = recordsByUrl.get(oldUrl) ?? [];
+    const cards: typeof known = [];
+    if (known.length > 0) {
+      const rows = await redis.mget(...known.map((rec) => rec.redisKey));
+      for (let i = 0; i < known.length; i++) {
+        const raw = rows[i];
+        if (!raw) continue;
+        try {
+          const data = (typeof raw === "string" ? JSON.parse(raw) : raw) as Record<string, unknown>;
+          if (data && typeof data === "object" && typeof data.imageUrl === "string" && data.imageUrl.trim() === oldUrl) {
+            cards.push({ redisKey: known[i].redisKey, data });
+          }
+        } catch {
+          /* skip a malformed card */
+        }
+      }
+    }
     if (cards.length === 0) {
       return {
         success: true,
@@ -289,7 +323,7 @@ export async function saveOptimizedCardImage(input: {
       tx.set(rec.redisKey, JSON.stringify(rec.data));
     }
     await tx.exec();
-
+    recordsByUrl.delete(oldUrl);
     if (!protectedReferenceUrls.has(oldUrl)) {
       try {
         await deleteImage(oldUrl);

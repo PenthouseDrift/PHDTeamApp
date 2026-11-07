@@ -185,7 +185,12 @@ export async function listActiveMarketListings(limit = 200): Promise<TcgMarketLi
 /** Attach `listingId` and `listedPrice` to any cards currently listed on the Marketplace. */
 export async function attachListingStateToCards(cards: MemberCard[]): Promise<MemberCard[]> {
   if (cards.length === 0) return cards;
-  const byCard = (await redis.hgetall<Record<string, string>>(TCG_MARKET_BY_CARD_KEY)) ?? {};
+  // Only this member's cards are looked up, not the whole table of everything listed on the Marketplace.
+  const byCard =
+    (await redis.hmget<Record<string, string | null>>(
+      TCG_MARKET_BY_CARD_KEY,
+      ...cards.map((c) => c.id)
+    )) ?? {};
   const listedCardIds = cards.filter((c) => Boolean(byCard[c.id])).map((c) => c.id);
   if (listedCardIds.length === 0) return cards;
 
@@ -487,6 +492,37 @@ export async function listCustomPacks(options?: { onlyLive?: boolean }): Promise
   return hydrated;
 }
 
+/**
+ * The packs on sale and the rare-card showcase are asked for on every visit to the game page, and building them reads and
+ * sanitises every pack's cards. They change only when an admin edits a pack, so the finished lists are kept in this server's
+ * memory for a short time (shared by every request it handles, and by both asks within one page load). Buying and opening a
+ * pack always reads the pack fresh, so a stale list can only show an old price or card for a moment, never charge it.
+ * Callers must not change what they get back.
+ */
+const PACK_CACHE_MS = 30_000;
+type Timed<T> = { at: number; value: Promise<T> };
+let livePacksCache: Timed<TcgCustomPackWithCards[]> | null = null;
+const showcaseCache = new Map<number, Timed<ShowcaseRareCard[]>>();
+
+/** Forget the kept pack lists, after an admin changes a pack. Other servers catch up when their copy expires. */
+export function clearPackCaches(): void {
+  livePacksCache = null;
+  showcaseCache.clear();
+}
+
+/** The packs on sale, from the short-lived copy when there is one. */
+export async function listLiveCustomPacks(): Promise<TcgCustomPackWithCards[]> {
+  if (!livePacksCache || Date.now() - livePacksCache.at > PACK_CACHE_MS) {
+    const entry: Timed<TcgCustomPackWithCards[]> = { at: Date.now(), value: listCustomPacks({ onlyLive: true }) };
+    // A failed read must not be kept.
+    entry.value.catch(() => {
+      if (livePacksCache === entry) livePacksCache = null;
+    });
+    livePacksCache = entry;
+  }
+  return livePacksCache.value;
+}
+
 // ── Clash Game Cards Config (Crew Cards, Debuff Cards, UK Track Cards) ──────
 
 function mergeCardPool<T extends { id: string }>(defaults: T[], saved?: T[]): T[] {
@@ -575,10 +611,18 @@ export interface ShowcaseRareCard {
  * gives an empty list so the page still loads.
  */
 export async function getFeaturedShowcaseCards(limit = 12): Promise<ShowcaseRareCard[]> {
+  const kept = showcaseCache.get(limit);
+  if (kept && Date.now() - kept.at <= PACK_CACHE_MS) return kept.value;
+  const entry: Timed<ShowcaseRareCard[]> = { at: Date.now(), value: buildFeaturedShowcaseCards(limit) };
+  showcaseCache.set(limit, entry);
+  return entry.value;
+}
+
+async function buildFeaturedShowcaseCards(limit: number): Promise<ShowcaseRareCard[]> {
   try {
     const [standard, livePacks] = await Promise.all([
       loadPackConfig(STANDARD_PACK_ID).catch(() => null),
-      listCustomPacks({ onlyLive: true }).catch(() => [] as TcgCustomPackWithCards[]),
+      listLiveCustomPacks().catch(() => [] as TcgCustomPackWithCards[]),
     ]);
     const configs: PackConfig[] = [];
     if (standard) configs.push(standard);

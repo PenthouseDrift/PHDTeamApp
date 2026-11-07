@@ -1,6 +1,8 @@
 import type { MemberCard } from "@/lib/card-roll";
 import type { GameXpBreakdown } from "../game-xp";
 import type { ClashOpponent } from "@/tcg/types";
+import type { FullArtTier } from "@/lib/full-art-card";
+import type { CurvePoint } from "./calibrate";
 
 /** A card face (picture and name) taken from the art pool. Stats are generated separately. */
 export interface ArtEntry {
@@ -15,6 +17,16 @@ export interface ArtEntry {
 }
 
 export type CampaignStatus = "active" | "champion" | "eliminated";
+
+/** Everything chosen for a round up front, before its rival is built. */
+export interface RoundSchedule {
+  round: number;
+  targetPct: number;
+  persona: { driver: string; team: string };
+  art: ArtEntry[];
+  /** Rarities to try for a roster of real cards, strongest first. Absent for the early rounds. */
+  showcase?: FullArtTier[];
+}
 
 /** One round of the cup, as the server stores it. */
 export interface CampaignRoundPlan {
@@ -82,7 +94,15 @@ export interface CampaignRun {
   cars: MemberCard[];
   /** The three Crew cards used: the player's best, topped up with the starter loaners if they own fewer than three. */
   crew: MemberCard[];
+  /**
+   * The rivals built so far. A rival is only built (it takes a lot of CPU) when the cup reaches its round, so this starts with
+   * round 1 and grows by one each time a round is won. Cups saved before that change have all six.
+   */
   rounds: CampaignRoundPlan[];
+  /** What is needed to build the rounds that have not been built yet (their names, pictures and targets). Missing on older cups. */
+  schedule?: RoundSchedule[];
+  /** The player's win-rate curve, measured once at the start and used to build each later rival. Missing on older cups. */
+  curve?: CurvePoint[];
   /** Index (0 to 5) of the round to play next. */
   currentRound: number;
   /** A battle has been started and no result has come back. */

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CardCollection } from "@/components/member-cards/CardCollection";
 import type { MemberCard } from "@/lib/card-roll";
 import type { TandemClashChallenge } from "@/tcg/challenges-types";
@@ -20,6 +20,7 @@ import type {
   TcgMarketListing,
   TcgTab,
 } from "@/tcg/types";
+import { loadClashOpponentAction } from "@/tcg/clash";
 import { DriftClashArena } from "./DriftClashArena";
 import { GameBottomNav, type GameNavItem } from "./GameBottomNav";
 import { PlayBanner, PlayHub, type PlayMode } from "./PlayHub";
@@ -122,7 +123,6 @@ export function TcgApp({
   initialPCreditBundles = P_CREDIT_BUNDLES,
   initialCustomPacks,
   initialListings,
-  initialClashOpponent,
   initialClashStats,
   initialLeaderboard = [],
   hasEarlyAccess = false,
@@ -147,7 +147,6 @@ export function TcgApp({
   initialPCreditBundles?: PCreditBundle[];
   initialCustomPacks: TcgCustomPackWithCards[];
   initialListings: TcgMarketListing[];
-  initialClashOpponent: ClashOpponent;
   initialClashStats: ClashPlayerStats;
   initialLeaderboard?: DriftClashLeaderboardEntry[];
   hasEarlyAccess?: boolean;
@@ -171,6 +170,9 @@ export function TcgApp({
   const [lobbyTab, setLobbyTab] = useState<"quick" | "challenges">("quick");
   // Goes up each time Tandem Clash is opened from the Play page, so the arena starts a game instead of showing its lobby.
   const [autoStart, setAutoStart] = useState(0);
+  // The rival for Tandem Clash, picked when that screen opens (see the effect below).
+  const [clashOpponent, setClashOpponent] = useState<ClashOpponent | null>(null);
+  const [opponentFailed, setOpponentFailed] = useState(false);
   // On a phone the player's stats (cards by rarity, power, wins) fold away under the level bar; tap the bar to open them.
   const [hudOpen, setHudOpen] = useState(false);
   // Sticky filter and wallet bars stick just under whatever covers the top of the page; this measures how far that reaches.
@@ -207,6 +209,7 @@ export function TcgApp({
   /** Go to a section: a light tap buzz, and the page starts at the top of the new section instead of mid-scroll. */
   const selectTab = useCallback((next: TcgTab) => {
     setTab(next);
+    if (next !== "clash") setClashOpponent(null);
     buzz(8);
     requestAnimationFrame(() => {
       document.querySelector<HTMLElement>(".pwa-protected-content")?.scrollTo?.({ top: 0 });
@@ -219,6 +222,26 @@ export function TcgApp({
   // A Tour or Campaign link the member has no access to lands on the Play page instead of an empty screen.
   const view: TcgTab = (tab === "tour" && !hasTourAccess) || (tab === "campaign" && !isAdmin) ? "play" : tab;
   const navActive: TcgTab = PLAY_SECTIONS.includes(view) ? "play" : view;
+
+  // The rival for Tandem Clash is picked when that screen opens, not on every page load: picking one reads and scores a lot of
+  // cards. It is dropped on leaving, so each visit gets a fresh rival.
+  const needOpponent = view === "clash" && !clashOpponent;
+  useEffect(() => {
+    if (!needOpponent || opponentFailed) return;
+    let cancelled = false;
+    loadClashOpponentAction()
+      .then((res) => {
+        if (cancelled) return;
+        if (res.success) setClashOpponent(res.data);
+        else setOpponentFailed(true);
+      })
+      .catch(() => {
+        if (!cancelled) setOpponentFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [needOpponent, opponentFailed]);
 
   /** Open one of the game modes listed on the Play page. */
   const openPlayMode = useCallback(
@@ -454,10 +477,25 @@ export function TcgApp({
               streak={clashStats.streak}
               dailyWinAvailable={!clashStats.dailyWinClaimed}
             />
+          ) : !clashOpponent ? (
+            opponentFailed ? (
+              <div role="alert" className="space-y-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-center">
+                <p className="text-sm font-bold text-rose-700 dark:text-rose-300">Could not find a rival. Try again.</p>
+                <button
+                  type="button"
+                  onClick={() => setOpponentFailed(false)}
+                  className="gx-tap inline-flex min-h-11 items-center justify-center rounded-xl bg-amber-500 px-5 text-sm font-black text-black hover:bg-amber-400"
+                >
+                  Try again
+                </button>
+              </div>
+            ) : (
+              <TabSkeleton label="Finding a rival" />
+            )
           ) : (
             <DriftClashArena
               cards={cards}
-              initialOpponent={initialClashOpponent}
+              initialOpponent={clashOpponent}
               initialStats={clashStats}
               hasEarlyAccess={hasEarlyAccess}
               isAdmin={isAdmin}

@@ -10,14 +10,13 @@ import {
   getDriftClashLeaderboard,
   getPlayerClashStats,
   hasClashEarlyAccess,
-  pickClashOpponent,
 } from "@/tcg/clash";
 import {
   getFeaturedShowcaseCards,
   getPCredits,
   getTcgStoreConfig,
   listActiveMarketListings,
-  listCustomPacks,
+  listLiveCustomPacks,
   withoutOdds,
 } from "@/tcg/storage";
 import { TcgApp } from "@/tcg/components/TcgApp";
@@ -89,7 +88,6 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
     storeConfig,
     customPacks,
     listings,
-    clashOpponent,
     clashStats,
     leaderboard,
     hasEarlyAccess,
@@ -104,9 +102,8 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
     getCardCredits(userId),
     getPCredits(userId),
     getTcgStoreConfig(),
-    listCustomPacks({ onlyLive: true }),
+    listLiveCustomPacks(),
     listActiveMarketListings(),
-    pickClashOpponent(userId),
     getPlayerClashStats(userId),
     getDriftClashLeaderboard(25),
     hasClashEarlyAccess(userId, session.user.role),
@@ -143,7 +140,6 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
           initialPCreditBundles={storeConfig.pCreditBundles}
           initialCustomPacks={customPacks.map(withoutOdds)}
           initialListings={listings}
-          initialClashOpponent={clashOpponent}
           initialClashStats={clashStats}
           initialLeaderboard={leaderboard}
           hasEarlyAccess={hasEarlyAccess}

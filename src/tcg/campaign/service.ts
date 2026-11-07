@@ -7,7 +7,7 @@ import { redis } from "@/lib/redis";
 import { grantPCredits, spendPCredits } from "../storage";
 import { mulberry32 } from "../battle-sim";
 import { loadArtPool } from "./art-pool";
-import { calibrate } from "./calibrate";
+import { calibrateRound, measureCurve, type CalibratedRound } from "./calibrate";
 import { CAMPAIGN_ROUNDS, CARS_TO_PICK, ENTRY_FEES, OFFER_SIZE, prizeFor, REROLLS_PER_CUP, RIVAL_POOL_SIZE } from "./config";
 import { dealOffer, deckProblem, tierSlotOf, type DealtSlot } from "./deal";
 import { gameXpFor } from "../game-xp";
@@ -370,7 +370,10 @@ export async function startCampaign(userId: string, carIds: string[]): Promise<C
       };
     });
 
-    const { rounds } = calibrate(side, profile, inputs, seed);
+    // Only the first rival is built now, which keeps starting a cup cheap. The rest are built as the cup reaches them (see
+    // buildRound), since most cups end before the last round. What they need is kept in the run.
+    const curve = measureCurve(side, profile, seed);
+    const first = calibrateRound(side, profile, curve, inputs[0], seed);
 
     const now = Date.now();
     const run: CampaignRun = {
@@ -383,31 +386,55 @@ export async function startCampaign(userId: string, carIds: string[]): Promise<C
       cars: chosen,
       crew: side.crew,
       rounds: [],
+      schedule: inputs.slice(1),
+      curve,
       currentRound: 0,
       battleStarted: false,
       results: [],
       entry,
     };
-    run.rounds = rounds.map((r) => {
-      const spec = CAMPAIGN_ROUNDS[r.round - 1];
-      const opponent = toOpponent(`campaign-${run.id}-r${r.round}`, spec.name, r.persona, r.build);
-      return {
-        round: r.round,
-        driverName: r.persona.driver,
-        teamName: r.persona.team,
-        portraitUrl: opponent.cards[0]?.imageUrl ?? "",
-        targetWinPct: r.targetPct,
-        estimatedWinPct: Math.round(r.estimatedPct),
-        strength: Math.round(r.strength * 100) / 100,
-        rosterTier: r.tier,
-        opponent,
-      };
-    });
+    run.rounds = [planFrom(run.id, first)];
+
     await saveRun(run);
     await clearOffer(userId);
     await clearTicket(userId);
     return toView(run);
   });
+}
+
+/** The stored round for a built rival. */
+function planFrom(runId: string, r: CalibratedRound): CampaignRoundPlan {
+  const spec = CAMPAIGN_ROUNDS[r.round - 1];
+  const opponent = toOpponent(`campaign-${runId}-r${r.round}`, spec.name, r.persona, r.build);
+  return {
+    round: r.round,
+    driverName: r.persona.driver,
+    teamName: r.persona.team,
+    portraitUrl: opponent.cards[0]?.imageUrl ?? "",
+    targetWinPct: r.targetPct,
+    estimatedWinPct: Math.round(r.estimatedPct),
+    strength: Math.round(r.strength * 100) / 100,
+    rosterTier: r.tier,
+    opponent,
+  };
+}
+
+/**
+ * Build the rival for the round at `index` (0 to 5) if it has not been built yet, and add it to the run. It is built from
+ * what the cup stored at the start (the round's name, pictures and target, and the player's win-rate curve), so it comes out
+ * exactly as it would have if every round had been built up front. Does nothing for a round that already has its rival,
+ * including every round of a cup saved before rivals were built one at a time. The caller saves the run.
+ */
+function buildRound(run: CampaignRun, index: number): void {
+  if (run.rounds.some((r) => r.round === index + 1)) return;
+  const input = run.schedule?.find((r) => r.round === index + 1);
+  if (!input) throw new Error("That round's rival is missing. Withdraw and start a new cup.");
+  const side = { cars: run.cars, crew: run.crew };
+  const profile = profileFor(side);
+  const curve = run.curve ?? measureCurve(side, profile, run.seed);
+  const built = calibrateRound(side, profile, curve, input, run.seed);
+  run.rounds = [...run.rounds, planFrom(run.id, built)].sort((a, b) => a.round - b.round);
+  run.schedule = (run.schedule ?? []).filter((r) => r.round !== input.round);
 }
 
 /** Start the next round's battle. Returns what the arena needs to play it. */
@@ -419,7 +446,9 @@ export async function beginRound(userId: string): Promise<CampaignBattle> {
     // A broken car cannot race. It has to be repaired in the pits first.
     const broken = run.cars.filter((c) => isCarBroken(c));
     if (broken.length > 0) throw new Error(`Repair ${broken.map((c) => c.name).join(" and ")} before the next battle.`);
-    const plan = run.rounds[run.currentRound];
+    // Normally built when the last round was won; built here if that did not happen.
+    if (!run.rounds.some((r) => r.round === run.currentRound + 1)) buildRound(run, run.currentRound);
+    const plan = run.rounds.find((r) => r.round === run.currentRound + 1);
     if (!plan) throw new Error("There is no round to play.");
 
     run.battleStarted = true;
@@ -428,7 +457,7 @@ export async function beginRound(userId: string): Promise<CampaignBattle> {
     const view = toView(run);
     return {
       view,
-      round: view.rounds[run.currentRound],
+      round: view.rounds.find((r) => r.round === run.currentRound + 1) as CampaignRoundView,
       opponent: plan.opponent,
       // Worn cars are shown as they are, but the arena sets aside a car with a fault. For the cup the three picked cars stay in.
       cars: run.cars.map((c) => ({ ...c, fault: null, battlesRemaining: Math.max(1, c.battlesRemaining ?? c.maxBattles ?? 1) })),
@@ -559,6 +588,15 @@ export async function reportResult(
       console.error("[campaign] could not apply car wear:", error);
     }
     applyResult(run, result);
+    // A win moves the cup on, so the next rival is built now, ready to show on the next screen. A loss ends the cup and a
+    // final win makes the player champion, so nothing is built then. If building fails the round is built when it is started.
+    if (result.won && run.status === "active") {
+      try {
+        buildRound(run, run.currentRound);
+      } catch (error) {
+        console.error("[campaign] could not build the next rival yet:", error);
+      }
+    }
     const balance = await settle(userId, run);
     await saveRun(run);
 

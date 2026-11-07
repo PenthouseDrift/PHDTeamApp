@@ -181,48 +181,65 @@ function tryShowcase(
   return null;
 }
 
+interface CalibrateOptions {
+  gridBattles?: number;
+  refineBattles?: number;
+  refineSteps?: number;
+}
+
+/**
+ * Build and check the rival for ONE round, aimed at that round's target win rate. `curve` is the player's win-rate curve
+ * (from measureCurve). A round's result depends only on the curve, the seed and the round itself, so rounds can be built one
+ * at a time as the cup reaches them and come out exactly as if they had all been built at the start.
+ */
+export function calibrateRound(
+  side: PlayerSide,
+  profile: PlayerProfile,
+  curve: CurvePoint[],
+  r: RoundInput,
+  seed: number,
+  options: CalibrateOptions = {}
+): CalibratedRound {
+  const refineBattles = options.refineBattles ?? REFINE_BATTLES;
+  const refineSteps = options.refineSteps ?? REFINE_STEPS;
+  if (r.showcase && r.showcase.length > 0) {
+    const showcase = tryShowcase(side, r, seed, refineBattles, refineSteps);
+    if (showcase) return showcase;
+  }
+  const rivalSeed = seed * 31 + r.round * 1009;
+  let strength = strengthFor(curve, r.targetPct);
+  let best: CalibratedRound | null = null;
+  for (let step = 0; step <= refineSteps; step++) {
+    const build = rivalAt(profile, strength, r.art, rivalSeed, r.persona);
+    const estimatedPct = winPct(side, () => build, refineBattles, seed ^ (r.round * 7717));
+    const candidate: CalibratedRound = {
+      round: r.round,
+      targetPct: r.targetPct,
+      strength,
+      estimatedPct,
+      build,
+      persona: r.persona,
+      tier: rosterTierOf(build.carPool),
+    };
+    if (!best || Math.abs(estimatedPct - r.targetPct) < Math.abs(best.estimatedPct - r.targetPct)) best = candidate;
+    if (Math.abs(estimatedPct - r.targetPct) <= ACCEPT_WITHIN_PCT) break;
+    // Too easy (win rate above target) means the rival must be stronger, and the other way round.
+    const next = strength + (estimatedPct - r.targetPct) / slopeAt(curve, strength);
+    const clamped = Math.min(MAX_STRENGTH, Math.max(0, next));
+    if (Math.abs(clamped - strength) < 0.005) break;
+    strength = clamped;
+  }
+  return best as CalibratedRound;
+}
+
 /** Build and check one rival per round, each aimed at its round's target win rate. */
 export function calibrate(
   side: PlayerSide,
   profile: PlayerProfile,
   rounds: RoundInput[],
   seed: number,
-  options: { gridBattles?: number; refineBattles?: number; refineSteps?: number } = {}
+  options: CalibrateOptions = {}
 ): { curve: CurvePoint[]; rounds: CalibratedRound[] } {
-  const refineBattles = options.refineBattles ?? REFINE_BATTLES;
-  const refineSteps = options.refineSteps ?? REFINE_STEPS;
   const curve = measureCurve(side, profile, seed, options.gridBattles ?? GRID_BATTLES);
-
-  const calibrated = rounds.map((r) => {
-    if (r.showcase && r.showcase.length > 0) {
-      const showcase = tryShowcase(side, r, seed, refineBattles, refineSteps);
-      if (showcase) return showcase;
-    }
-    const rivalSeed = seed * 31 + r.round * 1009;
-    let strength = strengthFor(curve, r.targetPct);
-    let best: CalibratedRound | null = null;
-    for (let step = 0; step <= refineSteps; step++) {
-      const build = rivalAt(profile, strength, r.art, rivalSeed, r.persona);
-      const estimatedPct = winPct(side, () => build, refineBattles, seed ^ (r.round * 7717));
-      const candidate: CalibratedRound = {
-        round: r.round,
-        targetPct: r.targetPct,
-        strength,
-        estimatedPct,
-        build,
-        persona: r.persona,
-        tier: rosterTierOf(build.carPool),
-      };
-      if (!best || Math.abs(estimatedPct - r.targetPct) < Math.abs(best.estimatedPct - r.targetPct)) best = candidate;
-      if (Math.abs(estimatedPct - r.targetPct) <= ACCEPT_WITHIN_PCT) break;
-      // Too easy (win rate above target) means the rival must be stronger, and the other way round.
-      const next = strength + (estimatedPct - r.targetPct) / slopeAt(curve, strength);
-      const clamped = Math.min(MAX_STRENGTH, Math.max(0, next));
-      if (Math.abs(clamped - strength) < 0.005) break;
-      strength = clamped;
-    }
-    return best as CalibratedRound;
-  });
-
-  return { curve, rounds: calibrated };
+  return { curve, rounds: rounds.map((r) => calibrateRound(side, profile, curve, r, seed, options)) };
 }

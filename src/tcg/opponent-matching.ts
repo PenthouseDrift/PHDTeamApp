@@ -74,6 +74,11 @@ export interface Persona {
 }
 
 let generatedCount = 0;
+/**
+ * What a generated car scores, for each way of ordering its stats (there are only 24) and each total. It never changes, and
+ * finding the best total for a target scans all 77 totals, so it is worked out once and kept.
+ */
+const generatedScores = new Map<string, { usable: boolean; points: number }>();
 
 /** A car whose points are as close as possible to `target`, with its stats spread a little unevenly like a real card. */
 export function generatedCar(target: number, rng: Rng, persona: Persona): MemberCard {
@@ -105,10 +110,20 @@ export function generatedCar(target: number, rng: Rng, persona: Persona): Member
   };
   let best = 24;
   let bestGap = Infinity;
+  const orderKey = order.join("");
   for (let total = 24; total <= 100; total++) {
-    const candidate = make(total);
-    if (Math.max(...Object.values(candidate.stats).map(Number)) <= 10) continue;
-    const gap = Math.abs(carPoints(candidate) - target);
+    const scoreKey = `${orderKey}:${total}`;
+    let scored = generatedScores.get(scoreKey);
+    if (!scored) {
+      const candidate = make(total);
+      scored = {
+        usable: Math.max(...Object.values(candidate.stats).map(Number)) > 10,
+        points: carPoints(candidate),
+      };
+      generatedScores.set(scoreKey, scored);
+    }
+    if (!scored.usable) continue;
+    const gap = Math.abs(scored.points - target);
     if (gap < bestGap) {
       bestGap = gap;
       best = total;

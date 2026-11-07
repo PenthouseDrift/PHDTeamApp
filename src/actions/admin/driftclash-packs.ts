@@ -40,6 +40,7 @@ import {
   hydrateCustomPacks,
   parseCustomPack,
   tcgCustomPackKey,
+  clearPackCaches,
 } from "@/tcg/storage";
 import { DEFAULT_STANDARD_PACK_PRICE, isOnSale } from "@/tcg/config";
 import { simulateManyPacks, simulateOnePack, type SimSlot, type SimStats } from "@/tcg/pack-simulate";
@@ -111,6 +112,7 @@ export async function getStandardPackConfig(): Promise<PackConfig> {
 export async function savePackConfigAction(input: PackConfig): Promise<ActionResult<PackConfig>> {
   try {
     if (!(await requireAdmin())) return { success: false, error: "Only admins can change packs" };
+    clearPackCaches();
 
     const config = sanitizePackConfig(input);
     if (!config) return { success: false, error: "That pack setup isn't valid" };
@@ -144,6 +146,7 @@ export async function savePackConfigAction(input: PackConfig): Promise<ActionRes
 export async function setStandardPackEnabledAction(enabled: boolean): Promise<ActionResult<PackConfig>> {
   try {
     if (!(await requireAdmin())) return { success: false, error: "Only admins can change packs" };
+    clearPackCaches();
     const current = (await loadPackConfig(STANDARD_PACK_ID)) ?? emptyPackConfig(STANDARD_PACK_ID);
     const saved = await savePackConfig({ ...current, enabled: enabled === true });
     revalidate();
@@ -161,6 +164,7 @@ export async function setStandardPackEnabledAction(enabled: boolean): Promise<Ac
 export async function setStandardPackCardCreditsAction(allow: boolean): Promise<ActionResult<PackConfig>> {
   try {
     if (!(await requireAdmin())) return { success: false, error: "Only admins can change packs" };
+    clearPackCaches();
     const current = (await loadPackConfig(STANDARD_PACK_ID)) ?? emptyPackConfig(STANDARD_PACK_ID);
     const next: PackConfig = { ...current };
     if (allow === false) next.allowCardCredits = false;
@@ -194,6 +198,7 @@ export interface SavePackInput {
 export async function savePackAction(input: SavePackInput): Promise<ActionResult<TcgCustomPackWithCards>> {
   try {
     if (!(await requireAdmin())) return { success: false, error: "Only admins can create or edit packs" };
+    clearPackCaches();
 
     const name = String(input.name ?? "").trim().slice(0, 60);
     if (!name) return { success: false, error: "Give the pack a name", field: "name" };
@@ -277,6 +282,7 @@ export async function savePackAction(input: SavePackInput): Promise<ActionResult
 export async function convertLegacyPackAction(packId: string): Promise<ActionResult<TcgCustomPackWithCards>> {
   try {
     if (!(await requireAdmin())) return { success: false, error: "Only admins can change packs" };
+    clearPackCaches();
     if (!MEMBER_CARD_ID_PATTERN.test(packId)) return { success: false, error: "Invalid pack" };
 
     const pack = parseCustomPack(await redis.get(tcgCustomPackKey(packId)));
@@ -307,6 +313,7 @@ export async function convertLegacyPackAction(packId: string): Promise<ActionRes
 export async function setPackStatusAction(packId: string, status: TcgPackStatus): Promise<ActionResult<TcgCustomPackWithCards>> {
   try {
     if (!(await requireAdmin())) return { success: false, error: "Only admins can change packs" };
+    clearPackCaches();
     if (!MEMBER_CARD_ID_PATTERN.test(packId)) return { success: false, error: "Invalid pack" };
 
     const pack = parseCustomPack(await redis.get(tcgCustomPackKey(packId)));
@@ -346,6 +353,7 @@ export async function setPackStatusAction(packId: string, status: TcgPackStatus)
 export async function setPackPurchasableAction(packId: string, purchasable: boolean): Promise<ActionResult<TcgCustomPackWithCards>> {
   try {
     if (!(await requireAdmin())) return { success: false, error: "Only admins can change packs" };
+    clearPackCaches();
     if (!MEMBER_CARD_ID_PATTERN.test(packId)) return { success: false, error: "Invalid pack" };
 
     const pack = parseCustomPack(await redis.get(tcgCustomPackKey(packId)));
@@ -418,6 +426,7 @@ export async function simulatePackStatsAction(input: {
 export async function setPackCardCreditsAction(packId: string, allow: boolean): Promise<ActionResult<TcgCustomPackWithCards>> {
   try {
     if (!(await requireAdmin())) return { success: false, error: "Only admins can change packs" };
+    clearPackCaches();
     if (!MEMBER_CARD_ID_PATTERN.test(packId)) return { success: false, error: "Invalid pack" };
 
     const pack = parseCustomPack(await redis.get(tcgCustomPackKey(packId)));
@@ -440,6 +449,7 @@ export async function setPackCardCreditsAction(packId: string, allow: boolean): 
 export async function deletePackAction(packId: string): Promise<ActionResult<{ id: string }>> {
   try {
     if (!(await requireAdmin())) return { success: false, error: "Only admins can delete packs" };
+    clearPackCaches();
     if (!MEMBER_CARD_ID_PATTERN.test(packId)) return { success: false, error: "Invalid pack" };
     await redis.multi().del(tcgCustomPackKey(packId)).zrem(TCG_CUSTOM_PACKS_INDEX_KEY, packId).exec();
     await deletePackConfig(packId);
@@ -605,6 +615,7 @@ export async function importMemberCardToPackAction(input: { memberCardId: string
   let copiedUrl = "";
   try {
     if (!(await requireAdmin())) return { success: false, error: "Only admins can create set cards" };
+    clearPackCaches();
 
     const memberCardId = String(input?.memberCardId ?? "").trim();
     if (!MEMBER_CARD_ID_PATTERN.test(memberCardId)) return { success: false, error: "Invalid card" };
@@ -746,6 +757,7 @@ export async function createFinishedSetCardAction(input: {
   let copiedUrl = "";
   try {
     if (!(await requireAdmin())) return { success: false, error: "Only admins can create set cards" };
+    clearPackCaches();
 
     const tier = input?.tier;
     if (!ALL_TIERS.includes(tier)) return { success: false, error: "Invalid rarity" };
@@ -869,6 +881,7 @@ export async function createCardFromPictureAction(input: {
   let copiedUrl = "";
   try {
     if (!(await requireAdmin())) return { success: false, error: "Only admins can create set cards" };
+    clearPackCaches();
 
     const tier = input?.tier;
     if (!ALL_TIERS.includes(tier)) return { success: false, error: "Invalid rarity" };
@@ -942,6 +955,7 @@ export async function createCardFromPictureAction(input: {
 export async function adoptPictureAction(input: { url: string }): Promise<ActionResult<{ imageUrl: string }>> {
   try {
     if (!(await requireAdmin())) return { success: false, error: "Only admins can change cards" };
+    clearPackCaches();
     const url = String(input?.url ?? "").trim();
     if (!isBlobUrl(url)) return { success: false, error: "That picture isn't stored in the app." };
     return { success: true, data: { imageUrl: await copyCardImage(url) } };

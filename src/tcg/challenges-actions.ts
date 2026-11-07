@@ -298,19 +298,10 @@ async function buildChallengeOpponent(
     }
 
     // Case B: Automated Challenge -> Query candidate cards for the challenge's spec
-    const allIds = (await redis.zrange(ALL_MEMBER_CARDS_INDEX, 0, 999, { rev: true })) as string[];
     let candidateCards: MemberCard[] = [];
     const targetTier = challenge.allowedRarity !== "any" ? challenge.allowedRarity : "bronze";
-
-    if (allIds && allIds.length > 0) {
-      // Load batch of member cards
-      const sampleIds = allIds.slice(0, 300);
-      const rows = await redis.mget(...sampleIds.map((id) => memberCardKey(String(id))));
-      const cards = rows
-        .map(parseStoredCard)
-        .filter((c): c is StoredMemberCard => c !== null && !c.archived && !c.cardType && !c.crewCardId)
-        .map(toPublicCard);
-
+    const cards = await loadChallengeCardPool();
+    if (cards.length > 0) {
       // Filter strictly by challenge restrictions and exclude player's own cards
       candidateCards = cards.filter((c) => {
         if (userId && c.userId === userId) return false;
@@ -326,8 +317,11 @@ async function buildChallengeOpponent(
         return true;
       });
 
-      // Sort candidate cards by score descending to get the ABSOLUTE BEST
-      candidateCards.sort((a, b) => getCarNormalizedTotalScore(b) - getCarNormalizedTotalScore(a));
+      // Sort candidate cards by score descending to get the ABSOLUTE BEST. Each score is worked out once, not on every comparison.
+      candidateCards = candidateCards
+        .map((card) => ({ card, score: getCarNormalizedTotalScore(card) }))
+        .sort((x, y) => y.score - x.score)
+        .map((entry) => entry.card);
     }
 
     // The rival chooses its cars from a pool: good cars of the right rarity, not only the very best.
@@ -506,6 +500,37 @@ export async function startChallengeBattleAction(
     console.error("[challenges-actions] startChallengeBattleAction error:", error);
     return { success: false, error: "Could not enter challenge." };
   }
+}
+
+/**
+ * The recent member cards a challenge rival is chosen from (the 300 newest car cards). Reading and parsing them is most of the
+ * work of starting a challenge, and they barely change, so they are kept in this server's memory for a couple of minutes and
+ * shared by every challenge start. The player's own cards are left out afterwards, per player. Callers must not change them.
+ */
+const CHALLENGE_POOL_MS = 120_000;
+let challengePool: { at: number; cards: Promise<MemberCard[]> } | null = null;
+
+async function loadChallengeCardPool(): Promise<MemberCard[]> {
+  if (!challengePool || Date.now() - challengePool.at > CHALLENGE_POOL_MS) {
+    const entry = {
+      at: Date.now(),
+      cards: (async () => {
+        const allIds = (await redis.zrange(ALL_MEMBER_CARDS_INDEX, 0, 999, { rev: true })) as string[];
+        if (!allIds || allIds.length === 0) return [] as MemberCard[];
+        const rows = await redis.mget(...allIds.slice(0, 300).map((id) => memberCardKey(String(id))));
+        return rows
+          .map(parseStoredCard)
+          .filter((c): c is StoredMemberCard => c !== null && !c.archived && !c.cardType && !c.crewCardId)
+          .map(toPublicCard);
+      })(),
+    };
+    // A failed read must not be kept.
+    entry.cards.catch(() => {
+      if (challengePool === entry) challengePool = null;
+    });
+    challengePool = entry;
+  }
+  return challengePool.cards;
 }
 
 /**
@@ -824,7 +849,8 @@ export async function estimateChallengeWinRateAction(input: AdminChallengeInput)
             skill: opponent.aiSkill ?? difficulty.skill,
           };
 
-    const BATTLES = 220;
+    // 100 each for the casual and the good player: about 3.5 points either way on the estimate, for under half the CPU of 220.
+    const BATTLES = 100;
     const base = { ...DEFAULT_SIM, tier, rival: "ai" as const, rivalBuilder };
     const casual = winRate({ ...base, player: "casual" }, BATTLES, 31);
     const good = winRate({ ...base, player: "good" }, BATTLES, 32);

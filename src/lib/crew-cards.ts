@@ -174,7 +174,30 @@ export function escapeSvgText(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }
 
+/**
+ * Every Crew card has a drawn picture built from a few fields, and the same ones are built again each time a card is read
+ * from storage (hundreds of times when a collection is loaded). The result depends only on those fields, so it is kept.
+ */
+const crewSvgCache = new Map<string, string>();
 export function buildCrewCardSvgDataUrl(def: {
+  icon: string;
+  category: string;
+  accentColor: string;
+  setNumber: number;
+  badgeText?: string;
+  tier?: FullArtTier;
+}): string {
+  const cacheKey = JSON.stringify([def.icon, def.category, def.accentColor, def.setNumber, def.badgeText ?? null, def.tier ?? null]);
+  const cached = crewSvgCache.get(cacheKey);
+  if (cached) return cached;
+  const url = drawCrewCardSvgDataUrl(def);
+  // Admins can edit Crew cards, which makes new keys; the cache is cleared rather than left to grow without end.
+  if (crewSvgCache.size >= 500) crewSvgCache.clear();
+  crewSvgCache.set(cacheKey, url);
+  return url;
+}
+
+function drawCrewCardSvgDataUrl(def: {
   icon: string;
   category: string;
   accentColor: string;

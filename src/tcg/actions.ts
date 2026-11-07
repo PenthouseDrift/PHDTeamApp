@@ -66,6 +66,7 @@ import {
   tcgMarketLockKey,
   transferPCredits,
   type ClashGameCardsConfig,
+  clearPackCaches,
 } from "./storage";
 import { buildPackContents, type PackContents } from "./pack-contents";
 import { buildPackExtraCards } from "./pack-extras";
@@ -1221,6 +1222,7 @@ export async function saveCustomPackAction(
     if (!(await requireAdmin())) {
       return { success: false, error: "Only admins can create or edit custom packs." };
     }
+    clearPackCaches();
 
     const name = String(input.name ?? "").trim().slice(0, 60);
     if (!name) return { success: false, error: "Give the pack a name." };
@@ -1303,6 +1305,7 @@ export async function setCustomPackStatusAction(
 ): Promise<ActionResult<TcgCustomPackWithCards>> {
   try {
     if (!(await requireAdmin())) return { success: false, error: "Only admins can update packs." };
+    clearPackCaches();
     if (!MEMBER_CARD_ID_PATTERN.test(packId)) return { success: false, error: "Invalid pack." };
 
     const existing = parseCustomPack(await redis.get(tcgCustomPackKey(packId)));
@@ -1327,6 +1330,7 @@ export async function updateCustomPackPricingAction(
 ): Promise<ActionResult<TcgCustomPackWithCards>> {
   try {
     if (!(await requireAdmin())) return { success: false, error: "Only admins can update pack pricing." };
+    clearPackCaches();
     if (!MEMBER_CARD_ID_PATTERN.test(packId)) return { success: false, error: "Invalid pack." };
 
     const existing = parseCustomPack(await redis.get(tcgCustomPackKey(packId)));
@@ -1348,6 +1352,7 @@ export async function updateCustomPackPricingAction(
 export async function deleteCustomPackAction(packId: string): Promise<ActionResult<{ id: string }>> {
   try {
     if (!(await requireAdmin())) return { success: false, error: "Only admins can delete packs." };
+    clearPackCaches();
     if (!MEMBER_CARD_ID_PATTERN.test(packId)) return { success: false, error: "Invalid pack." };
 
     await redis
