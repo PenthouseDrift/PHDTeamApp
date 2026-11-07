@@ -236,7 +236,7 @@ export function ClashHowToPlayModal({
                     <h4 className="font-black text-white">Debuffs &amp; Verdict</h4>
                   </div>
                   <p className="text-sm text-zinc-400 leading-relaxed">
-                    On each corner you are dealt 3 debuff cards and play one on the rival&apos;s car, while the rival plays one on yours. Corner scores calculate automatically. The driver who wins <strong>2 out of 3 corners</strong> takes the match victory and rewards!
+                    On each corner you are dealt 3 debuff cards and play one on the rival&apos;s car, while the rival plays one on yours. Every debuff hits every car with a base cut set by its rarity. A <strong>Lock On</strong> game adds a bonus cut with yours, and a <strong>Brace</strong> game blocks up to half of theirs. Corner scores calculate automatically. The driver who wins <strong>2 out of 3 corners</strong> takes the match victory and rewards!
                   </p>
                 </div>
               </div>
@@ -559,7 +559,15 @@ export function ClashHowToPlayModal({
                   ⚠️ Corner Debuffs
                 </h4>
                 <p className="text-sm text-zinc-300 leading-relaxed">
-                  On each corner you are dealt <strong>3 random debuff cards</strong> (some hit harder than others) and play <strong>one on the rival&apos;s car</strong> (e.g. <em>Slick Patch</em>, <em>Gyro Wobble</em>, or <em>Wall Brush</em>). The rival does the same to you, at the same time. Each card shows how much it would cost the rival&apos;s car.
+                  On each corner you are dealt <strong>3 random debuff cards</strong> (some hit harder than others) and play <strong>one on the rival&apos;s car</strong> (e.g. <em>Slick Patch</em>, <em>Gyro Wobble</em>, or <em>Wall Brush</em>). The rival does the same to you, at the same time. Every debuff hits every car.
+                  <br />
+                  Each debuff always cuts one stat by an amount set by its rarity (Bronze 3, Silver 5, Gold 8, Legend 12). Then you play two short games:
+                  <br />
+                  <strong>Attack · Lock On.</strong> Tap when the shrinking ring matches the target ring. A cleaner lock adds a bonus cut to a <em>second</em> stat on the rival&apos;s car, up to the same amount again. It is hard to be perfect, and only a near-perfect lock adds the full bonus.
+                  <br />
+                  <strong>Defend · Brace.</strong> Gusts push a marker along a track. Hold left or right to keep it inside the safe zone. The longer you hold it, the more of the rival&apos;s debuff you block, but a perfect brace blocks at most <strong>half</strong>.
+                  <br />
+                  Rarer debuffs hit harder and come with quicker games.
                   <br />
                   <span className="text-cyan-300 font-bold">
                     💡 Tactical Tip: Crew Cards with <strong>Debuff Shielding</strong> protect your score from these penalties!

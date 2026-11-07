@@ -30,6 +30,14 @@ import type { FullArtTier } from "@/lib/full-art-card";
 import { rollStatsForTier } from "@/lib/pack-config";
 import { getBestCrewCardsForRarity, getCarNormalizedTotalScore } from "./challenges-types";
 import {
+  applyDebuffImpact,
+  rivalAttackAccuracy,
+  rivalDefendAccuracy,
+  rollThreeClashDebuffCards,
+  simulatedAttackAccuracy,
+  simulatedDefendAccuracy,
+} from "./debuff-impact";
+import {
   applyFinaleToResult,
   chooseRivalFinale,
   defaultPlayerChoice,
@@ -190,6 +198,15 @@ export interface SimConfig {
    * "casual" one times a run at 50% after one pass.
    */
   finale?: boolean;
+
+  /**
+   * Play debuffs as the game now does (see debuff-impact.ts): every debuff hits every car with a base cut set by its rarity, an
+   * attack mini-game adds a bonus cut to a second stat, and a defend mini-game blocks up to half. A "good" player averages 70%
+   * accuracy attacking and 80% defending, a "casual" one 40% and 55%; the rival AI averages 30% to 60% attacking and 40% to 75%
+   * defending by its skill. On by default. Turn it off to compare with the game as it was (debuffs aimed at high-stat cars,
+   * no mini-games).
+   */
+  debuffGame?: boolean;
 }
 
 export const DEFAULT_SIM: SimConfig = {
@@ -205,6 +222,7 @@ export const DEFAULT_SIM: SimConfig = {
   rivalCrewCount: 9,
   rivalCrewBoost: 0,
   finale: true,
+  debuffGame: true,
 };
 
 const byPowerDesc = (a: MemberCard, b: MemberCard) => getCardPower(b) - getCardPower(a);
@@ -311,8 +329,9 @@ export function simulateBattle(cfg: SimConfig, rng: Rng): SimResult {
     const playerCar = player.cars[carSlot];
 
     // Each side is dealt 3 debuff cards and plays one on the other's car, at the same time.
-    const playerHand = rollThreeDebuffCards(DEBUFF_CARD_SET, rng);
-    const rivalHand = rollThreeDebuffCards(DEBUFF_CARD_SET, rng);
+    const dealHand = cfg.debuffGame ? rollThreeClashDebuffCards : rollThreeDebuffCards;
+    const playerHand = dealHand(DEBUFF_CARD_SET, rng);
+    const rivalHand = dealHand(DEBUFF_CARD_SET, rng);
     let playerPick = 0;
     if (cfg.player === "good") {
       const hurt = playerHand.map((debuff) => {
@@ -338,8 +357,20 @@ export function simulateBattle(cfg: SimConfig, rng: Rng): SimResult {
       cfg.rival === "old"
         ? 0
         : chooseRivalDebuff({ cornerIdx: k, ctx, rivalCar, playerCar, hand: rivalHand, skill: rivalSkill, rng });
-    debuffsOnRival[k] = playerHand[playerPick];
-    debuffsOnPlayer[k] = rivalHand[rivalPick];
+    let onRival = playerHand[playerPick];
+    let onPlayer = rivalHand[rivalPick];
+    if (cfg.debuffGame) {
+      // Each side attacks with the debuff it played (the bonus cut) and defends against the one it was hit with (up to half
+      // blocked).
+      const playerAttack = simulatedAttackAccuracy(cfg.player, rng);
+      const playerDefend = simulatedDefendAccuracy(cfg.player, rng);
+      const rivalAttack = rivalAttackAccuracy(rivalSkill, rng);
+      const rivalDefend = rivalDefendAccuracy(rivalSkill, rng);
+      onRival = applyDebuffImpact(onRival, playerAttack, rivalDefend);
+      onPlayer = applyDebuffImpact(onPlayer, rivalAttack, playerDefend);
+    }
+    debuffsOnRival[k] = onRival;
+    debuffsOnPlayer[k] = onPlayer;
 
     // The player picks a Crew card, seeing both debuffs.
     let crewSlot: number;

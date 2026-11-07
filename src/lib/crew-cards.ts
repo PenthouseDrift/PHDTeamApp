@@ -110,6 +110,34 @@ export interface DebuffCardDefinition {
   imageX?: number;
   imageY?: number;
   isCustom?: boolean;
+  /**
+   * Set only for Clash and the Campaign (see src/tcg/debuff-impact.ts): the debuff as it is dealt. It always cuts `primary`
+   * by `baseCut` (set by its rarity), and the attack game can add up to `bonusMax` more off `secondary`. Tandem Tour never
+   * sets this.
+   */
+  clash?: DebuffClashSpec;
+  /** Set once the attack and defend games have been played: what they decided. The penalties on the card already include it. */
+  impact?: DebuffImpactResult;
+}
+
+export type DebuffStat = "drift" | "accel" | "grip" | "steer";
+
+export interface DebuffClashSpec {
+  primary: DebuffStat;
+  secondary: DebuffStat;
+  baseCut: number;
+  bonusMax: number;
+}
+
+export interface DebuffImpactResult {
+  /** The attacker's accuracy in the attack game, 0 to 1. */
+  attackAccuracy: number;
+  /** The defender's accuracy in the defence game, 0 to 1. */
+  defendAccuracy: number;
+  /** The extra cut the attack game added to the secondary stat, before the defence. */
+  bonus: number;
+  /** The share of the debuff the defence blocked, 0 to 50. */
+  blockedPct: number;
 }
 
 export interface TrackCardRules {

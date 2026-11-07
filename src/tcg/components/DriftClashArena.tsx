@@ -59,7 +59,6 @@ import {
   getNormalizedCardStats,
   normalizeStatValue,
   rollThreeClashSectors,
-  rollThreeDebuffCards,
   rollUkTrackCard,
   scoreCardForSector,
   type ClashSectorSpec,
@@ -101,6 +100,20 @@ import {
   type FinaleOutcome,
   type FinaleWeights,
 } from "../finale";
+import {
+  DEBUFF_DEFENCE_PCT,
+  DEFAULT_IMPACT_ACCURACY,
+  applyDebuffImpact,
+  baseCutFor,
+  bonusMaxFor,
+  impactLabel,
+  rivalAttackAccuracy,
+  rivalDefendAccuracy,
+  rollThreeClashDebuffCards,
+  toClashDebuff,
+} from "../debuff-impact";
+import { ClashBracePanel } from "./ClashBracePanel";
+import { ClashImpactPanel } from "./ClashImpactPanel";
 import { ClashFinalePanel } from "./ClashFinalePanel";
 import { ClashFinaleResult } from "./ClashFinaleResult";
 import { ClashRevealPanel } from "./ClashRevealPanel";
@@ -747,6 +760,7 @@ type BattleAnimStep =
   | "head_to_head"
   | "battle_initial"
   | "prompt_debuff"
+  | "prompt_impact"
   | "hazard_incident"
   | "debuff_overlay"
   | "battle_shake_1"
@@ -1233,6 +1247,15 @@ export function DriftClashArena({
   const [debuffHand, setDebuffHand] = useState<DebuffCardDefinition[]>([]);
   const [rivalDebuffHand, setRivalDebuffHand] = useState<DebuffCardDefinition[]>([]);
   const [debuffPickIdx, setDebuffPickIdx] = useState<number | null>(null);
+  // The attack and defend mini-games for the corner (see debuff-impact.ts): which one is up, the two debuffs as dealt (before
+  // the games scale them), and the player's attack accuracy once that game has been played.
+  const [impactGame, setImpactGame] = useState<{
+    cornerIdx: 0 | 1 | 2;
+    stage: "attack" | "defend";
+    onRival: DebuffCardDefinition;
+    onPlayer: DebuffCardDefinition;
+    attackAccuracy: number;
+  } | null>(null);
   const [activeCornerIdx, setActiveCornerIdx] = useState<0 | 1 | 2>(0);
   const [battleAnimStep, setBattleAnimStep] = useState<BattleAnimStep>("cards_entrance");
   const [cornerSubStage, setCornerSubStage] = useState<CornerSubStage>("car_draw");
@@ -1391,7 +1414,8 @@ export function DriftClashArena({
   const catalogDebuffMemberCards = useMemo<MemberCard[]>(
     () =>
       debuffCatalogDefs.map((def) => {
-        const scaled = scaleDebuffCardDefinition(def, catalogTierTab);
+        // The catalogue shows the debuff as it is dealt: it hits every car.
+        const scaled = toClashDebuff(scaleDebuffCardDefinition(def, catalogTierTab));
         return {
           id: `${def.id}-${catalogTierTab}`,
           userId: "catalog",
@@ -1687,6 +1711,7 @@ export function DriftClashArena({
     setDebuffHand([]);
     setRivalDebuffHand([]);
     setDebuffPickIdx(null);
+    setImpactGame(null);
     setRivalCrewOrder([0, 1, 2]);
 
     // Animate roulette cycling through UK tracks with realistic slot deceleration
@@ -1891,8 +1916,10 @@ export function DriftClashArena({
   /** Deal 3 debuff cards to each side for the corner being played. */
   function dealDebuffHands(): { mine: DebuffCardDefinition[]; theirs: DebuffCardDefinition[] } {
     const pool = debuffCatalogDefs.length >= 3 ? debuffCatalogDefs : DEBUFF_CARD_SET;
-    const mine = rollThreeDebuffCards(pool);
-    const theirs = rollThreeDebuffCards(pool);
+    // Every debuff hits every car with a base cut set by its rarity; the attack game adds a bonus and the defend game blocks up
+    // to half.
+    const mine = rollThreeClashDebuffCards(pool);
+    const theirs = rollThreeClashDebuffCards(pool);
     setDebuffHand(mine);
     setRivalDebuffHand(theirs);
     setDebuffPickIdx(null);
@@ -1959,8 +1986,58 @@ export function DriftClashArena({
     });
     return { onPlayer, onRival };
   }
+  /**
+   * Both debuffs are in play. The attack game (the debuff you played on the rival) and the defend game (the one played on you)
+   * decide how hard each lands: this scales both debuffs by the accuracies (the rival's come from its skill, as in the finale)
+   * and locks the scaled cards into the corner. Returns them, since state will not have updated yet.
+   */
+  function settleImpact(
+    cornerIdx: 0 | 1 | 2,
+    onRival: DebuffCardDefinition,
+    onPlayer: DebuffCardDefinition,
+    playerAttack: number,
+    playerDefend: number
+  ): { onPlayer: DebuffCardDefinition; onRival: DebuffCardDefinition } {
+    const skill = opponent.aiSkill ?? CASUAL_AI_SKILL;
+    const rivalAttack = rivalAttackAccuracy(skill, Math.random);
+    const rivalDefend = rivalDefendAccuracy(skill, Math.random);
+    const scale = (def: DebuffCardDefinition, attack: number, defend: number) =>
+      isNoDebuff(def) ? def : applyDebuffImpact(def, attack, defend);
+    const scaledOnRival = scale(onRival, playerAttack, rivalDefend);
+    const scaledOnPlayer = scale(onPlayer, rivalAttack, playerDefend);
+    setDebuffsOnRival((prev) => {
+      const next = [...prev] as DebuffTrio;
+      next[cornerIdx] = scaledOnRival;
+      return next;
+    });
+    setDebuffsOnPlayer((prev) => {
+      const next = [...prev] as DebuffTrio;
+      next[cornerIdx] = scaledOnPlayer;
+      return next;
+    });
+    return { onPlayer: scaledOnPlayer, onRival: scaledOnRival };
+  }
+  /** The player picked a debuff: both are played, then the attack game opens, then the defend game. */
   function handleConfirmDebuffPick(pickIdx: number) {
-    playDebuffs(activeCornerIdx, debuffHand, rivalDebuffHand, pickIdx);
+    const played = playDebuffs(activeCornerIdx, debuffHand, rivalDebuffHand, pickIdx);
+    setImpactGame({
+      cornerIdx: activeCornerIdx,
+      stage: "attack",
+      onRival: played.onRival,
+      onPlayer: played.onPlayer,
+      attackAccuracy: DEFAULT_IMPACT_ACCURACY,
+    });
+    setBattleAnimStep("prompt_impact");
+  }
+  /** A mini-game finished: the attack game leads to the defend game, and the defend game lands both debuffs. */
+  function handleImpactSubmit(accuracy: number) {
+    if (!impactGame) return;
+    if (impactGame.stage === "attack") {
+      setImpactGame({ ...impactGame, stage: "defend", attackAccuracy: accuracy });
+      return;
+    }
+    settleImpact(impactGame.cornerIdx, impactGame.onRival, impactGame.onPlayer, impactGame.attackAccuracy, accuracy);
+    setImpactGame(null);
     handleContinueFromDebuff();
   }
   function handleContinueFromDebuff() {
@@ -2147,9 +2224,20 @@ export function DriftClashArena({
 
   function handleSkipBattleAnimation() {
     clearTimers();
-    // Skipping the debuff pick plays the debuff that hurts the rival's car most, then carries on to the crew.
+    // Skipping an attack or defend game gives it an average result (and skips the other one too), then carries on to the crew.
+    if (battleAnimStep === "prompt_impact" && impactGame) {
+      const attack = impactGame.stage === "attack" ? DEFAULT_IMPACT_ACCURACY : impactGame.attackAccuracy;
+      settleImpact(impactGame.cornerIdx, impactGame.onRival, impactGame.onPlayer, attack, DEFAULT_IMPACT_ACCURACY);
+      setImpactGame(null);
+      handleContinueFromDebuff();
+      return;
+    }
+    // Skipping the debuff pick plays the debuff that hurts the rival's car most, with average mini-game results, then carries on
+    // to the crew.
     if (battleAnimStep === "prompt_debuff" || battleAnimStep === "hazard_incident") {
-      handleConfirmDebuffPick(debuffPickIdx ?? bestDebuffIndex(debuffHand, activeCornerIdx));
+      const played = playDebuffs(activeCornerIdx, debuffHand, rivalDebuffHand, debuffPickIdx ?? bestDebuffIndex(debuffHand, activeCornerIdx));
+      settleImpact(activeCornerIdx, played.onRival, played.onPlayer, DEFAULT_IMPACT_ACCURACY, DEFAULT_IMPACT_ACCURACY);
+      handleContinueFromDebuff();
       return;
     }
     // Skipping the finale settles it with default picks (your best stat, an even setup, a middling run).
@@ -2177,7 +2265,8 @@ export function DriftClashArena({
       let playedNow: { onPlayer: DebuffCardDefinition; onRival: DebuffCardDefinition } | undefined;
       if (isNoDebuff(debuffsOnRival[cornerIdx]) && isNoDebuff(debuffsOnPlayer[cornerIdx])) {
         const { mine, theirs } = dealDebuffHands();
-        playedNow = playDebuffs(cornerIdx, mine, theirs, bestDebuffIndex(mine, cornerIdx));
+        const played = playDebuffs(cornerIdx, mine, theirs, bestDebuffIndex(mine, cornerIdx));
+        playedNow = settleImpact(cornerIdx, played.onRival, played.onPlayer, DEFAULT_IMPACT_ACCURACY, DEFAULT_IMPACT_ACCURACY);
       }
       handleApplyCrewAndResumeBattle(chosenCrew, cornerIdx, playedNow, true);
     }
@@ -3114,22 +3203,17 @@ export function DriftClashArena({
                       </div>
 
                       <div className="flex items-center gap-1 text-[11px] font-black text-rose-400">
-                        <span>⚠️ Scaled Penalties:</span>
+                        <span>⚠️ Hit:</span>
                         <span className="text-zinc-300 font-bold">
-                          {catalogTierTab === "bronze"
-                            ? "-1 stat · -1 pt"
-                            : catalogTierTab === "silver"
-                              ? "-2 stats · -2 pts"
-                              : catalogTierTab === "gold"
-                                ? "-3 stats · -4 pts"
-                                : "-4 stats · -6 pts"}
+                          always -{baseCutFor(catalogTierTab)} on its main stat, plus up to -{bonusMaxFor(catalogTierTab)} on a second stat from the
+                          attack game. A perfect defence blocks {DEBUFF_DEFENCE_PCT}%.
                         </span>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                       {debuffCatalogDefs.map((def, idx) => {
-                        const scaledDef = scaleDebuffCardDefinition(def, catalogTierTab);
+                        const scaledDef = toClashDebuff(scaleDebuffCardDefinition(def, catalogTierTab));
                         const previewCard = catalogDebuffMemberCards[idx];
                         const pen = scaledDef.penalties;
                         return (
@@ -3170,9 +3254,9 @@ export function DriftClashArena({
                                   -{pen.steerPenalty} STEER
                                 </span>
                               ) : null}
-                              {pen.flatPenalty ? (
-                                <span className="rounded bg-rose-500/20 border border-rose-400/50 px-1 py-0.5 text-[10px] font-black text-rose-300">
-                                  -{pen.flatPenalty} PTS
+                              {scaledDef.clash ? (
+                                <span className="rounded bg-amber-500/10 border border-amber-400/50 px-1 py-0.5 text-[10px] font-black text-amber-300">
+                                  +0 to -{scaledDef.clash.bonusMax} {scaledDef.clash.secondary.toUpperCase()}
                                 </span>
                               ) : null}
                             </div>
@@ -4578,7 +4662,7 @@ export function DriftClashArena({
                     } else if (battleAnimStep === "finale_roulette" || battleAnimStep === "prompt_finale" || battleAnimStep === "finale_result" || battleAnimStep === "reveal_stats") {
                       // ...and stay locked together while the finale is drawn, played and revealed.
                       pCardClass += "translate-x-[38%] sm:translate-x-[52%] scale-105 rotate-3 z-30 duration-500";
-                    } else if (battleAnimStep === "head_to_head" || battleAnimStep === "prompt_crew" || battleAnimStep === "prompt_debuff" || battleAnimStep === "hazard_incident") {
+                    } else if (battleAnimStep === "head_to_head" || battleAnimStep === "prompt_crew" || battleAnimStep === "prompt_debuff" || battleAnimStep === "prompt_impact" || battleAnimStep === "hazard_incident") {
                       pCardClass += "translate-x-[12%] sm:translate-x-[16%] scale-100 rotate-1 z-20 duration-500";
                     } else if (battleAnimStep === "battle_initial") {
                       pCardClass += "translate-x-[20%] sm:translate-x-[26%] rotate-3 animate-clash-shake z-20";
@@ -4608,7 +4692,7 @@ export function DriftClashArena({
                       rCardClass += "-translate-x-[38%] sm:-translate-x-[52%] scale-110 -rotate-6 animate-clash-shake z-30";
                     } else if (battleAnimStep === "finale_roulette" || battleAnimStep === "prompt_finale" || battleAnimStep === "finale_result" || battleAnimStep === "reveal_stats") {
                       rCardClass += "-translate-x-[38%] sm:-translate-x-[52%] scale-105 -rotate-3 z-30 duration-500";
-                    } else if (battleAnimStep === "head_to_head" || battleAnimStep === "prompt_crew" || battleAnimStep === "prompt_debuff" || battleAnimStep === "hazard_incident") {
+                    } else if (battleAnimStep === "head_to_head" || battleAnimStep === "prompt_crew" || battleAnimStep === "prompt_debuff" || battleAnimStep === "prompt_impact" || battleAnimStep === "hazard_incident") {
                       rCardClass += "-translate-x-[12%] sm:-translate-x-[16%] scale-100 -rotate-1 z-20 duration-500";
                     } else if (battleAnimStep === "battle_initial") {
                       rCardClass += "-translate-x-[20%] sm:-translate-x-[26%] -rotate-3 animate-clash-shake z-20";
@@ -4678,6 +4762,8 @@ export function DriftClashArena({
                                             ? "Tandem Entry Clash! ⚔️"
                                             : battleAnimStep === "prompt_debuff"
                                               ? "Pick a Debuff! ⚠️"
+                                              : battleAnimStep === "prompt_impact"
+                                              ? (impactGame?.stage === "defend" ? "Brace! 🛡️" : "Land the Hit! 🎯")
                                               : battleAnimStep === "hazard_incident"
                                               ? "Hazard Incident! 🚨"
                                               : battleAnimStep === "debuff_overlay"
@@ -5050,11 +5136,17 @@ export function DriftClashArena({
                                     <span>ON YOU (RIVAL&apos;S PICK):</span>
                                     <span className="text-white font-extrabold">{playerDebuffDef.name}</span>
                                     <span className="text-rose-300">({pDebuffBreakdown.totalSummary})</span>
+                                    {playerDebuffDef.impact && (
+                                      <span className="text-amber-300">· {impactLabel(playerDebuffDef)}</span>
+                                    )}
                                   </div>
                                   <div className="flex items-center gap-1 rounded-lg bg-rose-950/80 border border-rose-500/50 px-2.5 py-1 text-rose-200">
                                     <span>ON RIVAL (YOUR PICK):</span>
                                     <span className="text-white font-extrabold">{rivalDebuffDef.name}</span>
                                     {!hideRival && <span className="text-rose-300">({rDebuffBreakdown.totalSummary})</span>}
+                                    {rivalDebuffDef.impact && (
+                                      <span className="text-amber-300">· {impactLabel(rivalDebuffDef)}</span>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -5300,7 +5392,7 @@ export function DriftClashArena({
                                     Hit {opponent.driverName}&apos;s {rivalCar.name}
                                   </h3>
                                   <p className="mt-1 text-xs text-zinc-400">
-                                    Pick one of your {debuffHand.length} debuff cards. The rival is picking one for your car too. Their car&apos;s stats are hidden.
+                                    Pick one of your {debuffHand.length} debuff cards. The rival is picking one for your car too. Their car&apos;s stats are hidden. Every debuff hits every car with a base cut set by its rarity. Next you&apos;ll play Lock On to add a bonus cut with yours, and Brace to block up to half of theirs.
                                   </p>
                                 </div>
 
@@ -5374,6 +5466,27 @@ export function DriftClashArena({
                                 </button>
                               </div>
                             </div>
+                          )}
+                          {/* ── ATTACK: Lock On adds a bonus cut to the debuff you played. DEFEND: Brace blocks up to half of theirs ── */}
+                          {battleAnimStep === "prompt_impact" && impactGame && impactGame.cornerIdx === activeCornerIdx && impactGame.stage === "attack" && (
+                            <ClashImpactPanel
+                              key={`impact-${activeCornerIdx}-attack`}
+                              cornerNumber={sector.number}
+                              debuff={impactGame.onRival}
+                              subject={`${opponent.driverName}'s ${rivalCar.name}`}
+                              onSubmit={handleImpactSubmit}
+                              onSkip={handleSkipBattleAnimation}
+                            />
+                          )}
+                          {battleAnimStep === "prompt_impact" && impactGame && impactGame.cornerIdx === activeCornerIdx && impactGame.stage === "defend" && (
+                            <ClashBracePanel
+                              key={`impact-${activeCornerIdx}-defend`}
+                              cornerNumber={sector.number}
+                              debuff={impactGame.onPlayer}
+                              subject={`your ${playerCar.name}`}
+                              onSubmit={handleImpactSubmit}
+                              onSkip={handleSkipBattleAnimation}
+                            />
                           )}
                           {/* The cars slam together in the middle before the final showdown is drawn */}
                           {battleAnimStep === "finale_clash" && (
