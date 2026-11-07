@@ -57,6 +57,9 @@ interface ClashBracePanelProps {
 const confirmClass =
   "flex min-h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-500 via-sky-500 to-indigo-500 px-6 py-3 text-xs font-black uppercase tracking-wider text-white shadow-[0_0_30px_rgba(34,211,238,0.5)] transition-all hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:scale-[0.98] [touch-action:manipulation] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none sm:text-sm";
 
+const tiltButtonClass =
+  "gx-tap mt-2 flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-xl border border-cyan-400/60 bg-cyan-500/15 px-3 text-xs font-black uppercase tracking-wider text-cyan-100 [touch-action:manipulation] hover:bg-cyan-500/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-white";
+
 const steerClass =
   "flex min-h-20 flex-1 cursor-pointer select-none items-center justify-center rounded-2xl border-2 border-cyan-400/60 bg-cyan-500/15 px-3 text-lg font-black uppercase tracking-wider text-cyan-100 [touch-action:none] transition-colors hover:bg-cyan-500/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:bg-cyan-400/40";
 
@@ -94,17 +97,21 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
   // that tipping the right side down moves the bar right, before the game begins.
   const setupActive = tilt.setup !== null;
   const tiltCalibrate = tilt.calibrate;
+  const tiltPeek = tilt.peek;
+  const [rawTilt, setRawTilt] = useState<{ x: number; y: number } | null>(null);
   useEffect(() => {
-    if (state !== "ready" || !tilt.enabled || !tilt.calibrated || !tilt.seen || setupActive) return;
-    tiltCalibrate();
+    if (state !== "ready" || !tilt.enabled || !tilt.seen || setupActive) return;
+    // Once set up, how the phone is held right now counts as straight for this live test. (The player can reset it with a button.)
+    if (tilt.calibrated) tiltCalibrate();
     let frame = 0;
     const tick = () => {
-      setPreviewPush(tiltReadRef.current());
+      setRawTilt(tiltPeek());
+      if (tilt.calibrated) setPreviewPush(tiltReadRef.current());
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [state, tilt.enabled, tilt.calibrated, tilt.seen, setupActive, tiltCalibrate]);
+  }, [state, tilt.enabled, tilt.calibrated, tilt.seen, setupActive, tiltCalibrate, tiltPeek]);
   const stoppedRef = useRef(false);
   const submitTimerRef = useRef<number | null>(null);
   const onSubmitRef = useRef(onSubmit);
@@ -224,6 +231,12 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
     }
     setCount(COUNTDOWN_STEPS);
     setState("countdown");
+  };
+
+  /** Run the one-time tilt setup from the ready screen, so it can be tested before starting. */
+  const runTiltSetup = async () => {
+    setTiltNote(null);
+    if (!(await tilt.measure())) setTiltNote("I couldn't see a clear tip. Try again: hold steady, then tip the right side of the screen down and keep it there.");
   };
 
   const calibrate = tilt.calibrate;
@@ -346,28 +359,68 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
                     )}
                   </div>
                 )}
-                {!tilt.setup && tilt.enabled && tilt.calibrated && tilt.seen && (
-                  <div className="mt-2" aria-hidden>
-                    <p className="text-[11px] font-bold text-zinc-400">Try it: tip the right side down and the bar fills to the right.</p>
-                    <div className="relative mt-1 h-2 w-full overflow-hidden rounded-full bg-zinc-800">
-                      <div
-                        className="absolute inset-y-0 bg-cyan-400"
-                        style={{ left: previewPush < 0 ? `${50 + previewPush * 50}%` : "50%", width: `${Math.abs(previewPush) * 50}%` }}
-                      />
-                      <div className="absolute inset-y-0 left-1/2 w-px bg-zinc-500" />
-                    </div>
+                {/* Test the sensor before the game starts: allow it, see it is reading, set it up, then watch the bar follow your tilt. */}
+                {tilt.enabled && !tilt.setup && (
+                  <div className="mt-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-2.5">
+                    {tilt.needsPermission && tilt.permission !== "granted" ? (
+                      <>
+                        <p className="text-[11px] font-bold text-zinc-300">Your phone needs your OK before the game can read its tilt.</p>
+                        <button type="button" onClick={() => void tilt.enable()} className={tiltButtonClass}>
+                          Allow motion access
+                        </button>
+                      </>
+                    ) : !tilt.seen ? (
+                      <p className="text-[11px] font-bold text-amber-300" aria-live="polite">
+                        Waiting for tilt readings… move your phone a little. If nothing happens, this device may not support tilt, so use the
+                        buttons.
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-[11px] font-black text-emerald-300" aria-live="polite">
+                          ✓ Receiving tilt from your phone
+                          {rawTilt ? ` · raw ${rawTilt.x.toFixed(0)}° / ${rawTilt.y.toFixed(0)}°` : ""}
+                        </p>
+                        {!tilt.calibrated ? (
+                          <>
+                            <p className="mt-1 text-[11px] font-bold text-zinc-400">
+                              Next, set it up so the game learns which way is right for how you&apos;re holding the phone.
+                            </p>
+                            <button type="button" onClick={() => void runTiltSetup()} className={tiltButtonClass}>
+                              Set up tilt now
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <p className="mt-1 text-[11px] font-bold text-zinc-400">
+                              Test it: tip the right side of the screen down and the bar fills to the right. The left side down fills it to the
+                              left.
+                            </p>
+                            <div className="mt-1.5 flex items-center gap-1.5" aria-hidden>
+                              <span className="text-[10px] font-black text-zinc-500">◀</span>
+                              <div className="relative h-3 flex-1 overflow-hidden rounded-full bg-zinc-800">
+                                <div
+                                  className="absolute inset-y-0 bg-cyan-400"
+                                  style={{ left: previewPush < 0 ? `${50 + previewPush * 50}%` : "50%", width: `${Math.abs(previewPush) * 50}%` }}
+                                />
+                                <div className="absolute inset-y-0 left-1/2 w-px bg-zinc-500" />
+                              </div>
+                              <span className="text-[10px] font-black text-zinc-500">▶</span>
+                            </div>
+                            <div className="mt-2 flex gap-2">
+                              <button type="button" onClick={() => tilt.calibrate()} className={`${tiltButtonClass} mt-0 flex-1`}>
+                                Set straight here
+                              </button>
+                              <button type="button" onClick={() => tilt.resetCalibration()} className={`${tiltButtonClass} mt-0 flex-1`}>
+                                Wrong way? Redo setup
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </>
+                    )}
                   </div>
                 )}
                 {tiltNote && <p className="mt-2 text-[11px] font-bold text-amber-300">{tiltNote}</p>}
-                {tilt.enabled && tilt.calibrated && !tilt.setup && (
-                  <button
-                    type="button"
-                    onClick={() => tilt.resetCalibration()}
-                    className="gx-tap mt-2 min-h-[44px] w-full cursor-pointer rounded-xl px-3 text-xs font-bold text-zinc-400 [touch-action:manipulation] hover:text-zinc-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
-                  >
-                    Wrong way round? Redo tilt setup
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={() => (tilt.enabled ? tilt.disable() : void tilt.enable())}
@@ -376,9 +429,6 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
                 >
                   {tilt.enabled ? "Tilt is on · tap to turn off" : "Use tilt"}
                 </button>
-                {tilt.enabled && tilt.needsPermission && tilt.permission !== "granted" && (
-                  <p className="mt-1 text-[11px] font-bold text-cyan-300">Your phone will ask to allow motion access when you press Start. Choose Allow.</p>
-                )}
                 {tilt.permission === "denied" && (
                   <p className="mt-1 text-[11px] font-bold text-amber-300">Motion access was refused, so tilt can&apos;t be used. The buttons still work.</p>
                 )}

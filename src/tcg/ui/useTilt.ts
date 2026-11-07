@@ -321,6 +321,12 @@ export function useTilt() {
     smoothRef.current = 0;
   }, []);
 
+  /** The raw tilt the phone is reporting right now, in degrees along each of its two sides, or null with no reading. For a live test display. */
+  const peek = useCallback((): { x: number; y: number } | null => {
+    const latest = latestRef.current;
+    return latest ? { x: tiltDegrees(latest.x), y: tiltDegrees(latest.y) } : null;
+  }, []);
+
   /** The push right now, -1 to 1 (0 with no reading or no setup). Call once per frame. */
   const read = useCallback((): number => {
     const cal = calibrationRef.current;
@@ -344,6 +350,7 @@ export function useTilt() {
     measure,
     resetCalibration,
     calibrate,
+    peek,
     read,
   };
 }
