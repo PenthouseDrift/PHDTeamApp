@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { DebuffCardDefinition } from "@/lib/crew-cards";
 import { buzz } from "../ui/feedback";
-import { isTouchDevice, useTilt } from "../ui/useTilt";
+import { TILT_SETUP_MIN_DEGREES, isTouchDevice, useTilt } from "../ui/useTilt";
 import {
   BRACE_SECONDS,
   BRACE_START,
@@ -81,12 +81,30 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
   const tilt = useTilt();
   const [push, setPush] = useState(0);
   const [touchLike] = useState(isTouchDevice);
+  const [tiltNote, setTiltNote] = useState<string | null>(null);
+  const [previewPush, setPreviewPush] = useState(0);
   const tiltReadRef = useRef(tilt.read);
   const tiltLiveRef = useRef(false);
   useEffect(() => {
     tiltReadRef.current = tilt.read;
-    tiltLiveRef.current = tilt.enabled && tilt.seen;
-  }, [tilt.read, tilt.enabled, tilt.seen]);
+    tiltLiveRef.current = tilt.enabled && tilt.seen && tilt.calibrated;
+  }, [tilt.read, tilt.enabled, tilt.seen, tilt.calibrated]);
+
+  // On the ready screen, show the tilt working live (relative to how the phone is held when this starts) so the player can see
+  // that tipping the right side down moves the bar right, before the game begins.
+  const setupActive = tilt.setup !== null;
+  const tiltCalibrate = tilt.calibrate;
+  useEffect(() => {
+    if (state !== "ready" || !tilt.enabled || !tilt.calibrated || !tilt.seen || setupActive) return;
+    tiltCalibrate();
+    let frame = 0;
+    const tick = () => {
+      setPreviewPush(tiltReadRef.current());
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [state, tilt.enabled, tilt.calibrated, tilt.seen, setupActive, tiltCalibrate]);
   const stoppedRef = useRef(false);
   const submitTimerRef = useRef<number | null>(null);
   const onSubmitRef = useRef(onSubmit);
@@ -189,7 +207,21 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
    * reload, and it has to be asked for from this tap.
    */
   const start = async () => {
-    if (tilt.enabled && tilt.needsPermission && tilt.permission !== "granted") await tilt.enable();
+    setTiltNote(null);
+    let tiltOn = tilt.enabled;
+    if (tiltOn && tilt.needsPermission && tilt.permission !== "granted") tiltOn = await tilt.enable();
+    if (tiltOn) {
+      if (!(await tilt.waitForReading(1500))) {
+        // No readings came: no motion sensor, or access was not given. The buttons still work.
+        setTiltNote("This phone isn't sending any tilt readings, so use the buttons.");
+      } else if (!tilt.calibrated) {
+        // First time holding the phone this way: learn which way is which from a single tip.
+        if (!(await tilt.measure())) {
+          setTiltNote("I couldn't see a clear tip. Try again, or turn tilt off and use the buttons.");
+          return;
+        }
+      }
+    }
     setCount(COUNTDOWN_STEPS);
     setState("countdown");
   };
@@ -289,9 +321,53 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
               <div className="mx-auto mt-3 max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3 text-left">
                 <p className="text-xs font-black text-cyan-200">📱 Tilt to steer</p>
                 <p className="mt-0.5 text-[11px] font-bold text-zinc-400">
-                  Tip your phone left or right to push the marker back: the further you tip it, the harder you push. After you press
-                  Start, hold the phone steady for a moment. The angle you hold it at then counts as straight.
+                  Tip the <strong className="text-zinc-200">right side of the screen down</strong> to push the marker right, and the left
+                  side down to push it left. The further you tip, the harder you push. Hold your phone however you like (upright, flat or
+                  sideways); the first time, you&apos;ll be asked to tip it once so the game learns your hold.
                 </p>
+                {tilt.setup && (
+                  <div className="mt-2 rounded-xl border border-cyan-400/40 bg-cyan-500/10 p-2.5" aria-live="polite">
+                    <p className="text-xs font-black text-cyan-100">
+                      {tilt.setup.phase === "hold" && "Hold your phone steady…"}
+                      {tilt.setup.phase === "tip" && "Now tip the RIGHT side of the screen down"}
+                      {tilt.setup.phase === "done" && "Got it. Tilt is ready ✓"}
+                      {tilt.setup.phase === "failed" && "Couldn't see a clear tip. Press Start to try again."}
+                    </p>
+                    {tilt.setup.phase === "tip" && (
+                      <>
+                        <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-zinc-800" aria-hidden>
+                          <div
+                            className="h-full bg-cyan-400 transition-[width] duration-75"
+                            style={{ width: `${Math.min(100, (tilt.setup.deviation / TILT_SETUP_MIN_DEGREES) * 100)}%` }}
+                          />
+                        </div>
+                        <p className="mt-1 text-[11px] font-bold text-zinc-400">Tip it a good way over and hold it there for a moment.</p>
+                      </>
+                    )}
+                  </div>
+                )}
+                {!tilt.setup && tilt.enabled && tilt.calibrated && tilt.seen && (
+                  <div className="mt-2" aria-hidden>
+                    <p className="text-[11px] font-bold text-zinc-400">Try it: tip the right side down and the bar fills to the right.</p>
+                    <div className="relative mt-1 h-2 w-full overflow-hidden rounded-full bg-zinc-800">
+                      <div
+                        className="absolute inset-y-0 bg-cyan-400"
+                        style={{ left: previewPush < 0 ? `${50 + previewPush * 50}%` : "50%", width: `${Math.abs(previewPush) * 50}%` }}
+                      />
+                      <div className="absolute inset-y-0 left-1/2 w-px bg-zinc-500" />
+                    </div>
+                  </div>
+                )}
+                {tiltNote && <p className="mt-2 text-[11px] font-bold text-amber-300">{tiltNote}</p>}
+                {tilt.enabled && tilt.calibrated && !tilt.setup && (
+                  <button
+                    type="button"
+                    onClick={() => tilt.resetCalibration()}
+                    className="gx-tap mt-2 min-h-[44px] w-full cursor-pointer rounded-xl px-3 text-xs font-bold text-zinc-400 [touch-action:manipulation] hover:text-zinc-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+                  >
+                    Wrong way round? Redo tilt setup
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => (tilt.enabled ? tilt.disable() : void tilt.enable())}
@@ -324,8 +400,14 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
             createPortal(
               <>
                 {state === "ready" && (
-                  <button type="button" onClick={() => void start()} className={confirmClass} autoFocus>
-                    Start bracing
+                  <button
+                    type="button"
+                    onClick={() => void start()}
+                    disabled={tilt.setup !== null && tilt.setup.phase !== "failed"}
+                    className={confirmClass}
+                    autoFocus
+                  >
+                    {tilt.setup && tilt.setup.phase !== "failed" ? "Setting up tilt…" : tilt.enabled && !tilt.calibrated && touchLike ? "Set up tilt & start" : "Start bracing"}
                     <span aria-hidden>→</span>
                   </button>
                 )}
