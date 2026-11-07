@@ -26,6 +26,8 @@ const REDUCED_MOTION_GUST = 0.6;
 const RESULT_MS = 1000;
 /** A long frame (a tab in the background) never moves the marker more than this many seconds at once. */
 const MAX_FRAME_SECONDS = 0.05;
+/** How much of the real wind the practice can use: off, half, three quarters, or the real thing. */
+const PRACTICE_WIND_LEVELS = [0, 0.5, 0.75, 1] as const;
 /** Before the brace starts the player holds the phone steady for 3 short beats; that angle is then counted as straight. */
 const COUNTDOWN_STEPS = 3;
 const COUNTDOWN_STEP_MS = 380;
@@ -99,19 +101,11 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
   const tiltCalibrate = tilt.calibrate;
   const tiltPeek = tilt.peek;
   const [rawTilt, setRawTilt] = useState<{ x: number; y: number } | null>(null);
-  useEffect(() => {
-    if (state !== "ready" || !tilt.enabled || !tilt.seen || setupActive) return;
-    // Once set up, how the phone is held right now counts as straight for this live test. (The player can reset it with a button.)
-    if (tilt.calibrated) tiltCalibrate();
-    let frame = 0;
-    const tick = () => {
-      setRawTilt(tiltPeek());
-      if (tilt.calibrated) setPreviewPush(tiltReadRef.current());
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [state, tilt.enabled, tilt.calibrated, tilt.seen, setupActive, tiltCalibrate, tiltPeek]);
+  // Practice: before the game starts, the real track and marker run live (nothing is scored), driven by the tilt, the buttons or
+  // the keys. The wind can be switched off to check the tilt on its own, then raised to the real strength to feel it.
+  const [windLevel, setWindLevel] = useState<(typeof PRACTICE_WIND_LEVELS)[number]>(0);
+  const [practice, setPractice] = useState<BraceState>(BRACE_START);
+  const [practiceGust, setPracticeGust] = useState(0);
   const stoppedRef = useRef(false);
   const submitTimerRef = useRef<number | null>(null);
   const onSubmitRef = useRef(onSubmit);
@@ -121,6 +115,44 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
 
   const strength = braceStrength(debuff.tier) * (reducedMotion ? REDUCED_MOTION_GUST : 1);
   const { primary, secondary } = debuff.clash ?? { primary: "grip", secondary: "steer" };
+
+  const tiltUsable = tilt.enabled && tilt.seen && tilt.calibrated;
+  useEffect(() => {
+    if (state !== "ready" || setupActive) return;
+    // How the phone is held when practice starts counts as straight. "Set straight here" resets it.
+    if (tiltUsable) tiltCalibrate();
+    let frame = 0;
+    let last = performance.now();
+    let t = 0;
+    let atWall = 0;
+    let s: BraceState = { ...BRACE_START };
+    const windStrength = strength * windLevel;
+    const tick = (now: number) => {
+      const dt = Math.min(MAX_FRAME_SECONDS, (now - last) / 1000);
+      last = now;
+      const held = inputRef.current;
+      const input = held !== 0 ? held : tiltUsable ? tiltReadRef.current() : 0;
+      s = braceStep(s, input, t, phases, windStrength, dt);
+      t += dt;
+      // If the marker is left against a wall for a moment, put it back in the middle so the test keeps going.
+      if (Math.abs(s.x - 0.5) > 0.45) {
+        atWall += dt;
+        if (atWall > 1) {
+          s = { ...BRACE_START };
+          atWall = 0;
+        }
+      } else {
+        atWall = 0;
+      }
+      setPractice(s);
+      setPreviewPush(input);
+      setPracticeGust(windStrength > 0 ? braceGust(t, phases, windStrength) / windStrength : 0);
+      setRawTilt(tiltPeek());
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [state, setupActive, tiltUsable, tiltCalibrate, tiltPeek, strength, windLevel, phases]);
 
   const finish = useCallback((accuracy: number) => {
     if (stoppedRef.current) return;
@@ -174,9 +206,9 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
     []
   );
 
-  // Arrow keys (or A and D) counter-steer, for keyboards.
+  // Arrow keys (or A and D) counter-steer, for keyboards. They work in practice too.
   useEffect(() => {
-    if (state !== "running") return;
+    if (state !== "running" && state !== "ready") return;
     const dirOf = (e: KeyboardEvent): -1 | 1 | 0 =>
       e.key === "ArrowLeft" || e.key === "a" || e.key === "A" ? -1 : e.key === "ArrowRight" || e.key === "d" || e.key === "D" ? 1 : 0;
     const down = (e: KeyboardEvent) => {
@@ -253,7 +285,10 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
     return () => window.clearTimeout(timer);
   }, [state, count, calibrate]);
 
-  const inZoneNow = braceInZone(marker.x);
+  // Before the game the track shows the practice marker; once it starts, the real one.
+  const shownMarker = state === "ready" ? practice : marker;
+  const shownGust = state === "ready" ? practiceGust : gust;
+  const inZoneNow = braceInZone(shownMarker.x);
   const blocked = result === null ? 0 : Math.round(defenceShare(result) * 100);
   const verdict =
     result === null ? "" : `Held ${Math.round(result * 100)}% of the time · blocked ${blocked}% of the debuff`;
@@ -298,25 +333,58 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
               />
               <div
                 className={`absolute top-1/2 h-9 w-9 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 shadow-lg ${
-                  state === "ready" || inZoneNow
+                  inZoneNow
                     ? "border-emerald-200 bg-emerald-400 shadow-[0_0_16px_rgba(52,211,153,0.9)]"
                     : "border-rose-200 bg-rose-500 shadow-[0_0_16px_rgba(244,63,94,0.9)]"
                 }`}
-                style={{ left: `${marker.x * 100}%` }}
+                style={{ left: `${shownMarker.x * 100}%` }}
               />
             </div>
             {/* The wind: which way the next push is coming from, so the player can get ahead of it. */}
             <div className="mt-2 flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-wider text-zinc-400" aria-hidden>
-              <span className={gust < -0.15 ? "text-sky-300" : "text-zinc-700"} style={{ opacity: gust < -0.15 ? Math.min(1, Math.abs(gust)) : 1 }}>
+              <span className={shownGust < -0.15 ? "text-sky-300" : "text-zinc-700"} style={{ opacity: shownGust < -0.15 ? Math.min(1, Math.abs(shownGust)) : 1 }}>
                 ◀ wind
               </span>
               <span className="min-w-14 rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-center text-zinc-200">
-                {state === "done" ? "Done" : `${timeLeft.toFixed(1)}s`}
+                {state === "ready" ? "Practice" : state === "done" ? "Done" : `${timeLeft.toFixed(1)}s`}
               </span>
-              <span className={gust > 0.15 ? "text-sky-300" : "text-zinc-700"} style={{ opacity: gust > 0.15 ? Math.min(1, Math.abs(gust)) : 1 }}>
+              <span className={shownGust > 0.15 ? "text-sky-300" : "text-zinc-700"} style={{ opacity: shownGust > 0.15 ? Math.min(1, Math.abs(shownGust)) : 1 }}>
                 wind ▶
               </span>
             </div>
+            {/* Practice, before the game: the marker above is live and follows your tilt. Nothing here is scored. */}
+            {state === "ready" && (
+              <div className="mx-auto mt-3 max-w-sm rounded-2xl border border-emerald-400/30 bg-emerald-500/5 p-3 text-left">
+                <p className="text-xs font-black text-emerald-200">Practice (not scored)</p>
+                <p className="mt-0.5 text-[11px] font-bold text-zinc-400">
+                  The marker above is live. With the wind off it should follow your tilt exactly: tip the right side of the screen down and it
+                  slides right. Then turn the wind up to the real strength to feel how hard it pushes.
+                </p>
+                <div className="mt-2 flex items-center gap-1.5" role="group" aria-label="Practice wind strength">
+                  <span className="shrink-0 text-[11px] font-black uppercase tracking-wider text-zinc-400">Wind</span>
+                  {PRACTICE_WIND_LEVELS.map((level) => (
+                    <button
+                      key={level}
+                      type="button"
+                      aria-pressed={windLevel === level}
+                      onClick={() => setWindLevel(level)}
+                      className={`gx-tap min-h-[44px] flex-1 cursor-pointer rounded-xl border px-2 text-xs font-black uppercase tracking-wider [touch-action:manipulation] focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+                        windLevel === level
+                          ? "border-emerald-300 bg-emerald-500/25 text-emerald-100"
+                          : "border-zinc-700 bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+                      }`}
+                    >
+                      {level === 0 ? "Off" : level === 1 ? "Real" : `${level * 100}%`}
+                    </button>
+                  ))}
+                </div>
+                {!tiltUsable && touchLike && (
+                  <p className="mt-2 text-[11px] font-bold text-amber-300">
+                    Tilt isn&apos;t ready yet, so the marker won&apos;t move from your phone. Use the Tilt card below to allow it and set it up.
+                  </p>
+                )}
+              </div>
+            )}
             {/* How hard the player is pushing right now, from either the buttons or the tilt of the phone. */}
             {state === "running" && (
               <div className="relative mx-auto mt-2 h-2 w-44 overflow-hidden rounded-full bg-zinc-800" aria-hidden>
