@@ -93,7 +93,7 @@ const TABS: Array<{
     id: "marketplace",
     label: "Marketplace",
     shortLabel: "Market",
-    icon: "🏪",
+    icon: "🏷️",
     badge: ({ listings }) => (listings > 0 ? String(listings) : null),
   },
   {
