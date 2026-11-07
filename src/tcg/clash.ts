@@ -1142,7 +1142,7 @@ export async function completeClashBattleAction(input: {
  * changes show up when it expires.
  */
 const LEADERBOARD_CACHE_SECONDS = 90;
-const leaderboardCacheKey = (limit: number) => `tcg:clash:leaderboard:v1:${limit}`;
+const leaderboardCacheKey = (limit: number) => `tcg:clash:leaderboard:v2:${limit}`;
 
 export async function getDriftClashLeaderboard(
   limit = 25
@@ -1213,7 +1213,7 @@ async function buildDriftClashLeaderboard(
             "customAvatar",
             "image"
           ),
-          redis.hmget<Record<string, unknown>>(clashStatsKey(uid), "wins", "losses", "gameXp", "gameXpBackfilled"),
+          redis.hmget<Record<string, unknown>>(clashStatsKey(uid), "wins", "losses", "gameXp", "gameXpBackfilled", "cupsWon"),
         ]);
 
         const nickname =
@@ -1272,6 +1272,7 @@ async function buildDriftClashLeaderboard(
           clashWins,
           driftXp,
           driftLevel: getGameXpProgress(driftXp).level,
+          cupsWon: Math.max(0, Math.trunc(Number(clashHash?.cupsWon) || 0)),
           topCard: best
             ? {
                 carName: best.name,
@@ -1283,7 +1284,7 @@ async function buildDriftClashLeaderboard(
       })
     );
 
-    // The board can be sorted four ways, so keep the top drivers of each (someone with little power can still lead on Drift XP).
+    // The board can be sorted five ways, so keep the top drivers of each (someone with little power can still lead on Drift XP).
     const byPower = (a: DriftClashLeaderboardEntry, b: DriftClashLeaderboardEntry) => {
       if (b.collectorPower !== a.collectorPower) return b.collectorPower - a.collectorPower;
       if (b.mythicCount !== a.mythicCount) return b.mythicCount - a.mythicCount;
@@ -1293,6 +1294,7 @@ async function buildDriftClashLeaderboard(
       byPower,
       (a, b) => b.mythicCount - a.mythicCount || b.legendCount - a.legendCount || byPower(a, b),
       (a, b) => b.clashWins - a.clashWins || byPower(a, b),
+      (a, b) => b.cupsWon - a.cupsWon || b.driftXp - a.driftXp || byPower(a, b),
       (a, b) => b.driftXp - a.driftXp || b.clashWins - a.clashWins || byPower(a, b),
     ];
     const keep = new Map<string, DriftClashLeaderboardEntry>();

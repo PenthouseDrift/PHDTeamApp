@@ -27,6 +27,8 @@ export const CAMPAIGN_ROUNDS: CampaignRoundSpec[] = [
 export const CARS_TO_PICK = 3;
 /** How many random cars from the player's deck are dealt for them to choose those three from. */
 export const OFFER_SIZE = 6;
+/** The player picks this many Crew cards from the six dealt, the same way as the cars. */
+export const CREW_TO_PICK = 3;
 /**
  * A member needs at least this many bronze car cards to enter the cup. It keeps the deck from being emptied of
  * everything but a few good cars before entering.
@@ -44,6 +46,12 @@ export const OFFER_TIER_WEIGHTS = [40, 30, 20, 10] as const;
  * withdrawn), since every cup is a new entry.
  */
 export const REROLLS_PER_CUP = 3;
+
+/**
+ * How many times a cup's battle can be interrupted (the page closed or reloaded mid-battle) and picked up again from the
+ * start of that round. Past this, leaving mid-battle counts as a loss again, so a round can't be redone for free any number of times.
+ */
+export const MAX_INTERRUPTIONS = 3;
 
 /** How many cars each rival brings to choose its three from. */
 export const RIVAL_POOL_SIZE = 6;
@@ -96,3 +104,17 @@ export function prizeFor(fee: number, wins: number): number {
   const w = Math.min(PRIZE_MULTIPLIERS.length - 1, Math.max(0, Math.trunc(wins)));
   return Math.round(Math.max(0, fee) * PRIZE_MULTIPLIERS[w]);
 }
+
+/**
+ * What an instant repair costs in P-Credits, for a broken car when the deck has no Maintenance kit that fully repairs it.
+ * It fully repairs the car at once: the fault is cleared and the car goes back to full durability.
+ */
+export const INSTANT_REPAIR_COST = 40;
+/** The durability a paid instant repair gives: 10 battles, the most a car can have. */
+export const INSTANT_REPAIR_BATTLES = 10;
+
+/**
+ * The fastest a battle can be reported after it was started. The battle is played in the browser, so this only turns away
+ * results sent by a script the moment a battle opens. It is kept well under the time three corners really take.
+ */
+export const MIN_BATTLE_MS = 12_000;

@@ -10,7 +10,7 @@ import {
   FINALE_STATS,
   FINALE_STAT_LABEL,
   allocationTotal,
-  proportionalAllocation,
+  emptyAllocation,
   timingAccuracy,
   timingMaxPoints,
   timingPassSeconds,
@@ -173,8 +173,8 @@ function StatDuel({ playerStats, onSubmit, footerEl }: { playerStats: CornerFina
 // ── 2. Setup Allocation ───────────────────────────────────────────────────
 
 function Allocation({ weights, onSubmit, footerEl }: { weights: FinaleWeights; onSubmit: (c: FinaleChoice) => void; footerEl: HTMLDivElement | null }) {
-  // Starts spread in proportion to what each judge is worth; change it however you like.
-  const [alloc, setAlloc] = useState<FinaleAllocation>(() => proportionalAllocation(weights));
+  // Starts with nothing spent, so all of the pool is there to hand out. The setup can only be locked in once every point is spent.
+  const [alloc, setAlloc] = useState<FinaleAllocation>(() => emptyAllocation());
   const left = ALLOCATION_POOL - allocationTotal(alloc);
   const biggest = Math.max(...FINALE_STATS.map((s) => weights[s]));
 
@@ -240,13 +240,15 @@ function Allocation({ weights, onSubmit, footerEl }: { weights: FinaleWeights; o
       <Pinned footerEl={footerEl}>
         <button
           type="button"
+          disabled={left > 0}
           onClick={() => {
+            if (left > 0) return;
             buzz(15);
             onSubmit({ mode: "allocation", allocation: alloc, weights });
           }}
           className={confirmClass}
         >
-          {left > 0 ? `Lock in setup (${left} unspent)` : "Lock in setup"}
+          {left > 0 ? `Spend ${left} more point${left === 1 ? "" : "s"} to lock in` : "Lock in setup"}
           <span aria-hidden>→</span>
         </button>
       </Pinned>

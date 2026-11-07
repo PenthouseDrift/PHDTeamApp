@@ -11,8 +11,19 @@ import type { EntryChoice } from "../types";
 
 const card = "rounded-2xl border border-zinc-800 bg-zinc-900 p-3.5 text-zinc-100 sm:p-5";
 
-export function EntryStep({ entry, onEntry, pCredits }: { entry: EntryChoice; onEntry: (choice: EntryChoice) => void; pCredits: number }) {
-  const options: EntryChoice[] = ["test", ...ENTRY_FEES];
+export function EntryStep({
+  entry,
+  onEntry,
+  pCredits,
+  allowTest = false,
+}: {
+  entry: EntryChoice;
+  onEntry: (choice: EntryChoice) => void;
+  pCredits: number;
+  /** The free test cup, for admins only. */
+  allowTest?: boolean;
+}) {
+  const options: EntryChoice[] = allowTest ? ["test", ...ENTRY_FEES] : [...ENTRY_FEES];
   const fee = entry === "test" ? 0 : Number(entry);
   const top = fee > 0 ? prizeFor(fee, CAMPAIGN_ROUNDS.length) : 0;
 

@@ -172,6 +172,8 @@ export interface DriftClashLeaderboardEntry {
   /** Drift XP from playing games, and the Drift level it makes (see game-xp.ts). */
   driftXp: number;
   driftLevel: number;
+  /** Drift Campaign cups won (all six rounds), not counting free test cups. */
+  cupsWon: number;
   topCard: {
     carName: string;
     tier: FullArtTier;

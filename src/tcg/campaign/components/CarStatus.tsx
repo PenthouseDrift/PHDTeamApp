@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { MemberCard } from "@/lib/card-roll";
-import { isMaintenanceKit, outlookOf } from "../garage";
+import { INSTANT_REPAIR_BATTLES, INSTANT_REPAIR_COST } from "../config";
+import { durabilityAfterService, isMaintenanceKit, outlookOf, serviceGainOf } from "../garage";
 
 /**
  * How the campaign shows a car that will not last. A yellow caution tape runs across the card ("Needs repair"), and a
@@ -42,8 +43,11 @@ export function CarFooter({
   deck,
   disabled,
   working,
+  pCredits,
   onRepair,
   onService,
+  onBuy,
+  onTopUp,
 }: {
   car: MemberCard;
   /** Battles the cup could still need from this car. */
@@ -52,8 +56,14 @@ export function CarFooter({
   deck: MemberCard[];
   disabled: boolean;
   working: boolean;
+  /** The member's P-Credit balance, for the instant repair. */
+  pCredits: number;
   onRepair: (kitId: string) => void;
   onService: (kitId: string) => void;
+  /** Pay for an instant repair of this broken car. */
+  onBuy: () => void;
+  /** Go to the page where P-Credits are bought. Leave out to hide the link. */
+  onTopUp?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const outlook = outlookOf(car, ahead);
@@ -62,15 +72,22 @@ export function CarFooter({
 
   // Kits that can be used, one row per kind of kit with how many are owned.
   const rows = useMemo(() => {
-    const usable = deck.filter(isMaintenanceKit).filter((k) => !broken || (car.fault ? k.targetFault === car.fault.type : false));
+    // A broken car cannot race until it is fully repaired, so only kits of its kind that finish the job are offered.
+    const usable = deck.filter(isMaintenanceKit).filter((k) => {
+      if (!broken) return true;
+      if (!car.fault || k.targetFault !== car.fault.type) return false;
+      return (k.repairBattles ?? 1) >= car.fault.battlesRemaining;
+    });
     const byName = new Map<string, { kit: MemberCard; count: number }>();
     for (const kit of usable) {
-      const seen = byName.get(kit.name);
+      const key = `${kit.name}|${kit.repairBattles ?? 1}`;
+      const seen = byName.get(key);
       if (seen) seen.count += 1;
-      else byName.set(kit.name, { kit, count: 1 });
+      else byName.set(key, { kit, count: 1 });
     }
-    return [...byName.values()];
-  }, [deck, broken, car.fault]);
+    // The kit that does the most comes first.
+    return [...byName.values()].sort((a, b) => serviceGainOf(b.kit, ahead) - serviceGainOf(a.kit, ahead));
+  }, [deck, broken, car.fault, ahead]);
 
   return (
     <div className="space-y-1.5 text-center">
@@ -91,8 +108,22 @@ export function CarFooter({
         <KitDialog
           car={car}
           ahead={ahead}
+          left={outlook.left ?? 0}
           broken={broken}
           rows={rows}
+          pCredits={pCredits}
+          onBuy={() => {
+            setOpen(false);
+            onBuy();
+          }}
+          onTopUp={
+            onTopUp
+              ? () => {
+                  setOpen(false);
+                  onTopUp();
+                }
+              : undefined
+          }
           onClose={() => setOpen(false)}
           onPick={(kitId) => {
             setOpen(false);
@@ -108,15 +139,25 @@ export function CarFooter({
 function KitDialog({
   car,
   ahead,
+  left,
   broken,
   rows,
+  pCredits,
+  onBuy,
+  onTopUp,
   onClose,
   onPick,
 }: {
   car: MemberCard;
   ahead: number;
+  /** Battles the car has left now. */
+  left: number;
+
   broken: boolean;
   rows: Array<{ kit: MemberCard; count: number }>;
+  pCredits: number;
+  onBuy: () => void;
+  onTopUp?: () => void;
   onClose: () => void;
   onPick: (kitId: string) => void;
 }) {
@@ -149,8 +190,8 @@ function KitDialog({
             <h4 className="text-base font-black">{car.name}</h4>
             <p className="mt-0.5 text-xs text-zinc-400">
               {broken
-                ? `Broken down${car.fault ? ` (${car.fault.name})` : ""}. Only a matching kit will fix it.`
-                : `It will not last the ${ahead} battles ahead. Any kit tops it up to last them all.`}
+                ? `Broken down${car.fault ? ` (${car.fault.name})` : ""}. Only a matching kit that finishes the repair is shown.`
+                : `It has ${left} of the ${ahead} battles ahead. Each kit adds the battles shown, up to ${ahead}.`}
             </p>
           </div>
           <button
@@ -163,14 +204,43 @@ function KitDialog({
           </button>
         </div>
 
-        {rows.length === 0 ? (
+        {rows.length === 0 && broken ? (
+          <div className="mt-4 space-y-3">
+            <p className="rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm text-zinc-300">
+              You have no kit that fully repairs this fault. You can pay for an instant repair, or get a kit from the Pack Store.
+            </p>
+            <button
+              type="button"
+              disabled={pCredits < INSTANT_REPAIR_COST}
+              onClick={onBuy}
+              className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border border-amber-500/60 bg-amber-500/10 px-3 py-2 text-left transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <span className="min-w-0">
+                <span className="block text-sm font-black">Instant repair</span>
+                <span className="block text-[11px] text-zinc-400">
+                  {pCredits < INSTANT_REPAIR_COST ? `You have 🪙 ${pCredits.toLocaleString()}, so you need more P-Credits.` : `Fully repairs the car now and sets its durability to ${INSTANT_REPAIR_BATTLES} battles.`}
+                </span>
+              </span>
+              <span className="shrink-0 rounded-full bg-amber-500 px-2.5 py-0.5 text-xs font-black text-black">🪙 {INSTANT_REPAIR_COST}</span>
+            </button>
+            {pCredits < INSTANT_REPAIR_COST && onTopUp && (
+              <button
+                type="button"
+                onClick={onTopUp}
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-amber-500 px-3 text-sm font-black uppercase tracking-wide text-black shadow transition hover:bg-amber-400"
+              >
+                + Top up P-Credits
+              </button>
+            )}
+          </div>
+        ) : rows.length === 0 ? (
           <p className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm text-zinc-300">
-            {broken ? "You have no kit that matches this fault." : "You have no Maintenance kits in your deck."} Get one from the Pack Store.
+            You have no Maintenance kits in your deck. Get one from the Pack Store.
           </p>
         ) : (
           <ul className="mt-4 space-y-2">
             {rows.map(({ kit, count }) => (
-              <li key={kit.name}>
+              <li key={`${kit.name}|${kit.repairBattles ?? 1}`}>
                 <button
                   type="button"
                   onClick={() => onPick(kit.id)}
@@ -179,7 +249,9 @@ function KitDialog({
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-black">{kit.name}</span>
                     <span className="block text-[11px] text-zinc-400">
-                      {broken ? (kit.repairBattles ? `Takes ${kit.repairBattles} battles off the repair` : "Repairs the fault") : `Lasts ${ahead} battles`}
+                      {broken
+                        ? "Fully repairs the fault"
+                        : `+${serviceGainOf(kit, ahead)} battle${serviceGainOf(kit, ahead) === 1 ? "" : "s"}: ${left} → ${durabilityAfterService(left, kit, ahead)} of ${ahead}`}
                     </span>
                   </span>
                   <span className="shrink-0 rounded-full bg-zinc-800 px-2 py-0.5 text-xs font-black text-yellow-300">×{count}</span>

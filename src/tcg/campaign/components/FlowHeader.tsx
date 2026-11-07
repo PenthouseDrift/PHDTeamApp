@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 
-const STEPS = ["Entry", "Cars", "Cup"];
+const STEPS = ["Entry", "Cars", "Crew", "Cup"];
 
 /**
  * The campaign's slim top bar: title, one line saying what to do now, the member's balance, and (while entering) a
- * three-step tracker. It is one row on a phone so the content gets the screen.
+ * four-step tracker. It is one row on a phone so the content gets the screen.
  */
 export function FlowHeader({
   subtitle,
@@ -14,8 +14,8 @@ export function FlowHeader({
 }: {
   subtitle: string;
   balance: number;
-  /** 0 = entry, 1 = cars, 2 = the cup. Leave out to hide the tracker. */
-  step?: 0 | 1 | 2;
+  /** 0 = entry, 1 = cars, 2 = crew, 3 = the cup. Leave out to hide the tracker. */
+  step?: 0 | 1 | 2 | 3;
   right?: ReactNode;
 }) {
   return (
@@ -34,7 +34,7 @@ export function FlowHeader({
         </span>
       </header>
       {step !== undefined && (
-        <ol className="grid grid-cols-3 gap-1.5 px-0.5" aria-label="Progress">
+        <ol className="grid grid-cols-4 gap-1.5 px-0.5" aria-label="Progress">
           {STEPS.map((label, i) => (
             <li key={label} aria-current={i === step ? "step" : undefined} className="space-y-1">
               <span className={`block h-1.5 rounded-full ${i < step ? "bg-emerald-500" : i === step ? "bg-amber-400" : "bg-zinc-700"}`} />

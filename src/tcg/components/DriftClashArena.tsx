@@ -1641,6 +1641,9 @@ export function DriftClashArena({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Drift Campaign: the cars and Crew were already chosen before the cup, so the lineup screens are skipped. Once the track has
+  // landed, the screen stays until the player taps "Start" in the footer (see the footer button for track_roulette).
+
   function handleRequestReplayChallenge(challenge: TandemClashChallenge) {
     if (challenge.entryCostPCredits > 0) {
       setChallengeReplayConfirm(challenge);
@@ -2499,6 +2502,14 @@ export function DriftClashArena({
       );
     }
 
+    if (phase === "track_roulette" && trackLockedIn && campaign) {
+      // The cars and Crew were chosen before the cup, so this goes straight to the first corner and never to the lineup screens.
+      return (
+        <button type="button" onClick={handleStartBattleFromLineup} className={`${footerPrimaryCls} w-full`}>
+          <span>🏁 Start {campaign.roundLabel} →</span>
+        </button>
+      );
+    }
     if (phase === "track_roulette" && trackLockedIn) {
       return (
         <button type="button" onClick={() => setPhase("lineup")} className={`${footerPrimaryCls} w-full`}>
@@ -4132,20 +4143,21 @@ export function DriftClashArena({
 
                         {/* Selected Car Telemetry & Deploy Action Dock */}
                         <div className="rounded-3xl border border-zinc-800 bg-zinc-950/90 p-4 sm:p-5 max-w-xl mx-auto shadow-2xl backdrop-blur-md space-y-3">
-                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
-                            <div>
-                              <span className="text-[10px] font-black uppercase tracking-wider text-amber-400">
+                          <div className="flex items-center justify-between gap-3 border-b border-zinc-800/80 pb-3">
+                            {/* min-w-0 lets a long name shrink to an ellipsis instead of pushing the rating onto the next line */}
+                            <div className="min-w-0 flex-1">
+                              <span className="block text-[10px] font-black uppercase tracking-wider text-amber-400">
                                 SELECTED DRIFT MACHINE
                               </span>
-                              <h4 className="text-base sm:text-lg font-black text-white truncate">
+                              <h4 className="truncate text-base sm:text-lg font-black text-white" title={activeCar.name}>
                                 {activeCar.name}
                               </h4>
-                              <p className="text-[11px] font-bold text-zinc-400">
+                              <p className="truncate text-[11px] font-bold text-zinc-400">
                                 Driver: {activeCar.driver || "Team Pilot"} · {activeCar.team || "Team PHD"}
                               </p>
                             </div>
 
-                            <div className="text-right">
+                            <div className="shrink-0 whitespace-nowrap text-right">
                               <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400">
                                 SECTOR RATING
                               </span>

@@ -40,7 +40,7 @@ const TourTab = dynamic(() => import("@/tcg/tour/components/TourTab").then((m) =
   loading: () => <TabSkeleton label="Loading Tandem Tour" />,
 });
 
-// Drift Campaign (admin only for now) is loaded the same way.
+// Drift Campaign is loaded the same way.
 const CampaignTab = dynamic(() => import("@/tcg/campaign/components/CampaignTab").then((m) => m.CampaignTab), {
   ssr: false,
   loading: () => <TabSkeleton label="Loading Drift Campaign" />,
@@ -220,7 +220,7 @@ export function TcgApp({
   // The same sections and badges as the header panel, for the bar fixed to the bottom of a phone screen.
   const visibleTabs = TABS;
   // A Tour or Campaign link the member has no access to lands on the Play page instead of an empty screen.
-  const view: TcgTab = (tab === "tour" && !hasTourAccess) || (tab === "campaign" && !isAdmin) ? "play" : tab;
+  const view: TcgTab = tab === "tour" && !hasTourAccess ? "play" : tab;
   const navActive: TcgTab = PLAY_SECTIONS.includes(view) ? "play" : view;
 
   // The rival for Tandem Clash is picked when that screen opens, not on every page load: picking one reads and scores a lot of
@@ -285,35 +285,27 @@ export function TcgApp({
             onClick={() => setHudOpen((open) => !open)}
             aria-expanded={hudOpen}
             aria-controls="gx-hud-details"
-            aria-label={`Level ${progress.level}, ${progress.rankTitle}. ${hudOpen ? "Hide" : "Show"} your stats`}
+            aria-label={`Drift level ${drift.level}, ${progress.rankTitle}. ${hudOpen ? "Hide" : "Show"} your stats`}
             className="gx-tap flex min-h-12 min-w-0 flex-1 items-center gap-2.5 rounded-xl text-left sm:pointer-events-none"
           >
-            <span className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-orange-600 text-black shadow-md shadow-amber-500/20">
-              <span className="text-[10px] font-black uppercase leading-none opacity-80">LV</span>
-              <span className="text-base font-black leading-tight">{progress.level}</span>
+            <span className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-br from-emerald-300 via-emerald-400 to-cyan-500 text-black shadow-md shadow-emerald-500/20">
+              <span className="text-[9px] font-black uppercase leading-none opacity-80">Drift</span>
+              <span className="text-base font-black leading-tight">{drift.level}</span>
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-black uppercase tracking-wide text-amber-400">
                 {progress.rankIcon} {progress.rankTitle}
               </span>
-              <span className="mt-1 flex items-center gap-2">
-                <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-zinc-800">
-                  <span className="gx-grow block h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500" style={{ width: `${progress.progressPct}%` }} />
-                </span>
-                <span className="shrink-0 text-[11px] font-bold tabular-nums text-zinc-400">
-                  {progress.xp.toLocaleString()}/{progress.nextLevelXp.toLocaleString()} XP
-                </span>
-              </span>
-              {/* Drift XP: earned from playing games (margin of wins, clean sweeps, challenges, campaign rounds) */}
+              {/* Drift XP comes first: earned from playing games (margin of wins, clean sweeps, challenges, campaign rounds) */}
               <span className="mt-1 flex items-center gap-2" role="img" aria-label={`Drift level ${drift.level}, ${drift.intoLevel} of ${drift.forLevel} XP`}>
-                <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-zinc-800">
+                <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-zinc-800">
                   <span
-                    className="block h-full rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400 transition-[width] duration-700"
+                    className="gx-grow block h-full rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400 transition-[width] duration-700"
                     style={{ width: `${drift.progressPct}%` }}
                   />
                 </span>
-                <span className="shrink-0 text-[10px] font-bold uppercase tabular-nums text-emerald-300">
-                  Drift Lv {drift.level} · {drift.intoLevel}/{drift.forLevel}
+                <span className="shrink-0 text-[11px] font-bold tabular-nums text-emerald-300">
+                  {drift.intoLevel.toLocaleString()}/{drift.forLevel.toLocaleString()} XP
                 </span>
               </span>
             </span>
@@ -449,7 +441,6 @@ export function TcgApp({
           liveChallenges={initialChallenges.filter((c) => !initialCompletedChallengeIds.includes(c.id)).length}
           hasTourAccess={hasTourAccess}
           tourAdminPreview={tourAdminPreview}
-          isAdmin={isAdmin}
         />
       )}
 
@@ -525,12 +516,14 @@ export function TcgApp({
       )}
 
       {view === "campaign" && <CampaignTab
+          isAdmin={isAdmin}
           onBack={() => selectTab("play")}
           onGameXp={(total) => setClashStats((prev) => ({ ...prev, gameXp: total }))}
           cards={cards}
           pCredits={pCredits}
           onPCreditsChange={setPCredits}
           onKitUsed={(kitId) => setCards((prev) => prev.filter((c) => c.id !== kitId))}
+          onOpenPCreditsTab={() => selectTab("p-credits")}
           onCardsWorn={(worn) => {
             const byId = new Map(worn.map((c) => [c.id, c]));
             setCards((prev) => prev.map((c) => byId.get(c.id) ?? c));

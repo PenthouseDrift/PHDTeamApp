@@ -66,6 +66,47 @@ function faceOf(art: ArtEntry) {
   };
 }
 
+const TIER_RANK: Record<string, number> = { bronze: 0, silver: 1, gold: 2, legend: 3, mythic: 4 };
+
+/**
+ * Give each rival car a picture from a card of its own rarity. Pictures are drawn in a look for their rarity, so a Silver
+ * rival with a Legend picture looks wrong. The stats are made first (they have to be, to be calibrated), so the pictures are
+ * matched to the finished cars. A car takes an unused picture of its rarity, or the nearest rarity (the lower one on a tie)
+ * when there are none left. Pictures in `avoid` (the player's, and rivals already faced) are not used. The picture does not
+ * affect scoring, so this never changes how hard a rival is.
+ */
+export function matchFacesToTiers(cars: MemberCard[], pool: ArtEntry[], avoid: Set<string>, rng: Rng): MemberCard[] {
+  const tiered = pool.filter((a) => a.tier && a.tier in TIER_RANK);
+  if (tiered.length === 0) return cars;
+  const taken = new Set(avoid);
+  const used = new Set<string>();
+  return cars.map((car) => {
+    const want = TIER_RANK[car.tier] ?? 0;
+    const sameTier = tiered.filter((a) => TIER_RANK[a.tier as string] === want);
+    // The car's own rarity always comes first: an unused picture of it, then (when they have all been used) one used by
+    // a rival before, then one already on this roster. Another rarity is only used if there are no pictures of this one at all.
+    let best = sameTier.filter((a) => !taken.has(a.key));
+    if (best.length === 0) best = sameTier.filter((a) => !used.has(a.key));
+    if (best.length === 0) best = sameTier;
+    if (best.length === 0) {
+      let bestDistance = Infinity;
+      for (const art of tiered) {
+        const rank = TIER_RANK[art.tier as string];
+        const distance = Math.abs(rank - want) + (rank > want ? 0.1 : 0);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = [art];
+        } else if (distance === bestDistance) best.push(art);
+      }
+    }
+    if (best.length === 0) return car;
+    const pick = best[Math.floor(rng() * best.length)];
+    taken.add(pick.key);
+    used.add(pick.key);
+    return { ...car, ...faceOf(pick) };
+  });
+}
+
 export interface PlayerSide {
   cars: MemberCard[];
   crew: MemberCard[];

@@ -7,6 +7,8 @@ import type { CurvePoint } from "./calibrate";
 /** A card face (picture and name) taken from the art pool. Stats are generated separately. */
 export interface ArtEntry {
   key: string;
+  /** The rarity of the card this picture came from. Pictures are drawn in a look for their rarity, so a rival car's picture should match its own rarity. */
+  tier?: FullArtTier;
   name: string;
   driver: string;
   team: string;
@@ -107,6 +109,10 @@ export interface CampaignRun {
   currentRound: number;
   /** A battle has been started and no result has come back. */
   battleStarted: boolean;
+  /** When the open battle was started (server time), used to turn away results reported impossibly fast. Missing on older cups. */
+  battleStartedAt?: number;
+  /** How many times a battle was cut off (page closed or reloaded) and the round picked up again. Missing on older cups. */
+  interruptions?: number;
   results: CampaignRoundResult[];
   /** Missing on cups saved before entry fees existed, which count as free test cups. */
   entry?: CampaignEntry;
@@ -142,6 +148,8 @@ export interface CampaignView {
   rounds: CampaignRoundView[];
   currentRound: number;
   battleStarted: boolean;
+  /** How many more times a cut-off battle can be picked up again before leaving counts as a loss. */
+  resumesLeft?: number;
   /** Set after a result that ended the run by a forfeit, so the screen can say why. */
   note?: string;
   entry: CampaignEntry;
@@ -200,10 +208,20 @@ export interface CampaignOffer {
   rerollsLeft: number;
 }
 
-/** A paid entry waiting for its cars to be picked: what was paid, and the six dealt. */
+/** The six Crew cards dealt to choose three from, the same way as the cars. Starter loaners fill in when you own too few. */
+export interface CampaignCrewOffer {
+  crew: MemberCard[];
+  /** The rarity each slot rolled, in the same order as `crew`. */
+  rolls: RolledTier[];
+  /** Extra deals left for the Crew cards. */
+  rerollsLeft: number;
+}
+
+/** A paid entry waiting for its cars and Crew to be picked: what was paid, and the six cars and six Crew cards dealt. */
 export interface CampaignDraft {
   entry: CampaignEntry;
   offer: CampaignOffer;
+  crewOffer: CampaignCrewOffer;
 }
 
 /** What the tab needs when it opens: the current cup (if any) and a paid entry that has not started (if any). */

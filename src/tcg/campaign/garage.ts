@@ -53,3 +53,14 @@ export function outlookOf(car: MemberCard, ahead: number): Outlook {
   if (left === null) return { kind: "unknown", left, ahead };
   return { kind: left >= ahead ? "ready" : "short", left, ahead };
 }
+
+/** Battles a Maintenance kit adds to a car's durability when it services a car that is not broken. A kit of 5 or more is a full service. */
+export function serviceGainOf(kit: MemberCard, ahead: number): number {
+  const power = kit.repairBattles ?? 1;
+  return power >= 5 ? ahead : Math.max(1, power);
+}
+
+/** The durability a car has after a kit services it: its battles left plus the kit's, never more than the battles ahead. */
+export function durabilityAfterService(left: number, kit: MemberCard, ahead: number): number {
+  return Math.min(ahead, left + serviceGainOf(kit, ahead));
+}

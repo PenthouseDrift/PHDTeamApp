@@ -30,3 +30,11 @@ export async function ensureGameXpBackfilled(
   const missing = Math.max(0, estimatedXpForPastGames(current.wins, current.losses) - current.gameXp);
   return missing > 0 ? addGameXp(userId, missing) : current.gameXp;
 }
+
+/**
+ * Count one more tournament (Drift Campaign cup) won by a driver, for the Hall of Fame. Kept next to the wins and Drift XP.
+ * The add is atomic. The caller makes sure it is only called once per cup. Returns the new total.
+ */
+export async function addCupWon(userId: string): Promise<number> {
+  return Number(await redis.hincrby(clashStatsKey(userId), "cupsWon", 1)) || 1;
+}

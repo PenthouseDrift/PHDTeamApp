@@ -5,10 +5,11 @@ import { rarityLabel } from "@/lib/card-roll";
 import type { DriftClashLeaderboardEntry } from "@/tcg/types";
 import { useBottomChromeHeight } from "@/tcg/ui/useBottomChrome";
 
-type LeaderboardSort = "power" | "mythics" | "wins" | "drift";
+type LeaderboardSort = "power" | "mythics" | "wins" | "drift" | "cups";
 
 const SORT_TABS: { id: LeaderboardSort; label: string; icon: string }[] = [
   { id: "drift", label: "Drift", icon: "🏁" },
+  { id: "cups", label: "Cups", icon: "🏆" },
   { id: "power", label: "Power", icon: "⚡" },
   { id: "mythics", label: "Rare cards", icon: "💎" },
   { id: "wins", label: "Wins", icon: "⚔️" },
@@ -31,6 +32,11 @@ function statsFor(entry: DriftClashLeaderboardEntry): Record<LeaderboardSort, { 
       label: "Clash wins",
       value: `⚔️ ${entry.clashWins.toLocaleString()}`,
       tone: "text-emerald-600 dark:text-emerald-400",
+    },
+    cups: {
+      label: "Tournaments won",
+      value: `🏆 ${(entry.cupsWon ?? 0).toLocaleString()}`,
+      tone: "text-yellow-600 dark:text-yellow-400",
     },
     drift: {
       label: "Drift level",
@@ -116,6 +122,11 @@ export function DriftClashLeaderboard({
         if (b.clashWins !== a.clashWins) return b.clashWins - a.clashWins;
         return b.collectorPower - a.collectorPower;
       }
+      if (sortBy === "cups") {
+        if ((b.cupsWon ?? 0) !== (a.cupsWon ?? 0)) return (b.cupsWon ?? 0) - (a.cupsWon ?? 0);
+        if (b.driftXp !== a.driftXp) return b.driftXp - a.driftXp;
+        return b.collectorPower - a.collectorPower;
+      }
       if (sortBy === "drift") {
         if (b.driftXp !== a.driftXp) return b.driftXp - a.driftXp;
         if (b.clashWins !== a.clashWins) return b.clashWins - a.clashWins;
@@ -147,7 +158,7 @@ export function DriftClashLeaderboard({
         </span>
         <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-100 sm:text-2xl">🏆 DriftClash Hall of Fame</h2>
         <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          Live rankings by Drift level, deck power, Mythic &amp; Legend pulls and Tandem Clash wins.
+          Live rankings by Drift level, tournaments won, deck power, Mythic &amp; Legend pulls and Tandem Clash wins.
         </p>
       </section>
 
@@ -155,7 +166,7 @@ export function DriftClashLeaderboard({
       <div
         role="group"
         aria-label="Rank collectors by"
-        className="sticky gx-sticky-top z-[35] grid grid-cols-4 gap-1.5 rounded-2xl border border-zinc-800 bg-zinc-950/95 p-1.5 shadow-lg backdrop-blur"
+        className="sticky gx-sticky-top z-[35] grid grid-cols-5 gap-1 rounded-2xl border border-zinc-800 bg-zinc-950/95 p-1.5 shadow-lg backdrop-blur"
       >
         {SORT_TABS.map((tab) => {
           const active = sortBy === tab.id;
@@ -272,7 +283,7 @@ export function DriftClashLeaderboard({
 
                   {open && (
                     <div id={panelId} className="space-y-2.5 border-t border-zinc-200/70 px-3 pb-3 pt-3 dark:border-zinc-800">
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                         {SORT_TABS.map((t) => (
                           <div
                             key={t.id}

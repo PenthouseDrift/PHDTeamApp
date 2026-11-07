@@ -118,7 +118,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
   // ?tab=clash opens Tandem Clash itself. The Play page (?tab=play) lists it with the other game modes.
   const requestedTab = params.tab as TcgTab | undefined;
   const initialTab: TcgTab =
-    requestedTab && VALID_TABS.includes(requestedTab) && (requestedTab !== "campaign" || session.user.role === "admin")
+    requestedTab && VALID_TABS.includes(requestedTab)
       ? requestedTab
       : checkoutConfirmed
         ? "p-credits"

@@ -30,7 +30,6 @@ export function PlayHub({
   liveChallenges,
   hasTourAccess,
   tourAdminPreview,
-  isAdmin,
 }: {
   onSelect: (mode: PlayMode) => void;
   wins: number;
@@ -42,7 +41,6 @@ export function PlayHub({
   hasTourAccess: boolean;
   /** Tour is only visible because the member is an admin; it is not open to members yet. */
   tourAdminPreview: boolean;
-  isAdmin: boolean;
 }) {
   const modes: ModeCard[] = [
     {
@@ -80,18 +78,16 @@ export function PlayHub({
     });
   }
 
-  if (isAdmin) {
-    modes.push({
-      mode: "campaign",
-      icon: "🏅",
-      title: "Drift Campaign",
-      blurb: "A six round knockout cup. Beat one driver per round to be champion.",
-      tag: "Admin preview",
-      cta: "Open Campaign",
-      surface: "border-emerald-500/40 from-emerald-950/60 via-zinc-950 to-black",
-      ctaCls: "bg-emerald-500 text-black",
-    });
-  }
+  modes.push({
+    mode: "campaign",
+    icon: "🏅",
+    title: "Drift Campaign",
+    blurb: "A six round knockout cup. Beat one driver per round to be champion.",
+    tag: "New",
+    cta: "Open Campaign",
+    surface: "border-emerald-500/40 from-emerald-950/60 via-zinc-950 to-black",
+    ctaCls: "bg-emerald-500 text-black",
+  });
 
   const [primary, ...others] = modes;
 

@@ -38,11 +38,6 @@ export function NextUpCard({
         <div className="min-w-0 flex-1">
           <p className="truncate text-lg font-black leading-tight">{round.driverName}</p>
           <p className="truncate text-xs text-blue-100/80">{round.teamName}</p>
-          {round.rosterTier && (
-            <p className="mt-1 inline-block rounded-full bg-black/30 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-blue-100">
-              {round.rosterTier} cars
-            </p>
-          )}
         </div>
         {prize && (
           <div className="shrink-0 rounded-xl bg-black/30 px-2.5 py-1.5 text-right">

@@ -165,14 +165,6 @@ export function Bracket({
                     gold={spec.round === CAMPAIGN_ROUNDS.length}
                   />
                 </div>
-                {r?.rosterTier && (
-                  <p
-                    className="absolute text-center text-[10px] font-bold uppercase tracking-wider text-blue-200/80"
-                    style={{ left: `${left}rem`, top: `${top + PILL_H + MATCH_GAP + PILL_H + 0.1}rem`, width: `${PILL_W}rem` }}
-                  >
-                    {r.rosterTier} cars
-                  </p>
-                )}
                 {/* The bracket line joining the two pills, and the winner's line out of its middle. */}
                 <div
                   className={`absolute border-y-2 border-r-2 ${lineBorder}`}
@@ -252,9 +244,6 @@ export function Bracket({
                       gold={spec.round === CAMPAIGN_ROUNDS.length}
                     />
                   </div>
-                  {r?.rosterTier && (
-                    <p className="mt-1 text-right text-[10px] font-bold uppercase tracking-wider text-blue-200/80">{r.rosterTier} cars</p>
-                  )}
                 </div>
               </li>
             );
@@ -278,7 +267,7 @@ export function Bracket({
       <ol className="sr-only">
         {stages.map(({ spec, r }) => (
           <li key={spec.round}>
-            Round {spec.round}, {spec.name}: {r ? `${r.driverName} of ${r.teamName}${r.rosterTier ? `, ${r.rosterTier} cars` : ""}` : "opponent not yet known"},{" "}
+            Round {spec.round}, {spec.name}: {r ? `${r.driverName} of ${r.teamName}` : "opponent not yet known"},{" "}
             {prizeText(fee, spec.round) ? `prize for winning ${prizeText(fee, spec.round)}.` : "no prize."}{" "}
             {r?.state === "won" ? "You won." : r?.state === "lost" ? "You lost." : r?.state === "current" ? "Next up." : "Still to come."}
           </li>

@@ -4,11 +4,11 @@ import { auth } from "@/lib/auth";
 import type { ActionResult } from "@/types";
 import * as service from "./service";
 import type { MemberCard } from "@/lib/card-roll";
-import type { CampaignBattle, CampaignDraft, CampaignOffer, CampaignState, CampaignView, EntryChoice } from "./types";
+import type { CampaignBattle, CampaignCrewOffer, CampaignDraft, CampaignOffer, CampaignState, CampaignView, EntryChoice } from "./types";
 
 /**
- * Drift Campaign server actions. The mode is admin only for now: every action checks the signed-in member's role
- * before doing anything, so hiding the tab is not the only thing keeping other members out.
+ * Drift Campaign server actions. The mode is open to every signed-in member. Every action checks the session, and admin-only
+ * extras (the free test cup) are decided here from the session's role, never from anything the browser sends.
  */
 
 async function run<T>(fn: (userId: string, isAdmin: boolean) => Promise<T>): Promise<ActionResult<T>> {
@@ -16,8 +16,7 @@ async function run<T>(fn: (userId: string, isAdmin: boolean) => Promise<T>): Pro
     const session = await auth();
     const userId = session?.user?.id;
     if (!userId) return { success: false, error: "Please sign in." };
-    if (session.user?.role !== "admin") return { success: false, error: "Drift Campaign is admin only for now." };
-    return { success: true, data: await fn(userId, true) };
+    return { success: true, data: await fn(userId, session.user?.role === "admin") };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Something went wrong. Please try again." };
   }
@@ -42,9 +41,15 @@ export async function withdrawCampaignDraftAction(): Promise<ActionResult<boolea
   return run((userId) => service.withdrawDraft(userId));
 }
 
-/** Start the cup with three of the six dealt cars (kept for the whole cup) and build the six rivals. Takes several seconds. The entry is already paid. */
-export async function startCampaignAction(carIds: string[]): Promise<ActionResult<CampaignView>> {
-  return run((userId) => service.startCampaign(userId, Array.isArray(carIds) ? carIds.map(String).slice(0, 6) : []));
+/** Start the cup with three of the six dealt cars and three of the six dealt Crew cards (kept for the whole cup) and build the first rival. The entry is already paid. */
+export async function startCampaignAction(carIds: string[], crewIds: string[] = []): Promise<ActionResult<CampaignView>> {
+  return run((userId) =>
+    service.startCampaign(
+      userId,
+      Array.isArray(carIds) ? carIds.map(String).slice(0, 6) : [],
+      Array.isArray(crewIds) ? crewIds.map(String).slice(0, 6) : []
+    )
+  );
 }
 
 /** Start the next round's battle. */
@@ -60,6 +65,13 @@ export async function repairCampaignCarAction(input: {
   return run((userId) => service.repairCar(userId, String(input?.carId ?? ""), String(input?.maintenanceCardId ?? "")));
 }
 
+/** Pay P-Credits to repair a broken car at once, when no kit in the deck can finish the repair. */
+export async function buyCampaignRepairAction(input: {
+  carId: string;
+}): Promise<ActionResult<{ car: MemberCard; view: CampaignView | null; balance: number }>> {
+  return run((userId) => service.buyRepair(userId, String(input?.carId ?? "")));
+}
+
 /** Top up a car that will not last the battles ahead, using any Maintenance kit from your deck. */
 export async function serviceCampaignCarAction(input: {
   carId: string;
@@ -71,6 +83,11 @@ export async function serviceCampaignCarAction(input: {
 /** Deal a different six, using one of your three re-rolls for this entry. */
 export async function rerollCampaignCarsAction(): Promise<ActionResult<CampaignOffer>> {
   return run((userId) => service.rerollCars(userId));
+}
+
+/** Deal a different six Crew cards, using one of your three Crew re-rolls for this entry. */
+export async function rerollCampaignCrewAction(): Promise<ActionResult<CampaignCrewOffer>> {
+  return run((userId) => service.rerollCrew(userId));
 }
 
 /** Report how the battle ended. */

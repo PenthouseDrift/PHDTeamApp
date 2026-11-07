@@ -12,6 +12,8 @@ const K = {
   active: (userId: string) => `tcg:campaign:active:${userId}`,
   lock: (userId: string) => `tcg:campaign:lock:${userId}`,
   offer: (userId: string) => `tcg:campaign:offer:${userId}`,
+  crewOffer: (userId: string) => `tcg:campaign:crew-offer:${userId}`,
+  crewProfile: (userId: string) => `tcg:campaign:crew-profile:${userId}`,
   profile: (userId: string) => `tcg:campaign:profile:${userId}`,
   paid: (runId: string) => `tcg:campaign:paid:${runId}`,
   ticket: (userId: string) => `tcg:campaign:ticket:${userId}`,
@@ -56,11 +58,14 @@ export async function withUserLock<T>(userId: string, fn: () => Promise<T>): Pro
 // Long, because the six belong to a paid entry: they must not expire and hand out a free re-deal.
 const OFFER_TTL_SECONDS = 60 * 60 * 24 * 30;
 
+/** What a deal is for: the cars, or the Crew cards. Each has its own six, its own picks and its own re-rolls. */
+export type OfferKind = "cars" | "crew";
+const offerKey = (userId: string, kind: OfferKind) => (kind === "crew" ? K.crewOffer(userId) : K.offer(userId));
 const ROLLED_TIERS: RolledTier[] = ["bronze", "silver", "gold", "legend"];
 
 /** The dealt cars with the rarity each slot rolled. A deal saved before rolls were recorded has no roll (null). */
-export async function loadOfferSlots(userId: string): Promise<Array<{ id: string; rolled: RolledTier | null }>> {
-  const raw = await redis.get(K.offer(userId));
+export async function loadOfferSlots(userId: string, kind: OfferKind = "cars"): Promise<Array<{ id: string; rolled: RolledTier | null }>> {
+  const raw = await redis.get(offerKey(userId, kind));
   if (!raw) return [];
   try {
     const parsed: unknown = typeof raw === "string" ? JSON.parse(raw) : raw;
@@ -81,24 +86,25 @@ export async function loadOfferSlots(userId: string): Promise<Array<{ id: string
 }
 
 /** Just the ids of the dealt cars. */
-export async function loadOffer(userId: string): Promise<string[]> {
-  return (await loadOfferSlots(userId)).map((s) => s.id);
+export async function loadOffer(userId: string, kind: OfferKind = "cars"): Promise<string[]> {
+  return (await loadOfferSlots(userId, kind)).map((s) => s.id);
 }
 
-export async function saveOffer(userId: string, slots: Array<{ id: string; rolled: RolledTier }>): Promise<void> {
-  await redis.set(K.offer(userId), JSON.stringify(slots), { ex: OFFER_TTL_SECONDS });
+export async function saveOffer(userId: string, slots: Array<{ id: string; rolled: RolledTier }>, kind: OfferKind = "cars"): Promise<void> {
+  await redis.set(offerKey(userId, kind), JSON.stringify(slots), { ex: OFFER_TTL_SECONDS });
 }
 
+/** Drops both the dealt cars and the dealt Crew cards. */
 export async function clearOffer(userId: string): Promise<void> {
-  await redis.del(K.offer(userId));
+  await redis.del(K.offer(userId), K.crewOffer(userId));
 }
 
 /**
  * The member's campaign profile. It holds the re-rolls left for choosing cars and has no expiry, so the count cannot be
  * reset by waiting, reloading, or abandoning a cup.
  */
-export async function loadRerollsLeft(userId: string): Promise<number> {
-  const raw = await redis.get(K.profile(userId));
+export async function loadRerollsLeft(userId: string, kind: OfferKind = "cars"): Promise<number> {
+  const raw = await redis.get(kind === "crew" ? K.crewProfile(userId) : K.profile(userId));
   if (!raw) return REROLLS_PER_CUP;
   try {
     const profile = (typeof raw === "string" ? JSON.parse(raw) : raw) as { rerollsLeft?: unknown; cap?: unknown };
@@ -114,8 +120,8 @@ export async function loadRerollsLeft(userId: string): Promise<number> {
   }
 }
 
-export async function saveRerollsLeft(userId: string, rerollsLeft: number): Promise<void> {
-  await redis.set(K.profile(userId), JSON.stringify({ rerollsLeft, cap: REROLLS_PER_CUP, updatedAt: Date.now() }));
+export async function saveRerollsLeft(userId: string, rerollsLeft: number, kind: OfferKind = "cars"): Promise<void> {
+  await redis.set(kind === "crew" ? K.crewProfile(userId) : K.profile(userId), JSON.stringify({ rerollsLeft, cap: REROLLS_PER_CUP, updatedAt: Date.now() }));
 }
 
 /** One mark per cup: true the first time, false after. Stops a prize being paid twice. */
