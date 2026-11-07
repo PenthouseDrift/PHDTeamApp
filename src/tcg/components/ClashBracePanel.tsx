@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { DebuffCardDefinition } from "@/lib/crew-cards";
 import { buzz } from "../ui/feedback";
-import { TILT_SETUP_MIN_DEGREES, isTouchDevice, useTilt } from "../ui/useTilt";
 import {
   BRACE_SECONDS,
   BRACE_START,
@@ -26,11 +25,8 @@ const REDUCED_MOTION_GUST = 0.6;
 const RESULT_MS = 1000;
 /** A long frame (a tab in the background) never moves the marker more than this many seconds at once. */
 const MAX_FRAME_SECONDS = 0.05;
-/** How much of the real wind the practice can use: off, half, three quarters, or the real thing. */
+/** How much of the real wind the practice uses: off, half, three quarters, or the real thing. */
 const PRACTICE_WIND_LEVELS = [0, 0.5, 0.75, 1] as const;
-/** Before the brace starts the player holds the phone steady for 3 short beats; that angle is then counted as straight. */
-const COUNTDOWN_STEPS = 3;
-const COUNTDOWN_STEP_MS = 380;
 
 function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -59,53 +55,32 @@ interface ClashBracePanelProps {
 const confirmClass =
   "flex min-h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-500 via-sky-500 to-indigo-500 px-6 py-3 text-xs font-black uppercase tracking-wider text-white shadow-[0_0_30px_rgba(34,211,238,0.5)] transition-all hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:scale-[0.98] [touch-action:manipulation] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none sm:text-sm";
 
-const tiltButtonClass =
-  "gx-tap mt-2 flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-xl border border-cyan-400/60 bg-cyan-500/15 px-3 text-xs font-black uppercase tracking-wider text-cyan-100 [touch-action:manipulation] hover:bg-cyan-500/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-white";
-
 const steerClass =
-  "flex min-h-20 flex-1 cursor-pointer select-none items-center justify-center rounded-2xl border-2 border-cyan-400/60 bg-cyan-500/15 px-3 text-lg font-black uppercase tracking-wider text-cyan-100 [touch-action:none] transition-colors hover:bg-cyan-500/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:bg-cyan-400/40";
+  "flex flex-1 cursor-pointer select-none items-center justify-center rounded-2xl border-2 border-cyan-400/60 bg-cyan-500/15 px-3 text-lg font-black uppercase tracking-wider text-cyan-100 [touch-action:none] transition-colors hover:bg-cyan-500/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-white active:bg-cyan-400/40";
 
 /**
  * "Brace": the DEFEND game, and nothing like Lock On. Gusts push a marker along a track and the player holds the left or right
  * button to counter-steer, keeping it inside the safe zone. The share of the time spent inside is the accuracy, and a perfect
- * brace blocks at most half of the debuff. The rival's own game is never shown.
+ * brace blocks at most half of the debuff. Before the game starts there is a practice (nothing is scored) on the same track, with
+ * the wind adjustable, so the player can get the feel of the buttons. The rival's own game is never shown.
  */
 export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSkip }: ClashBracePanelProps) {
   const reducedMotion = usePrefersReducedMotion();
   const [footerEl, setFooterEl] = useState<HTMLDivElement | null>(null);
-  const [state, setState] = useState<"ready" | "countdown" | "running" | "done">("ready");
-  const [count, setCount] = useState(COUNTDOWN_STEPS);
+  const [state, setState] = useState<"ready" | "running" | "done">("ready");
   const [marker, setMarker] = useState<BraceState>(BRACE_START);
   const [gust, setGust] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [result, setResult] = useState<number | null>(null);
   const [phases] = useState(() => rollBracePhases());
+  // Which way the player is holding (-1 left, 0 none, 1 right), from the on-screen buttons or the keys.
   const inputRef = useRef<-1 | 0 | 1>(0);
 
-  // Phone tilt: the further the phone is tipped, the harder the push. Buttons and keys still work, and win while held.
-  const tilt = useTilt();
-  const [push, setPush] = useState(0);
-  const [touchLike] = useState(isTouchDevice);
-  const [tiltNote, setTiltNote] = useState<string | null>(null);
-  const [previewPush, setPreviewPush] = useState(0);
-  const tiltReadRef = useRef(tilt.read);
-  const tiltLiveRef = useRef(false);
-  useEffect(() => {
-    tiltReadRef.current = tilt.read;
-    tiltLiveRef.current = tilt.enabled && tilt.seen && tilt.calibrated;
-  }, [tilt.read, tilt.enabled, tilt.seen, tilt.calibrated]);
-
-  // On the ready screen, show the tilt working live (relative to how the phone is held when this starts) so the player can see
-  // that tipping the right side down moves the bar right, before the game begins.
-  const setupActive = tilt.setup !== null;
-  const tiltCalibrate = tilt.calibrate;
-  const tiltPeek = tilt.peek;
-  const [rawTilt, setRawTilt] = useState<{ x: number; y: number } | null>(null);
-  // Practice: before the game starts, the real track and marker run live (nothing is scored), driven by the tilt, the buttons or
-  // the keys. The wind can be switched off to check the tilt on its own, then raised to the real strength to feel it.
-  const [windLevel, setWindLevel] = useState<(typeof PRACTICE_WIND_LEVELS)[number]>(0);
+  // Practice, before the game starts.
+  const [windLevel, setWindLevel] = useState<(typeof PRACTICE_WIND_LEVELS)[number]>(1);
   const [practice, setPractice] = useState<BraceState>(BRACE_START);
   const [practiceGust, setPracticeGust] = useState(0);
+
   const stoppedRef = useRef(false);
   const submitTimerRef = useRef<number | null>(null);
   const onSubmitRef = useRef(onSubmit);
@@ -115,44 +90,6 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
 
   const strength = braceStrength(debuff.tier) * (reducedMotion ? REDUCED_MOTION_GUST : 1);
   const { primary, secondary } = debuff.clash ?? { primary: "grip", secondary: "steer" };
-
-  const tiltUsable = tilt.enabled && tilt.seen && tilt.calibrated;
-  useEffect(() => {
-    if (state !== "ready" || setupActive) return;
-    // How the phone is held when practice starts counts as straight. "Set straight here" resets it.
-    if (tiltUsable) tiltCalibrate();
-    let frame = 0;
-    let last = performance.now();
-    let t = 0;
-    let atWall = 0;
-    let s: BraceState = { ...BRACE_START };
-    const windStrength = strength * windLevel;
-    const tick = (now: number) => {
-      const dt = Math.min(MAX_FRAME_SECONDS, (now - last) / 1000);
-      last = now;
-      const held = inputRef.current;
-      const input = held !== 0 ? held : tiltUsable ? tiltReadRef.current() : 0;
-      s = braceStep(s, input, t, phases, windStrength, dt);
-      t += dt;
-      // If the marker is left against a wall for a moment, put it back in the middle so the test keeps going.
-      if (Math.abs(s.x - 0.5) > 0.45) {
-        atWall += dt;
-        if (atWall > 1) {
-          s = { ...BRACE_START };
-          atWall = 0;
-        }
-      } else {
-        atWall = 0;
-      }
-      setPractice(s);
-      setPreviewPush(input);
-      setPracticeGust(windStrength > 0 ? braceGust(t, phases, windStrength) / windStrength : 0);
-      setRawTilt(tiltPeek());
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [state, setupActive, tiltUsable, tiltCalibrate, tiltPeek, strength, windLevel, phases]);
 
   const finish = useCallback((accuracy: number) => {
     if (stoppedRef.current) return;
@@ -178,13 +115,9 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
     const tick = (now: number) => {
       const dt = Math.min(MAX_FRAME_SECONDS, (now - last) / 1000);
       last = now;
-      // A held button or key counts first; otherwise the tilt of the phone sets how hard to push (-1 to 1).
-      const held = inputRef.current;
-      const input = held !== 0 ? held : tiltLiveRef.current ? tiltReadRef.current() : 0;
-      s = braceStep(s, input, t, phases, strength, dt);
+      s = braceStep(s, inputRef.current, t, phases, strength, dt);
       if (braceInZone(s.x)) inZone += dt;
       t += dt;
-      setPush(input);
       setMarker(s);
       setGust(braceGust(t, phases, strength) / (strength || 1));
       setElapsed(t);
@@ -197,6 +130,38 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [state, phases, strength]);
+
+  // Practice: the same track and physics, live before the game starts, with the wind at the chosen share of the real strength.
+  useEffect(() => {
+    if (state !== "ready") return;
+    let frame = 0;
+    let last = performance.now();
+    let t = 0;
+    let atWall = 0;
+    let s: BraceState = { ...BRACE_START };
+    const windStrength = strength * windLevel;
+    const tick = (now: number) => {
+      const dt = Math.min(MAX_FRAME_SECONDS, (now - last) / 1000);
+      last = now;
+      s = braceStep(s, inputRef.current, t, phases, windStrength, dt);
+      t += dt;
+      // If the marker is left against a wall for a moment, put it back in the middle so the practice keeps going.
+      if (Math.abs(s.x - 0.5) > 0.45) {
+        atWall += dt;
+        if (atWall > 1) {
+          s = { ...BRACE_START };
+          atWall = 0;
+        }
+      } else {
+        atWall = 0;
+      }
+      setPractice(s);
+      setPracticeGust(windStrength > 0 ? braceGust(t, phases, windStrength) / windStrength : 0);
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [state, strength, windLevel, phases]);
 
   // If the panel goes away first (the player skipped), the pending hand-back must not fire.
   useEffect(
@@ -240,59 +205,43 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
     if (inputRef.current === dir) inputRef.current = 0;
   }, []);
 
-  /**
-   * Press Start: a short "hold steady" countdown, then the brace. The phone is calibrated at the END of the countdown, so the
-   * tap on Start (which tips the phone) does not decide what counts as straight. iPhone asks for motion access again after a
-   * reload, and it has to be asked for from this tap.
-   */
-  const start = async () => {
-    setTiltNote(null);
-    let tiltOn = tilt.enabled;
-    if (tiltOn && tilt.needsPermission && tilt.permission !== "granted") tiltOn = await tilt.enable();
-    if (tiltOn) {
-      if (!(await tilt.waitForReading(1500))) {
-        // No readings came: no motion sensor, or access was not given. The buttons still work.
-        setTiltNote("This phone isn't sending any tilt readings, so use the buttons.");
-      } else if (!tilt.calibrated) {
-        // First time holding the phone this way: learn which way is which from a single tip.
-        if (!(await tilt.measure())) {
-          setTiltNote("I couldn't see a clear tip. Try again, or turn tilt off and use the buttons.");
-          return;
-        }
-      }
-    }
-    setCount(COUNTDOWN_STEPS);
-    setState("countdown");
+  /** Start the game. Anything still held from practice is let go, so the game starts with no push. */
+  const start = () => {
+    inputRef.current = 0;
+    setState("running");
   };
-
-  /** Run the one-time tilt setup from the ready screen, so it can be tested before starting. */
-  const runTiltSetup = async () => {
-    setTiltNote(null);
-    if (!(await tilt.measure())) setTiltNote("I couldn't see a clear tip. Try again: hold steady, then tip the right side of the screen down and keep it there.");
-  };
-
-  const calibrate = tilt.calibrate;
-  useEffect(() => {
-    if (state !== "countdown") return;
-    const timer = window.setTimeout(() => {
-      if (count > 1) {
-        setCount(count - 1);
-      } else {
-        calibrate();
-        setState("running");
-      }
-    }, COUNTDOWN_STEP_MS);
-    return () => window.clearTimeout(timer);
-  }, [state, count, calibrate]);
 
   // Before the game the track shows the practice marker; once it starts, the real one.
   const shownMarker = state === "ready" ? practice : marker;
   const shownGust = state === "ready" ? practiceGust : gust;
   const inZoneNow = braceInZone(shownMarker.x);
   const blocked = result === null ? 0 : Math.round(defenceShare(result) * 100);
-  const verdict =
-    result === null ? "" : `Held ${Math.round(result * 100)}% of the time · blocked ${blocked}% of the debuff`;
+  const verdict = result === null ? "" : `Held ${Math.round(result * 100)}% of the time · blocked ${blocked}% of the debuff`;
   const timeLeft = Math.max(0, BRACE_SECONDS - elapsed);
+
+  /** The Left and Right buttons. Used in practice and in the game. */
+  const steerButtons = (heightClass: string) => (
+    <div className="flex gap-2" role="group" aria-label="Counter-steer">
+      {([-1, 1] as const).map((dir) => (
+        <button
+          key={dir}
+          type="button"
+          aria-label={dir === -1 ? "Counter-steer left (hold)" : "Counter-steer right (hold)"}
+          className={`${steerClass} ${heightClass}`}
+          onPointerDown={(e) => {
+            if (e.button !== 0) return;
+            e.currentTarget.setPointerCapture?.(e.pointerId);
+            press(dir);
+          }}
+          onPointerUp={() => release(dir)}
+          onPointerCancel={() => release(dir)}
+          onLostPointerCapture={() => release(dir)}
+        >
+          {dir === -1 ? "◀ Left" : "Right ▶"}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/85 backdrop-blur-md animate-in fade-in duration-200 sm:items-center sm:p-4">
@@ -314,7 +263,8 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
               Brace {subject}
             </h3>
             <p className="mt-1 text-sm text-zinc-300">
-              Gusts push the marker around. Hold left or right (or tilt your phone) to counter-steer and keep it inside the green zone for as long as you can.
+              Gusts push the marker around. Hold the Left or Right button to counter-steer and keep it inside the green zone for as long as you
+              can.
             </p>
             <p className="mt-2 text-xs font-black text-amber-300">
               {debuff.icon} {debuff.name} · <span className="uppercase">{debuff.tier}</span> is coming at your car
@@ -352,13 +302,14 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
                 wind ▶
               </span>
             </div>
-            {/* Practice, before the game: the marker above is live and follows your tilt. Nothing here is scored. */}
+
+            {/* Practice, before the game: the marker above is live. Nothing here is scored. */}
             {state === "ready" && (
               <div className="mx-auto mt-3 max-w-sm rounded-2xl border border-emerald-400/30 bg-emerald-500/5 p-3 text-left">
                 <p className="text-xs font-black text-emerald-200">Practice (not scored)</p>
                 <p className="mt-0.5 text-[11px] font-bold text-zinc-400">
-                  The marker above is live. With the wind off it should follow your tilt exactly: tip the right side of the screen down and it
-                  slides right. Then turn the wind up to the real strength to feel how hard it pushes.
+                  Try the Left and Right buttons below. The marker above is live, so you can get the feel before the real thing. Change the wind
+                  to try it gentler or at full strength.
                 </p>
                 <div className="mt-2 flex items-center gap-1.5" role="group" aria-label="Practice wind strength">
                   <span className="shrink-0 text-[11px] font-black uppercase tracking-wider text-zinc-400">Wind</span>
@@ -378,128 +329,6 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
                     </button>
                   ))}
                 </div>
-                {!tiltUsable && touchLike && (
-                  <p className="mt-2 text-[11px] font-bold text-amber-300">
-                    Tilt isn&apos;t ready yet, so the marker won&apos;t move from your phone. Use the Tilt card below to allow it and set it up.
-                  </p>
-                )}
-              </div>
-            )}
-            {/* How hard the player is pushing right now, from either the buttons or the tilt of the phone. */}
-            {state === "running" && (
-              <div className="relative mx-auto mt-2 h-2 w-44 overflow-hidden rounded-full bg-zinc-800" aria-hidden>
-                <div
-                  className="absolute inset-y-0 bg-cyan-400"
-                  style={{ left: push < 0 ? `${50 + push * 50}%` : "50%", width: `${Math.abs(push) * 50}%` }}
-                />
-                <div className="absolute inset-y-0 left-1/2 w-px bg-zinc-500" />
-              </div>
-            )}
-            {state === "running" && tilt.enabled && !tilt.seen && (
-              <p className="mt-1 text-[11px] font-bold text-amber-300">No tilt detected on this device. Use the buttons below.</p>
-            )}
-            {state === "ready" && (touchLike || tilt.enabled) && (
-              <div className="mx-auto mt-3 max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3 text-left">
-                <p className="text-xs font-black text-cyan-200">📱 Tilt to steer</p>
-                <p className="mt-0.5 text-[11px] font-bold text-zinc-400">
-                  Tip the <strong className="text-zinc-200">right side of the screen down</strong> to push the marker right, and the left
-                  side down to push it left. The further you tip, the harder you push. Hold your phone however you like (upright, flat or
-                  sideways); the first time, you&apos;ll be asked to tip it once so the game learns your hold.
-                </p>
-                {tilt.setup && (
-                  <div className="mt-2 rounded-xl border border-cyan-400/40 bg-cyan-500/10 p-2.5" aria-live="polite">
-                    <p className="text-xs font-black text-cyan-100">
-                      {tilt.setup.phase === "hold" && "Hold your phone steady…"}
-                      {tilt.setup.phase === "tip" && "Now tip the RIGHT side of the screen down"}
-                      {tilt.setup.phase === "done" && "Got it. Tilt is ready ✓"}
-                      {tilt.setup.phase === "failed" && "Couldn't see a clear tip. Press Start to try again."}
-                    </p>
-                    {tilt.setup.phase === "tip" && (
-                      <>
-                        <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-zinc-800" aria-hidden>
-                          <div
-                            className="h-full bg-cyan-400 transition-[width] duration-75"
-                            style={{ width: `${Math.min(100, (tilt.setup.deviation / TILT_SETUP_MIN_DEGREES) * 100)}%` }}
-                          />
-                        </div>
-                        <p className="mt-1 text-[11px] font-bold text-zinc-400">Tip it a good way over and hold it there for a moment.</p>
-                      </>
-                    )}
-                  </div>
-                )}
-                {/* Test the sensor before the game starts: allow it, see it is reading, set it up, then watch the bar follow your tilt. */}
-                {tilt.enabled && !tilt.setup && (
-                  <div className="mt-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-2.5">
-                    {tilt.needsPermission && tilt.permission !== "granted" ? (
-                      <>
-                        <p className="text-[11px] font-bold text-zinc-300">Your phone needs your OK before the game can read its tilt.</p>
-                        <button type="button" onClick={() => void tilt.enable()} className={tiltButtonClass}>
-                          Allow motion access
-                        </button>
-                      </>
-                    ) : !tilt.seen ? (
-                      <p className="text-[11px] font-bold text-amber-300" aria-live="polite">
-                        Waiting for tilt readings… move your phone a little. If nothing happens, this device may not support tilt, so use the
-                        buttons.
-                      </p>
-                    ) : (
-                      <>
-                        <p className="text-[11px] font-black text-emerald-300" aria-live="polite">
-                          ✓ Receiving tilt from your phone
-                          {rawTilt ? ` · raw ${rawTilt.x.toFixed(0)}° / ${rawTilt.y.toFixed(0)}°` : ""}
-                        </p>
-                        {!tilt.calibrated ? (
-                          <>
-                            <p className="mt-1 text-[11px] font-bold text-zinc-400">
-                              Next, set it up so the game learns which way is right for how you&apos;re holding the phone.
-                            </p>
-                            <button type="button" onClick={() => void runTiltSetup()} className={tiltButtonClass}>
-                              Set up tilt now
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <p className="mt-1 text-[11px] font-bold text-zinc-400">
-                              Test it: tip the right side of the screen down and the bar fills to the right. The left side down fills it to the
-                              left.
-                            </p>
-                            <div className="mt-1.5 flex items-center gap-1.5" aria-hidden>
-                              <span className="text-[10px] font-black text-zinc-500">◀</span>
-                              <div className="relative h-3 flex-1 overflow-hidden rounded-full bg-zinc-800">
-                                <div
-                                  className="absolute inset-y-0 bg-cyan-400"
-                                  style={{ left: previewPush < 0 ? `${50 + previewPush * 50}%` : "50%", width: `${Math.abs(previewPush) * 50}%` }}
-                                />
-                                <div className="absolute inset-y-0 left-1/2 w-px bg-zinc-500" />
-                              </div>
-                              <span className="text-[10px] font-black text-zinc-500">▶</span>
-                            </div>
-                            <div className="mt-2 flex gap-2">
-                              <button type="button" onClick={() => tilt.calibrate()} className={`${tiltButtonClass} mt-0 flex-1`}>
-                                Set straight here
-                              </button>
-                              <button type="button" onClick={() => tilt.resetCalibration()} className={`${tiltButtonClass} mt-0 flex-1`}>
-                                Wrong way? Redo setup
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
-                {tiltNote && <p className="mt-2 text-[11px] font-bold text-amber-300">{tiltNote}</p>}
-                <button
-                  type="button"
-                  onClick={() => (tilt.enabled ? tilt.disable() : void tilt.enable())}
-                  aria-pressed={tilt.enabled}
-                  className="gx-tap mt-2 flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-xl border border-cyan-400/60 bg-cyan-500/15 px-3 text-xs font-black uppercase tracking-wider text-cyan-100 [touch-action:manipulation] hover:bg-cyan-500/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-                >
-                  {tilt.enabled ? "Tilt is on · tap to turn off" : "Use tilt"}
-                </button>
-                {tilt.permission === "denied" && (
-                  <p className="mt-1 text-[11px] font-bold text-amber-300">Motion access was refused, so tilt can&apos;t be used. The buttons still work.</p>
-                )}
               </div>
             )}
             <p className="mt-3 text-[11px] font-bold text-zinc-400">
@@ -518,44 +347,15 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
             createPortal(
               <>
                 {state === "ready" && (
-                  <button
-                    type="button"
-                    onClick={() => void start()}
-                    disabled={tilt.setup !== null && tilt.setup.phase !== "failed"}
-                    className={confirmClass}
-                    autoFocus
-                  >
-                    {tilt.setup && tilt.setup.phase !== "failed" ? "Setting up tilt…" : tilt.enabled && !tilt.calibrated && touchLike ? "Set up tilt & start" : "Start bracing"}
-                    <span aria-hidden>→</span>
-                  </button>
-                )}
-                {state === "countdown" && (
-                  <button type="button" disabled className={`${confirmClass} min-h-14`} aria-live="assertive">
-                    Hold steady… {count}
-                  </button>
-                )}
-                {state === "running" && (
-                  <div className="flex gap-2" role="group" aria-label="Counter-steer">
-                    {([-1, 1] as const).map((dir) => (
-                      <button
-                        key={dir}
-                        type="button"
-                        aria-label={dir === -1 ? "Counter-steer left (hold)" : "Counter-steer right (hold)"}
-                        className={steerClass}
-                        onPointerDown={(e) => {
-                          if (e.button !== 0) return;
-                          e.currentTarget.setPointerCapture?.(e.pointerId);
-                          press(dir);
-                        }}
-                        onPointerUp={() => release(dir)}
-                        onPointerCancel={() => release(dir)}
-                        onLostPointerCapture={() => release(dir)}
-                      >
-                        {dir === -1 ? "◀ Left" : "Right ▶"}
-                      </button>
-                    ))}
+                  <div className="space-y-2">
+                    {steerButtons("min-h-16")}
+                    <button type="button" onClick={start} className={confirmClass} autoFocus>
+                      Start bracing
+                      <span aria-hidden>→</span>
+                    </button>
                   </div>
                 )}
+                {state === "running" && steerButtons("min-h-20")}
                 {state === "done" && (
                   <button type="button" disabled className={`${confirmClass} min-h-14`}>
                     Braced

@@ -29,6 +29,8 @@ import {
 } from "./progression";
 import { isCarBroken } from "@/lib/mechanical-faults";
 import { matchCars, matchCrew, profileOf, targetsFor, type PlayerProfile } from "./opponent-matching";
+import { loadArtPoolCached } from "./campaign/art-pool";
+import { matchFacesToTiers } from "./campaign/generate";
 import { getPCredits, grantPCredits } from "./storage";
 import { gameXpFor, getGameXpProgress, type GameXpBreakdown } from "./game-xp";
 import { addGameXp, ensureGameXpBackfilled } from "./game-xp-store";
@@ -533,6 +535,37 @@ const RIVAL_TITLES = ["Tandem Challenger", "P-Tile Specialist", "Night Touge Run
 /** How many members are looked at to find the closest match to the player. */
 const MATCH_CANDIDATES = 6;
 
+/** The `userId` that opponent-matching.ts gives the cars it generates to fill a gap in a collection. */
+const GENERATED_RIVAL_USER = "matched-rival";
+
+/**
+ * A matched opponent's generated cars come with the app icon as their picture and placeholder text. Give each one a real car
+ * picture of its own rarity from the art pool (the same pool the Campaign uses), never one of `avoid` (the player's own pictures)
+ * or one already on this roster. Real cards are left exactly as they are. The picture does not affect scoring. If the pool is
+ * empty or cannot be read, the cars are returned unchanged.
+ */
+async function withRealArt(cars: MemberCard[], avoid: Set<string>): Promise<MemberCard[]> {
+  const generatedAt = cars.map((c, i) => (c.userId === GENERATED_RIVAL_USER ? i : -1)).filter((i) => i >= 0);
+  if (generatedAt.length === 0) return cars;
+  try {
+    const pool = await loadArtPoolCached();
+    const taken = new Set(avoid);
+    for (const c of cars) if (c.userId !== GENERATED_RIVAL_USER && c.imageUrl) taken.add(c.imageUrl);
+    const skinned = matchFacesToTiers(generatedAt.map((i) => cars[i]), pool, taken, Math.random);
+    const out = [...cars];
+    generatedAt.forEach((carIndex, n) => {
+      const before = cars[carIndex];
+      const after = skinned[n];
+      // Only a car that really got a new picture also gets the new text; one that found no art stays as it was.
+      out[carIndex] = after.imageUrl !== before.imageUrl ? { ...after, ability: "Community Spec", effect: "Tuned for the Drift Clash." } : before;
+    });
+    return out;
+  } catch (error) {
+    console.error("[clash] could not load pictures for the generated rival cars:", error);
+    return cars;
+  }
+}
+
 /** Put an opponent together from three matched cars and three matched Crew cards. */
 function assembleOpponent(args: { idPrefix: string; driverName: string; teamName: string; title: string; cars: MemberCard[]; crew: MemberCard[] }): ClashOpponent {
   const crew = args.crew.slice(0, 3) as [MemberCard, MemberCard, MemberCard];
@@ -555,7 +588,7 @@ function assembleOpponent(args: { idPrefix: string; driverName: string; teamName
  * An opponent built to the player's strength (see opponent-matching.ts): among a few members, the one whose collection fits
  * the player's three cars best, with any gap filled by a generated car. Returns null when there is no member to use.
  */
-async function pickMatchedOpponent(profile: PlayerProfile, candidateIds: string[]): Promise<ClashOpponent | null> {
+async function pickMatchedOpponent(profile: PlayerProfile, candidateIds: string[], avoidImages: Set<string>): Promise<ClashOpponent | null> {
   const targets = targetsFor(profile, Math.random);
   let best: { userId: string; match: ReturnType<typeof matchCars>; crew: MemberCard[]; lead: MemberCard } | null = null;
   for (const userId of candidateIds.slice(0, MATCH_CANDIDATES)) {
@@ -577,13 +610,13 @@ async function pickMatchedOpponent(profile: PlayerProfile, candidateIds: string[
     driverName: nickname || fullName || best.lead.driver?.trim() || "PHD Rival",
     teamName: best.lead.team?.trim() || "Community Crew",
     title: RIVAL_TITLES[randomInt(0, RIVAL_TITLES.length)],
-    cars: best.match.cars,
+    cars: await withRealArt(best.match.cars, avoidImages),
     crew: matchCrew(profile.crewTiers, best.crew, Math.random),
   });
 }
 
 /** The same, from one of the built-in bosses, for when no member has a car to use. */
-function pickMatchedBoss(profile: PlayerProfile): ClashOpponent {
+async function pickMatchedBoss(profile: PlayerProfile, avoidImages: Set<string>): Promise<ClashOpponent> {
   const boss = FALLBACK_BOSS_CREWS[randomInt(0, FALLBACK_BOSS_CREWS.length)];
   const match = matchCars(targetsFor(profile, Math.random), boss.cards, Math.random, { driver: boss.driverName, team: boss.teamName });
   return assembleOpponent({
@@ -591,13 +624,15 @@ function pickMatchedBoss(profile: PlayerProfile): ClashOpponent {
     driverName: boss.driverName,
     teamName: boss.teamName,
     title: boss.title,
-    cars: match.cars,
+    cars: await withRealArt(match.cars, avoidImages),
     crew: matchCrew(profile.crewTiers, boss.crewCards ?? [], Math.random),
   });
 }
 
 export async function pickClashOpponent(excludeUserId?: string): Promise<ClashOpponent> {
   let profile: PlayerProfile | null = null;
+  // The pictures of the player's own cars, so a generated rival is never given one of them.
+  let avoidImages = new Set<string>();
   try {
     // If excludeUserId was not provided, try to extract current user session
     if (!excludeUserId) {
@@ -609,6 +644,7 @@ export async function pickClashOpponent(excludeUserId?: string): Promise<ClashOp
     if (excludeUserId) {
       const mine = await loadCollection(excludeUserId, false).catch(() => null);
       profile = mine ? profileOf(mine.cars.filter((car) => !isCarBroken(car)), mine.crew) : null;
+      avoidImages = new Set((mine?.cars ?? []).map((car) => car.imageUrl).filter(Boolean));
     }
 
     await ensureCommunityPool();
@@ -641,7 +677,7 @@ export async function pickClashOpponent(excludeUserId?: string): Promise<ClashOp
 
       // If at least 1 genuine rival user exists (never the player):
       if (rivalUserIds.length > 0 && profile) {
-        const matched = await pickMatchedOpponent(profile, rivalUserIds.slice().sort(() => Math.random() - 0.5));
+        const matched = await pickMatchedOpponent(profile, rivalUserIds.slice().sort(() => Math.random() - 0.5), avoidImages);
         if (matched) return matched;
       }
 
@@ -770,7 +806,7 @@ export async function pickClashOpponent(excludeUserId?: string): Promise<ClashOp
   }
 
   // Fallback when no other community drivers exist: a built-in boss, built to the player's strength when it is known.
-  if (profile) return pickMatchedBoss(profile);
+  if (profile) return pickMatchedBoss(profile, avoidImages);
   const boss = FALLBACK_BOSS_CREWS[randomInt(0, FALLBACK_BOSS_CREWS.length)];
   const bossCrewCards = boss.crewCards ?? STARTER_LOANER_CREW_CARDS;
   const leadBossCrewCard = bossCrewCards[0] ?? STARTER_LOANER_CREW_CARD;
