@@ -87,6 +87,8 @@ function roundView(run: CampaignRun, plan: CampaignRoundPlan): CampaignRoundView
 const FREE_TEST: CampaignEntry = { kind: "test", fee: 0 };
 const entryOf = (run: CampaignRun): CampaignEntry => run.entry ?? FREE_TEST;
 const winsOf = (run: CampaignRun): number => run.results.filter((r) => r.won).length;
+/** The prize for the rounds won so far. A cup saved before entries existed (no `entry`) pays nothing. */
+const prizeOf = (run: CampaignRun): number => (run.entry ? prizeFor(run.entry.fee, winsOf(run)) : 0);
 
 function toView(run: CampaignRun, note?: string, balance?: number): CampaignView {
   const entry = entryOf(run);
@@ -103,7 +105,7 @@ function toView(run: CampaignRun, note?: string, balance?: number): CampaignView
     note,
     entry,
     wins,
-    prize: entry.fee > 0 ? prizeFor(entry.fee, wins) : 0,
+    prize: prizeOf(run),
     payout: run.payout ?? null,
     endedBy: run.endedBy,
     balance,
@@ -133,8 +135,7 @@ function forfeit(run: CampaignRun, by: "withdrew" | "left-track"): void {
  */
 async function settle(userId: string, run: CampaignRun): Promise<number | undefined> {
   if (run.status === "active" || run.settled) return undefined;
-  const entry = entryOf(run);
-  const reward = entry.fee > 0 ? prizeFor(entry.fee, winsOf(run)) : 0;
+  const reward = prizeOf(run);
   let balance: number | undefined;
   if (reward > 0 && (await claimPayout(run.id))) {
     try {

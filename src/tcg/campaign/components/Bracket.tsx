@@ -79,11 +79,11 @@ function Trophy() {
   );
 }
 
-/** What winning a round is worth: the prize in P-Credits for the entry, a multiple of the entry before one is chosen, nothing for a test cup. */
+/** What winning a round is worth: the prize in P-Credits for the entry, a multiple of the entry before one is chosen, nothing for a round a free cup does not pay. */
 function prizeText(fee: number | undefined, round: number): string | null {
   if (fee === undefined) return `×${PRIZE_MULTIPLIERS[round]} entry`;
-  if (fee <= 0) return null;
-  return `🪙 ${prizeFor(fee, round).toLocaleString()}`;
+  const prize = prizeFor(fee, round);
+  return prize > 0 ? `🪙 ${prize.toLocaleString()}` : null;
 }
 
 export function Bracket({

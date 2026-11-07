@@ -14,7 +14,7 @@ const card = "rounded-2xl border border-zinc-800 bg-zinc-900 p-3.5 text-zinc-100
 export function EntryStep({ entry, onEntry, pCredits }: { entry: EntryChoice; onEntry: (choice: EntryChoice) => void; pCredits: number }) {
   const options: EntryChoice[] = ["test", ...ENTRY_FEES];
   const fee = entry === "test" ? 0 : Number(entry);
-  const top = fee > 0 ? prizeFor(fee, CAMPAIGN_ROUNDS.length) : 0;
+  const top = Math.max(1, prizeFor(fee, CAMPAIGN_ROUNDS.length));
 
   return (
     <div className="space-y-3">
@@ -40,7 +40,7 @@ export function EntryStep({ entry, onEntry, pCredits }: { entry: EntryChoice; on
               >
                 <span className="text-xl font-black tabular-nums">{choice === "test" ? "Free" : `🪙 ${choice}`}</span>
                 <span className="mt-0.5 text-[11px] font-bold leading-tight text-zinc-400">
-                  {choice === "test" ? "Free · no prize" : cantAfford ? "Not enough P-Credits" : `Win up to 🪙 ${prizeFor(Number(choice), CAMPAIGN_ROUNDS.length).toLocaleString()}`}
+                  {choice === "test" ? `Free · win up to 🪙 ${prizeFor(0, CAMPAIGN_ROUNDS.length).toLocaleString()}` : cantAfford ? "Not enough P-Credits" : `Win up to 🪙 ${prizeFor(Number(choice), CAMPAIGN_ROUNDS.length).toLocaleString()}`}
                 </span>
               </button>
             );
@@ -55,13 +55,16 @@ export function EntryStep({ entry, onEntry, pCredits }: { entry: EntryChoice; on
           </h3>
           {fee > 0 && <span className="text-xs font-bold text-amber-300">Entry 🪙 {fee}</span>}
         </div>
-        {fee === 0 ? (
-          <p className="mt-2 rounded-xl bg-zinc-950/60 p-3 text-sm text-zinc-300">A free cup costs nothing and pays no prize, however far you get. It does not count towards your tournaments won. Pick a fee to see the prizes.</p>
-        ) : (
+        {fee === 0 && (
+          <p className="mt-2 rounded-xl bg-zinc-950/60 p-3 text-sm text-zinc-300">
+            A free cup costs nothing. It pays 🪙 {prizeFor(0, 5)} for winning the Semi-Final and 🪙 {prizeFor(0, 6)} for winning the Final, and nothing before that. It does not count towards your tournaments won.
+          </p>
+        )}
+        {(
           <ol className="mt-2.5 space-y-1.5">
             {CAMPAIGN_ROUNDS.map((r) => {
               const prize = prizeFor(fee, r.round);
-              const width = Math.max(10, Math.round(Math.sqrt(prize / top) * 100));
+              const width = Math.max(prize > 0 ? 10 : 0, Math.round(Math.sqrt(prize / top) * 100));
               return (
                 <li key={r.round} className="relative flex min-h-11 items-center justify-between gap-3 overflow-hidden rounded-xl bg-zinc-950/60 px-3">
                   <span aria-hidden className="absolute inset-y-0 left-0 bg-amber-500/15" style={{ width: `${width}%` }} />
@@ -70,7 +73,7 @@ export function EntryStep({ entry, onEntry, pCredits }: { entry: EntryChoice; on
                     {r.name}
                   </span>
                   <span className="relative shrink-0 text-right">
-                    <span className="block text-base font-black tabular-nums text-white">🪙 {prize.toLocaleString()}</span>
+                    <span className="block text-base font-black tabular-nums text-white">{prize > 0 ? `🪙 ${prize.toLocaleString()}` : "—"}</span>
                   </span>
                 </li>
               );
@@ -78,8 +81,8 @@ export function EntryStep({ entry, onEntry, pCredits }: { entry: EntryChoice; on
           </ol>
         )}
         <p className="mt-2.5 text-xs leading-relaxed text-zinc-400">
-          You are paid for the rounds you win, however the cup ends: win, lose or withdraw. The entry is taken when you continue. You then pick 3 of 6
-          cars (re-roll up to {REROLLS_PER_CUP} times), and can start the cup or withdraw. Withdrawing before it starts loses the entry.
+          You are paid for the rounds you win, however the cup ends: win, lose or withdraw.{fee > 0 ? " The entry is taken when you continue." : ""} You then pick 3 of 6
+          cars (re-roll up to {REROLLS_PER_CUP} times), and can start the cup or withdraw.{fee > 0 ? " Withdrawing before it starts loses the entry." : ""}
         </p>
       </section>
 

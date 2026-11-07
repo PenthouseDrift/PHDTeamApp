@@ -21,7 +21,7 @@ export function ResumeDialog({
   totalRounds: number;
   /** Why the round starts again, when the last battle was cut off. */
   note?: string;
-  /** What withdrawing would pay now, or null for a free test cup. */
+  /** What withdrawing would pay now, (0 when no round that pays has been won). */
   prize: number | null;
   onResume: () => void;
   onWithdraw: () => void;

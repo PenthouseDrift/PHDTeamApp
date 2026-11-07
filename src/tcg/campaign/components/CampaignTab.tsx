@@ -360,7 +360,7 @@ export function CampaignTab({
       entry === "test"
         ? {
             title: "Start a free cup?",
-            body: "A free cup costs nothing and pays no prize, however far you get.",
+            body: `A free cup costs nothing. It pays 🪙 ${prizeFor(0, 5)} for winning the Semi-Final and 🪙 ${prizeFor(0, 6)} for winning the Final.`,
             confirmLabel: "Start free cup",
             run: () => void runPayEntry(),
           }
@@ -494,12 +494,12 @@ export function CampaignTab({
   }
 
   function withdraw() {
-    const prize = view && view.entry.fee > 0 ? view.prize : 0;
+    const prize = view ? view.prize : 0;
     setAsk({
       title: "Withdraw from the cup?",
       body:
-        view?.entry.kind === "test"
-          ? "You will be out of this free cup. It pays no prize."
+        prize <= 0
+          ? "You will be out of this cup. You have not won a round that pays a prize yet."
           : `You will be out of the cup and keep the prize for the rounds you have won (🪙 ${prize.toLocaleString()}).`,
       confirmLabel: "Withdraw",
       danger: true,
@@ -578,7 +578,8 @@ export function CampaignTab({
             : "6 rounds · lose once and you are out";
 
   /** What winning the current round pays, for the "next up" card. */
-  const nextPrize = view && nextRound && view.entry.fee > 0 ? `🪙 ${prizeFor(view.entry.fee, nextRound.round).toLocaleString()}` : null;
+  const nextPrizeAmount = view && nextRound ? prizeFor(view.entry.fee, nextRound.round) : 0;
+  const nextPrize = nextPrizeAmount > 0 ? `🪙 ${nextPrizeAmount.toLocaleString()}` : null;
 
   return (
     <section aria-label="Drift Campaign" className="space-y-3">
@@ -686,7 +687,7 @@ export function CampaignTab({
               <PrizeLine view={view} />
             </div>
           )}
-          {view && <PrizeLadder compact fee={view.entry.fee} wins={view.wins} test={view.entry.kind === "test"} />}
+          {view && <PrizeLadder compact fee={view.entry.fee} wins={view.wins} />}
           <Bracket rounds={view?.rounds ?? null} status={view?.status} fee={view?.entry.fee} />
           <DockSpacer />
           {deckIssue && (
@@ -724,7 +725,7 @@ export function CampaignTab({
           <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5">
             <p className="min-w-0 truncate text-xs font-bold text-amber-900 dark:text-amber-100">
               {entryPaidText}
-              {paidEntry && paidEntry.fee > 0 && ` · top prize 🪙 ${prizeFor(paidEntry.fee, CAMPAIGN_ROUNDS.length).toLocaleString()}`}
+              {paidEntry && ` · top prize 🪙 ${prizeFor(paidEntry.fee, CAMPAIGN_ROUNDS.length).toLocaleString()}`}
             </p>
           </div>
 
@@ -880,7 +881,7 @@ export function CampaignTab({
           <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5">
             <p className="min-w-0 truncate text-xs font-bold text-amber-900 dark:text-amber-100">
               {entryPaidText}
-              {paidEntry && paidEntry.fee > 0 && ` · top prize 🪙 ${prizeFor(paidEntry.fee, CAMPAIGN_ROUNDS.length).toLocaleString()}`}
+              {paidEntry && ` · top prize 🪙 ${prizeFor(paidEntry.fee, CAMPAIGN_ROUNDS.length).toLocaleString()}`}
             </p>
           </div>
           <CrewPicker
@@ -948,7 +949,7 @@ export function CampaignTab({
       {busy !== "loading" && view && active && nextRound && (
         <>
           <NextUpCard round={nextRound} prize={nextPrize} blocked={anyBroken ? "Repair your cars to play" : null} />
-          <PrizeLadder compact fee={view.entry.fee} wins={view.wins} test={view.entry.kind === "test"} />
+          <PrizeLadder compact fee={view.entry.fee} wins={view.wins} />
 
           <section className={`${panel} !p-3`} aria-label="Your cars">
             <h3 className="text-sm font-black uppercase tracking-wide text-zinc-300">Your cars</h3>
@@ -1010,7 +1011,7 @@ export function CampaignTab({
           roundsWon={view.wins}
           totalRounds={CAMPAIGN_ROUNDS.length}
           note={view.note}
-          prize={view.entry.fee > 0 ? view.prize : null}
+          prize={view.prize}
           onResume={() => setResumePrompt(false)}
           onWithdraw={() => {
             setResumePrompt(false);
@@ -1025,11 +1026,11 @@ export function CampaignTab({
 /** Shows what a finished cup paid. */
 function PrizeLine({ view }: { view: CampaignView | null }) {
   if (!view) return null;
-  if (view.entry.kind === "test") return <p className="mt-2 text-xs font-bold text-zinc-400">Free cup: no prize.</p>;
   const paid = view.payout ?? 0;
   return (
     <p className={`mt-2 text-sm font-black ${paid > 0 ? "text-emerald-300" : "text-zinc-400"}`}>
-      {paid > 0 ? `🪙 +${paid} P-Credits prize` : "No prize this time"} <span className="font-bold text-zinc-500">(entry {view.entry.fee})</span>
+      {paid > 0 ? `🪙 +${paid} P-Credits prize` : "No prize this time"}{" "}
+      <span className="font-bold text-zinc-500">({view.entry.fee > 0 ? `entry ${view.entry.fee}` : "free cup"})</span>
     </p>
   );
 }

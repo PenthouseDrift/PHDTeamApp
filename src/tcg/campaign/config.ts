@@ -99,9 +99,17 @@ export const ENTRY_FEES = [50, 100, 200];
  */
 export const PRIZE_MULTIPLIERS = [0, 0.25, 0.5, 1, 2, 4, 10];
 
-/** The prize in P-Credits for winning `wins` rounds on an entry of `fee`. */
+/**
+ * What a free entry pays, by how many rounds were won (index 0 = none, 6 = the whole cup): nothing until the Semi-Final
+ * (5 wins) pays 🪙 50, and the Final (6 wins) pays 🪙 100. Like the paid prizes, this is the total for the rounds won, not
+ * an extra on top of earlier rounds.
+ */
+export const FREE_PRIZES = [0, 0, 0, 10, 20, 50, 100];
+
+/** The prize in P-Credits for winning `wins` rounds on an entry of `fee` (0 for a free entry). */
 export function prizeFor(fee: number, wins: number): number {
   const w = Math.min(PRIZE_MULTIPLIERS.length - 1, Math.max(0, Math.trunc(wins)));
+  if (!(fee > 0)) return FREE_PRIZES[w];
   return Math.round(Math.max(0, fee) * PRIZE_MULTIPLIERS[w]);
 }
 
