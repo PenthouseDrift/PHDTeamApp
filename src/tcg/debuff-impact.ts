@@ -252,16 +252,20 @@ export interface BraceState {
 
 export const BRACE_START: BraceState = { x: 0.5, v: 0 };
 
-/** Move the marker on by `dt` seconds at time `t`. `input` is -1 (counter-steer left), 0, or 1 (right). The track has walls. */
+/**
+ * Move the marker on by `dt` seconds at time `t`. `input` is the counter-steer from -1 (full left) to 1 (full right): buttons
+ * and keys give -1, 0 or 1, and phone tilt gives anything in between. The track has walls.
+ */
 export function braceStep(
   state: BraceState,
-  input: -1 | 0 | 1,
+  input: number,
   t: number,
   phases: [number, number],
   strength: number,
   dt: number
 ): BraceState {
-  let v = state.v + (braceGust(t, phases, strength) + input * BRACE_CONTROL) * dt;
+  const push = clamp(input, -1, 1);
+  let v = state.v + (braceGust(t, phases, strength) + push * BRACE_CONTROL) * dt;
   v *= Math.pow(BRACE_DRAG, dt);
   let x = state.x + v * dt;
   if (x < 0) {

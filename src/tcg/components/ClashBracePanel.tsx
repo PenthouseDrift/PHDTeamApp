@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { DebuffCardDefinition } from "@/lib/crew-cards";
 import { buzz } from "../ui/feedback";
+import { useTilt } from "../ui/useTilt";
 import {
   BRACE_SECONDS,
   BRACE_START,
@@ -71,6 +72,19 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
   const [result, setResult] = useState<number | null>(null);
   const [phases] = useState(() => rollBracePhases());
   const inputRef = useRef<-1 | 0 | 1>(0);
+
+  // Phone tilt: the further the phone is tipped, the harder the push. Buttons and keys still work, and win while held.
+  const tilt = useTilt();
+  const [push, setPush] = useState(0);
+  const [touchLike] = useState(
+    () => typeof window !== "undefined" && (window.matchMedia?.("(pointer: coarse)").matches || "ontouchstart" in window)
+  );
+  const tiltReadRef = useRef(tilt.read);
+  const tiltLiveRef = useRef(false);
+  useEffect(() => {
+    tiltReadRef.current = tilt.read;
+    tiltLiveRef.current = tilt.enabled && tilt.seen;
+  }, [tilt.read, tilt.enabled, tilt.seen]);
   const stoppedRef = useRef(false);
   const submitTimerRef = useRef<number | null>(null);
   const onSubmitRef = useRef(onSubmit);
@@ -105,9 +119,13 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
     const tick = (now: number) => {
       const dt = Math.min(MAX_FRAME_SECONDS, (now - last) / 1000);
       last = now;
-      s = braceStep(s, inputRef.current, t, phases, strength, dt);
+      // A held button or key counts first; otherwise the tilt of the phone sets how hard to push (-1 to 1).
+      const held = inputRef.current;
+      const input = held !== 0 ? held : tiltLiveRef.current ? tiltReadRef.current() : 0;
+      s = braceStep(s, input, t, phases, strength, dt);
       if (braceInZone(s.x)) inZone += dt;
       t += dt;
+      setPush(input);
       setMarker(s);
       setGust(braceGust(t, phases, strength) / (strength || 1));
       setElapsed(t);
@@ -163,6 +181,13 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
     if (inputRef.current === dir) inputRef.current = 0;
   }, []);
 
+  /** Start the brace. The way the phone is held right now counts as straight. iPhone asks for motion access again after a reload. */
+  const start = async () => {
+    if (tilt.enabled && tilt.needsPermission && tilt.permission !== "granted") await tilt.enable();
+    tilt.calibrate();
+    setState("running");
+  };
+
   const inZoneNow = braceInZone(marker.x);
   const blocked = result === null ? 0 : Math.round(defenceShare(result) * 100);
   const verdict =
@@ -189,7 +214,7 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
               Brace {subject}
             </h3>
             <p className="mt-1 text-sm text-zinc-300">
-              Gusts push the marker around. Hold left or right to counter-steer and keep it inside the green zone for as long as you can.
+              Gusts push the marker around. Hold left or right (or tilt your phone) to counter-steer and keep it inside the green zone for as long as you can.
             </p>
             <p className="mt-2 text-xs font-black text-amber-300">
               {debuff.icon} {debuff.name} · <span className="uppercase">{debuff.tier}</span> is coming at your car
@@ -227,6 +252,39 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
                 wind ▶
               </span>
             </div>
+            {/* How hard the player is pushing right now, from either the buttons or the tilt of the phone. */}
+            {state === "running" && (
+              <div className="relative mx-auto mt-2 h-2 w-44 overflow-hidden rounded-full bg-zinc-800" aria-hidden>
+                <div
+                  className="absolute inset-y-0 bg-cyan-400"
+                  style={{ left: push < 0 ? `${50 + push * 50}%` : "50%", width: `${Math.abs(push) * 50}%` }}
+                />
+                <div className="absolute inset-y-0 left-1/2 w-px bg-zinc-500" />
+              </div>
+            )}
+            {state === "running" && tilt.enabled && !tilt.seen && (
+              <p className="mt-1 text-[11px] font-bold text-amber-300">No tilt detected on this device. Use the buttons below.</p>
+            )}
+            {state === "ready" && (touchLike || tilt.enabled) && (
+              <div className="mx-auto mt-3 max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3 text-left">
+                <p className="text-xs font-black text-cyan-200">📱 Tilt to steer</p>
+                <p className="mt-0.5 text-[11px] font-bold text-zinc-400">
+                  Tip your phone left or right: the further you tip it, the harder you push back. Hold it the way you like it and press
+                  Start. That angle counts as straight.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => (tilt.enabled ? tilt.disable() : void tilt.enable())}
+                  aria-pressed={tilt.enabled}
+                  className="gx-tap mt-2 flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-xl border border-cyan-400/60 bg-cyan-500/15 px-3 text-xs font-black uppercase tracking-wider text-cyan-100 [touch-action:manipulation] hover:bg-cyan-500/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                >
+                  {tilt.enabled ? "Tilt is on · tap to turn off" : "Use tilt"}
+                </button>
+                {tilt.permission === "denied" && (
+                  <p className="mt-1 text-[11px] font-bold text-amber-300">Motion access was refused, so tilt can&apos;t be used. The buttons still work.</p>
+                )}
+              </div>
+            )}
             <p className="mt-3 text-[11px] font-bold text-zinc-400">
               Left and right arrow keys (or A and D) work too.
               {reducedMotion ? " Reduced motion is on, so the gusts are gentler." : ""}
@@ -243,7 +301,7 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
             createPortal(
               <>
                 {state === "ready" && (
-                  <button type="button" onClick={() => setState("running")} className={confirmClass} autoFocus>
+                  <button type="button" onClick={() => void start()} className={confirmClass} autoFocus>
                     Start bracing
                     <span aria-hidden>→</span>
                   </button>
