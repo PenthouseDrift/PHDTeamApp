@@ -54,18 +54,25 @@ export const RIVAL_POOL_SIZE = 6;
  */
 export const STRENGTH_GRID = [0, 0.2, 0.4, 0.6, 0.8, 1, 1.12, 1.25];
 
-/** Battles simulated per grid point, per refinement step and for the final check. More is steadier but slower. */
-export const GRID_BATTLES = 160;
-export const REFINE_BATTLES = 240;
-export const REFINE_STEPS = 2;
+/**
+ * Battles simulated per grid point, per refinement step and for the final check. More is steadier but slower.
+ *
+ * These cost server CPU (starting a cup builds six rivals this way, and Vercel bills the time). They were cut from the first
+ * values (160 / 240 / 2 steps / 100 probes, accept within 4): a cup start dropped from about 15 s to about 6 s of CPU in
+ * scripts/simulate-campaign.ts, and rounds land on average 5.6 points from their target win rate instead of 4.4.
+ * Raise them for tighter difficulty at more cost; run that script to see both numbers.
+ */
+export const GRID_BATTLES = 80;
+export const REFINE_BATTLES = 160;
+export const REFINE_STEPS = 1;
 
 /** Battles per probe when a showcase roster is checked: can it be beaten as often as the round needs? */
-export const SHOWCASE_PROBE_BATTLES = 100;
+export const SHOWCASE_PROBE_BATTLES = 50;
 /** A showcase roster is used only if its best refined version lands within this many points of the target. */
 export const SHOWCASE_ACCEPT_WITHIN_PCT = 9;
 
 /** A refined rival is accepted when its simulated win rate is within this many percentage points of the target. */
-export const ACCEPT_WITHIN_PCT = 4;
+export const ACCEPT_WITHIN_PCT = 5;
 
 /** A run that has not moved for this long is dropped from Redis. */
 export const RUN_TTL_SECONDS = 60 * 60 * 24 * 3;

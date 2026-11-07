@@ -934,6 +934,8 @@ export async function completeClashBattleAction(input: {
       playerCorners: input.playerCorners,
     });
     const nextGameXp = await addGameXp(userId, xp.total);
+    // The Hall of Fame is kept for a short while; a finished battle changes wins and Drift XP, so the next look rebuilds it.
+    await redis.del(leaderboardCacheKey(25)).catch(() => 0);
 
     let rewardGranted = 0;
     let streakBonusGranted = 0;
@@ -1099,8 +1101,42 @@ export async function completeClashBattleAction(input: {
   }
 }
 
+/**
+ * The Hall of Fame. Building it reads up to 1,000 cards and works out every member's stats, which is a lot of work for
+ * something every visit to the game page asks for, so the finished board is kept in Redis for a short while and shared by
+ * everyone. A finished battle clears it (see completeClashBattleAction) so the next look is fresh; pack openings and other
+ * changes show up when it expires.
+ */
+const LEADERBOARD_CACHE_SECONDS = 90;
+const leaderboardCacheKey = (limit: number) => `tcg:clash:leaderboard:v1:${limit}`;
+
 export async function getDriftClashLeaderboard(
   limit = 25
+): Promise<DriftClashLeaderboardEntry[]> {
+  try {
+    const cached = await redis.get<DriftClashLeaderboardEntry[] | string>(leaderboardCacheKey(limit));
+    if (cached) {
+      const parsed = typeof cached === "string" ? JSON.parse(cached) : cached;
+      if (Array.isArray(parsed)) return parsed as DriftClashLeaderboardEntry[];
+    }
+  } catch (error) {
+    console.error("[driftClash] leaderboard cache read failed, rebuilding:", error);
+  }
+
+  const entries = await buildDriftClashLeaderboard(limit);
+  // An empty result can mean the build failed, so only a real board is kept.
+  if (entries.length > 0) {
+    try {
+      await redis.set(leaderboardCacheKey(limit), JSON.stringify(entries), { ex: LEADERBOARD_CACHE_SECONDS });
+    } catch (error) {
+      console.error("[driftClash] leaderboard cache write failed:", error);
+    }
+  }
+  return entries;
+}
+
+async function buildDriftClashLeaderboard(
+  limit: number
 ): Promise<DriftClashLeaderboardEntry[]> {
   try {
     const allCardIds = (await redis.zrange(ALL_MEMBER_CARDS_INDEX, 0, 999, { rev: true })) as string[];

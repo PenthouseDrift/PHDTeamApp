@@ -1336,7 +1336,7 @@ export function formatScaledDebuffTexts(
   return { ability, effect };
 }
 
-export function scaleCrewCardDefinition(
+function computeScaledCrewCardDefinition(
   baseDef: CrewCardDefinition,
   targetTier: FullArtTier
 ): CrewCardDefinition {
@@ -1419,6 +1419,26 @@ export function scaleCrewCardDefinition(
     ability: scaledTexts.ability,
     effect: scaledTexts.effect,
   };
+}
+
+/**
+ * A Crew card at a rarity. The same definition is scaled over and over while a battle is scored (and thousands of times when
+ * the Campaign tests its rivals), so results are kept per definition object and rarity. A definition that is edited is a new
+ * object, so it gets a fresh result. The result is shared, so treat it as read only.
+ */
+const scaledCrewCache = new WeakMap<CrewCardDefinition, Map<FullArtTier, CrewCardDefinition>>();
+export function scaleCrewCardDefinition(baseDef: CrewCardDefinition, targetTier: FullArtTier): CrewCardDefinition {
+  let byTier = scaledCrewCache.get(baseDef);
+  if (!byTier) {
+    byTier = new Map();
+    scaledCrewCache.set(baseDef, byTier);
+  }
+  let scaled = byTier.get(targetTier);
+  if (!scaled) {
+    scaled = computeScaledCrewCardDefinition(baseDef, targetTier);
+    byTier.set(targetTier, scaled);
+  }
+  return scaled;
 }
 
 /**
