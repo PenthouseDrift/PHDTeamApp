@@ -7,8 +7,8 @@ import type { MemberCard } from "@/lib/card-roll";
 import type { CampaignBattle, CampaignCrewOffer, CampaignDraft, CampaignOffer, CampaignState, CampaignView, EntryChoice } from "./types";
 
 /**
- * Drift Campaign server actions. The mode is open to every signed-in member. Every action checks the session, and admin-only
- * extras (the free test cup) are decided here from the session's role, never from anything the browser sends.
+ * Drift Campaign server actions. The mode is open to every signed-in member. Every action checks the session. The role is passed on
+ * from the session (never from anything the browser sends) in case an action needs an admin-only extra.
  */
 
 async function run<T>(fn: (userId: string, isAdmin: boolean) => Promise<T>): Promise<ActionResult<T>> {
@@ -33,7 +33,7 @@ export async function getCampaignAction(): Promise<ActionResult<CampaignState>> 
 
 /** Pay the entry fee and deal your first six cars. This is where the fee is taken. */
 export async function payCampaignEntryAction(entry: EntryChoice): Promise<ActionResult<{ draft: CampaignDraft; balance?: number }>> {
-  return run((userId, isAdmin) => service.payEntry(userId, entry === "test" ? "test" : Number(entry), isAdmin));
+  return run((userId) => service.payEntry(userId, entry === "test" ? "test" : Number(entry)));
 }
 
 /** Walk away from a paid entry before the cup starts. The fee is lost. */

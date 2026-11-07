@@ -284,10 +284,10 @@ export async function getDraft(userId: string): Promise<CampaignDraft | null> {
 /**
  * Pay the entry and deal the first six cars. This is where the fee is taken: before any cars are seen. Paying also gives a
  * full set of re-rolls for this entry, which is the only way to get them back. A paid entry stays until the cup is started
- * or withdrawn from, so leaving the page does not lose it and cannot be used to dodge the fee. Free test entries are for
- * admins only.
+ * or withdrawn from, so leaving the page does not lose it and cannot be used to dodge the fee. A free entry ("test") costs
+ * nothing, pays no prize and does not count towards cups won.
  */
-export async function payEntry(userId: string, choice: EntryChoice, isAdmin: boolean): Promise<{ draft: CampaignDraft; balance?: number }> {
+export async function payEntry(userId: string, choice: EntryChoice): Promise<{ draft: CampaignDraft; balance?: number }> {
   return withUserLock(userId, async () => {
     const run = await loadActiveRun(userId);
     if (run && isCurrentRun(run) && run.status === "active") throw new Error("A campaign is already in progress.");
@@ -300,7 +300,6 @@ export async function payEntry(userId: string, choice: EntryChoice, isAdmin: boo
 
     let entry: CampaignEntry;
     if (choice === "test") {
-      if (!isAdmin) throw new Error("Free test entries are for admins only.");
       entry = { kind: "test", fee: 0 };
     } else {
       if (!ENTRY_FEES.includes(Number(choice))) throw new Error("Choose one of the entry fees.");

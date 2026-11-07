@@ -11,19 +11,8 @@ import type { EntryChoice } from "../types";
 
 const card = "rounded-2xl border border-zinc-800 bg-zinc-900 p-3.5 text-zinc-100 sm:p-5";
 
-export function EntryStep({
-  entry,
-  onEntry,
-  pCredits,
-  allowTest = false,
-}: {
-  entry: EntryChoice;
-  onEntry: (choice: EntryChoice) => void;
-  pCredits: number;
-  /** The free test cup, for admins only. */
-  allowTest?: boolean;
-}) {
-  const options: EntryChoice[] = allowTest ? ["test", ...ENTRY_FEES] : [...ENTRY_FEES];
+export function EntryStep({ entry, onEntry, pCredits }: { entry: EntryChoice; onEntry: (choice: EntryChoice) => void; pCredits: number }) {
+  const options: EntryChoice[] = ["test", ...ENTRY_FEES];
   const fee = entry === "test" ? 0 : Number(entry);
   const top = fee > 0 ? prizeFor(fee, CAMPAIGN_ROUNDS.length) : 0;
 
@@ -49,7 +38,7 @@ export function EntryStep({
                   on ? "border-amber-400 bg-amber-500/20 shadow-[0_0_18px_rgba(245,158,11,0.25)]" : "border-zinc-700 bg-zinc-800 hover:bg-zinc-700"
                 }`}
               >
-                <span className="text-xl font-black tabular-nums">{choice === "test" ? "Test" : `🪙 ${choice}`}</span>
+                <span className="text-xl font-black tabular-nums">{choice === "test" ? "Free" : `🪙 ${choice}`}</span>
                 <span className="mt-0.5 text-[11px] font-bold leading-tight text-zinc-400">
                   {choice === "test" ? "Free · no prize" : cantAfford ? "Not enough P-Credits" : `Win up to 🪙 ${prizeFor(Number(choice), CAMPAIGN_ROUNDS.length).toLocaleString()}`}
                 </span>
@@ -67,12 +56,11 @@ export function EntryStep({
           {fee > 0 && <span className="text-xs font-bold text-amber-300">Entry 🪙 {fee}</span>}
         </div>
         {fee === 0 ? (
-          <p className="mt-2 rounded-xl bg-zinc-950/60 p-3 text-sm text-zinc-300">A test cup is free and pays nothing, however far you get. Pick a fee to see the prizes.</p>
+          <p className="mt-2 rounded-xl bg-zinc-950/60 p-3 text-sm text-zinc-300">A free cup costs nothing and pays no prize, however far you get. It does not count towards your tournaments won. Pick a fee to see the prizes.</p>
         ) : (
           <ol className="mt-2.5 space-y-1.5">
             {CAMPAIGN_ROUNDS.map((r) => {
               const prize = prizeFor(fee, r.round);
-              const profit = prize - fee;
               const width = Math.max(10, Math.round(Math.sqrt(prize / top) * 100));
               return (
                 <li key={r.round} className="relative flex min-h-11 items-center justify-between gap-3 overflow-hidden rounded-xl bg-zinc-950/60 px-3">
@@ -83,9 +71,6 @@ export function EntryStep({
                   </span>
                   <span className="relative shrink-0 text-right">
                     <span className="block text-base font-black tabular-nums text-white">🪙 {prize.toLocaleString()}</span>
-                    <span className={`block text-[10px] font-bold leading-none ${profit > 0 ? "text-emerald-400" : profit === 0 ? "text-zinc-400" : "text-rose-400"}`}>
-                      {profit > 0 ? `+${profit.toLocaleString()} profit` : profit === 0 ? "break even" : `${profit.toLocaleString()}`}
-                    </span>
                   </span>
                 </li>
               );

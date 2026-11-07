@@ -21,7 +21,7 @@ import {
   withdrawCampaignAction,
   withdrawCampaignDraftAction,
 } from "../actions";
-import { CAMPAIGN_ROUNDS, CARS_TO_PICK, CREW_TO_PICK, ENTRY_FEES, MIN_BRONZE_CARS, prizeFor } from "../config";
+import { CAMPAIGN_ROUNDS, CARS_TO_PICK, CREW_TO_PICK, MIN_BRONZE_CARS, prizeFor } from "../config";
 import { deckProblem, tierSlotOf } from "../deal";
 import type { GameXpBreakdown } from "../../game-xp";
 import type { CampaignBattle, CampaignDraft, CampaignView, EntryChoice, RolledTier } from "../types";
@@ -95,7 +95,7 @@ export function CampaignTab({
   onKitUsed?: (kitId: string) => void;
   /** Opens the page where P-Credits are bought, for a member who cannot afford an instant repair. */
   onOpenPCreditsTab?: () => void;
-  /** Admins also get the free test cup and the admin tools in the arena. The server decides this again from the session. */
+  /** Admins also get the admin tools in the arena. The server decides this again from the session. */
   isAdmin?: boolean;
   /** Called with the cars after a battle has worn them, so the rest of the game shows the new durability. */
   onCardsWorn?: (cars: MemberCard[]) => void;
@@ -124,8 +124,8 @@ export function CampaignTab({
   // Entering needs a minimum number of bronze cars; the server checks this again before taking the fee.
   const deckIssue = useMemo(() => deckProblem(cards), [cards]);
   const [view, setView] = useState<CampaignView | null>(null);
-  // How the next cup is entered: a free test cup (the default, so nothing is spent by accident) or one of the fees.
-  const [entry, setEntry] = useState<EntryChoice>(isAdmin ? "test" : ENTRY_FEES[0]);
+  // How the next cup is entered: a free cup (the default, so nothing is spent by accident) or one of the fees.
+  const [entry, setEntry] = useState<EntryChoice>("test");
   const applyView = useCallback(
     (next: CampaignView | null) => {
       setView(next);
@@ -359,9 +359,9 @@ export function CampaignTab({
     setAsk(
       entry === "test"
         ? {
-            title: "Start a free test cup?",
-            body: "A test cup costs nothing and pays no prize, however far you get.",
-            confirmLabel: "Start test cup",
+            title: "Start a free cup?",
+            body: "A free cup costs nothing and pays no prize, however far you get.",
+            confirmLabel: "Start free cup",
             run: () => void runPayEntry(),
           }
         : {
@@ -394,7 +394,7 @@ export function CampaignTab({
       body:
         fee > 0
           ? `Your 🪙 ${fee} entry is lost and you start again from the beginning. A new entry means a new fee.`
-          : "This free test cup ends and you start again from the beginning.",
+          : "This free cup ends and you start again from the beginning.",
       confirmLabel: fee > 0 ? "Withdraw, lose entry" : "Withdraw",
       danger: true,
       run: () => void runWithdrawDraft(),
@@ -499,7 +499,7 @@ export function CampaignTab({
       title: "Withdraw from the cup?",
       body:
         view?.entry.kind === "test"
-          ? "You will be out of this test cup. It pays no prize."
+          ? "You will be out of this free cup. It pays no prize."
           : `You will be out of the cup and keep the prize for the rounds you have won (🪙 ${prize.toLocaleString()}).`,
       confirmLabel: "Withdraw",
       danger: true,
@@ -561,7 +561,7 @@ export function CampaignTab({
   const idle = busy !== "loading" && stage === null && !active; // no cup running: the start or finished screen
   const anyBroken = Boolean(view?.cars.some((c) => isCarBroken(c)));
   const nextRound = view && active ? view.rounds[view.currentRound] : undefined;
-  const entryPaidText = paidEntry && paidEntry.fee > 0 ? `Entry paid 🪙 ${paidEntry.fee}` : "Free test cup";
+  const entryPaidText = paidEntry && paidEntry.fee > 0 ? `Entry paid 🪙 ${paidEntry.fee}` : "Free cup";
   const working_ = busy !== null || working !== null;
   const step: 0 | 1 | 2 | 3 | undefined = stage === "entry" ? 0 : stage === "cars" ? 1 : stage === "crew" ? 2 : active ? 3 : undefined;
   const subtitle =
@@ -574,7 +574,7 @@ export function CampaignTab({
           : stage === "crew"
             ? `Pick ${CREW_TO_PICK} of your ${crewOffer.length} Crew cards`
           : active && view
-            ? `Round ${Math.min(view.currentRound + 1, CAMPAIGN_ROUNDS.length)} of ${CAMPAIGN_ROUNDS.length}${view.entry.fee > 0 ? ` · entry 🪙 ${view.entry.fee}` : " · test cup"}`
+            ? `Round ${Math.min(view.currentRound + 1, CAMPAIGN_ROUNDS.length)} of ${CAMPAIGN_ROUNDS.length}${view.entry.fee > 0 ? ` · entry 🪙 ${view.entry.fee}` : " · free cup"}`
             : "6 rounds · lose once and you are out";
 
   /** What winning the current round pays, for the "next up" card. */
@@ -705,7 +705,7 @@ export function CampaignTab({
       {/* Step 1: the entry fee and what each round pays, before any cars are picked. */}
       {busy !== "loading" && stage === "entry" && (
         <>
-          <EntryStep entry={entry} onEntry={setEntry} pCredits={pCredits} allowTest={isAdmin} />
+          <EntryStep entry={entry} onEntry={setEntry} pCredits={pCredits} />
           <DockSpacer />
           <ActionDock label="Entry actions">
             <button type="button" className={dockSecondary} onClick={() => setStage(null)} disabled={busy !== null}>
@@ -1025,7 +1025,7 @@ export function CampaignTab({
 /** Shows what a finished cup paid. */
 function PrizeLine({ view }: { view: CampaignView | null }) {
   if (!view) return null;
-  if (view.entry.kind === "test") return <p className="mt-2 text-xs font-bold text-zinc-400">Test cup: no prize.</p>;
+  if (view.entry.kind === "test") return <p className="mt-2 text-xs font-bold text-zinc-400">Free cup: no prize.</p>;
   const paid = view.payout ?? 0;
   return (
     <p className={`mt-2 text-sm font-black ${paid > 0 ? "text-emerald-300" : "text-zinc-400"}`}>

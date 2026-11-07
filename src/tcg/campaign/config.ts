@@ -97,7 +97,7 @@ export const ENTRY_FEES = [50, 100, 200];
  * than playing on. With the win chances of 80/70/60/50/30/20% a typical player gets back about 94% of the fee on average;
  * change these numbers to change the economy.
  */
-export const PRIZE_MULTIPLIERS = [0, 0.25, 0.5, 1, 2, 4, 20];
+export const PRIZE_MULTIPLIERS = [0, 0.25, 0.5, 1, 2, 4, 10];
 
 /** The prize in P-Credits for winning `wins` rounds on an entry of `fee`. */
 export function prizeFor(fee: number, wins: number): number {
