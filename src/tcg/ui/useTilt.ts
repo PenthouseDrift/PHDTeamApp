@@ -11,11 +11,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
  */
 
 /** The tilt that counts as a full push, in degrees from straight. */
-export const TILT_FULL_DEGREES = 22;
+export const TILT_FULL_DEGREES = 14;
 /** Small movements around straight are ignored, in degrees. */
-export const TILT_DEAD_ZONE_DEGREES = 2;
-/** Each frame the reading moves this share of the way to the new value, which takes the shake out of a hand-held phone. */
-const SMOOTHING = 0.4;
+export const TILT_DEAD_ZONE_DEGREES = 1;
+/** Each frame the reading moves this share of the way to the new value: enough to take the worst shake out of a hand-held phone, light enough to feel immediate. */
+const SMOOTHING = 0.7;
+/** "Straight" is the average of the tilt over this long just before the game starts, so the tap on Start does not skew it. */
+const CALIBRATE_WINDOW_MS = 400;
 const STORAGE_KEY = "clash-brace-tilt-v1";
 
 const norm360 = (a: number) => ((a % 360) + 360) % 360;
@@ -51,13 +53,23 @@ type OrientationWithPermission = typeof DeviceOrientationEvent & { requestPermis
 const screenAngle = () =>
   typeof screen !== "undefined" && screen.orientation ? screen.orientation.angle : ((window as unknown as { orientation?: number }).orientation ?? 0);
 
+/** A phone or tablet (a touch screen as the main pointer). A laptop with a touch screen does not count, since it has no tilt sensor. */
+export function isTouchDevice(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia ? window.matchMedia("(pointer: coarse)").matches : "ontouchstart" in window;
+}
+
+/** Tilt is on by default on a phone. A choice the player has made on this device (on or off) always wins. */
 function loadEnabled(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    return localStorage.getItem(STORAGE_KEY) === "on";
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved === "on") return true;
+    if (saved === "off") return false;
   } catch {
-    return false;
+    /* storage can be unavailable; fall back to the device default */
   }
+  return isTouchDevice();
 }
 
 export function useTilt() {
@@ -72,12 +84,18 @@ export function useTilt() {
   const rollRef = useRef<number | null>(null);
   const neutralRef = useRef(0);
   const smoothRef = useRef(0);
+  // The last second of readings, so "straight" can be the average of the moment before the game starts.
+  const samplesRef = useRef<Array<{ at: number; roll: number }>>([]);
 
   useEffect(() => {
     const onOrient = (e: DeviceOrientationEvent) => {
       const roll = tiltRoll(e.beta, e.gamma, screenAngle());
       if (roll === null) return;
       rollRef.current = roll;
+      const now = performance.now();
+      const samples = samplesRef.current;
+      samples.push({ at: now, roll });
+      while (samples.length > 0 && now - samples[0].at > 1000) samples.shift();
       setSeen((was) => was || true);
     };
     window.addEventListener("deviceorientation", onOrient);
@@ -99,9 +117,14 @@ export function useTilt() {
       try {
         const res = await doe.requestPermission();
         setPermission(res);
-        if (res !== "granted") return false;
+        if (res !== "granted") {
+          // Refused: use the buttons. This is not saved as the player's choice, so tilt works again if they allow it later.
+          setEnabled(false);
+          return false;
+        }
       } catch {
         setPermission("denied");
+        setEnabled(false);
         return false;
       }
     } else {
@@ -117,9 +140,23 @@ export function useTilt() {
     remember(false);
   }, [remember]);
 
-  /** Count the way the phone is held right now as "straight". */
+  /** Count the way the phone has been held for the last moment as "straight" (the average of the last few hundred milliseconds). */
   const calibrate = useCallback(() => {
-    if (rollRef.current !== null) neutralRef.current = rollRef.current;
+    const now = performance.now();
+    const recent = samplesRef.current.filter((s) => now - s.at <= CALIBRATE_WINDOW_MS);
+    if (recent.length > 0) {
+      // Average on the circle's offset from the latest reading, so readings either side of the 180 degree wrap do not cancel out.
+      const ref = recent[recent.length - 1].roll;
+      const offset = recent.reduce((sum, s) => {
+        let d = s.roll - ref;
+        if (d > 180) d -= 360;
+        if (d < -180) d += 360;
+        return sum + d;
+      }, 0);
+      neutralRef.current = ref + offset / recent.length;
+    } else if (rollRef.current !== null) {
+      neutralRef.current = rollRef.current;
+    }
     smoothRef.current = 0;
   }, []);
 

@@ -222,15 +222,19 @@ export function ringAccuracy(radius: number): number {
 /** Seconds a brace lasts. */
 export const BRACE_SECONDS = 4;
 /** The safe zone is the middle of the track, this far either side of the centre (the track is 0 to 1). */
-export const BRACE_ZONE_HALF = 0.13;
+export const BRACE_ZONE_HALF = 0.15;
 /** How hard a counter-steer pushes the marker (track widths per second, per second). */
-export const BRACE_CONTROL = 3.4;
-/** The marker loses this share of its speed each second (so 0.35 means it keeps 35% after one second). */
-export const BRACE_DRAG = 0.35;
+export const BRACE_CONTROL = 3.2;
+/**
+ * The marker keeps this share of its speed after one second (so 0.12 means it loses most of it). A low number makes the marker
+ * stop soon after you stop pushing, which is what makes it controllable by tipping a phone: it behaves like leaning against a
+ * steady wind, not like steering a car that keeps drifting.
+ */
+export const BRACE_DRAG = 0.12;
 
 /** How strong the gusts are, by the debuff's rarity. Always less than BRACE_CONTROL, so a brace can be held. */
 export function braceStrength(tier: FullArtTier): number {
-  return [1.7, 2.0, 2.3, 2.6][tierIndex(tier)];
+  return [1.4, 1.7, 2.0, 2.4][tierIndex(tier)];
 }
 
 /** Two random starting points for the gust pattern, so no two braces are the same. */
@@ -238,9 +242,12 @@ export function rollBracePhases(rng: Rng = Math.random): [number, number] {
   return [rng() * Math.PI * 2, rng() * Math.PI * 2];
 }
 
-/** The sideways push at time `t` seconds (positive pushes right). */
+/**
+ * The sideways push at time `t` seconds (positive pushes right). Mostly a slow, steady wave (a full swing takes about six
+ * seconds) with a faster ripple on top, so the player can lean into the wind instead of chasing sudden shoves.
+ */
 export function braceGust(t: number, phases: [number, number], strength: number): number {
-  return strength * (0.65 * Math.sin(2.1 * t + phases[0]) + 0.35 * Math.sin(3.7 * t + phases[1]));
+  return strength * (0.7 * Math.sin(1.0 * t + phases[0]) + 0.3 * Math.sin(3.0 * t + phases[1]));
 }
 
 export interface BraceState {
@@ -294,9 +301,9 @@ export function simulatedAttackAccuracy(kind: "good" | "casual", rng: Rng): numb
   return clamp((kind === "good" ? 0.7 : 0.4) + noise(rng), 0, 1);
 }
 
-/** A simulated player's defence accuracy: a good one averages 0.8, a casual one 0.55 (Brace is more forgiving). */
+/** A simulated player's defence accuracy: a good one averages 0.85, a casual one 0.65 (Brace is more forgiving than Lock On). */
 export function simulatedDefendAccuracy(kind: "good" | "casual", rng: Rng): number {
-  return clamp((kind === "good" ? 0.8 : 0.55) + noise(rng), 0, 1);
+  return clamp((kind === "good" ? 0.85 : 0.65) + noise(rng), 0, 1);
 }
 
 /** How well the rival AI attacks, 0 to 1. Averages 0.6 at skill 1 and 0.3 at skill 0. */

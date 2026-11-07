@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { DebuffCardDefinition } from "@/lib/crew-cards";
 import { buzz } from "../ui/feedback";
-import { useTilt } from "../ui/useTilt";
+import { isTouchDevice, useTilt } from "../ui/useTilt";
 import {
   BRACE_SECONDS,
   BRACE_START,
@@ -26,6 +26,9 @@ const REDUCED_MOTION_GUST = 0.6;
 const RESULT_MS = 1000;
 /** A long frame (a tab in the background) never moves the marker more than this many seconds at once. */
 const MAX_FRAME_SECONDS = 0.05;
+/** Before the brace starts the player holds the phone steady for 3 short beats; that angle is then counted as straight. */
+const COUNTDOWN_STEPS = 3;
+const COUNTDOWN_STEP_MS = 380;
 
 function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -65,7 +68,8 @@ const steerClass =
 export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSkip }: ClashBracePanelProps) {
   const reducedMotion = usePrefersReducedMotion();
   const [footerEl, setFooterEl] = useState<HTMLDivElement | null>(null);
-  const [state, setState] = useState<"ready" | "running" | "done">("ready");
+  const [state, setState] = useState<"ready" | "countdown" | "running" | "done">("ready");
+  const [count, setCount] = useState(COUNTDOWN_STEPS);
   const [marker, setMarker] = useState<BraceState>(BRACE_START);
   const [gust, setGust] = useState(0);
   const [elapsed, setElapsed] = useState(0);
@@ -76,9 +80,7 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
   // Phone tilt: the further the phone is tipped, the harder the push. Buttons and keys still work, and win while held.
   const tilt = useTilt();
   const [push, setPush] = useState(0);
-  const [touchLike] = useState(
-    () => typeof window !== "undefined" && (window.matchMedia?.("(pointer: coarse)").matches || "ontouchstart" in window)
-  );
+  const [touchLike] = useState(isTouchDevice);
   const tiltReadRef = useRef(tilt.read);
   const tiltLiveRef = useRef(false);
   useEffect(() => {
@@ -181,12 +183,30 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
     if (inputRef.current === dir) inputRef.current = 0;
   }, []);
 
-  /** Start the brace. The way the phone is held right now counts as straight. iPhone asks for motion access again after a reload. */
+  /**
+   * Press Start: a short "hold steady" countdown, then the brace. The phone is calibrated at the END of the countdown, so the
+   * tap on Start (which tips the phone) does not decide what counts as straight. iPhone asks for motion access again after a
+   * reload, and it has to be asked for from this tap.
+   */
   const start = async () => {
     if (tilt.enabled && tilt.needsPermission && tilt.permission !== "granted") await tilt.enable();
-    tilt.calibrate();
-    setState("running");
+    setCount(COUNTDOWN_STEPS);
+    setState("countdown");
   };
+
+  const calibrate = tilt.calibrate;
+  useEffect(() => {
+    if (state !== "countdown") return;
+    const timer = window.setTimeout(() => {
+      if (count > 1) {
+        setCount(count - 1);
+      } else {
+        calibrate();
+        setState("running");
+      }
+    }, COUNTDOWN_STEP_MS);
+    return () => window.clearTimeout(timer);
+  }, [state, count, calibrate]);
 
   const inZoneNow = braceInZone(marker.x);
   const blocked = result === null ? 0 : Math.round(defenceShare(result) * 100);
@@ -269,8 +289,8 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
               <div className="mx-auto mt-3 max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900/60 p-3 text-left">
                 <p className="text-xs font-black text-cyan-200">📱 Tilt to steer</p>
                 <p className="mt-0.5 text-[11px] font-bold text-zinc-400">
-                  Tip your phone left or right: the further you tip it, the harder you push back. Hold it the way you like it and press
-                  Start. That angle counts as straight.
+                  Tip your phone left or right to push the marker back: the further you tip it, the harder you push. After you press
+                  Start, hold the phone steady for a moment. The angle you hold it at then counts as straight.
                 </p>
                 <button
                   type="button"
@@ -280,6 +300,9 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
                 >
                   {tilt.enabled ? "Tilt is on · tap to turn off" : "Use tilt"}
                 </button>
+                {tilt.enabled && tilt.needsPermission && tilt.permission !== "granted" && (
+                  <p className="mt-1 text-[11px] font-bold text-cyan-300">Your phone will ask to allow motion access when you press Start. Choose Allow.</p>
+                )}
                 {tilt.permission === "denied" && (
                   <p className="mt-1 text-[11px] font-bold text-amber-300">Motion access was refused, so tilt can&apos;t be used. The buttons still work.</p>
                 )}
@@ -304,6 +327,11 @@ export function ClashBracePanel({ cornerNumber, debuff, subject, onSubmit, onSki
                   <button type="button" onClick={() => void start()} className={confirmClass} autoFocus>
                     Start bracing
                     <span aria-hidden>→</span>
+                  </button>
+                )}
+                {state === "countdown" && (
+                  <button type="button" disabled className={`${confirmClass} min-h-14`} aria-live="assertive">
+                    Hold steady… {count}
                   </button>
                 )}
                 {state === "running" && (
