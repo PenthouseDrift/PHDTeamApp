@@ -81,10 +81,10 @@ export function PlayHub({
   modes.push({
     mode: "campaign",
     icon: "🏅",
-    title: "Drift Campaign",
+    title: "Drift Tournaments",
     blurb: "A six round knockout cup. Beat one driver per round to be champion.",
     tag: "New",
-    cta: "Open Campaign",
+    cta: "Open Tournaments",
     surface: "border-emerald-500/40 from-emerald-950/60 via-zinc-950 to-black",
     ctaCls: "bg-emerald-500 text-black",
   });

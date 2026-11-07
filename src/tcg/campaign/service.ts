@@ -291,7 +291,7 @@ export async function getDraft(userId: string): Promise<CampaignDraft | null> {
 export async function payEntry(userId: string, choice: EntryChoice): Promise<{ draft: CampaignDraft; balance?: number }> {
   return withUserLock(userId, async () => {
     const run = await loadActiveRun(userId);
-    if (run && isCurrentRun(run) && run.status === "active") throw new Error("A campaign is already in progress.");
+    if (run && isCurrentRun(run) && run.status === "active") throw new Error("A tournament is already in progress.");
 
     // Already paid and waiting: show it again rather than charging twice.
     const waiting = await loadTicket(userId);
@@ -400,7 +400,7 @@ export async function rerollCrew(userId: string): Promise<CampaignCrewOffer> {
 export async function startCampaign(userId: string, carIds: string[], crewIds: string[] = []): Promise<CampaignView> {
   return withUserLock(userId, async () => {
     const existing = await loadActiveRun(userId);
-    if (existing && isCurrentRun(existing) && existing.status === "active") throw new Error("A campaign is already in progress. Withdraw from it first.");
+    if (existing && isCurrentRun(existing) && existing.status === "active") throw new Error("A tournament is already in progress. Withdraw from it first.");
 
     const ticket = await loadTicket(userId);
     if (!ticket) throw new Error("Pay your entry first.");
@@ -541,7 +541,7 @@ async function buildRound(run: CampaignRun, index: number): Promise<void> {
 export async function beginRound(userId: string): Promise<CampaignBattle> {
   return withUserLock(userId, async () => {
     const run = await loadActiveRun(userId);
-    if (!run || run.status !== "active") throw new Error("There is no campaign in progress.");
+    if (!run || run.status !== "active") throw new Error("There is no tournament in progress.");
     if (run.battleStarted) throw new Error("A battle is already under way.");
     // A broken car cannot race. It has to be repaired in the pits first.
     const broken = run.cars.filter((c) => isCarBroken(c));
@@ -805,7 +805,7 @@ export async function forfeitCampaign(userId: string): Promise<CampaignView | nu
       forfeit(run, "withdrew");
       const balance = await settle(userId, run);
         await saveRun(run);
-      return toView(run, "You withdrew from the cup. Reset the campaign to enter again.", balance);
+      return toView(run, "You withdrew from the cup. Reset the tournament to enter again.", balance);
     }
     return toView(run);
   });

@@ -25,7 +25,7 @@ export function FlowHeader({
           🏆
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-base font-black leading-tight">Drift Campaign</h2>
+          <h2 className="truncate text-base font-black leading-tight">Drift Tournaments</h2>
           <p className="truncate text-[11px] font-medium text-zinc-400">{subtitle}</p>
         </div>
         {right}

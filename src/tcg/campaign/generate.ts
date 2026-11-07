@@ -57,8 +57,8 @@ export function pickArt(pool: ArtEntry[], count: number, rng: Rng, avoid: Set<st
 function faceOf(art: ArtEntry) {
   return {
     name: art.name,
-    ability: "Campaign Spec",
-    effect: "Tuned for the Drift Campaign.",
+    ability: "Tournament Spec",
+    effect: "Tuned for the Drift Tournaments.",
     imageUrl: art.imageUrl,
     imageZoom: art.imageZoom,
     imageX: art.imageX,
@@ -196,7 +196,7 @@ export function toOpponent(
 
 export function profileFor(side: PlayerSide): PlayerProfile {
   const profile = profileOf(side.cars, side.crew);
-  if (!profile) throw new Error("The campaign needs at least one car.");
+  if (!profile) throw new Error("The tournament needs at least one car.");
   return profile;
 }
 

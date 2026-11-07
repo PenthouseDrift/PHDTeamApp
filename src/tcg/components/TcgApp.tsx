@@ -43,7 +43,7 @@ const TourTab = dynamic(() => import("@/tcg/tour/components/TourTab").then((m) =
 // Drift Campaign is loaded the same way.
 const CampaignTab = dynamic(() => import("@/tcg/campaign/components/CampaignTab").then((m) => m.CampaignTab), {
   ssr: false,
-  loading: () => <TabSkeleton label="Loading Drift Campaign" />,
+  loading: () => <TabSkeleton label="Loading Drift Tournaments" />,
 });
 
 /** The sections opened from the Play page. The Play entry in the navigation stays selected while one of these is open. */

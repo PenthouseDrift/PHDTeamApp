@@ -54,7 +54,7 @@ export function ResumeDialog({
         className="w-full max-w-md rounded-t-3xl border border-amber-400/50 bg-zinc-950 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-white shadow-2xl sm:rounded-3xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="text-[11px] font-black uppercase tracking-widest text-amber-400">Drift Campaign</p>
+        <p className="text-[11px] font-black uppercase tracking-widest text-amber-400">Drift Tournaments</p>
         <h4 id="campaign-resume-title" className="mt-0.5 text-lg font-black">
           You have a cup in progress
         </h4>

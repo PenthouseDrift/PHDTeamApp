@@ -3390,7 +3390,7 @@ export function DriftClashArena({
                             : "Final Judge Verdict"}
                   </span>
                   <h2 className="truncate text-xs font-black text-white sm:text-sm">
-                    {campaign ? `Drift Campaign · ${campaign.roundLabel}` : "Penthouse Tandem Clash"}
+                    {campaign ? `Drift Tournaments · ${campaign.roundLabel}` : "Penthouse Tandem Clash"}
                   </h2>
                 </div>
               </div>

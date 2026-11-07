@@ -60,7 +60,7 @@ async function safely<T>(call: () => Promise<ActionResult<T>>): Promise<ActionRe
     console.error("[campaign] server action failed:", e);
     return {
       success: false,
-      error: "Could not reach the campaign server. If the dev server was running when this feature was added, restart it and reload.",
+      error: "Could not reach the tournament server. If the dev server was running when this feature was added, restart it and reload.",
     };
   }
 }
@@ -582,7 +582,7 @@ export function CampaignTab({
   const nextPrize = nextPrizeAmount > 0 ? `🪙 ${nextPrizeAmount.toLocaleString()}` : null;
 
   return (
-    <section aria-label="Drift Campaign" className="space-y-3">
+    <section aria-label="Drift Tournaments" className="space-y-3">
       {/* Back to the Play page, and (while choosing cars on a paid entry) the way out of the cup. */}
       {(onBack || ((stage === "cars" || stage === "crew") && busy !== "loading")) && (
         <div className="flex items-center justify-between gap-2">
@@ -695,9 +695,9 @@ export function CampaignTab({
               {deckIssue}
             </p>
           )}
-          <ActionDock label="Campaign actions">
+          <ActionDock label="Tournament actions">
             <button type="button" className={dockPrimary} onClick={() => setStage("entry")} disabled={busy !== null || deckIssue !== null}>
-              {view?.endedBy === "withdrew" ? "↺ Reset campaign" : view ? "🏁 Start a new campaign" : "🏁 Enter the cup"}
+              {view?.endedBy === "withdrew" ? "↺ Reset tournament" : view ? "🏁 Start a new tournament" : "🏁 Enter the cup"}
             </button>
           </ActionDock>
         </>

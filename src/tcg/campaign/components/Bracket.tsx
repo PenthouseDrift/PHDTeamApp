@@ -124,7 +124,7 @@ export function Bracket({
       }}
     >
       <h3 className="px-4 pt-4 text-center text-2xl uppercase tracking-wide sm:text-3xl">
-        <span className="font-light">Drift Campaign </span>
+        <span className="font-light">Drift Tournaments </span>
         <span className="font-black text-amber-400">Schedule</span>
       </h3>
 
@@ -133,7 +133,7 @@ export function Bracket({
         className="hidden overflow-x-auto px-4 pb-4 pt-2 lg:block"
         tabIndex={0}
         role="region"
-        aria-label="Campaign bracket"
+        aria-label="Tournament bracket"
       >
         <div className="relative mx-auto" style={{ width: `${widthRem}rem`, height: `${height}rem` }} aria-hidden>
           {stages.map(({ spec, i, r }) => {

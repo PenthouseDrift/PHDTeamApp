@@ -25,10 +25,10 @@ export function PrizeLadder({ fee, wins, compact = false }: { fee: number; wins:
               key={r.round}
               aria-label={`${r.name}: ${prizeFor(fee, r.round)} P-Credits${reached ? ", won" : ""}`}
               className={`rounded-lg border px-2 py-1.5 text-center ${
-                reached ? "border-emerald-500/60 bg-emerald-500/15" : "border-zinc-800 bg-zinc-900"
+                reached ? "border-emerald-500/70 bg-emerald-950" : "border-zinc-800 bg-zinc-900"
               }`}
             >
-              <span className="block text-[10px] font-black uppercase text-zinc-400">{r.short}</span>
+              <span className={`block text-[10px] font-black uppercase ${reached ? "text-emerald-300" : "text-zinc-300"}`}>{r.short}</span>
               <span className={`block text-sm font-black tabular-nums ${reached ? "text-emerald-300" : "text-white"}`}>{amount(fee, i + 1)}</span>
               {fee > 0 && <span className="block text-[9px] text-zinc-500">×{PRIZE_MULTIPLIERS[i + 1]}</span>}
             </li>
@@ -51,10 +51,10 @@ function CompactLadder({ fee, wins }: { fee: number; wins: number }) {
             key={r.round}
             aria-label={`${r.name}: ${prizeFor(fee, r.round)} P-Credits${reached ? ", won" : ""}`}
             className={`min-w-[4.6rem] flex-1 snap-start rounded-xl border px-2 py-1.5 text-center ${
-              reached ? "border-emerald-500/60 bg-emerald-500/15" : next ? "border-amber-400 bg-amber-500/15" : "border-zinc-800 bg-zinc-900"
+              reached ? "border-emerald-500/70 bg-emerald-950" : next ? "border-amber-400 bg-amber-950" : "border-zinc-800 bg-zinc-900"
             }`}
           >
-            <span className="block text-[10px] font-black uppercase text-zinc-400">{reached ? "✓ " : ""}{r.short}</span>
+            <span className={`block text-[10px] font-black uppercase ${reached ? "text-emerald-300" : "text-zinc-300"}`}>{reached ? "✓ " : ""}{r.short}</span>
             <span className={`block text-sm font-black tabular-nums ${reached ? "text-emerald-300" : "text-white"}`}>{amount(fee, r.round)}</span>
           </li>
         );
