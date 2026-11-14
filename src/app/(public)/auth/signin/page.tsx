@@ -1,21 +1,26 @@
+import { headers } from "next/headers";
 import { signIn } from "@/lib/auth";
+import { isDriftClashHost } from "@/lib/app-host";
 
-export default function SignInPage({
+export default async function SignInPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
+  // On the game-only host this is the Drift Clash sign-in and lands in the game.
+  const h = await headers();
+  const driftClash = isDriftClashHost(h.get("x-forwarded-host") ?? h.get("host"));
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950">
       <div className="bg-white dark:bg-zinc-900 rounded-2xl p-8 w-full max-w-md shadow-lg border border-zinc-200 dark:border-zinc-800">
         <div className="flex justify-center mb-6">
-          <img src="/icons/icon-192.png" alt="Penthouse Drift" className="h-12 w-12" />
+          <img src="/icons/icon-192.png" alt={driftClash ? "Drift Clash" : "Penthouse Drift"} className="h-12 w-12" />
         </div>
         <p className="text-zinc-500 dark:text-zinc-400 text-center mb-8">
-          Sign in to access the track
+          {driftClash ? "Sign in to play Drift Clash" : "Sign in to access the track"}
         </p>
 
-        <SignInContent searchParams={searchParams} />
+        <SignInContent searchParams={searchParams} redirectTo={driftClash ? "/cards" : "/dashboard"} />
       </div>
     </div>
   );
@@ -23,8 +28,10 @@ export default function SignInPage({
 
 async function SignInContent({
   searchParams,
+  redirectTo,
 }: {
   searchParams: Promise<{ error?: string }>;
+  redirectTo: string;
 }) {
   const params = await searchParams;
 
@@ -39,7 +46,7 @@ async function SignInContent({
       <form
         action={async () => {
           "use server";
-          await signIn("google", { redirectTo: "/dashboard" });
+          await signIn("google", { redirectTo });
         }}
       >
         <button

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getWebsiteListings, getListingAuthorName } from "@/actions/marketplace";
+import { listingSellerName } from "@/lib/marketplace-seller";
 import { isListingReserved, variantBuyable, isVariantReserved } from "@/lib/marketplace-reserved";
 
 export const dynamic = "force-dynamic";
@@ -143,7 +144,7 @@ export async function GET(request: Request) {
         images: l.images,
         cover: l.images[0],
         location: l.location,
-        seller: names.get(l.userId) || "Member",
+        seller: listingSellerName(l, names.get(l.userId) || "Member"),
         atTrack: l.atTrack,
         meetAtTrack: l.meetAtTrack,
         soldByAsboRc: l.soldByAsboRc,

@@ -147,9 +147,8 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
           ))}
         </div>
 
-        {/* Search (keyed on query so external URL changes reset the input) */}
+        {/* Search (syncs itself with external URL changes, so no key needed) */}
         <MarketplaceSearch
-          key={query}
           initialQuery={query}
           basePath="/marketplace"
           category={category}

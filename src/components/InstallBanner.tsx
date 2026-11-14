@@ -82,11 +82,11 @@ function iosGuideSubtitle(browser: IOSBrowser): string {
 // Returns the ordered install steps tailored to the detected iOS browser.
 // Safari and Chrome both support Add to Home Screen but expose Share in
 // different places; in-app/other browsers must first bounce to Safari.
-function iosStepsForBrowser(browser: IOSBrowser): ReactNode[] {
+function iosStepsForBrowser(browser: IOSBrowser, appName: string): ReactNode[] {
   const shareThenAdd = (shareLocation: ReactNode): ReactNode[] => [
     shareLocation,
     <>Scroll down and choose <strong>Add to Home Screen</strong>, then tap <strong>Add</strong>.</>,
-    <>Launch Penthouse Drift from its new Home Screen icon.</>,
+    <>Launch {appName} from its new Home Screen icon.</>,
   ];
 
   switch (browser) {
@@ -103,14 +103,14 @@ function iosStepsForBrowser(browser: IOSBrowser): ReactNode[] {
         <>Tap the <strong>•••</strong> (or browser) menu in this app, then choose <strong>Open in Safari</strong> / <strong>Open in browser</strong>.</>,
         <>In Safari, tap the <strong>Share</strong> button <span aria-hidden="true">⬆️</span> in the bottom toolbar.</>,
         <>Choose <strong>Add to Home Screen</strong>, then tap <strong>Add</strong>.</>,
-        <>Launch Penthouse Drift from its new Home Screen icon.</>,
+        <>Launch {appName} from its new Home Screen icon.</>,
       ];
     case "other":
       return [
         <>Copy this page&apos;s link and open it in <strong>Safari</strong> (Chrome and Edge also work on newer iOS).</>,
         <>Tap the <strong>Share</strong> button <span aria-hidden="true">⬆️</span> in Safari&apos;s bottom toolbar.</>,
         <>Choose <strong>Add to Home Screen</strong>, then tap <strong>Add</strong>.</>,
-        <>Launch Penthouse Drift from its new Home Screen icon.</>,
+        <>Launch {appName} from its new Home Screen icon.</>,
       ];
   }
 }
@@ -124,7 +124,7 @@ function wasRecentlyDismissed() {
   }
 }
 
-export function InstallBanner() {
+export function InstallBanner({ appName = "Penthouse Drift" }: { appName?: string } = {}) {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showBanner, setShowBanner] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
@@ -205,7 +205,7 @@ export function InstallBanner() {
           <div className="flex items-center gap-3 min-w-0">
             <img src="/icons/icon-192.png" alt="" className="w-8 h-8 rounded-lg shrink-0 border border-black/20 object-cover" />
             <div className="min-w-0 text-left">
-              <p className="text-xs font-bold truncate leading-tight">Install Penthouse Drift</p>
+              <p className="text-xs font-bold truncate leading-tight">Install {appName}</p>
               <p className="text-[10px] font-medium opacity-90 truncate leading-tight">
                 {!isIOS
                   ? "Get quick full-screen app access"
@@ -240,7 +240,7 @@ export function InstallBanner() {
             </button>
 
             <div className="flex items-center gap-3.5 pr-8">
-              <img src="/icons/icon-192.png" alt="Penthouse Drift" className="w-14 h-14 rounded-2xl border border-zinc-200 dark:border-zinc-700" />
+              <img src="/icons/icon-192.png" alt={appName} className="w-14 h-14 rounded-2xl border border-zinc-200 dark:border-zinc-700" />
               <div>
                 <h2 id="install-title" className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Install on iPhone or iPad</h2>
                 <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold">{iosGuideSubtitle(iosBrowser)}</p>
@@ -258,7 +258,7 @@ export function InstallBanner() {
             )}
 
             <ol className="space-y-3 text-sm text-zinc-700 dark:text-zinc-300">
-              {iosStepsForBrowser(iosBrowser).map((step, index) => (
+              {iosStepsForBrowser(iosBrowser, appName).map((step, index) => (
                 <li key={index} className="flex gap-3">
                   <span className="font-black text-amber-500">{index + 1}</span>
                   <span>{step}</span>

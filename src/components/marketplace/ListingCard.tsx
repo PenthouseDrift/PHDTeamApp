@@ -7,6 +7,7 @@ import { useState, useTransition } from "react";
 import type { MarketplaceListing } from "@/types";
 import { deleteListing, setListingStatus, setListingSoldCount, sellAsboRcUnits, publishListing, adjustVariantSold, addListingStock, addVariantStock } from "@/actions/marketplace";
 import { isListingReserved } from "@/lib/marketplace-reserved";
+import { listingSellerName } from "@/lib/marketplace-seller";
 import { ShareButton } from "@/components/ShareButton";
 import { AddToBasketButton } from "@/components/marketplace/AddToBasketButton";
 import { MemberReservations, ReserveForMemberButton } from "@/components/marketplace/MemberReservations";
@@ -102,6 +103,31 @@ export function ListingCard({
       }
     });
   };
+
+  // Add stock for non-variant listings (normal and ASBO-RC): raises quantity and availability.
+  const addStockRow = (
+    <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+      <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Add stock</span>
+      <input
+        type="number"
+        min={1}
+        step={1}
+        inputMode="numeric"
+        aria-label="Units to add to stock"
+        value={addQty}
+        onChange={(e) => setAddQty(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+        className="ml-auto h-10 w-16 rounded-lg border border-zinc-300 bg-white px-2 text-center text-sm font-semibold text-zinc-800 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+      />
+      <button
+        type="button"
+        onClick={addStockToListing}
+        disabled={isPending}
+        className="h-10 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
+      >
+        + Add
+      </button>
+    </div>
+  );
 
   const hasVariations = listing.hasVariations;
   // Admins can reserve any live listing for a member; nobody else can.
@@ -338,7 +364,7 @@ export function ListingCard({
           </p>
         )}
         <p className="mt-0.5 line-clamp-1 text-xs text-zinc-500 dark:text-zinc-400">
-          {authorName}
+          {listingSellerName(listing, authorName)}
           {listing.location ? ` · ${listing.location}` : ""}
         </p>
         <p className={`mt-0.5 text-xs font-semibold ${status === "sold" ? "text-red-500 dark:text-red-400" : "text-zinc-600 dark:text-zinc-300"}`}>
@@ -542,8 +568,10 @@ export function ListingCard({
                           Record a sale
                         </button>
                       </div>
+                      {addStockRow}
                       <p className="text-xs leading-snug text-zinc-500 dark:text-zinc-400">
-                        Logs a sale to the ASBO-RC ledger and drops available by 1. Manage stock in Admin → Reports → ASBO-RC.
+                        Recording a sale logs it to the ASBO-RC ledger and drops available by 1. Adding stock raises
+                        available stock and updates the ASBO-RC report.
                       </p>
                     </>
                   ) : (
@@ -584,28 +612,7 @@ export function ListingCard({
                           ? multiUnit ? "Restock (mark available)" : "Mark available"
                           : multiUnit ? "Mark all sold" : "Mark as sold"}
                       </button>
-                      {/* Add stock: raises total quantity (and availability). */}
-                      <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-900/50 dark:bg-emerald-950/20">
-                        <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Add stock</span>
-                        <input
-                          type="number"
-                          min={1}
-                          step={1}
-                          inputMode="numeric"
-                          aria-label="Units to add to stock"
-                          value={addQty}
-                          onChange={(e) => setAddQty(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
-                          className="ml-auto h-10 w-16 rounded-lg border border-zinc-300 bg-white px-2 text-center text-sm font-semibold text-zinc-800 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-                        />
-                        <button
-                          type="button"
-                          onClick={addStockToListing}
-                          disabled={isPending}
-                          className="h-10 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50"
-                        >
-                          + Add
-                        </button>
-                      </div>
+                      {addStockRow}
                     </>
                   )}
                 </section>

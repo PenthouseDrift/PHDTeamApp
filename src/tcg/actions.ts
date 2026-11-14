@@ -1,6 +1,7 @@
 "use server";
 
 import { hostedCheckoutUrl } from "@/lib/sumup-urls";
+import { requestBaseUrl } from "@/lib/request-base-url";
 import { randomInt, randomUUID } from "crypto";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
@@ -142,7 +143,8 @@ export async function createPCreditsCheckout(
     const itemLabel = `${bundle.name} (${bundle.pCredits.toLocaleString()} P-Credits)`;
     const description = `Penthouse TCG - ${itemLabel} - ${user.name}`;
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    // Return to whichever host the player bought on (the main app or the game-only Drift Clash host).
+    const baseUrl = await requestBaseUrl();
     const returnUrl = `${baseUrl}/cards?tab=p-credits`;
 
     const checkout = await createCheckout({

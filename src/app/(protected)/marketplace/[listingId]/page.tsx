@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { getListingById, getListingAuthorName, canViewDraft } from "@/actions/marketplace";
 import { ListingDetailActions } from "@/components/marketplace/ListingDetailActions";
 import { ListingGallery } from "@/components/marketplace/ListingGallery";
+import { listingSellerName } from "@/lib/marketplace-seller";
 import { ListingVariantPricing } from "@/components/marketplace/ListingVariantPricing";
 import { BuyAndCollect } from "@/components/marketplace/BuyAndCollect";
 import { isListingReserved } from "@/lib/marketplace-reserved";
@@ -94,11 +95,13 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
     notFound();
   }
 
-  const [authorName, reservationCtx] = await Promise.all([
+  const [memberName, reservationCtx] = await Promise.all([
     getListingAuthorName(listing.userId),
     // Viewer-specific: your own holds, plus every holder for admins only.
     getReservationContext(),
   ]);
+  // "Sold by PHD" items show Penthouse Drift, not the admin who created the listing.
+  const authorName = listingSellerName(listing, memberName);
   const viewerId = session?.user?.id ?? "";
   const isStaff = session?.user?.role === "admin" || session?.user?.role === "moderator";
   const canManage = viewerId === listing.userId || isStaff;

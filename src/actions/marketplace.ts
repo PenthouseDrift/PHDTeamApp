@@ -2044,6 +2044,36 @@ export async function setVariantReservedCount(
   }
 }
 
+/** Matches the per-listing / per-variation quantity cap in marketplaceListingSchema. */
+const MAX_LISTING_QUANTITY = 10000;
+
+/** Re-score a restocked listing in the right index (drafts never enter the public one). */
+async function reindexAfterStockChange(
+  listing: Pick<MarketplaceListing, "listingId" | "createdAt" | "isDraft">,
+  status: "available" | "sold"
+): Promise<void> {
+  if (listing.isDraft) {
+    await redis.zadd(MARKETPLACE_DRAFTS_INDEX, { score: -listing.createdAt, member: listing.listingId });
+  } else {
+    await redis.zadd(MARKETPLACE_INDEX, {
+      score: indexScore(listing.createdAt, status),
+      member: listing.listingId,
+    });
+  }
+}
+
+/** Refresh every page that shows stock / ASBO-RC availability after a restock. */
+function revalidateAfterStockChange(listingId: string): void {
+  revalidatePath("/marketplace");
+  revalidatePath("/marketplace/mine");
+  bustMarketplaceCache();
+  revalidatePath(`/marketplace/${listingId}`);
+  revalidatePath("/admin/asbo-rc");
+  revalidatePath("/asbo-rc");
+  revalidatePath("/admin/click-collect");
+  revalidatePath("/dashboard");
+}
+
 /**
  * Add `add` units of stock to a NON-VARIANT listing. This raises the listing's
  * total quantity (so available = quantity - soldCount goes up by `add`), which
@@ -2077,6 +2107,12 @@ export async function addListingStock(
     }
 
     const nextQuantity = listing.quantity + toAdd;
+    if (nextQuantity > MAX_LISTING_QUANTITY) {
+      return {
+        success: false,
+        error: `Stock can't exceed ${MAX_LISTING_QUANTITY} units (currently ${listing.quantity}).`,
+      };
+    }
     // ASBO-RC: quantity == available. Normal: available = quantity - soldCount.
     const available = listing.soldByAsboRc ? nextQuantity : nextQuantity - listing.soldCount;
     const status: "available" | "sold" = available <= 0 ? "sold" : "available";
@@ -2087,16 +2123,8 @@ export async function addListingStock(
       status,
       updatedAt: now,
     });
-    await redis.zadd(MARKETPLACE_INDEX, {
-      score: indexScore(listing.createdAt, status),
-      member: listingId,
-    });
-
-    revalidatePath("/marketplace");
-    bustMarketplaceCache();
-    revalidatePath(`/marketplace/${listingId}`);
-    revalidatePath("/admin/asbo-rc");
-    revalidatePath("/asbo-rc");
+    await reindexAfterStockChange(listing, status);
+    revalidateAfterStockChange(listingId);
     return { success: true, data: { quantity: nextQuantity, available: Math.max(0, available), status } };
   } catch (error) {
     return {
@@ -2141,6 +2169,12 @@ export async function addVariantStock(
 
     const variant = listing.variants[idx];
     const nextVariantQty = variant.quantity + toAdd;
+    if (nextVariantQty > MAX_LISTING_QUANTITY) {
+      return {
+        success: false,
+        error: `A variation can't exceed ${MAX_LISTING_QUANTITY} units (currently ${variant.quantity}).`,
+      };
+    }
     const nextVariants = listing.variants.map((v, i) =>
       i === idx ? { ...v, quantity: nextVariantQty } : v
     );
@@ -2155,16 +2189,8 @@ export async function addVariantStock(
       status: derived.status,
       updatedAt: now,
     });
-    await redis.zadd(MARKETPLACE_INDEX, {
-      score: indexScore(listing.createdAt, derived.status),
-      member: listingId,
-    });
-
-    revalidatePath("/marketplace");
-    bustMarketplaceCache();
-    revalidatePath(`/marketplace/${listingId}`);
-    revalidatePath("/admin/asbo-rc");
-    revalidatePath("/asbo-rc");
+    await reindexAfterStockChange(listing, derived.status);
+    revalidateAfterStockChange(listingId);
     return {
       success: true,
       data: {

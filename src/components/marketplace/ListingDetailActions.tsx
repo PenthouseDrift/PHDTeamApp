@@ -11,6 +11,7 @@ import {
   setListingSoldCount,
   sellAsboRcUnits,
   addListingStock,
+  addVariantStock,
 } from "@/actions/marketplace";
 
 /** What the "mark a variation sold" window needs to know about each variation. */
@@ -57,6 +58,7 @@ export function ListingDetailActions({
   // Total quantity (restockable). For ASBO this doubles as live available.
   const [quantityState, setQuantityState] = useState(Math.max(0, quantity));
     const [addQty, setAddQty] = useState(1);
+  const [variantAddQty, setVariantAddQty] = useState<Record<string, number>>({});
   const [variants, setVariants] = useState(initialVariants);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerError, setPickerError] = useState<string | null>(null);
@@ -85,6 +87,23 @@ export function ListingDetailActions({
       if (result.success) {
         setQuantityState(result.data.quantity);
         if (soldByAsboRc) setAsboAvailable(result.data.available);
+        setStatus(result.data.status);
+        router.refresh();
+      } else {
+        alert(result.error);
+      }
+    });
+  };
+
+  const addStockToVariant = (variantId: string) => {
+    setPickerError(null);
+    const n = Math.max(1, Math.floor(variantAddQty[variantId] ?? 1) || 1);
+    startTransition(async () => {
+      const result = await addVariantStock(listingId, variantId, n);
+      if (result.success) {
+        setVariants((list) =>
+          list.map((v) => (v.id === variantId ? { ...v, quantity: result.data.variantQuantity } : v))
+        );
         setStatus(result.data.status);
         router.refresh();
       } else {
@@ -288,9 +307,47 @@ export function ListingDetailActions({
           </span>
         </div>
       ) : (
-        <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/40 dark:text-zinc-400">
-          This item has variations — add stock per option from its card in the marketplace list.
-        </p>
+        <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-2.5 dark:border-emerald-900/50 dark:bg-emerald-950/20">
+          <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+            Add stock per {optionWord}
+          </span>
+          <ul className="space-y-2">
+            {variants.map((v) => {
+              const left = Math.max(0, v.quantity - v.soldCount);
+              return (
+                <li key={v.id} className="flex flex-wrap items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-sm text-zinc-800 dark:text-zinc-200">
+                    {v.name}
+                    <span className="ml-2 text-xs text-zinc-500 dark:text-zinc-400">{left} left</span>
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    inputMode="numeric"
+                    aria-label={`Units to add to ${v.name}`}
+                    value={variantAddQty[v.id] ?? 1}
+                    onChange={(e) =>
+                      setVariantAddQty((m) => ({
+                        ...m,
+                        [v.id]: Math.max(1, Math.floor(Number(e.target.value) || 1)),
+                      }))
+                    }
+                    className="h-8 w-16 rounded-md border border-zinc-300 bg-white px-2 text-center text-sm font-semibold text-zinc-800 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => addStockToVariant(v.id)}
+                    disabled={isPending}
+                    className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
+                  >
+                    + Add
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
 
       <div className="flex flex-wrap gap-2">

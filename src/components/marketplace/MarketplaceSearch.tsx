@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 interface MarketplaceSearchProps {
-  /** Current query from the URL. The parent keys this component on it, so a
-   * change (back button, clear link) remounts with the right initial value. */
+  /** Current query from the URL. External changes (back button, clear link)
+   * are synced into the input without remounting it. */
   initialQuery?: string;
   /** Route the search navigates to (defaults to the browse grid). */
     basePath?: string;
@@ -27,23 +27,37 @@ export function MarketplaceSearch({
 }: MarketplaceSearchProps) {
   const router = useRouter();
   const [value, setValue] = useState(initialQuery);
+  // The last query this component put in the URL (or synced from it). Lets us
+  // tell our own navigations apart from external ones (back button, clear link).
+  const lastSynced = useRef(initialQuery.trim());
 
-  // Debounced navigation on typing. Skips pushing when the value already matches
-  // the URL query the component mounted with (no redundant navigation).
+  // External URL change (not caused by our own typing): adopt it into the input.
+  // Our own pushes update lastSynced first, so they never overwrite what the
+  // user is still typing.
+  useEffect(() => {
+    const incoming = initialQuery.trim();
+    if (incoming === lastSynced.current) return;
+    lastSynced.current = incoming;
+    setValue(initialQuery);
+  }, [initialQuery]);
+
+  // Debounced navigation on typing. Skips when the value already matches the URL.
   useEffect(() => {
     const trimmed = value.trim();
-    if (trimmed === initialQuery.trim()) return;
+    if (trimmed === lastSynced.current) return;
     const t = setTimeout(() => {
-            // Keep the category and "Sold by PHD" filters; only the query (and page) change.
+      lastSynced.current = trimmed;
+      // Keep the category and "Sold by PHD" filters; only the query (and page) change.
       const sp = new URLSearchParams();
       if (trimmed) sp.set("q", trimmed);
       if (category) sp.set("category", category);
       if (soldByPhd) sp.set("sold", "phd");
       const qs = sp.toString();
-      router.push(qs ? `${basePath}?${qs}` : basePath);
+      // replace (not push) so each keystroke doesn't add a history entry.
+      router.replace(qs ? `${basePath}?${qs}` : basePath, { scroll: false });
     }, 300);
     return () => clearTimeout(t);
-  }, [value, initialQuery, basePath, category, soldByPhd, router]);
+  }, [value, basePath, category, soldByPhd, router]);
 
   return (
     <div className="relative">

@@ -23,20 +23,12 @@ export function DriftClashShell({
   const pathname = usePathname();
   const { theme, toggleTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
-  const isAdmin = user.role === "admin";
 
   const navLinks = [
     { href: "/cards?tab=clash", label: "Play Clash", icon: "⚔️", exact: false },
     { href: "/cards", label: "Deck Hub", icon: "🃏", exact: true },
     { href: "/cards/new", label: "Forge Pack", icon: "✨", exact: false },
     { href: "/cars", label: "My Garage", icon: "🏎️", exact: false },
-    ...(isAdmin
-      ? [
-          { href: "/admin/card-maker", label: "Card Studio", icon: "🛠️", exact: false },
-          { href: "/admin/member-cards", label: "All Cards", icon: "🗂️", exact: false },
-          { href: "/admin/challenges", label: "Challenges", icon: "🏆", exact: false },
-        ]
-      : []),
   ];
 
   return (

@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { isDriftClashHost } from "@/lib/app-host";
+import { DriftClashShell } from "@/tcg/components/DriftClashShell";
 import { getUnreadCount } from "@/actions/notifications";
 import { getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
 import { ProtectedNavigation } from "@/components/ProtectedNavigation";
@@ -23,6 +26,25 @@ export default async function ProtectedLayout({
 
   if (!session?.user) {
     redirect("/auth/signin");
+  }
+
+  // Game-only host: wrap the page in the slim Drift Clash shell instead of the track app's navigation,
+  // and skip everything that belongs to the track (notifications, check-in prompt, dev tools, basket).
+  const requestHeaders = await headers();
+  if (isDriftClashHost(requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"))) {
+    const sessionUser = session.user as typeof session.user & { customAvatar?: string | null };
+    return (
+      <DriftClashShell
+        user={{
+          id: session.user.id,
+          name: session.user.name,
+          image: sessionUser.customAvatar || session.user.image || null,
+          role: session.user.role,
+        }}
+      >
+        {children}
+      </DriftClashShell>
+    );
   }
 
   // Fetch avatar, unread count, and winner status in parallel
