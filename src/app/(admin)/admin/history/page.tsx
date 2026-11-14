@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getCheckInsByDate } from "@/actions/admin/checkins";
 import { CheckInHistory } from "@/components/admin/CheckInHistory";
+import { excludeAdminCheckIns } from "@/lib/checkin-stats";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,8 @@ export default async function CheckInHistoryPage({
   const params = await searchParams;
   const selectedDate = params.date || new Date().toISOString().split("T")[0];
   const checkIns = await getCheckInsByDate(selectedDate);
+  // Admins are auto checked in, so the headline total leaves them out (they stay in the list).
+  const attendeeCount = (await excludeAdminCheckIns(checkIns)).length;
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
@@ -29,7 +32,7 @@ export default async function CheckInHistoryPage({
         </p>
       </div>
 
-      <CheckInHistory checkIns={checkIns} selectedDate={selectedDate} />
+      <CheckInHistory checkIns={checkIns} attendeeCount={attendeeCount} selectedDate={selectedDate} />
     </div>
   );
 }

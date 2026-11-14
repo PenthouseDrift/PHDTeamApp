@@ -12,6 +12,7 @@ import {
   type MemberDiscounts,
 } from "@/lib/pricing";
 import { UNPAID_INDEX_KEY, type ActivityEntry } from "@/lib/activity";
+import { isAdminAutoCheckInActivity } from "@/lib/checkin-stats";
 
 export const getRecentActivity = unstable_cache(
   async () => {
@@ -358,7 +359,8 @@ async function reduceEntries(
     // 1) Attendance — count every check-in as a person on track, regardless of
     //    whether it generated revenue (wallet redemptions still put someone on
     //    the track). Split into on-track (passes + members) vs rentals.
-    if (item.type === "checkin") {
+    //    Admins are auto checked in for every event, so they're left out.
+    if (item.type === "checkin" && !isAdminAutoCheckInActivity(item)) {
       const category = attendanceCategory(item);
       if (category) {
         for (const bucket of bucketsFor(item.timestamp)) {

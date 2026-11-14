@@ -5,10 +5,12 @@ import type { CheckInEntry } from "@/actions/admin/checkins";
 
 interface CheckInHistoryProps {
   checkIns: CheckInEntry[];
+  /** Number of check-ins excluding admins (who are auto checked in). Defaults to the full list. */
+  attendeeCount?: number;
   selectedDate: string;
 }
 
-export function CheckInHistory({ checkIns, selectedDate }: CheckInHistoryProps) {
+export function CheckInHistory({ checkIns, attendeeCount = checkIns.length, selectedDate }: CheckInHistoryProps) {
   const router = useRouter();
   const todayStr = new Date().toISOString().split("T")[0];
   const isToday = selectedDate === todayStr;
@@ -107,7 +109,7 @@ export function CheckInHistory({ checkIns, selectedDate }: CheckInHistoryProps) 
             )}
           </div>
           <span className="inline-flex items-center rounded-full bg-amber-500/15 border border-amber-500/30 px-3 py-1 text-xs font-extrabold text-amber-600 dark:text-amber-400">
-            {checkIns.length} {checkIns.length === 1 ? "Check-In" : "Check-Ins"}
+            {attendeeCount} {attendeeCount === 1 ? "Check-In" : "Check-Ins"}
           </span>
         </div>
 

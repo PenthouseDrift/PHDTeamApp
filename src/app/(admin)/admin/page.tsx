@@ -8,6 +8,7 @@ import { getUpcomingEvents } from "@/actions/events";
 import { Suspense } from "react";
 import { getCurrentWeekWinnerInfo } from "@/actions/admin/showcase";
 import { getEventTiming } from "@/lib/event-utils";
+import { excludeAdminCheckIns } from "@/lib/checkin-stats";
 import { getActiveShopOrders } from "@/actions/orders";
 import { getReservedListings } from "@/actions/marketplace";
 import { getDashboardVersion } from "@/lib/dashboard-pref";
@@ -77,7 +78,9 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
 
   const winnerChosenThisWeek = Boolean(currentWinnerInfo.shellId);
   const activeMemberships = members.filter((m) => m.membership?.status === "active").length;
-  const memberCheckinsCount = todayCheckins.filter(
+  // Admins are auto checked in, so they're left out of both check-in counts.
+  const attendeeCheckins = await excludeAdminCheckIns(todayCheckins);
+  const memberCheckinsCount = attendeeCheckins.filter(
     (c) =>
       c.method === "qr" ||
       c.method === "manual" ||
@@ -365,7 +368,7 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
             </div>
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-baseline gap-1">
-                <span className="text-3xl font-extrabold text-amber-500">{todayCheckins.length}</span>
+                <span className="text-3xl font-extrabold text-amber-500">{attendeeCheckins.length}</span>
                 <span className="text-[10px] text-zinc-400 font-bold uppercase">Total</span>
               </div>
               {!isModerator && (

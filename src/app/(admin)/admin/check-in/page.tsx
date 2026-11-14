@@ -3,6 +3,7 @@ import { getActiveRentals } from "@/actions/admin/rentals";
 import { getTodayCheckIns } from "@/actions/admin/checkins";
 import { getAllMembers } from "@/actions/admin/members";
 import { getMemberRoster } from "@/lib/member-roster";
+import { excludeAdminCheckIns } from "@/lib/checkin-stats";
 import { ActiveRentalsWidget } from "@/components/admin/ActiveRentalsWidget";
 import { RefreshDataButton } from "@/components/admin/RefreshDataButton";
 import { CheckInWizard } from "@/components/admin/CheckInWizard";
@@ -47,13 +48,15 @@ export default async function CheckInPage({
       if (!c.userId.startsWith("guest_")) checkedIn[c.userId] = Math.max(checkedIn[c.userId] ?? 0, c.timestamp);
     }
     const unpaid = todayCheckIns.filter((c) => c.unpaid).length;
+    // Admins are auto checked in, so they're left out of the headline count.
+    const attendeeCount = (await excludeAdminCheckIns(todayCheckIns)).length;
     const runningRentals = activeRentals.filter((r) => r.status === "active").length;
 
     return (
       <div className="mx-auto w-full max-w-6xl space-y-4 px-4 py-4 sm:px-6 lg:px-8">
         <dl className="grid grid-cols-3 gap-2">
           {[
-            { label: "Checked in", value: todayCheckIns.length, tone: "text-emerald-600 dark:text-emerald-400" },
+            { label: "Checked in", value: attendeeCount, tone: "text-emerald-600 dark:text-emerald-400" },
             { label: "Unpaid", value: unpaid, tone: unpaid > 0 ? "text-red-600 dark:text-red-400" : "text-zinc-400" },
             { label: "Rentals running", value: runningRentals, tone: "text-blue-600 dark:text-blue-400" },
           ].map((s) => (

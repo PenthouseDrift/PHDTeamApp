@@ -7,6 +7,7 @@ import { logActivity } from "@/lib/activity";
 import { recordCheckInCount } from "@/lib/checkin-count";
 import { requireStaff } from "@/lib/staff-auth";
 import { checkInDedupTtlSeconds } from "@/lib/checkin-dedup";
+import { ADMIN_AUTO_CHECKIN_DESCRIPTION } from "@/lib/checkin-stats";
 
 export interface CheckInEntry {
   userId: string;
@@ -189,7 +190,7 @@ export async function ensureAdminsCheckedInForTodayEvent(): Promise<void> {
           type: "checkin",
           memberId: admin.id,
           memberName: displayName,
-          description: "Auto checked in for today's event (Admin)",
+          description: ADMIN_AUTO_CHECKIN_DESCRIPTION,
           method: "membership",
           isDev: false,
         });

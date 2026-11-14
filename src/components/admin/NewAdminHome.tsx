@@ -11,6 +11,7 @@ import { getUnpaidSummary } from "@/actions/admin/unpaid";
 import { UnpaidPanel } from "@/components/admin/UnpaidPanel";
 import { ShellIcon } from "@/components/new-shell/shell-icons";
 import { getEventTiming } from "@/lib/event-utils";
+import { excludeAdminCheckIns } from "@/lib/checkin-stats";
 
 /**
  * "Today" for staff in the new experience. It answers three questions in
@@ -81,6 +82,8 @@ export async function NewAdminHome({ isModerator }: { isModerator: boolean }) {
   const reservedValue = reserved.reduce((sum, l) => sum + l.reservedValue, 0);
 
   const unpaid = todayCheckIns.filter((c) => c.unpaid).length;
+  // Admins are auto checked in, so they're left out of the headline count.
+  const attendeeCount = (await excludeAdminCheckIns(todayCheckIns)).length;
   const runningRentals = activeRentals.filter((r) => r.status === "active");
   const overdue = countOverdue(runningRentals);
 
@@ -169,13 +172,31 @@ export async function NewAdminHome({ isModerator }: { isModerator: boolean }) {
 
       <dl className="grid grid-cols-3 gap-2">
         {[
-          { label: "Checked in", value: todayCheckIns.length, tone: "text-emerald-600 dark:text-emerald-400" },
+          { label: "Checked in", value: attendeeCount, tone: "text-emerald-600 dark:text-emerald-400", href: "/admin/check-in" },
           { label: "Unpaid", value: unpaid, tone: unpaid > 0 ? "text-red-600 dark:text-red-400" : "text-zinc-400" },
           { label: "Rentals running", value: runningRentals.length, tone: "text-blue-600 dark:text-blue-400" },
         ].map((s) => (
-          <div key={s.label} className="rounded-xl border border-zinc-200 bg-white p-3 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          // A tile with an href is a link: the Link stretches over the whole tile, and the
+          // dd/dt stay direct children of the div so the <dl> markup remains valid.
+          <div
+            key={s.label}
+            className={`relative rounded-xl border border-zinc-200 bg-white p-3 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-900 ${
+              s.href ? "transition-colors hover:border-emerald-400 dark:hover:border-emerald-500" : ""
+            }`}
+          >
             <dd className={`text-2xl font-black ${s.tone}`}>{s.value}</dd>
-            <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{s.label}</dt>
+            <dt className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              {s.href ? (
+                <Link
+                  href={s.href}
+                  className="after:absolute after:inset-0 after:rounded-xl focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-emerald-500"
+                >
+                  {s.label}
+                </Link>
+              ) : (
+                s.label
+              )}
+            </dt>
           </div>
         ))}
       </dl>

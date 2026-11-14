@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { auth } from "@/lib/auth";
 import { getAllMembers } from "@/actions/admin/members";
 import { getTodayCheckIns } from "@/actions/admin/checkins";
+import { excludeAdminCheckIns } from "@/lib/checkin-stats";
 import { getActiveRentals } from "@/actions/admin/rentals";
 import { MemberList } from "@/components/admin/MemberList";
 import { ActiveRentalsWidget } from "@/components/admin/ActiveRentalsWidget";
@@ -54,9 +55,11 @@ async function MembersHeaderStats() {
     getAllMembers(),
     getTodayCheckIns(),
   ]);
+  // Admins are auto checked in, so they're left out of the count.
+  const attendeeCount = (await excludeAdminCheckIns(todayCheckIns)).length;
   return (
     <p className="text-sm text-zinc-500 mt-1">
-      {members.length} registered member{members.length !== 1 ? "s" : ""} • {todayCheckIns.length} checked in today
+      {members.length} registered member{members.length !== 1 ? "s" : ""} • {attendeeCount} checked in today
     </p>
   );
 }
