@@ -20,9 +20,10 @@ export interface CheckInEntry {
 
 /**
  * Whether members may self check-in right now. Fully automated: self check-in
- * is open only while a (non-cancelled) event scheduled for today is currently
- * within its open/close window — i.e. its timing state is "happening_now".
- * There is no manual admin toggle; it follows the event schedule.
+ * is open only while a (non-cancelled) event scheduled for today is within its
+ * open/close window, starting 30 minutes before the event opens (see
+ * isSelfCheckInWindowOpen). There is no manual admin toggle; it follows the
+ * event schedule.
  */
 export async function getSelfCheckInStatus(): Promise<boolean> {
   noStore();
@@ -35,7 +36,7 @@ export async function getSelfCheckInStatus(): Promise<boolean> {
     }
 
     const { getUpcomingEvents } = await import("@/actions/events");
-    const { getEventTiming } = await import("@/lib/event-utils");
+    const { isSelfCheckInWindowOpen } = await import("@/lib/event-utils");
 
     const now = new Date();
     const formatter = new Intl.DateTimeFormat("en-GB", {
@@ -57,13 +58,13 @@ export async function getSelfCheckInStatus(): Promise<boolean> {
       await ensureAdminsCheckedInForTodayEvent();
     }
 
-    // Open only while an event today is actively running (between its open
-    // and close times). Pre-open ("today") and finished events do not count.
+    // Open from 30 minutes before an event today opens until it closes.
+    // Earlier than that, and finished events, do not count.
     return events.some(
       (e) =>
         e.date === localToday &&
         e.status !== "cancelled" &&
-        getEventTiming(e).state === "happening_now"
+        isSelfCheckInWindowOpen(e)
     );
   } catch {
     return false;

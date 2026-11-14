@@ -257,10 +257,10 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
               </div>
               <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
                 {selfCheckInActive
-                  ? "An event is running now, so members can check themselves in. This opens and closes automatically with today's event times."
+                  ? "Members can check themselves in. Self check-in opens 30 minutes before today's event and closes automatically when it ends."
                   : allEventsFinished
                   ? "Today's events have finished — self check-in is closed until the next event opens."
-                  : "Self check-in opens automatically when today's event reaches its open time."}
+                  : "Self check-in opens automatically 30 minutes before today's event opens."}
               </p>
             </div>
           </div>

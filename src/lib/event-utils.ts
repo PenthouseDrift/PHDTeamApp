@@ -9,6 +9,52 @@ export interface EventTimingInfo {
   animateDot?: boolean;
 }
 
+/** Member self check-in opens this many minutes before an event's opening time. */
+export const SELF_CHECKIN_LEAD_MINUTES = 30;
+
+/**
+ * Whether member self check-in is open for this event right now: from
+ * SELF_CHECKIN_LEAD_MINUTES before the event opens until it closes. The event's
+ * own timing state (badges, "Happening Now") is unchanged; this only widens the
+ * check-in window. Same-day only, so the lead time is clamped at midnight.
+ */
+export function isSelfCheckInWindowOpen(event: {
+  date: string;
+  openTime?: string;
+  closeTime?: string;
+  time?: string;
+  status?: string;
+}): boolean {
+  const timing = getEventTiming(event);
+  if (timing.state === "happening_now") return true;
+  // Before the event opens, only today's events can be in the early window.
+  if (timing.state !== "today") return false;
+
+  let openMin = -1;
+  if (event.openTime) {
+    const [h, m] = event.openTime.split(":").map(Number);
+    if (!isNaN(h)) openMin = h * 60 + (m || 0);
+  }
+  if (openMin === -1 && event.time) {
+    const match = event.time.match(/(\d{1,2}):(\d{2})/);
+    if (match) openMin = parseInt(match[1]) * 60 + parseInt(match[2]);
+  }
+  // No usable open time: keep the original behaviour (not open before the event starts).
+  if (openMin === -1) return false;
+
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const hour = parseInt(parts.find((p) => p.type === "hour")?.value || "0", 10) % 24;
+  const minute = parseInt(parts.find((p) => p.type === "minute")?.value || "0", 10);
+  const currentMinutes = hour * 60 + minute;
+
+  return currentMinutes >= openMin - SELF_CHECKIN_LEAD_MINUTES && currentMinutes < openMin;
+}
+
 export function getEventTiming(event: {
   date: string;
   openTime?: string;
