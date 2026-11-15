@@ -13,6 +13,7 @@ import { getEffectivePrice, getSaleDiscountPct, isOnSale } from "@/tcg/config";
 import type { TcgCustomPackWithCards } from "@/tcg/types";
 import { BottomSheet, sheetPrimary, sheetSecondary } from "@/tcg/ui/BottomSheet";
 import { buzz } from "@/tcg/ui/feedback";
+import { totalCardsInPack } from "@/tcg/pack-display";
 import { BusyOverlay } from "@/tcg/ui/Shimmer";
 import { useToast } from "@/tcg/ui/Toast";
 
@@ -892,11 +893,6 @@ function TitleAndPrice({ name, price, effectivePrice, onSale }: { name: string; 
       </div>
     </div>
   );
-}
-
-/** Every card a pack gives each time it is opened: its cards plus its Crew and Repair Kit cards. (A bonus pull is a chance, so it isn't counted.) */
-function totalCardsInPack(pack: TcgCustomPackWithCards): number {
-  return pack.cardsPerPack + (pack.extraCards?.crew ?? 0) + (pack.extraCards?.repair ?? 0);
 }
 
 /** What one pack gives, in words: "3 cards + 1 crew + 1 repair kit". */

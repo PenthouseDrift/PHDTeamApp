@@ -8,6 +8,7 @@ import { CHALLENGE_THEME_CONFIGS, type TandemClashChallenge } from "@/tcg/challe
 import { getEffectivePrice, getSaleDiscountPct, isOnSale } from "@/tcg/config";
 import type { ShowcaseRareCard } from "@/tcg/storage";
 import { PackArt } from "@/tcg/components/PackArt";
+import { packCardsLabel, packExtraLabel } from "@/tcg/pack-display";
 import type { TcgCustomPackWithCards } from "@/tcg/types";
 
 // Rows swipe sideways and settle on a card; overscroll-x-contain stops a swipe at the end of a row dragging the whole page.
@@ -153,7 +154,8 @@ export function TcgHome({
                       <PackArt
                         name={pack.name}
                         variant="custom"
-                        cardsLabel={`${pack.cardsPerPack} CARD${pack.cardsPerPack === 1 ? "" : "S"}`}
+                        cardsLabel={packCardsLabel(pack)}
+                        extraLabel={packExtraLabel(pack)}
                         heroCard={pack.setList[0]?.card}
                         discountPct={onSale ? getSaleDiscountPct(pack.price, pack.salePrice) : 0}
                       />
