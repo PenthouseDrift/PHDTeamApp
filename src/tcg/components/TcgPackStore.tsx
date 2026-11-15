@@ -49,6 +49,7 @@ export function TcgPackStore({
   onCustomCardsPulled,
   onOpenPCreditsTab,
   onOpenCollectionTab,
+  showWalletBar = true,
 }: {
   pCredits: number;
   packCredits: number;
@@ -62,6 +63,8 @@ export function TcgPackStore({
   onCustomCardsPulled: (cards: MemberCard[], newPCredits: number) => void;
   onOpenPCreditsTab: () => void;
   onOpenCollectionTab: () => void;
+  /** The slim sticky wallet line. Off on the game-only app, where the page header already shows these balances. */
+  showWalletBar?: boolean;
 }) {
   const toast = useToast();
   const [pending, startTransition] = useTransition();
@@ -180,27 +183,29 @@ export function TcgPackStore({
   return (
     <div className="space-y-5 sm:space-y-6">
       {/* Always in reach: what you can spend, and the way to get more. One slim line, above the page content. */}
-      <div className="gx-sticky-top sticky z-[35] -mx-1 flex items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/95 px-2 py-1.5 text-zinc-100 shadow-lg backdrop-blur">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5">
-          <span
-            className="inline-flex min-h-11 min-w-0 items-center gap-1.5 rounded-xl bg-amber-500/15 px-2.5 text-sm font-black tabular-nums text-amber-300"
-            aria-label={`${pCredits.toLocaleString()} P-Credits`}
-          >
-            <span aria-hidden>🪙</span>
-            <span className="truncate">{pCredits.toLocaleString()}</span>
-          </span>
-          <span
-            className="inline-flex min-h-11 min-w-0 items-center gap-1.5 rounded-xl bg-zinc-800/80 px-2.5 text-sm font-black tabular-nums text-zinc-100"
-            aria-label={`${packCredits.toLocaleString()} pack credits`}
-          >
-            <span aria-hidden>🎟️</span>
-            <span className="truncate">{packCredits.toLocaleString()}</span>
-          </span>
+      {showWalletBar && (
+        <div className="gx-sticky-top sticky z-[35] -mx-1 flex items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/95 px-2 py-1.5 text-zinc-100 shadow-lg backdrop-blur">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            <span
+              className="inline-flex min-h-11 min-w-0 items-center gap-1.5 rounded-xl bg-amber-500/15 px-2.5 text-sm font-black tabular-nums text-amber-300"
+              aria-label={`${pCredits.toLocaleString()} P-Credits`}
+            >
+              <span aria-hidden>🪙</span>
+              <span className="truncate">{pCredits.toLocaleString()}</span>
+            </span>
+            <span
+              className="inline-flex min-h-11 min-w-0 items-center gap-1.5 rounded-xl bg-zinc-800/80 px-2.5 text-sm font-black tabular-nums text-zinc-100"
+              aria-label={`${packCredits.toLocaleString()} pack credits`}
+            >
+              <span aria-hidden>🎟️</span>
+              <span className="truncate">{packCredits.toLocaleString()}</span>
+            </span>
+          </div>
+          <button type="button" onClick={onOpenPCreditsTab} className={`${primaryBtn} shrink-0 px-3.5`}>
+            + P-Credits
+          </button>
         </div>
-        <button type="button" onClick={onOpenPCreditsTab} className={`${primaryBtn} shrink-0 px-3.5`}>
-          + P-Credits
-        </button>
-      </div>
+      )}
 
       <section className={`${panel} flex flex-wrap items-center justify-between gap-3`}>
         <div>

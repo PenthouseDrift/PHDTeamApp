@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { isDriftClashHost } from "@/lib/app-host";
 import { getCardCredits } from "@/lib/card-credits";
 import { listMyCards } from "@/actions/member-cards";
 import { redis } from "@/lib/redis";
@@ -52,6 +54,9 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
 
   const userId = session.user.id;
   const params = await searchParams;
+  // On the game-only Drift Clash host the page has no track app around it, so the game trims duplicated chrome.
+  const requestHeaders = await headers();
+  const gameOnly = isDriftClashHost(requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"));
 
   // Verify any returning or pending SumUp P-Credits checkout immediately
   let checkoutConfirmed = false;
@@ -150,6 +155,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
           hasTourAccess={hasTourAccess}
           tourAdminPreview={tourAdminPreview}
           checkoutConfirmed={checkoutConfirmed}
+          gameOnly={gameOnly}
         />
       </div>
     </div>

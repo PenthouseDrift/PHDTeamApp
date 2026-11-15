@@ -5,13 +5,18 @@
  *   - the full Penthouse Drift app (app.penthousedrift.com and friends), and
  *   - a game-only Drift Clash app (driftclashapp.penthousedrift.com), which shows only the card game.
  *
- * Pure (no Next imports) so the edge middleware can use it. The Drift Clash hosts can be overridden with
- * the DRIFTCLASH_HOSTS env var (comma separated, host names only, e.g. "driftclashapp.penthousedrift.com").
- * `driftclash.localhost` is always accepted so it can be tried locally (browsers send *.localhost to
- * 127.0.0.1): run `npm run dev` and open http://driftclash.localhost:3000.
+ * Pure (no Next imports) so the edge middleware can use it. Extra Drift Clash hosts can be added with the
+ * DRIFTCLASH_HOSTS env var (comma separated). An entry without a port matches that host on any port; an
+ * entry with a port matches only that port.
+ *
+ * Trying it locally: Google sign-in only accepts http redirect URIs for exactly "localhost" (not
+ * "*.localhost"), so run the game host on its own port and register that URI with Google:
+ *   start the dev server with DRIFTCLASH_HOSTS=localhost:3001 on port 3001
+ *   -> http://localhost:3001 is the game, redirect URI http://localhost:3001/api/auth/callback/google
+ * (Stop the normal dev server first: two Next dev servers can't share one project folder.)
  */
 
-const DEFAULT_DRIFTCLASH_HOSTS = ["driftclashapp.penthousedrift.com", "driftclash.localhost"];
+const DEFAULT_DRIFTCLASH_HOSTS = ["driftclashapp.penthousedrift.com"];
 
 function configuredHosts(): string[] {
   const fromEnv = (process.env.DRIFTCLASH_HOSTS || "")
@@ -21,15 +26,13 @@ function configuredHosts(): string[] {
   return [...DEFAULT_DRIFTCLASH_HOSTS, ...fromEnv];
 }
 
-/** "Driftclashapp.PenthouseDrift.com:443" -> "driftclashapp.penthousedrift.com" */
-function normaliseHost(host: string | null | undefined): string {
-  return (host || "").split(",")[0].trim().toLowerCase().replace(/:\d+$/, "");
-}
-
-/** True when the request host is one of the game-only Drift Clash hosts. */
+/** True when the request host (with or without a port) is one of the game-only Drift Clash hosts. */
 export function isDriftClashHost(host: string | null | undefined): boolean {
-  const h = normaliseHost(host);
-  return h !== "" && configuredHosts().includes(h);
+  const withPort = (host || "").split(",")[0].trim().toLowerCase();
+  if (!withPort) return false;
+  const withoutPort = withPort.replace(/:\d+$/, "");
+  const hosts = configuredHosts();
+  return hosts.includes(withPort) || hosts.includes(withoutPort);
 }
 
 /**

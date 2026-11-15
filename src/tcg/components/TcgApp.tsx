@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CardCollection } from "@/components/member-cards/CardCollection";
@@ -133,6 +132,7 @@ export function TcgApp({
   initialComingSoon = [],
   hasTourAccess = false,
   tourAdminPreview = false,
+  gameOnly = false,
 }: {
   userId: string;
   isAdmin?: boolean;
@@ -159,6 +159,8 @@ export function TcgApp({
   hasTourAccess?: boolean;
   /** Tour is only showing because this member is an admin (it is not switched on for members yet). */
   tourAdminPreview?: boolean;
+  /** True on the game-only Drift Clash app (no Penthouse Drift app around the game). */
+  gameOnly?: boolean;
 }) {
   const [tab, setTab] = useState<TcgTab>(initialTab);
   const [cards, setCards] = useState<MemberCard[]>(initialCards);
@@ -325,15 +327,16 @@ export function TcgApp({
               <span className="text-sm font-black tabular-nums text-white">{pCredits.toLocaleString()}</span>
               <span aria-hidden className="rounded bg-amber-500 px-1.5 text-xs font-black text-black">+</span>
             </button>
-            <Link
-              href="/cards/new"
-              aria-label={`${packCredits} pack credits. Forge a pack`}
+            <button
+              type="button"
+              onClick={() => selectTab("store")}
+              aria-label={`${packCredits} pack credits. Open the Pack Store`}
               className="gx-tap inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800/90 px-2.5 text-left transition-colors hover:border-amber-500/50 hover:bg-zinc-800"
             >
               <span aria-hidden className="text-sm">🎟️</span>
               <span className="text-sm font-black tabular-nums text-white">{packCredits}</span>
-              <span className="hidden rounded bg-amber-500 px-1.5 py-0.5 text-[11px] font-black uppercase text-black sm:inline">Forge</span>
-            </Link>
+              <span className="hidden rounded bg-amber-500 px-1.5 py-0.5 text-[11px] font-black uppercase text-black sm:inline">Packs</span>
+            </button>
           </div>
         </div>
 
@@ -563,6 +566,7 @@ export function TcgApp({
           standardAllowsCardCredits={initialStandardAllowsCardCredits}
           customPacks={initialCustomPacks}
           isAdmin={isAdmin}
+          showWalletBar={!gameOnly}
           onBalancesChange={({ pCredits: nextP, packCredits: nextPack }) => {
             setPCredits(nextP);
             setPackCredits(nextPack);

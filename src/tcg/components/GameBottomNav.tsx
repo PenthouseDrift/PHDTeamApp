@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 
 export interface GameNavItem {
@@ -36,11 +36,16 @@ export function GameBottomNav({
   // Whether there are more sections to the right, to show a fade at the edge of the bar.
   const [moreRight, setMoreRight] = useState(false);
   // How tall the main tab bar is (it includes the phone's safe area), so this bar sits exactly on top of it.
+  // The game-only Drift Clash app has no main tab bar, so there this bar sits on the bottom edge (0).
   const [offset, setOffset] = useState(56);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const bar = document.querySelector<HTMLElement>(".pwa-bottom-nav");
-    if (!bar || typeof ResizeObserver === "undefined") return;
+    if (!bar) {
+      setOffset(0);
+      return;
+    }
+    if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => setOffset(Math.round(bar.getBoundingClientRect().height)));
     observer.observe(bar);
     return () => observer.disconnect();
@@ -64,7 +69,8 @@ export function GameBottomNav({
       ref={bar}
       onScroll={measureScroll}
       aria-label="DriftClash sections"
-      style={{ bottom: offset }}
+      // With no main tab bar under it, keep clear of the phone's home indicator.
+      style={{ bottom: offset, paddingBottom: offset === 0 ? "env(safe-area-inset-bottom, 0px)" : undefined }}
       className="gx-fade-up fixed inset-x-0 z-30 flex overflow-x-auto overscroll-x-contain border-t border-amber-500/30 bg-zinc-950/95 px-1 shadow-[0_-8px_20px_rgba(0,0,0,0.35)] backdrop-blur-sm [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden"
     >
       {items.map((item) => {

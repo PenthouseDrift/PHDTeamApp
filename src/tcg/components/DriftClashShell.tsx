@@ -27,7 +27,7 @@ export function DriftClashShell({
   const navLinks = [
     { href: "/cards?tab=clash", label: "Play Clash", icon: "⚔️", exact: false },
     { href: "/cards", label: "Deck Hub", icon: "🃏", exact: true },
-    { href: "/cards/new", label: "Forge Pack", icon: "✨", exact: false },
+    { href: "/cards?tab=store", label: "Pack Store", icon: "🎁", exact: false },
     { href: "/cars", label: "My Garage", icon: "🏎️", exact: false },
   ];
 
@@ -87,14 +87,6 @@ export function DriftClashShell({
               <span className="text-sm">🎮</span>
               <span className="hidden sm:inline">Play Clash</span>
               <span className="sm:hidden">Play</span>
-            </Link>
-
-            <Link
-              href="/cards/new"
-              className="inline-flex md:hidden items-center gap-1 rounded-xl bg-zinc-800 px-2.5 py-1.5 text-[11px] font-black text-white hover:bg-zinc-700"
-            >
-              <span>✨</span>
-              <span>Forge</span>
             </Link>
 
             <button
@@ -184,7 +176,8 @@ export function DriftClashShell({
       </header>
 
       {/* Main Content */}
-      <main className="flex-1">{children}</main>
+      {/* On a phone the game's section bar is fixed to the bottom edge, so leave room for it under the page. */}
+      <main className="flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">{children}</main>
     </div>
   );
 }

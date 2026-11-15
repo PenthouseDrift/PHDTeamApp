@@ -75,7 +75,17 @@ export default async function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      // The inline script below may add the "dark" class before React loads.
+      suppressHydrationWarning
     >
+      <head>
+        {/* Apply the saved theme before the first paint so the app doesn't flash light when reopened. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(localStorage.getItem("phd-theme")==="dark")document.documentElement.classList.add("dark")}catch(e){}`,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col bg-zinc-50 dark:bg-zinc-950">
         <SessionProvider>
           <ThemeProvider>
