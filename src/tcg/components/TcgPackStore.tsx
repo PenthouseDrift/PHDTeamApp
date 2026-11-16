@@ -1,19 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition, type ReactNode } from "react";
+import { useRef, useState, useTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { FullArtCard } from "@/components/cards/FullArtCard";
 import { PackOpening, splitStorePackCards } from "@/components/member-cards/PackOpening";
 import { rarityLabel, type MemberCard } from "@/lib/card-roll";
 import { buyAndOpenCustomPack, buyStandardPackWithPCredits, previewOpenPackAction } from "@/tcg/actions";
-import { PackArt } from "@/tcg/components/PackArt";
+import { PackCarousel, type CarouselPack } from "@/tcg/components/PackCarousel";
 import { PackContentsModal, PackContentsView } from "@/tcg/components/PackContentsView";
 import { getEffectivePrice, getSaleDiscountPct, isOnSale } from "@/tcg/config";
 import type { TcgCustomPackWithCards } from "@/tcg/types";
 import { BottomSheet, sheetPrimary, sheetSecondary } from "@/tcg/ui/BottomSheet";
 import { buzz } from "@/tcg/ui/feedback";
-import { totalCardsInPack } from "@/tcg/pack-display";
+import { useBottomChromeHeight, useFillScreenHeight } from "@/tcg/ui/useBottomChrome";
+import { packCardsLabel, packExtraLabel, totalCardsInPack } from "@/tcg/pack-display";
 import { BusyOverlay } from "@/tcg/ui/Shimmer";
 import { useToast } from "@/tcg/ui/Toast";
 
@@ -25,11 +26,9 @@ const secondaryBtn =
   "gx-tap inline-flex min-h-11 items-center justify-center rounded-xl border border-zinc-300 px-4 text-sm font-bold text-zinc-800 transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800";
 /** The main button on a pack tile: full width, 48px tall. */
 const buyBtn = `${primaryBtn} min-h-12 w-full`;
-/** "What's in the pack?": a quiet 44px button under the main one. */
-const ghostBtn =
-  "gx-tap inline-flex min-h-11 w-full items-center justify-center rounded-xl px-4 text-sm font-bold text-zinc-600 transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-zinc-800";
-/** An outlined, full-width 44px button (use a pack credit, top up). */
-const outlineBtn = `${secondaryBtn} w-full`;
+/** The smaller buttons in the dark dock under the pack fan. */
+const dockBtn =
+  "gx-tap inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-zinc-600 bg-zinc-900 px-2 text-center text-xs font-bold text-zinc-100 transition-colors hover:bg-zinc-800 disabled:opacity-50";
 /** Buttons on the dark opening stage: 48px, thumb-sized. */
 const stageBtn =
   "gx-tap inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-sm font-bold text-zinc-100 hover:bg-zinc-800 disabled:opacity-50";
@@ -68,6 +67,14 @@ export function TcgPackStore({
   showWalletBar?: boolean;
 }) {
   const toast = useToast();
+  /** How tall the bars fixed to the bottom of a phone screen are, so the docked pack fan sits just above them. */
+  const chromeHeight = useBottomChromeHeight();
+  /** The shop is one screen: it is as tall as what is left under the page header, above the bottom bars. */
+  const stageRef = useRef<HTMLElement>(null);
+  const stageHeight = useFillScreenHeight(stageRef, chromeHeight + 8);
+  // The summary needs about 150px, and the buttons plus the dock's padding about 124px. The fan gets what is left: it grows on a
+  // tall screen and shrinks on a short one, so the summary stays readable without scrolling.
+  const fanScale = stageHeight ? Math.min(1.8, Math.max(0.6, (stageHeight - 150 - 8 - 124) / 168)) : 1;
   const [pending, startTransition] = useTransition();
   /** The purchase that is running, if any. `pending` alone can't say which tile it belongs to. */
   const [pendingBuy, setPendingBuy] = useState<PendingBuy | null>(null);
@@ -95,6 +102,34 @@ export function TcgPackStore({
   const standardOnSale = isOnSale(standardPackPrice, standardPackSalePrice);
   const effectiveStandardPrice = getEffectivePrice(standardPackPrice, standardPackSalePrice);
   const standardDiscountPct = getSaleDiscountPct(standardPackPrice, standardPackSalePrice);
+
+  /** Which pack is raised in the middle of the fan. Falls back to the first pack if the chosen one is gone (the list refreshed). */
+  const [selectedId, setSelectedId] = useState<string>(customPacks[0]?.id ?? STANDARD_ID);
+  const activeId = selectedId === STANDARD_ID || customPacks.some((p) => p.id === selectedId) ? selectedId : (customPacks[0]?.id ?? STANDARD_ID);
+  /** The selected store pack, or null when the Standard Pack is selected. */
+  const activePack = customPacks.find((p) => p.id === activeId) ?? null;
+  // The store packs first, then the Standard Pack last.
+  const carouselPacks: CarouselPack[] = [
+    ...customPacks.map(
+      (p): CarouselPack => ({
+        id: p.id,
+        name: p.name,
+        variant: "custom",
+        cardsLabel: packCardsLabel(p),
+        extraLabel: packExtraLabel(p),
+        heroCard: p.setList[0]?.card,
+        discountPct: isOnSale(p.price, p.salePrice) ? getSaleDiscountPct(p.price, p.salePrice) : 0,
+      })
+    ),
+    {
+      id: STANDARD_ID,
+      name: "Standard Pack",
+      variant: "standard",
+      cardsLabel: "4 CARDS",
+      extraLabel: "+ RARE CHANCE",
+      discountPct: standardOnSale ? standardDiscountPct : 0,
+    },
+  ];
 
   function handleBuyStandardPack() {
     setError(null);
@@ -182,10 +217,10 @@ export function TcgPackStore({
   const isBuying = (id: string, via: PendingBuy["via"] = "pcredits") => pendingBuy?.id === id && pendingBuy.via === via;
 
   return (
-    <div className="space-y-5 sm:space-y-6">
+    <div className="space-y-2 sm:space-y-4">
       {/* Always in reach: what you can spend, and the way to get more. One slim line, above the page content. */}
       {showWalletBar && (
-        <div className="gx-sticky-top sticky z-[35] -mx-1 flex items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/95 px-2 py-1.5 text-zinc-100 shadow-lg backdrop-blur">
+        <div className="gx-sticky-top sticky z-[35] -mx-1 hidden items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/95 px-2 py-1.5 text-zinc-100 shadow-lg backdrop-blur sm:flex">
           <div className="flex min-w-0 flex-1 items-center gap-1.5">
             <span
               className="inline-flex min-h-11 min-w-0 items-center gap-1.5 rounded-xl bg-amber-500/15 px-2.5 text-sm font-black tabular-nums text-amber-300"
@@ -208,7 +243,7 @@ export function TcgPackStore({
         </div>
       )}
 
-      <section className={`${panel} flex flex-wrap items-center justify-between gap-3`}>
+      <section className={`${panel} hidden flex-wrap items-center justify-between gap-3 sm:flex`}>
         <div>
           <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">TCG Pack Store</h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
@@ -239,254 +274,246 @@ export function TcgPackStore({
         </div>
       )}
 
-      {/* Packs: the store packs first, then the Standard Pack last, all the same kind of tile */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Packs</h3>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Pick a pack, see what could be inside, and spend your P-Credits.
-          </p>
+      {/*
+        The pack shop as one game screen: what's in the selected pack fills the space at the top (and scrolls inside itself only
+        on a very short screen), while the fan of packs and the buy buttons are docked together at the bottom, just above the
+        app's bottom bars. The page itself never has to scroll to reach another pack.
+      */}
+      <section
+        ref={stageRef}
+        aria-label="Packs"
+        style={stageHeight ? { height: stageHeight } : undefined}
+        className="flex min-h-[22rem] flex-col gap-2"
+      >
+        <div aria-live="polite" className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain">
+          {activePack ? (
+            <PackSummary onSale={isOnSale(activePack.price, activePack.salePrice)}>
+              <TitleAndPrice
+                name={activePack.name}
+                price={activePack.price}
+                effectivePrice={getEffectivePrice(activePack.price, activePack.salePrice)}
+                onSale={isOnSale(activePack.price, activePack.salePrice)}
+              />
+              {/* Only what the pack really gives. The bonus is just a chance, so it says "Bonus card" and no percentage. */}
+              <ul className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${3 + (activePack.bonus ? 1 : 0)}, minmax(0, 1fr))` }}>
+                <ContentStat icon="🏎️" value={activePack.cardsPerPack} label={activePack.cardsPerPack === 1 ? "Card" : "Cards"} />
+                <ContentStat icon="👥" value={activePack.extraCards?.crew ?? 0} label="Crew" />
+                <ContentStat icon="🔧" value={activePack.extraCards?.repair ?? 0} label="Repair kit" />
+                {activePack.bonus && <ContentStat icon="★" value="Bonus" label="Card" accent />}
+              </ul>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {isOnSale(activePack.price, activePack.salePrice) && (
+                  <span className="rounded-full bg-gradient-to-r from-rose-600 to-amber-500 px-2.5 py-0.5 text-[11px] font-black uppercase text-white">
+                    🔥 -{getSaleDiscountPct(activePack.price, activePack.salePrice)}% sale
+                  </span>
+                )}
+                {activePack.purchasable === false && (
+                  <span className="rounded-full border border-zinc-400/60 bg-zinc-500/10 px-2.5 py-0.5 text-[11px] font-black text-zinc-700 dark:text-zinc-200">
+                    Not available right now
+                  </span>
+                )}
+                {activePack.needsGeneration && (
+                  <span className="rounded-full border border-zinc-300 px-2.5 py-0.5 text-[11px] font-bold text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">
+                    Pick a car when you open it
+                  </span>
+                )}
+                <button type="button" onClick={() => setInspectPack(activePack)} className="ml-auto rounded-lg px-2 py-1 text-xs font-black text-amber-600 hover:bg-amber-500/10 dark:text-amber-400">
+                  See pack list →
+                </button>
+              </div>
+              {activePack.setList.length > 0 && (
+                <ul className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1" aria-label="Cards in the set">
+                  {activePack.setList.slice(0, 8).map(({ card }) => (
+                    <li key={card.id} className="w-12 shrink-0 sm:w-16">
+                      <FullArtCard card={card} className="drop-shadow-md" />
+                    </li>
+                  ))}
+                  {activePack.setList.length > 8 && (
+                    <li className="flex w-12 shrink-0 items-center justify-center text-xs font-black text-zinc-500 dark:text-zinc-400 sm:w-16">
+                      +{activePack.setList.length - 8}
+                    </li>
+                  )}
+                </ul>
+              )}
+              {activePack.description && <p className="text-xs text-zinc-500 dark:text-zinc-400">{activePack.description}</p>}
+            </PackSummary>
+          ) : (
+            <PackSummary onSale={standardOnSale}>
+              <TitleAndPrice name="Standard Pack" price={standardPackPrice} effectivePrice={effectiveStandardPrice} onSale={standardOnSale} />
+              <ul className="grid grid-cols-4 gap-1.5">
+                <ContentStat icon="🏎️" value={2} label="Car cards" />
+                <ContentStat icon="👥" value={1} label="Crew" />
+                <ContentStat icon="🔧" value={1} label="Repair kit" />
+                <ContentStat icon="★" value="Bonus" label="Card" accent />
+              </ul>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {standardOnSale && (
+                  <span className="rounded-full bg-gradient-to-r from-rose-600 to-amber-500 px-2.5 py-0.5 text-[11px] font-black uppercase text-white">
+                    🔥 -{standardDiscountPct}% sale
+                  </span>
+                )}
+                {standardAllowsCardCredits && (
+                  <span className="rounded-full border border-amber-400/40 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-black text-amber-700 dark:text-amber-300">
+                    You have {packCredits} unopened
+                  </span>
+                )}
+                <button type="button" onClick={() => setShowStandardContents(true)} className="ml-auto rounded-lg px-2 py-1 text-xs font-black text-amber-600 hover:bg-amber-500/10 dark:text-amber-400">
+                  See pack list →
+                </button>
+              </div>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                1 custom AI card of your car and 1 community car card, 1 Tactical Crew Card for Clash Arena, 1 Repair Kit, and a chance at a rare
+                bonus set card.
+              </p>
+            </PackSummary>
+          )}
+
+          {isAdmin && (
+            <div className="space-y-2">
+              <Link href="/admin/driftclash/packs" className={`${secondaryBtn} w-full sm:hidden`}>
+                ⚙️ Manage Packs &amp; Sale Prices
+              </Link>
+              <DevPreviewButton
+                busy={previewing === (activePack?.id ?? STANDARD_ID)}
+                disabled={previewing !== null}
+                guaranteeLegend={guaranteeLegend}
+                onGuaranteeChange={setGuaranteeLegend}
+                onClick={() => handlePreviewPack(activePack?.id ?? STANDARD_ID)}
+              />
+            </div>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {customPacks.map((pack) => {
-            const packOnSale = isOnSale(pack.price, pack.salePrice);
-            const effectivePrice = getEffectivePrice(pack.price, pack.salePrice);
-            const discountPct = getSaleDiscountPct(pack.price, pack.salePrice);
-            const canAfford = pCredits >= effectivePrice;
-            // A live pack can be shown without being for sale: members can look inside but not buy.
-            const forSale = pack.purchasable !== false;
-            const previewCards = pack.setList.slice(0, 3).map((s) => s.card);
-
-            return (
-              <PackTile key={pack.id} onSale={packOnSale}>
-                <div className="space-y-3">
-                  {/* Preview fan of cards in the set */}
-                  <ArtFrame onSale={packOnSale}>
-                    <div className="flex items-center justify-center -space-x-7 sm:-space-x-8">
-                      {previewCards.length === 0 && (
-                        <span className="rounded-xl border border-amber-400/40 bg-black/60 px-4 py-3 text-center text-sm font-black text-amber-300">
-                          Cards drawn from a car
+        {/* Docked at the bottom: the fan of packs, then what you can do with the selected one */}
+        <div className="shrink-0 space-y-2 rounded-2xl border border-zinc-800 bg-zinc-950 p-2 shadow-xl">
+          <PackCarousel packs={carouselPacks} selectedId={activeId} onSelect={setSelectedId} scale={fanScale} />
+          {(() => {
+            // The main button first, then up to two smaller ones beside each other.
+            let main: ReactNode;
+            const more: ReactNode[] = [];
+            if (activePack) {
+              const pack = activePack;
+              const packOnSale = isOnSale(pack.price, pack.salePrice);
+              const effectivePrice = getEffectivePrice(pack.price, pack.salePrice);
+              const canAfford = pCredits >= effectivePrice;
+              // A live pack can be shown without being for sale: members can look inside but not buy.
+              const forSale = pack.purchasable !== false;
+              if (!forSale) {
+                main = (
+                  <button type="button" disabled className={buyBtn}>
+                    Not available right now
+                  </button>
+                );
+              } else if (pack.needsGeneration) {
+                main = canAfford ? (
+                  <Link href={`/cards/new?pack=${pack.id}`} className={buyBtn}>
+                    Choose car &amp; open · {effectivePrice.toLocaleString()} P
+                  </Link>
+                ) : (
+                  <button type="button" disabled className={buyBtn}>
+                    Need {effectivePrice.toLocaleString()} P
+                  </button>
+                );
+              } else {
+                main = (
+                  <button type="button" onClick={() => handleBuyCustomPack(pack)} disabled={pending || !canAfford} className={buyBtn}>
+                    {isBuying(pack.id) ? (
+                      "Opening…"
+                    ) : canAfford ? (
+                      packOnSale ? (
+                        <span>
+                          Buy &amp; Open · <span className="line-through opacity-60">{pack.price.toLocaleString()}</span>{" "}
+                          {effectivePrice.toLocaleString()} P
                         </span>
-                      )}
-                      {previewCards.map((c, idx) => (
-                        <div
-                          key={c.id ?? idx}
-                          className="relative w-24 transition-transform sm:w-28"
-                          style={{
-                            transform:
-                              previewCards.length > 1
-                                ? `rotate(${(idx - (previewCards.length - 1) / 2) * 8}deg) translateY(${idx === 1 ? -4 : 4}px)`
-                                : undefined,
-                            zIndex: idx === 1 ? 10 : idx,
-                          }}
-                        >
-                          {/* Holds the card's place (and shimmers) until its picture has loaded, so the fan doesn't pop in */}
-                          <div aria-hidden className="gx-shimmer absolute inset-0 rounded-xl" style={{ aspectRatio: "63 / 88" }} />
-                          <FullArtCard card={c} className="relative drop-shadow-xl" />
-                        </div>
-                      ))}
-                    </div>
-                    <span className="absolute left-3 top-3 z-20 rounded-full bg-amber-500 px-2.5 py-0.5 text-[11px] font-black text-black">
-                      {totalCardsInPack(pack)} Card{totalCardsInPack(pack) === 1 ? "" : "s"} / Pack
-                    </span>
-                    {packOnSale && <SalePill pct={discountPct} />}
-                  </ArtFrame>
-
-                  {(pack.bonus || !forSale) && (
-                    <div className="flex flex-wrap gap-2">
-                      {pack.bonus && (
-                        <span className="rounded-full border border-fuchsia-400/50 bg-fuchsia-500/10 px-2.5 py-0.5 text-[11px] font-black text-fuchsia-700 dark:text-fuchsia-300">
-                          ★ Bonus card
-                        </span>
-                      )}
-                      {!forSale && (
-                        <span className="rounded-full border border-zinc-400/60 bg-zinc-500/10 px-2.5 py-0.5 text-[11px] font-black text-zinc-700 dark:text-zinc-200">
-                          Not available right now
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="space-y-1">
-                    <TitleAndPrice name={pack.name} price={pack.price} effectivePrice={effectivePrice} onSale={packOnSale} />
-                    {/* Said out loud on the tile: a hover tooltip is invisible on a phone */}
-                    <p className="text-xs font-bold text-zinc-700 dark:text-zinc-300">{packBreakdown(pack)}</p>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                      {pack.needsGeneration
-                        ? `${pack.setList.length} set card${pack.setList.length === 1 ? "" : "s"} + cards drawn from a car`
-                        : `${pack.setList.length} card${pack.setList.length === 1 ? "" : "s"} in the set`}
-                    </p>
-                    {pack.description && (
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400">{pack.description}</p>
+                      ) : (
+                        `Buy & Open · ${effectivePrice.toLocaleString()} P`
+                      )
+                    ) : (
+                      `Need ${effectivePrice.toLocaleString()} P`
                     )}
-                  </div>
-                </div>
-
-                <div className="mt-4 space-y-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
-                  {!forSale ? (
-                    <button type="button" disabled className={buyBtn}>
-                      Not available right now
-                    </button>
-                  ) : pack.needsGeneration ? (
-                    canAfford ? (
-                      <Link href={`/cards/new?pack=${pack.id}`} className={buyBtn}>
-                        Choose car &amp; open · {effectivePrice.toLocaleString()} P
+                  </button>
+                );
+              }
+              if (forSale && pack.allowCardCredits) {
+                more.push(
+                  pack.needsGeneration ? (
+                    packCredits > 0 ? (
+                      <Link key="credit" href={`/cards/new?pack=${pack.id}`} className={dockBtn}>
+                        Use a pack credit ({packCredits})
                       </Link>
                     ) : (
-                      <button type="button" disabled className={buyBtn}>
-                        Need {effectivePrice.toLocaleString()} P
+                      <button key="credit" type="button" disabled className={dockBtn}>
+                        No pack credits
                       </button>
                     )
                   ) : (
                     <button
+                      key="credit"
                       type="button"
-                      onClick={() => handleBuyCustomPack(pack)}
-                      disabled={pending || !canAfford}
-                      className={buyBtn}
+                      onClick={() => handleBuyCustomPack(pack, "cardCredit")}
+                      disabled={pending || packCredits < 1}
+                      className={dockBtn}
                     >
-                      {isBuying(pack.id) ? (
-                        "Opening…"
-                      ) : canAfford ? (
-                        packOnSale ? (
-                          <span>
-                            Buy &amp; Open ·{" "}
-                            <span className="line-through opacity-60">{pack.price.toLocaleString()}</span>{" "}
-                            {effectivePrice.toLocaleString()} P
-                          </span>
-                        ) : (
-                          `Buy & Open · ${effectivePrice.toLocaleString()} P`
-                        )
-                      ) : (
-                        `Need ${effectivePrice.toLocaleString()} P`
-                      )}
+                      {isBuying(pack.id, "cardCredit") ? "Opening…" : packCredits > 0 ? `Use a pack credit (${packCredits})` : "No pack credits"}
                     </button>
-                  )}
-                  {forSale && pack.allowCardCredits && (
-                    pack.needsGeneration ? (
-                      packCredits > 0 ? (
-                        <Link href={`/cards/new?pack=${pack.id}`} className={outlineBtn}>
-                          Choose car &amp; use a pack credit ({packCredits} left)
-                        </Link>
-                      ) : (
-                        <button type="button" disabled className={outlineBtn}>
-                          Pack credit: none left
-                        </button>
-                      )
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleBuyCustomPack(pack, "cardCredit")}
-                        disabled={pending || packCredits < 1}
-                        className={outlineBtn}
-                      >
-                        {isBuying(pack.id, "cardCredit")
-                          ? "Opening…"
-                          : packCredits > 0
-                            ? `Use a pack credit (${packCredits} left)`
-                            : "Pack credit: none left"}
-                      </button>
-                    )
-                  )}
-                  {forSale && !canAfford && (
-                    <button type="button" onClick={onOpenPCreditsTab} className={`${outlineBtn} border-amber-500/50 text-amber-700 dark:text-amber-300`}>
-                      Need {(effectivePrice - pCredits).toLocaleString()} more P-Credits
-                    </button>
-                  )}
-                  <button type="button" onClick={() => setInspectPack(pack)} className={ghostBtn}>
-                    What&apos;s in the pack?
+                  )
+                );
+              }
+              if (forSale && !canAfford) {
+                more.push(
+                  <button key="topup" type="button" onClick={onOpenPCreditsTab} className={`${dockBtn} !border-amber-500/60 !text-amber-300`}>
+                    Get {(effectivePrice - pCredits).toLocaleString()} more P
                   </button>
-                  {isAdmin && <DevPreviewButton busy={previewing === pack.id} disabled={previewing !== null} guaranteeLegend={guaranteeLegend} onGuaranteeChange={setGuaranteeLegend} onClick={() => handlePreviewPack(pack.id)} />}
-                </div>
-              </PackTile>
-            );
-          })}
-
-          {/* The Standard Pack */}
-          <PackTile onSale={standardOnSale}>
-            <div className="space-y-3">
-              <ArtFrame onSale={standardOnSale}>
-                <div className="w-24 sm:w-28">
-                  <PackArt
-                    name="Standard Pack"
-                    variant="standard"
-                    cardsLabel="4 CARDS"
-                    extraLabel="+ RARE CHANCE"
-                    discountPct={standardOnSale ? standardDiscountPct : 0}
-                  />
-                </div>
-                <span className="absolute left-3 top-3 z-20 rounded-full bg-amber-500 px-2.5 py-0.5 text-[11px] font-black text-black">
-                  4 Cards / Pack
-                </span>
-                {standardOnSale && <SalePill pct={standardDiscountPct} />}
-              </ArtFrame>
-
-              {standardAllowsCardCredits && (
-                <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full border border-amber-400/40 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-black text-amber-700 dark:text-amber-300">
-                    You have {packCredits} unopened
-                  </span>
-                </div>
-              )}
-
-              <div className="space-y-1">
-                <TitleAndPrice
-                  name="Penthouse Standard Pack"
-                  price={standardPackPrice}
-                  effectivePrice={effectiveStandardPrice}
-                  onSale={standardOnSale}
-                />
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  1 custom AI card of your car, 1 community car card, 1 Tactical Crew Card for Clash Arena and 1 Repair Kit, plus a
-                  chance at a rare Bonus Set Card.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
-              {!standardAllowsCardCredits && pCredits >= effectiveStandardPrice && (
+                );
+              }
+            } else {
+              if (!standardAllowsCardCredits && pCredits >= effectiveStandardPrice) {
                 // Paid for when it is opened: the member picks their car in the wizard, which charges the price.
-                <Link href="/cards/new" className={buyBtn}>
-                  Choose car &amp; open · {effectiveStandardPrice.toLocaleString()} P
-                </Link>
-              )}
-              {(standardAllowsCardCredits || pCredits < effectiveStandardPrice) && (
-                <button
-                  type="button"
-                  onClick={handleBuyStandardPack}
-                  disabled={pending || pCredits < effectiveStandardPrice}
-                  className={buyBtn}
-                >
-                  {isBuying(STANDARD_ID) ? (
-                    "Purchasing…"
-                  ) : pCredits < effectiveStandardPrice ? (
-                    `Need ${effectiveStandardPrice.toLocaleString()} P`
-                  ) : standardOnSale ? (
-                    <span>
-                      Buy · <span className="line-through opacity-60">{standardPackPrice.toLocaleString()}</span>{" "}
-                      {effectiveStandardPrice.toLocaleString()} P
-                    </span>
-                  ) : (
-                    `Buy Pack · ${effectiveStandardPrice.toLocaleString()} P`
-                  )}
-                </button>
-              )}
-              {standardAllowsCardCredits && packCredits > 0 && (
-                <Link href="/cards/new" className={outlineBtn}>
-                  Open Pack ({packCredits} ready) →
-                </Link>
-              )}
-              {pCredits < effectiveStandardPrice && (
-                <button type="button" onClick={onOpenPCreditsTab} className={`${outlineBtn} border-amber-500/50 text-amber-700 dark:text-amber-300`}>
-                  Need {(effectiveStandardPrice - pCredits).toLocaleString()} more P-Credits
-                </button>
-              )}
-              <button type="button" onClick={() => setShowStandardContents(true)} className={ghostBtn}>
-                What&apos;s in the pack?
-              </button>
-              {isAdmin && <DevPreviewButton busy={previewing === STANDARD_ID} disabled={previewing !== null} guaranteeLegend={guaranteeLegend} onGuaranteeChange={setGuaranteeLegend} onClick={() => handlePreviewPack(STANDARD_ID)} />}
-            </div>
-          </PackTile>
+                main = (
+                  <Link href="/cards/new" className={buyBtn}>
+                    Choose car &amp; open · {effectiveStandardPrice.toLocaleString()} P
+                  </Link>
+                );
+              } else {
+                main = (
+                  <button type="button" onClick={handleBuyStandardPack} disabled={pending || pCredits < effectiveStandardPrice} className={buyBtn}>
+                    {isBuying(STANDARD_ID) ? (
+                      "Purchasing…"
+                    ) : pCredits < effectiveStandardPrice ? (
+                      `Need ${effectiveStandardPrice.toLocaleString()} P`
+                    ) : standardOnSale ? (
+                      <span>
+                        Buy · <span className="line-through opacity-60">{standardPackPrice.toLocaleString()}</span>{" "}
+                        {effectiveStandardPrice.toLocaleString()} P
+                      </span>
+                    ) : (
+                      `Buy Pack · ${effectiveStandardPrice.toLocaleString()} P`
+                    )}
+                  </button>
+                );
+              }
+              if (standardAllowsCardCredits && packCredits > 0) {
+                more.push(
+                  <Link key="open" href="/cards/new" className={dockBtn}>
+                    Open a pack ({packCredits} ready) →
+                  </Link>
+                );
+              }
+              if (pCredits < effectiveStandardPrice) {
+                more.push(
+                  <button key="topup" type="button" onClick={onOpenPCreditsTab} className={`${dockBtn} !border-amber-500/60 !text-amber-300`}>
+                    Get {(effectiveStandardPrice - pCredits).toLocaleString()} more P
+                  </button>
+                );
+              }
+            }
+            return (
+              <div className="space-y-2">
+                {main}
+                {more.length > 0 && <div className={`grid gap-2 ${more.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>{more}</div>}
+              </div>
+            );
+          })()}
         </div>
       </section>
 
@@ -842,11 +869,11 @@ function DevPreviewButton({
   );
 }
 
-/** The outer card of a pack tile. */
-function PackTile({ onSale, children }: { onSale: boolean; children: ReactNode }) {
+/** The panel that sums up the selected pack above the fan. */
+function PackSummary({ onSale, children }: { onSale: boolean; children: ReactNode }) {
   return (
     <div
-      className={`relative flex flex-col justify-between rounded-3xl border bg-white p-4 shadow-sm transition-shadow hover:shadow-md dark:bg-zinc-900 sm:p-5 ${
+      className={`space-y-3 rounded-3xl border bg-white p-4 shadow-sm dark:bg-zinc-900 sm:p-5 ${
         onSale ? "border-rose-500/60 dark:border-rose-500/50" : "border-zinc-200 dark:border-zinc-800"
       }`}
     >
@@ -855,31 +882,31 @@ function PackTile({ onSale, children }: { onSale: boolean; children: ReactNode }
   );
 }
 
-/** The dark art block at the top of a tile. The pills that sit on it are placed by the caller (top-left and top-right only). */
-function ArtFrame({ onSale, children }: { onSale: boolean; children: ReactNode }) {
+/** One thing a pack gives: an icon and how many on one line, and what it is underneath. */
+function ContentStat({ icon, value, label, accent = false }: { icon: string; value: number | string; label: string; accent?: boolean }) {
   return (
-    <div
-      className={`relative flex h-44 items-center justify-center overflow-hidden rounded-2xl p-4 sm:h-48 ${
-        onSale ? "bg-gradient-to-b from-rose-950/80 via-zinc-900 to-zinc-950" : "bg-gradient-to-b from-zinc-900 to-zinc-950"
+    <li
+      className={`min-w-0 rounded-xl border px-2 py-1.5 ${
+        accent
+          ? "border-fuchsia-400/40 bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300"
+          : "border-zinc-200 bg-zinc-50 text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
       }`}
     >
-      {children}
-    </div>
-  );
-}
-
-function SalePill({ pct }: { pct: number }) {
-  return (
-    <span className="absolute right-3 top-3 z-20 rounded-full bg-gradient-to-r from-rose-600 to-amber-500 px-2.5 py-0.5 text-[11px] font-black uppercase text-white shadow">
-      🔥 -{pct}% SALE
-    </span>
+      <span className="flex items-center gap-1.5">
+        <span aria-hidden className="text-base leading-none">
+          {icon}
+        </span>
+        <span className="text-base font-black leading-tight tabular-nums">{value}</span>
+      </span>
+      <span className="mt-0.5 block text-[10px] font-bold leading-tight opacity-70">{label}</span>
+    </li>
   );
 }
 
 /** The name, then the price on its own line (beside the name from sm: up). */
 function TitleAndPrice({ name, price, effectivePrice, onSale }: { name: string; price: number; effectivePrice: number; onSale: boolean }) {
   return (
-    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+    <div className="flex items-start justify-between gap-2 sm:gap-3">
       <h4 className="text-lg font-black leading-tight text-zinc-900 dark:text-zinc-100">{name}</h4>
       <div className="flex shrink-0 items-baseline gap-2 sm:justify-end">
         {onSale && <span className="text-xs font-bold text-zinc-400 line-through">{price.toLocaleString()} P</span>}
@@ -893,15 +920,6 @@ function TitleAndPrice({ name, price, effectivePrice, onSale }: { name: string; 
       </div>
     </div>
   );
-}
-
-/** What one pack gives, in words: "3 cards + 1 crew + 1 repair kit". */
-function packBreakdown(pack: TcgCustomPackWithCards): string {
-  return [
-    `${pack.cardsPerPack} card${pack.cardsPerPack === 1 ? "" : "s"}`,
-    ...(pack.extraCards?.crew ? [`${pack.extraCards.crew} crew`] : []),
-    ...(pack.extraCards?.repair ? [`${pack.extraCards.repair} repair kit${pack.extraCards.repair === 1 ? "" : "s"}`] : []),
-  ].join(" + ");
 }
 
 /** For packs that draw some cards from a car: a short note that a car is chosen when opening. */

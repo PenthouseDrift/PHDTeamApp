@@ -3,6 +3,9 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getDailyRevenue } from "@/actions/admin/activity";
 import { formatGBP } from "@/lib/activity-pricing";
+import { getClubChartData, getClubLedger } from "@/actions/admin/club-accounts";
+import { todayInLondon } from "@/lib/club-accounts";
+import ClubAccountsClient from "./ClubAccountsClient";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +17,7 @@ export default async function AdminRevenuePage() {
 
   // Today only (UTC). This fetches just the current day's entries, so the page
   // loads fast. The full month lives on a separate page linked below.
-  const today = await getDailyRevenue();
+  const [today, ledger, clubChart] = await Promise.all([getDailyRevenue(), getClubLedger(), getClubChartData()]);
 
   return (
     <div className="min-h-full bg-zinc-50 dark:bg-zinc-950 px-4 py-6 sm:px-6 lg:px-8 space-y-8">
@@ -125,6 +128,9 @@ export default async function AdminRevenuePage() {
             </span>
           </Link>
         </div>
+
+        {/* Where the club's money is: SumUp bank, cash and the kitty */}
+        <ClubAccountsClient ledger={ledger} chart={clubChart} today={todayInLondon()} />
 
         <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
           Today&apos;s figures are derived from the activity log for the current day (UTC).

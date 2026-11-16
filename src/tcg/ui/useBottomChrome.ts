@@ -130,3 +130,72 @@ export function useStickyTopOffset(anchor: RefObject<HTMLElement | null>): void 
     };
   }, [anchor]);
 }
+
+/**
+ * Sizes a "one screen" layout (a game screen that should not need the page to scroll): returns how tall the element should
+ * be to fill what is left of the screen below where it starts, clamped to [min, max] px. It measures where the element sits
+ * in the scrolling content (so scrolling does not change the answer), leaves `bottomReserve` px for bars fixed to the
+ * bottom, and re-measures when the screen is resized or whatever sits above it changes size (the player header opening).
+ * It also sets a negative bottom margin that cancels the padding the app reserves under its content for those bars, so the
+ * page is not left scrollable by the height of a bar it already allowed for.
+ *
+ * Returns null until it has measured (the first render), so callers can fall back to a minimum height.
+ */
+export function useFillScreenHeight(ref: RefObject<HTMLElement | null>, bottomReserve: number, min = 352, max = 760): number | null {
+  const [height, setHeight] = useState<number | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const scroller = scrollerOf(el);
+    let frame = 0;
+
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      let top: number;
+      let room: number;
+      if (scroller) {
+        top = rect.top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+        room = scroller.clientHeight;
+      } else {
+        top = rect.top + window.scrollY;
+        room = window.innerHeight;
+      }
+      const next = Math.round(Math.min(max, Math.max(min, room - top - bottomReserve)));
+      setHeight((prev) => (prev === next ? prev : next));
+
+      // The padding the app leaves under its content for the bottom bars is already allowed for in `bottomReserve`.
+      let padding = 0;
+      for (let node = el.parentElement; node && node !== document.documentElement; node = node.parentElement) {
+        padding += parseFloat(getComputedStyle(node).paddingBottom) || 0;
+        if (node === scroller || node === document.body) break;
+      }
+      el.style.marginBottom = padding > 0 ? `-${Math.round(padding)}px` : "";
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+
+    measure();
+    window.addEventListener("resize", schedule);
+    window.visualViewport?.addEventListener("resize", schedule);
+    // Anything above the element growing or shrinking moves it: watch the things that come before it, and the scrolling area.
+    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(schedule);
+    if (resize) {
+      if (scroller) resize.observe(scroller);
+      for (let node: HTMLElement | null = el; node && node !== scroller && node !== document.body; node = node.parentElement) {
+        for (let sib = node.previousElementSibling; sib; sib = sib.previousElementSibling) resize.observe(sib);
+      }
+    }
+    const settle = [setTimeout(measure, 300), setTimeout(measure, 1200)];
+    return () => {
+      cancelAnimationFrame(frame);
+      settle.forEach(clearTimeout);
+      window.removeEventListener("resize", schedule);
+      window.visualViewport?.removeEventListener("resize", schedule);
+      resize?.disconnect();
+      el.style.marginBottom = "";
+    };
+  }, [ref, bottomReserve, min, max]);
+  return height;
+}
