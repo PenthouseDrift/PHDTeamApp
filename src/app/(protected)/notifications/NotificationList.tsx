@@ -13,6 +13,9 @@ function getIcon(type: AppNotification["type"]): string {
     case "comment": return "💬";
     case "reply": return "↩️";
     case "comment_like": return "👍";
+    case "card_gift": return "🎁";
+    case "card_offer": return "🤝";
+    case "card_offer_result": return "🃏";
     default: return "🔔";
   }
 }

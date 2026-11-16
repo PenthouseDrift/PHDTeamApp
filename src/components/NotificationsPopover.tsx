@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   getNotifications,
@@ -22,6 +22,9 @@ function getIcon(type: AppNotification["type"]): string {
     case "comment_like": return "👍";
     case "global": return "📢";
     case "event_reminder": return "🏎️";
+    case "card_gift": return "🎁";
+    case "card_offer": return "🤝";
+    case "card_offer_result": return "🃏";
     default: return "🔔";
   }
 }
@@ -46,6 +49,23 @@ export function NotificationsPopover({ userId, initialUnreadCount = 0 }: Notific
   const [loading, setLoading] = useState(false);
   const [selectedNotification, setSelectedNotification] = useState<AppNotification | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  // Where the desktop panel sits, in screen coordinates. Worked out from the bell each time it opens, so it always fits on screen.
+  const [panelPos, setPanelPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  const placePanel = useCallback(() => {
+    const bell = wrapperRef.current;
+    if (!bell) return;
+    const r = bell.getBoundingClientRect();
+    const margin = 8;
+    const width = Math.min(384, window.innerWidth - margin * 2);
+    // Line up with the bell's left edge when the panel fits that way; otherwise with its right edge, so it opens towards the middle of the screen.
+    const left = r.left + width <= window.innerWidth - margin ? r.left : r.right - width;
+    setPanelPos({
+      top: r.bottom + 8,
+      left: Math.min(Math.max(left, margin), window.innerWidth - width - margin),
+      width,
+    });
+  }, []);
 
   useEffect(() => {
     setUnreadCount(initialUnreadCount);
@@ -64,6 +84,17 @@ export function NotificationsPopover({ userId, initialUnreadCount = 0 }: Notific
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [isOpen]);
+
+  // Keep the panel next to the bell if the window is resized or scrolled while it is open.
+  useEffect(() => {
+    if (!isOpen) return;
+    window.addEventListener("resize", placePanel);
+    window.addEventListener("scroll", placePanel, true);
+    return () => {
+      window.removeEventListener("resize", placePanel);
+      window.removeEventListener("scroll", placePanel, true);
+    };
+  }, [isOpen, placePanel]);
 
   // Load notifications when opened
   useEffect(() => {
@@ -97,6 +128,7 @@ export function NotificationsPopover({ userId, initialUnreadCount = 0 }: Notific
 
   async function handleOpen() {
     if (isOpen) { setIsOpen(false); return; }
+    placePanel();
     setIsOpen(true);
     if (unreadCount > 0) {
       setUnreadCount(0);
@@ -247,8 +279,8 @@ export function NotificationsPopover({ userId, initialUnreadCount = 0 }: Notific
             {panelContent}
           </div>
 
-          {/* Desktop: compact dropdown anchored to bell, no overlay */}
-          <div className="hidden md:block absolute left-0 top-full mt-2 w-96 z-[9999]">
+          {/* Desktop: dropdown next to the bell, kept inside the screen (position is measured when it opens), no overlay */}
+          <div className="hidden md:block fixed z-[9999]" style={panelPos ? { top: panelPos.top, left: panelPos.left, width: panelPos.width } : undefined}>
             {panelContent}
           </div>
         </>

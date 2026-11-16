@@ -29,6 +29,9 @@ import { TcgMarketplace } from "./TcgMarketplace";
 import { TcgPackStore } from "./TcgPackStore";
 import { TcgPCreditsShop } from "./TcgPCreditsShop";
 import { buzz } from "@/tcg/ui/feedback";
+import { acknowledgeReceivedCards } from "@/tcg/trade-actions";
+import type { ReceivedCard } from "@/tcg/trade-types";
+import { ReceivedCardsReveal } from "./ReceivedCardsReveal";
 import { useStickyTopOffset } from "@/tcg/ui/useBottomChrome";
 import { TabSkeleton } from "@/tcg/ui/Shimmer";
 import { ToastProvider } from "@/tcg/ui/Toast";
@@ -133,6 +136,7 @@ export function TcgApp({
   hasTourAccess = false,
   tourAdminPreview = false,
   gameOnly = false,
+  initialReceived = [],
 }: {
   userId: string;
   isAdmin?: boolean;
@@ -161,9 +165,13 @@ export function TcgApp({
   tourAdminPreview?: boolean;
   /** True on the game-only Drift Clash app (no Penthouse Drift app around the game). */
   gameOnly?: boolean;
+  /** Cards the member was given (gifts, trades) and has not been shown the reveal for yet. */
+  initialReceived?: ReceivedCard[];
 }) {
   const [tab, setTab] = useState<TcgTab>(initialTab);
   const [cards, setCards] = useState<MemberCard[]>(initialCards);
+  // Cards just received: the reveal plays for these, then they are marked as seen so it never plays for them again.
+  const [reveal, setReveal] = useState<ReceivedCard[]>(initialReceived);
   const [packCredits, setPackCredits] = useState<number>(initialPackCredits);
   const [pCredits, setPCredits] = useState<number>(initialPCredits);
   const [listings, setListings] = useState<TcgMarketListing[]>(initialListings);
@@ -607,6 +615,15 @@ export function TcgApp({
             );
           }}
           onOpenPCreditsTab={() => selectTab("p-credits")}
+          myCards={cards}
+          onTradeCompleted={({ gaveCardId, receivedCards, pCredits: nextPCredits, fromName }) => {
+            setPCredits(nextPCredits);
+            setReveal(receivedCards.map((card) => ({ card, fromName, kind: "trade" as const, at: Date.now() })));
+            setCards((prev) => {
+              const receivedIds = new Set(receivedCards.map((c) => c.id));
+              return [...receivedCards, ...prev.filter((c) => c.id !== gaveCardId && !receivedIds.has(c.id))];
+            });
+          }}
         />
       )}
 
@@ -630,6 +647,18 @@ export function TcgApp({
       )}
       </div>
     </div>
+
+    {reveal.length > 0 && (
+      <ReceivedCardsReveal
+        items={reveal}
+        onDone={() => {
+          const ids = reveal.map((r) => r.card.id);
+          setReveal([]);
+          // Remembered on the server, so this reveal doesn't play for these cards again (on any device).
+          void acknowledgeReceivedCards(ids).catch(() => {});
+        }}
+      />
+    )}
     </ToastProvider>
   );
 }

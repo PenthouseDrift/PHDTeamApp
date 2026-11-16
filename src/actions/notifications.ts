@@ -9,7 +9,7 @@ import type { ActionResult } from "@/types";
 export interface AppNotification {
   notificationId: string;
   userId: string;
-  type: "like" | "comment" | "reply" | "comment_like" | "global" | "event_reminder";
+  type: "like" | "comment" | "reply" | "comment_like" | "global" | "event_reminder" | "card_gift" | "card_offer" | "card_offer_result";
   fromUserId: string;
   fromUserName: string;
   shellId?: string;
@@ -96,7 +96,12 @@ export async function createNotification(params: {
     sendPushToUser(params.userId, {
       title: getNotificationTitle(params.type),
       body: params.message,
-      url: params.shellId ? `/showcase?open=${params.shellId}` : "/notifications",
+      // A link inside the app (for example a card offer) opens straight to it; otherwise the showcase post, or the list.
+      url: params.shellId
+        ? `/showcase?open=${params.shellId}`
+        : params.url && params.url.startsWith("/") && !params.url.startsWith("//")
+          ? params.url
+          : "/notifications",
     }).catch(() => {});
 
     return true;
@@ -405,6 +410,9 @@ function getNotificationTitle(type: AppNotification["type"]): string {
     case "comment_like": return "👍 Comment Liked";
     case "global": return "📢 Track Announcement";
     case "event_reminder": return "🏎️ Event Reminder";
+    case "card_gift": return "🎁 You were gifted a card";
+    case "card_offer": return "🤝 New card offer";
+    case "card_offer_result": return "🃏 Card offer update";
     default: return "🔔 Notification";
   }
 }

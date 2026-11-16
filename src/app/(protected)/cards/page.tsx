@@ -24,6 +24,7 @@ import {
 import { TcgApp } from "@/tcg/components/TcgApp";
 import { standardPackAllowsCardCredits } from "@/lib/pack-config-store";
 import { listTandemClashChallengesAction } from "@/tcg/challenges-actions";
+import { getUnseenReceived } from "@/tcg/trade-store";
 import { getTourAccess, getTourAdminPreview } from "@/tcg/tour/actions";
 import type { TcgTab } from "@/tcg/types";
 
@@ -102,6 +103,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
     standardAllowsCardCredits,
     hasTourAccess,
     tourAdminPreview,
+    unseenReceived,
   ] = await Promise.all([
     listMyCards(),
     getCardCredits(userId),
@@ -118,6 +120,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
     standardPackAllowsCardCredits(),
     getTourAccess(),
     getTourAdminPreview(),
+    getUnseenReceived(userId),
   ]);
 
   // ?tab=clash opens Tandem Clash itself. The Play page (?tab=play) lists it with the other game modes.
@@ -156,6 +159,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
           tourAdminPreview={tourAdminPreview}
           checkoutConfirmed={checkoutConfirmed}
           gameOnly={gameOnly}
+          initialReceived={unseenReceived}
         />
       </div>
     </div>

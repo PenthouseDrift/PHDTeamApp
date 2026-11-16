@@ -5,6 +5,10 @@ import { FullArtCard } from "@/components/cards/FullArtCard";
 import { FULL_ART_TIERS, type FullArtTier } from "@/lib/full-art-card";
 import { RARITY_RANK, rarityLabel, type MemberCard } from "@/lib/card-roll";
 import { buyCardFromMarket, unlistCardFromMarket } from "@/tcg/actions";
+import { acceptTradeOffer, declineTradeOffer, getMyTradeOffers, withdrawTradeOffer } from "@/tcg/trade-actions";
+import { describeOffer, type MyTradeOffers, type TradeOffer } from "@/tcg/trade-types";
+import { TradeOfferSheet } from "@/tcg/components/TradeOfferSheet";
+import { TradeOffersPanel, type OffersTab } from "@/tcg/components/TradeOffersPanel";
 import type { TcgMarketListing } from "@/tcg/types";
 import { BottomSheet, sheetDanger, sheetPrimary, sheetSecondary } from "@/tcg/ui/BottomSheet";
 import { ProgressiveList } from "@/tcg/ui/ProgressiveList";
@@ -116,6 +120,8 @@ export function TcgMarketplace({
   onCardPurchased,
   onCardUnlisted,
   onOpenPCreditsTab,
+  myCards,
+  onTradeCompleted,
 }: {
   userId: string;
   pCredits: number;
@@ -124,6 +130,10 @@ export function TcgMarketplace({
   onCardPurchased: (card: MemberCard, newPCredits: number, listingId: string) => void;
   onCardUnlisted: (cardId: string, updatedCard: MemberCard | null) => void;
   onOpenPCreditsTab: () => void;
+  /** The member's own collection: what they can offer in a trade. */
+  myCards: MemberCard[];
+  /** A trade went through: the card given away leaves the collection, the cards received join it, and the balance changes. */
+  onTradeCompleted: (result: { gaveCardId: string; receivedCards: MemberCard[]; pCredits: number; fromName: string }) => void;
 }) {
   const toast = useToast();
   const [filters, setFilters] = useState<MarketFilters>(loadFilters);
@@ -134,6 +144,31 @@ export function TcgMarketplace({
   const [sheetError, setSheetError] = useState<string | null>(null);
   /** Listing ids with a purchase or unlist in flight, so only that tile or sheet shows the busy state. */
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(() => new Set());
+  // Trade offers: the ones on my listings and the ones I have made.
+  const [offers, setOffers] = useState<MyTradeOffers | null>(null);
+  const [offersTab, setOffersTab] = useState<OffersTab | null>(null);
+  const [offerTarget, setOfferTarget] = useState<TcgMarketListing | null>(null);
+  const [offerBusyId, setOfferBusyId] = useState<string | null>(null);
+  const [offerError, setOfferError] = useState<string | null>(null);
+
+  const refreshOffers = useCallback(async () => {
+    try {
+      setOffers(await getMyTradeOffers());
+    } catch {
+      /* the Offers button just stays empty until the next try */
+    }
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    getMyTradeOffers()
+      .then((result) => {
+        if (!cancelled) setOffers(result);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Actions finish after an await, so they must filter the list as it is then, not as it was when they started.
   const listingsRef = useRef(listings);
@@ -263,6 +298,53 @@ export function TcgMarketplace({
     }
   }
 
+  const waitingReceived = useMemo(() => (offers ? offers.received.filter((o) => o.status === "pending") : []), [offers]);
+  const waitingSent = useMemo(() => (offers ? offers.sent.filter((o) => o.status === "pending") : []), [offers]);
+  /** How many offers are waiting on each of my listings. */
+  const offersByListing = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const o of waitingReceived) map.set(o.listingId, (map.get(o.listingId) ?? 0) + 1);
+    return map;
+  }, [waitingReceived]);
+  const myOfferOn = (listingId: string) => waitingSent.find((o) => o.listingId === listingId) ?? null;
+
+  async function handleOfferAction(offer: TradeOffer, kind: "accept" | "decline" | "withdraw") {
+    if (offerBusyId) return;
+    setOfferBusyId(offer.id);
+    setOfferError(null);
+    try {
+      if (kind === "accept") {
+        const res = await acceptTradeOffer(offer.id);
+        if (res.success) {
+          onListingsChange(listingsRef.current.filter((l) => l.id !== res.data.listingId));
+          onTradeCompleted({
+            gaveCardId: res.data.gaveCardId,
+            receivedCards: res.data.receivedCards,
+            pCredits: res.data.pCredits,
+            fromName: offer.buyerName,
+          });
+          buzz(25);
+          toast(`Trade done: ${offer.listedCard.name} went to ${offer.buyerName} for ${describeOffer(offer)}.`, "success");
+        } else {
+          setOfferError(res.error);
+          toast(res.error, "error");
+        }
+      } else {
+        const res = kind === "decline" ? await declineTradeOffer(offer.id) : await withdrawTradeOffer(offer.id);
+        if (res.success) toast(kind === "decline" ? "Offer declined." : "Offer withdrawn.", "success");
+        else {
+          setOfferError(res.error);
+          toast(res.error, "error");
+        }
+      }
+      await refreshOffers();
+    } catch {
+      setOfferError("Something went wrong. Please try again.");
+    } finally {
+      setOfferBusyId(null);
+    }
+  }
+
   const detailPending = selectedListing ? pendingIds.has(selectedListing.id) : false;
   const unlistPending = unlistTarget ? pendingIds.has(unlistTarget.id) : false;
 
@@ -362,15 +444,37 @@ export function TcgMarketplace({
         <p className="text-sm font-bold text-zinc-600 dark:text-zinc-300">
           {filtered.length.toLocaleString()} {filtered.length === 1 ? "listing" : "listings"}
         </p>
-        {anyActive && (
+        <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={clearFilters}
-            className="gx-tap min-h-11 rounded-xl px-3 text-xs font-black text-amber-600 hover:underline dark:text-amber-400"
+            onClick={() => {
+              setOfferError(null);
+              setOffersTab(waitingReceived.length > 0 || waitingSent.length === 0 ? "received" : "sent");
+              void refreshOffers();
+            }}
+            className="gx-tap inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-zinc-300 px-3 text-xs font-black text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
           >
-            Clear
+            <span aria-hidden>🤝</span>
+            Offers
+            {waitingReceived.length > 0 && (
+              <span
+                aria-label={`${waitingReceived.length} offers waiting for you`}
+                className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1 text-[11px] font-black text-black"
+              >
+                {waitingReceived.length}
+              </span>
+            )}
           </button>
-        )}
+          {anyActive && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="gx-tap min-h-11 rounded-xl px-3 text-xs font-black text-amber-600 hover:underline dark:text-amber-400"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Listings Grid */}
@@ -402,6 +506,7 @@ export function TcgMarketplace({
             const isMine = item.sellerId === userId;
             const canAfford = pCredits >= item.price;
             const busy = pendingIds.has(item.id);
+            const offerCount = isMine ? (offersByListing.get(item.id) ?? 0) : 0;
             return (
               <div className="flex h-full flex-col justify-between rounded-2xl border border-zinc-200 bg-white p-2.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-3">
                 <div className="space-y-2">
@@ -433,6 +538,19 @@ export function TcgMarketplace({
                       {item.price.toLocaleString()} <span className="text-xs font-extrabold">P</span>
                     </span>
                   </div>
+                  {offerCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOfferError(null);
+                        setOffersTab("received");
+                      }}
+                      className="gx-tap mb-2 inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-amber-500/50 bg-amber-500/10 text-xs font-black text-amber-700 hover:bg-amber-500/20 dark:text-amber-300"
+                    >
+                      <span aria-hidden>🤝</span>
+                      {offerCount} {offerCount === 1 ? "offer" : "offers"}
+                    </button>
+                  )}
                   {isMine ? (
                     <button
                       type="button"
@@ -605,6 +723,11 @@ export function TcgMarketplace({
                   Balance <strong className="text-zinc-100">{pCredits.toLocaleString()} P</strong>
                 </span>
               </div>
+              {selectedListing.sellerId !== userId && myOfferOn(selectedListing.id) && (
+                <p className="text-xs font-semibold text-amber-300">
+                  Your offer is waiting: {describeOffer(myOfferOn(selectedListing.id)!)}.
+                </p>
+              )}
               {selectedListing.sellerId !== userId && pCredits < selectedListing.price && (
                 <p className="text-xs font-semibold text-rose-300">
                   You need {(selectedListing.price - pCredits).toLocaleString()} more P-Credits to buy this card.
@@ -622,6 +745,21 @@ export function TcgMarketplace({
                 >
                   Cancel
                 </button>
+                {selectedListing.sellerId !== userId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSheetError(null);
+                      const target = selectedListing;
+                      setSelectedListing(null);
+                      setOfferTarget(target);
+                    }}
+                    disabled={detailPending}
+                    className={sheetSecondary}
+                  >
+                    <span aria-hidden>🤝</span> {myOfferOn(selectedListing.id) ? "Change offer" : "Offer"}
+                  </button>
+                )}
                 {selectedListing.sellerId === userId ? (
                   <button type="button" onClick={() => askUnlist(selectedListing)} className={sheetPrimary}>
                     Remove listing
@@ -738,6 +876,40 @@ export function TcgMarketplace({
             collection and you can list it again any time.
           </p>
         </BottomSheet>
+      )}
+
+      {/* Make an offer */}
+      {offerTarget && (
+        <TradeOfferSheet
+          listing={offerTarget}
+          myCards={myCards}
+          pCredits={pCredits}
+          existing={myOfferOn(offerTarget.id)}
+          onClose={() => setOfferTarget(null)}
+          onSent={(offer) => {
+            setOfferTarget(null);
+            toast(`Offer sent to ${offer.sellerName}: ${describeOffer(offer)}.`, "success");
+            void refreshOffers();
+          }}
+        />
+      )}
+
+      {/* Offers I have received and made */}
+      {offersTab && (
+        <TradeOffersPanel
+          offers={offers}
+          tab={offersTab}
+          onTab={(t) => {
+            setOfferError(null);
+            setOffersTab(t);
+          }}
+          busyId={offerBusyId}
+          error={offerError}
+          onAccept={(o) => void handleOfferAction(o, "accept")}
+          onDecline={(o) => void handleOfferAction(o, "decline")}
+          onWithdraw={(o) => void handleOfferAction(o, "withdraw")}
+          onClose={() => setOffersTab(null)}
+        />
       )}
     </div>
   );

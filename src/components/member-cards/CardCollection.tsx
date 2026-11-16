@@ -34,6 +34,8 @@ import {
 import { ART_STYLES } from "@/lib/card-maker";
 import { FULL_ART_TIERS, type FullArtTierInfo } from "@/lib/full-art-card";
 import { getQuickSellPrice } from "@/tcg/config";
+import { giftCard, searchGiftRecipients } from "@/tcg/trade-actions";
+import type { GiftRecipient } from "@/tcg/trade-types";
 import {
   listCardOnMarket,
   quickSellCard,
@@ -727,7 +729,7 @@ const DeckTile = memo(function DeckTile({
   );
 });
 
-type Busy = null | "keep" | "reroll" | "list" | "unlist";
+type Busy = null | "keep" | "reroll" | "list" | "unlist" | "gift";
 
 /** The label/value rows of the Details list, by kind of card. */
 function detailRows(card: MemberCard, styles: string[]): Array<[string, ReactNode]> {
@@ -835,6 +837,12 @@ function CardViewer({
   const [confirm, setConfirm] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [listPriceText, setListPriceText] = useState("");
+  // Gifting: who to give the card to is searched by name, then picked.
+  const [giftOpen, setGiftOpen] = useState(false);
+  const [giftQuery, setGiftQuery] = useState("");
+  const [giftResults, setGiftResults] = useState<GiftRecipient[]>([]);
+  const [giftSearching, setGiftSearching] = useState(false);
+  const [giftPick, setGiftPick] = useState<GiftRecipient | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [repairPending, setRepairPending] = useState(false);
@@ -858,6 +866,10 @@ function CardViewer({
     setShownId(card?.id ?? null);
     setConfirm(false);
     setListOpen(false);
+    setGiftOpen(false);
+    setGiftQuery("");
+    setGiftResults([]);
+    setGiftPick(null);
     setShowRepairModal(false);
     setError(null);
     setStatusMessage(null);
@@ -917,6 +929,29 @@ function CardViewer({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, busy, onClose, onMove]);
 
+  // Search members by name a moment after typing stops.
+  useEffect(() => {
+    if (!giftOpen) return;
+    const query = giftQuery.trim();
+    if (query.length < 2) return;
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setGiftSearching(true);
+      try {
+        const found = await searchGiftRecipients(query);
+        if (!cancelled) setGiftResults(found);
+      } catch {
+        if (!cancelled) setGiftResults([]);
+      } finally {
+        if (!cancelled) setGiftSearching(false);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [giftOpen, giftQuery]);
+
   if (!card) return null;
   if (typeof document === "undefined") return null;
 
@@ -926,6 +961,7 @@ function CardViewer({
   const working = busy !== null || repairPending;
   const listPrice = Math.round(Number(listPriceText));
   const listPriceOk = Number.isFinite(listPrice) && listPrice > 0;
+  const giftMatches = giftQuery.trim().length >= 2 ? giftResults : [];
 
   function fail(message: string) {
     setError(message);
@@ -1033,6 +1069,22 @@ function CardViewer({
         onListingRemoved?.(target.id);
         setStatusMessage("Removed from the Marketplace.");
         toast("Removed from the Marketplace", "success");
+      } else fail(res.error);
+    });
+  }
+
+  function handleGift() {
+    if (!card || !giftPick) return;
+    const target = card;
+    const recipient = giftPick;
+    void run("gift", async () => {
+      const res = await giftCard(target.id, recipient.id);
+      if (res.success) {
+        setGiftOpen(false);
+        buzz(20);
+        toast(`Gifted "${target.name}" to ${res.data.recipientName}.`, "success");
+        // It is no longer in this collection: take it out of the deck and close the viewer.
+        onDeleted(target.id);
       } else fail(res.error);
     });
   }
@@ -1359,6 +1411,20 @@ function CardViewer({
                 >
                   Quick sell +{quickSellPayout} P
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    setGiftOpen(true);
+                  }}
+                  disabled={working || Boolean(card.listedPrice)}
+                  title={card.listedPrice ? "Unlist this card to gift it" : "Gift this card to another member"}
+                  aria-label={card.listedPrice ? "Gift card (unlist it first)" : "Gift card to another member"}
+                  className={`${barBtn} !flex-none border border-zinc-700 bg-zinc-900 px-4 text-zinc-100 hover:bg-zinc-800`}
+                >
+                  <span aria-hidden>🎁</span>
+                  <span>Gift</span>
+                </button>
               </div>
             </footer>
           </>
@@ -1423,8 +1489,103 @@ function CardViewer({
         </BottomSheet>
       )}
 
+      {giftOpen && (
+        <BottomSheet
+          title="Gift this card"
+          subtitle={card.name}
+          dismissible={busy !== "gift"}
+          onClose={() => setGiftOpen(false)}
+          footer={
+            <div className="space-y-2">
+              {giftPick && (
+                <p className="text-xs text-zinc-400">
+                  <strong className="text-zinc-200">{card.name}</strong> will move to <strong className="text-zinc-200">{giftPick.name}</strong>&apos;s collection.
+                  You can&apos;t undo a gift.
+                </p>
+              )}
+              <div className="flex gap-2">
+                <button type="button" className={sheetSecondary} onClick={() => setGiftOpen(false)} disabled={busy === "gift"}>
+                  Cancel
+                </button>
+                <button type="button" className={sheetPrimary} onClick={handleGift} disabled={busy === "gift" || !giftPick}>
+                  {busy === "gift" && <Spinner className="h-4 w-4" />}
+                  {busy === "gift" ? "Gifting…" : giftPick ? `Gift to ${giftPick.name}` : "Pick a member"}
+                </button>
+              </div>
+            </div>
+          }
+        >
+          <div className="space-y-3">
+            <label htmlFor="gift-search" className="block text-sm font-semibold text-zinc-200">
+              Who is it for?
+            </label>
+            <input
+              id="gift-search"
+              type="search"
+              value={giftQuery}
+              onChange={(e) => {
+                setGiftQuery(e.target.value);
+                setGiftPick(null);
+              }}
+              autoComplete="off"
+              placeholder="Search members by name"
+              className="min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-base text-zinc-100 placeholder-zinc-500 focus:border-amber-500 focus:outline-none"
+            />
+
+            {giftPick ? (
+              <div className="flex items-center gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3">
+                <RecipientAvatar person={giftPick} />
+                <span className="min-w-0 flex-1 truncate text-sm font-black text-zinc-100">{giftPick.name}</span>
+                <button type="button" onClick={() => setGiftPick(null)} className="text-xs font-bold text-zinc-300 hover:underline">
+                  Change
+                </button>
+              </div>
+            ) : giftQuery.trim().length < 2 ? (
+              <p className="text-xs text-zinc-400">Type at least two letters of their name.</p>
+            ) : giftSearching && giftMatches.length === 0 ? (
+              <p className="text-xs text-zinc-400" role="status">Searching…</p>
+            ) : giftMatches.length === 0 ? (
+              <p className="text-xs text-zinc-400" role="status">No members found. Check the spelling.</p>
+            ) : (
+              <ul className="space-y-1.5" aria-label="Members">
+                {giftMatches.map((m) => (
+                  <li key={m.id}>
+                    <button
+                      type="button"
+                      onClick={() => setGiftPick(m)}
+                      className="gx-tap flex min-h-12 w-full items-center gap-3 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-left hover:border-amber-500/60 hover:bg-zinc-800"
+                    >
+                      <RecipientAvatar person={m} />
+                      <span className="min-w-0 flex-1 truncate text-sm font-bold text-zinc-100">{m.name}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {error && (
+              <p role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs font-semibold text-red-400">
+                {error}
+              </p>
+            )}
+          </div>
+        </BottomSheet>
+      )}
+
       {busy === "reroll" && <BusyOverlay label="Re-rolling your card…" hint="This can take up to a minute." />}
     </div>,
     document.body
+  );
+}
+
+/** A member's picture, or their first letter when they have none. */
+function RecipientAvatar({ person }: { person: GiftRecipient }) {
+  return person.image ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={person.image} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+  ) : (
+    <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500 text-sm font-black text-black">
+      {(person.name || "?").slice(0, 1).toUpperCase()}
+    </span>
   );
 }
