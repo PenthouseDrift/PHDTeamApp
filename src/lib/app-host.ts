@@ -37,12 +37,15 @@ export function isDriftClashHost(host: string | null | undefined): boolean {
 
 /**
  * Routes the game-only host serves. Everything else is sent back to /cards.
- *   /cards   the game itself (hub, play, packs, store, marketplace, leaderboard) and the pack wizard
- *   /cars    the garage: a card is forged from one of the member's cars
- *   /auth    sign-in
- *   /api     route handlers (uploads, auth callbacks, webhooks); these enforce their own auth
+ *   /cards                 the game itself (hub, play, packs, store, marketplace, leaderboard) and the pack wizard
+ *   /cars                  the garage: a card is forged from one of the member's cars
+ *   /tuning-advisor        the garage's AI Tuning Advisor
+ *   /calculator            the garage's Gear Calculator
+ *   /tuning                the garage hub that the two tools above link back to ("← Tuning"); it only lists the garage pages
+ *   /auth                  sign-in
+ *   /api                   route handlers (uploads, auth callbacks, webhooks, the tuning advisor); these enforce their own auth
  */
-const DRIFTCLASH_ALLOWED_PREFIXES = ["/cards", "/cars", "/auth", "/api"];
+const DRIFTCLASH_ALLOWED_PREFIXES = ["/cards", "/cars", "/tuning-advisor", "/calculator", "/tuning", "/auth", "/api"];
 
 export function isDriftClashPath(pathname: string): boolean {
   return DRIFTCLASH_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));

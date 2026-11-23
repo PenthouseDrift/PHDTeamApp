@@ -49,7 +49,12 @@ import { ProgressiveList } from "@/tcg/ui/ProgressiveList";
 import { BusyOverlay, LoadingNote, Spinner } from "@/tcg/ui/Shimmer";
 import { useToast } from "@/tcg/ui/Toast";
 import { buzz } from "@/tcg/ui/feedback";
-import { useIsPhone } from "@/tcg/ui/useBottomChrome";
+import { useBottomChromeHeight, useIsPhone } from "@/tcg/ui/useBottomChrome";
+import { CompareCardsSheet } from "@/tcg/components/CompareCardsSheet";
+import { ListCardsSheet } from "@/tcg/components/ListCardsSheet";
+import { QuickSellSheet } from "@/tcg/components/QuickSellSheet";
+import { SelectionSheet } from "@/tcg/components/SelectionSheet";
+import type { QuickSellBatchResult } from "@/tcg/sell-actions";
 import { PitGarageRepairModal } from "./PitGarageRepairModal";
 
 /**
@@ -63,6 +68,7 @@ const SORTS: Array<{ key: CardSortKey; label: string }> = [
   { key: "power", label: "Total Power" },
   { key: "rarity", label: "Rarity" },
   { key: "newest", label: "Newest" },
+  { key: "name", label: "Car name" },
 ];
 
 const panel = "rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900";
@@ -100,6 +106,9 @@ const DEFAULT_FILTERS: DeckFilters = { search: "", tier: "all", type: "all", sor
 
 const filterListeners = new Set<() => void>();
 let memoryFilters = "";
+
+/** The most cards that can be ticked at once (the server sells at most this many in one go). */
+const MAX_SELECT = 40;
 
 function readFiltersRaw(): string {
   try {
@@ -221,6 +230,17 @@ export function CardCollection({
   const [quickSellPending, startQuickSellTransition] = useTransition();
   const [now] = useState(() => Date.now());
 
+  // Multi-select: any card ticked means we're "selecting". Capped at what the server sells in one go.
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selSheet, setSelSheet] = useState<null | "menu" | "compare" | "list" | "sell">(null);
+  const selectedRef = useRef<string[]>([]);
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
+  const bottomChrome = useBottomChromeHeight();
+
   // Sync when parent passes updated cards (e.g. after buying a card on the Marketplace or opening a Custom Pack)
   if (prevInitialCards !== initialCards) {
     setPrevInitialCards(initialCards);
@@ -294,7 +314,71 @@ export function CardCollection({
       return updated;
     });
     setOpenId(null);
+    if (selectedRef.current.includes(id)) commitSelection(selectedRef.current.filter((x) => x !== id));
   };
+
+  function commitSelection(next: string[]) {
+    selectedRef.current = next;
+    setSelectedIds(next);
+  }
+
+  // Stable, so the memoised tiles don't all redraw each time one is ticked.
+  const toggleSelect = useCallback(
+    (id: string) => {
+      const current = selectedRef.current;
+      if (current.includes(id)) {
+        commitSelection(current.filter((x) => x !== id));
+      } else if (current.length >= MAX_SELECT) {
+        toast(`You can select up to ${MAX_SELECT} cards at once.`, "info");
+      } else {
+        buzz(8);
+        commitSelection([...current, id]);
+      }
+    },
+    [toast]
+  );
+
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const selectedCards = useMemo(() => cards.filter((c) => selectedSet.has(c.id)), [cards, selectedSet]);
+  const selecting = selectedCards.length > 0;
+
+  function selectAllShown() {
+    const ids = sorted.slice(0, MAX_SELECT).map((c) => c.id);
+    commitSelection(ids);
+    if (sorted.length > MAX_SELECT) toast(`Selected the first ${MAX_SELECT} cards.`, "info");
+  }
+
+  function clearSelection() {
+    commitSelection([]);
+    setSelSheet(null);
+  }
+
+  function handleBulkSold(result: QuickSellBatchResult) {
+    const sold = new Set(result.soldIds);
+    if (sold.size > 0) {
+      for (const c of cards) {
+        if (sold.has(c.id) && c.listedPrice) onListingRemoved?.(c.id);
+      }
+      setCards((list) => {
+        const updated = list.filter((c) => !sold.has(c.id));
+        onCardsChange?.(updated);
+        return updated;
+      });
+      onPCreditsChange?.(result.pCredits);
+      buzz(15);
+    }
+    commitSelection(selectedRef.current.filter((id) => !sold.has(id)));
+    setSelSheet(null);
+    const skipped = result.skipped.length;
+    toast(
+      sold.size > 0
+        ? `Sold ${sold.size} card${sold.size === 1 ? "" : "s"} for +${result.payout.toLocaleString()} P${
+            skipped ? `. ${skipped} skipped.` : ""
+          }`
+        : result.skipped[0]?.reason ?? "Nothing was sold.",
+      sold.size > 0 ? "success" : "error"
+    );
+  }
 
   function chooseSort(key: CardSortKey) {
     updateFilters({ sort: key, dir: DEFAULT_SORT_DIRECTION[key] });
@@ -445,17 +529,40 @@ export function CardCollection({
 
           <div className="flex min-h-6 items-center justify-between gap-3 px-1">
             <p role="status" aria-live="polite" className="text-xs font-bold text-zinc-500 dark:text-zinc-400">
-              Showing {sorted.length} of {cards.length} card{cards.length === 1 ? "" : "s"}
+              {selecting
+                ? `${selectedCards.length} selected`
+                : `Showing ${sorted.length} of ${cards.length} card${cards.length === 1 ? "" : "s"}`}
             </p>
-            {isFiltered && (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="gx-tap inline-flex min-h-11 items-center rounded-xl px-3 text-xs font-black text-amber-500 hover:bg-amber-500/10"
-              >
-                Clear
-              </button>
-            )}
+            <div className="flex items-center gap-1">
+              {selecting ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={selectAllShown}
+                    className="gx-tap inline-flex min-h-11 items-center rounded-xl px-3 text-xs font-black text-amber-500 hover:bg-amber-500/10"
+                  >
+                    Select all shown
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearSelection}
+                    className="gx-tap inline-flex min-h-11 items-center rounded-xl px-3 text-xs font-black text-zinc-500 hover:bg-zinc-500/10"
+                  >
+                    Clear selection
+                  </button>
+                </>
+              ) : (
+                isFiltered && (
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="gx-tap inline-flex min-h-11 items-center rounded-xl px-3 text-xs font-black text-amber-500 hover:bg-amber-500/10"
+                  >
+                    Clear
+                  </button>
+                )
+              )}
+            </div>
           </div>
 
           {sorted.length === 0 ? (
@@ -482,7 +589,16 @@ export function CardCollection({
               batch={18}
               label="Your cards"
               className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4"
-              render={(c) => <DeckTile card={c} onOpen={openTile} onQuickSell={askQuickSell} />}
+              render={(c) => (
+                <DeckTile
+                  card={c}
+                  onOpen={openTile}
+                  onQuickSell={askQuickSell}
+                  selecting={selecting}
+                  selected={selectedSet.has(c.id)}
+                  onToggleSelect={toggleSelect}
+                />
+              )}
             />
           )}
         </>
@@ -569,10 +685,12 @@ export function CardCollection({
                 <button
                   type="button"
                   onClick={() => updateFilters({ dir: direction === "asc" ? "desc" : "asc" })}
-                  aria-label={`Sort order: ${direction === "asc" ? "ascending" : "descending"}. Tap to reverse.`}
+                  aria-label={`Sort order: ${
+                    sortKey === "name" ? (direction === "asc" ? "A to Z" : "Z to A") : direction === "asc" ? "ascending" : "descending"
+                  }. Tap to reverse.`}
                   className={`${chipBase} border border-zinc-600 bg-zinc-900 text-zinc-100 hover:bg-zinc-800`}
                 >
-                  {direction === "asc" ? "↑ Asc" : "↓ Desc"}
+                  {sortKey === "name" ? (direction === "asc" ? "A → Z" : "Z → A") : direction === "asc" ? "↑ Asc" : "↓ Desc"}
                 </button>
               </div>
             </section>
@@ -640,6 +758,54 @@ export function CardCollection({
         </BottomSheet>
       )}
 
+      {/* The floating counter. Portaled to the page, because a transformed ancestor would stop `fixed` working. */}
+      {mounted && selecting && !openCard && !selSheet
+        ? createPortal(
+            <button
+              type="button"
+              onClick={() => setSelSheet("menu")}
+              aria-label={`${selectedCards.length} card${selectedCards.length === 1 ? "" : "s"} selected. Open actions.`}
+              style={{ bottom: bottomChrome + 16 }}
+              className="gx-tap fixed right-4 z-[9000] inline-flex min-h-12 items-center gap-2 rounded-full border-2 border-amber-300 bg-amber-400 px-4 text-sm font-black text-zinc-900 shadow-xl shadow-black/40 active:scale-95"
+            >
+              <span aria-hidden>☑</span>
+              <span>{selectedCards.length} selected</span>
+            </button>,
+            document.body
+          )
+        : null}
+
+      {selSheet === "menu" && selecting && (
+        <SelectionSheet
+          cards={selectedCards}
+          onClose={() => setSelSheet(null)}
+          onClear={clearSelection}
+          onCompare={() => setSelSheet("compare")}
+          onList={() => setSelSheet("list")}
+          onSell={() => setSelSheet("sell")}
+        />
+      )}
+      {selSheet === "compare" && <CompareCardsSheet cards={selectedCards} onClose={() => setSelSheet("menu")} />}
+      {selSheet === "list" && (
+        <ListCardsSheet
+          cards={selectedCards}
+          onListed={(card, listing) => {
+            replaceCard(card);
+            onListingCreated?.(listing);
+          }}
+          onClose={() => setSelSheet("menu")}
+        />
+      )}
+      {selSheet === "sell" && (
+        <QuickSellSheet
+          cards={selectedCards}
+          title="Quick sell selected cards"
+          subtitle={`${selectedCards.length} card${selectedCards.length === 1 ? "" : "s"}`}
+          onClose={() => setSelSheet("menu")}
+          onSold={handleBulkSold}
+        />
+      )}
+
       <CardViewer
         card={openCard}
         allCards={cards}
@@ -681,10 +847,17 @@ const DeckTile = memo(function DeckTile({
   card: c,
   onOpen,
   onQuickSell,
+  selecting,
+  selected,
+  onToggleSelect,
 }: {
   card: MemberCard;
   onOpen: (id: string) => void;
   onQuickSell: (card: MemberCard) => void;
+  /** Some card is ticked: tapping a card's picture ticks it instead of opening it. */
+  selecting: boolean;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
 }) {
   const payout = getQuickSellPrice(c);
   const broken = isCarBroken(c);
@@ -697,34 +870,63 @@ const DeckTile = memo(function DeckTile({
         />
         <button
           type="button"
-          onClick={() => onOpen(c.id)}
-          className="relative block w-full rounded-2xl transition-transform hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-400/70 active:scale-[0.98] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
-          aria-label={`View ${c.name}, ${rarityLabel(c.tier)} card${c.listedPrice ? `, listed for ${c.listedPrice.toLocaleString()} P` : ""}`}
+          onClick={() => (selecting ? onToggleSelect(c.id) : onOpen(c.id))}
+          className={`relative block w-full rounded-2xl transition-transform hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-400/70 active:scale-[0.98] motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${
+            selected ? "ring-4 ring-amber-400" : ""
+          }`}
+          aria-label={
+            selecting
+              ? `${selected ? "Deselect" : "Select"} ${c.name}`
+              : `View ${c.name}, ${rarityLabel(c.tier)} card${c.listedPrice ? `, listed for ${c.listedPrice.toLocaleString()} P` : ""}`
+          }
         >
           <FullArtCard card={c} className="drop-shadow-lg" />
         </button>
+        {selected && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-amber-400 text-sm font-black text-zinc-900 shadow-lg"
+          >
+            ✓
+          </span>
+        )}
       </div>
       {c.listedPrice ? (
         <p className="truncate rounded-lg border border-amber-500/40 bg-amber-500/15 px-2 py-1 text-center text-[11px] font-black text-amber-600 dark:text-amber-300">
           🏷️ Listed · {c.listedPrice.toLocaleString()} P
         </p>
       ) : null}
-      <button
-        type="button"
-        onClick={() => onQuickSell(c)}
-        className="gx-tap inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-2.5 text-xs font-extrabold text-zinc-800 shadow-sm transition-colors hover:border-amber-500 hover:bg-amber-500/10 hover:text-amber-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-amber-500/60 dark:hover:bg-amber-500/10 dark:hover:text-amber-400"
-      >
-        <span>Quick sell</span>
-        <span
-          className={`rounded-md px-1.5 py-0.5 text-[11px] font-black ${
-            broken
-              ? "bg-rose-500/15 text-rose-600 dark:text-rose-400"
-              : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          onClick={() => onQuickSell(c)}
+          className="gx-tap inline-flex min-h-11 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-2 text-xs font-extrabold text-zinc-800 shadow-sm transition-colors hover:border-amber-500 hover:bg-amber-500/10 hover:text-amber-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-amber-500/60 dark:hover:bg-amber-500/10 dark:hover:text-amber-400"
+        >
+          <span className="truncate">Quick sell</span>
+          <span
+            className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-black ${
+              broken
+                ? "bg-rose-500/15 text-rose-600 dark:text-rose-400"
+                : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+            }`}
+          >
+            +{payout} P
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onToggleSelect(c.id)}
+          aria-pressed={selected}
+          aria-label={`${selected ? "Deselect" : "Select"} ${c.name}`}
+          className={`gx-tap inline-flex min-h-11 w-11 shrink-0 items-center justify-center rounded-xl border text-base font-black shadow-sm transition-colors ${
+            selected
+              ? "border-amber-400 bg-amber-400 text-zinc-900"
+              : "border-zinc-200 bg-white text-zinc-500 hover:border-amber-500 hover:text-amber-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-amber-500/60 dark:hover:text-amber-400"
           }`}
         >
-          +{payout} P
-        </span>
-      </button>
+          <span aria-hidden>{selected ? "✓" : "☐"}</span>
+        </button>
+      </div>
     </div>
   );
 });

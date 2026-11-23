@@ -7,6 +7,8 @@ import { PackOpening, bestCardOf, splitStorePackCards } from "@/components/membe
 import { ChassisSelector } from "@/components/cars/ChassisSelector";
 import { keepCard, openCardPack, rerollCard } from "@/actions/member-cards";
 import { buyStandardPackWithPCredits, openCustomPackWithCar } from "@/tcg/actions";
+import { QuickSellSheet } from "@/tcg/components/QuickSellSheet";
+import { getQuickSellPrice } from "@/tcg/config";
 import { deleteSpecSheet, getMemberSpecSheets, saveSpecSheet } from "@/actions/spec-sheets";
 import { PartSelector } from "@/components/member-cards/PartSelector";
 import { REROLL_ENABLED, rarityLabel, type MemberCard } from "@/lib/card-roll";
@@ -291,6 +293,10 @@ function CardPackWizardForm({
   const [revealed, setRevealed] = useState(false);
   const [confirmReroll, setConfirmReroll] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Quick selling the whole pack from the result screen.
+  const [sellOpen, setSellOpen] = useState(false);
+  const [soldIds, setSoldIds] = useState<string[]>([]);
+  const [soldNote, setSoldNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -404,6 +410,9 @@ function CardPackWizardForm({
     setRevealed(false);
     setConfirmReroll(false);
     setSaved(false);
+    setSellOpen(false);
+    setSoldIds([]);
+    setSoldNote(null);
     setRun((r) => r + 1);
     setMode("pack");
     startTransition(async () => {
@@ -583,6 +592,9 @@ function CardPackWizardForm({
     const finalCard = card?.rerolled || !REROLL_ENABLED;
     // The text about the pull is about the best car card in the pack, the one the opening builds up to.
     const bestPull = bestCardOf([card, bonus, featured, ...extras]) ?? card;
+    // Everything in the pack that has not been sold yet.
+    const sellable = [card, bonus, crew, featured, maintenance, ...extras].filter((c): c is MemberCard => Boolean(c) && !soldIds.includes((c as MemberCard).id));
+    const sellableTotal = sellable.reduce((sum, c) => sum + getQuickSellPrice(c), 0);
     return (
       <div className="space-y-4">
         <PackOpening
@@ -605,6 +617,26 @@ function CardPackWizardForm({
           </p>
         )}
 
+        {sellOpen && (
+          <QuickSellSheet
+            cards={sellable}
+            title="Quick sell this pack"
+            subtitle={customPack?.name ?? "Standard Pack"}
+            keepRareByDefault
+            onClose={() => setSellOpen(false)}
+            onSold={(result) => {
+              setSoldIds((prev) => [...prev, ...result.soldIds]);
+              setPBalance(result.pCredits);
+              setSellOpen(false);
+              const left = result.skipped.length;
+              setSoldNote(
+                `Sold ${result.soldIds.length} card${result.soldIds.length === 1 ? "" : "s"} for +${result.payout.toLocaleString()} P-Credits.${
+                  left > 0 ? ` ${left} could not be sold and ${left === 1 ? "stays" : "stay"} in your collection.` : ""
+                }`
+              );
+            }}
+          />
+        )}
         {revealed && card && bestPull && (
           <div className={`${panel} space-y-4`}>
             <div className="text-center">
@@ -639,7 +671,7 @@ function CardPackWizardForm({
                 </p>
               )}
               <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                Swipe the cards above to inspect every card in your pack. All of them have been added to your collection.
+                Swipe the cards above to inspect every card in your pack. {soldIds.length === 0 ? "All of them have been added to your collection." : "The ones you did not sell are in your collection."}
               </p>
             </div>
 
@@ -648,12 +680,26 @@ function CardPackWizardForm({
                 <p role="status" className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
                   {finalCard && !saved ? "This is your card. It's in your collection." : "Added to your collection."}
                 </p>
+                {soldNote && (
+                  <p role="status" className="text-sm font-bold text-amber-600 dark:text-amber-400">
+                    {soldNote}
+                  </p>
+                )}
                 {error && (
                   <p role="alert" className="text-sm font-bold text-red-600 dark:text-red-400">
                     {error}
                   </p>
                 )}
                 <div className="flex flex-wrap justify-center gap-2">
+                  {sellable.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSellOpen(true)}
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-rose-500/50 bg-rose-500/10 px-4 text-sm font-black text-rose-600 transition-colors hover:bg-rose-500/20 dark:text-rose-300"
+                    >
+                      Quick sell this pack · +{sellableTotal.toLocaleString()} P
+                    </button>
+                  )}
                   <Link
                     href="/cards"
                     className={(payStandardWithPCredits ? Boolean(standardPack && pBalance >= standardPack.price) : credits > 0) ? secondary : primary}

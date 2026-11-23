@@ -101,6 +101,24 @@ export async function cardBlockedReason(card: StoredMemberCard | null, ownerId: 
   return null;
 }
 
+/**
+ * Every card of this member's that is in a Campaign cup or a Tandem Tour in progress, with why. The cup and the tour are each
+ * read once, so checking a whole batch of cards costs the same as checking one.
+ */
+export async function cardsInUse(ownerId: string): Promise<Map<string, string>> {
+  const inUse = new Map<string, string>();
+  const run = await loadActiveRun(ownerId);
+  if (run && run.status === "active") {
+    for (const c of [...run.cars, ...run.crew]) inUse.set(c.id, "is in a Campaign cup in progress");
+  }
+  const tourId = await getActiveRunId(ownerId);
+  const tour = tourId ? await loadTourRun(tourId) : null;
+  if (tour && tour.status === "active") {
+    for (const c of [...tour.loadout.cars, ...tour.loadout.crew, ...tour.loadout.kits]) inUse.set(c.id, "is on a Tandem Tour in progress");
+  }
+  return inUse;
+}
+
 type Tx = ReturnType<typeof redis.multi>;
 
 /** Adds "this card now belongs to someone else" to a transaction: the card itself, the old owner's list and the new owner's list. */

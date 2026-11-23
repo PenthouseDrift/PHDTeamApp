@@ -585,6 +585,12 @@ export function TcgApp({
           }}
           onOpenPCreditsTab={() => selectTab("p-credits")}
           onOpenCollectionTab={() => selectTab("collection")}
+          onCardsSold={(soldIds, nextPCredits) => {
+            setPCredits(nextPCredits);
+            setCards((prev) => prev.filter((c) => !soldIds.includes(c.id)));
+            // A sold card can't stay listed.
+            setListings((prev) => prev.filter((l) => !soldIds.includes(l.cardId)));
+          }}
         />
       )}
 

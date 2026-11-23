@@ -8,8 +8,9 @@ import { PackOpening, splitStorePackCards } from "@/components/member-cards/Pack
 import { rarityLabel, type MemberCard } from "@/lib/card-roll";
 import { buyAndOpenCustomPack, buyStandardPackWithPCredits, previewOpenPackAction } from "@/tcg/actions";
 import { PackCarousel, type CarouselPack } from "@/tcg/components/PackCarousel";
+import { QuickSellSheet } from "@/tcg/components/QuickSellSheet";
 import { PackContentsModal, PackContentsView } from "@/tcg/components/PackContentsView";
-import { getEffectivePrice, getSaleDiscountPct, isOnSale } from "@/tcg/config";
+import { getEffectivePrice, getQuickSellPrice, getSaleDiscountPct, isOnSale } from "@/tcg/config";
 import type { TcgCustomPackWithCards } from "@/tcg/types";
 import { BottomSheet, sheetPrimary, sheetSecondary } from "@/tcg/ui/BottomSheet";
 import { buzz } from "@/tcg/ui/feedback";
@@ -49,6 +50,7 @@ export function TcgPackStore({
   onCustomCardsPulled,
   onOpenPCreditsTab,
   onOpenCollectionTab,
+  onCardsSold,
   showWalletBar = true,
 }: {
   pCredits: number;
@@ -63,6 +65,8 @@ export function TcgPackStore({
   onCustomCardsPulled: (cards: MemberCard[], newPCredits: number) => void;
   onOpenPCreditsTab: () => void;
   onOpenCollectionTab: () => void;
+  /** Cards from a pack were quick sold: they leave the collection and the balance changes. */
+  onCardsSold?: (soldIds: string[], pCredits: number) => void;
   /** The slim sticky wallet line. Off on the game-only app, where the page header already shows these balances. */
   showWalletBar?: boolean;
 }) {
@@ -93,7 +97,11 @@ export function TcgPackStore({
     pack: TcgCustomPackWithCards | null;
     /** Set for an admin's dev preview: the cards are not kept, and the pack that was previewed. */
     preview?: { packId: string };
+    /** Cards from this pack that were quick sold from the result screen, and a line saying so. */
+    sold?: string[];
+    soldNote?: string;
   } | null>(null);
+  const [sellOpen, setSellOpen] = useState(false);
   /** The pack an admin is rolling a dev preview of, so its button shows it is busy. */
   const [previewing, setPreviewing] = useState<string | null>(null);
   /** Dev preview option: make sure the pack gives a Legend car card, to try the Legend reveal. Shared by every pack. */
@@ -714,6 +722,27 @@ export function TcgPackStore({
           );
         })()}
 
+      {/* Quick sell the cards from the pack that was just opened */}
+      {sellOpen && openingState && !openingState.preview && onCardsSold && (
+        <QuickSellSheet
+          cards={openingState.cards.filter((c) => !(openingState.sold ?? []).includes(c.id))}
+          title="Quick sell this pack"
+          subtitle={openingState.packName}
+          keepRareByDefault
+          onClose={() => setSellOpen(false)}
+          onSold={(result) => {
+            setSellOpen(false);
+            onCardsSold(result.soldIds, result.pCredits);
+            const left = result.skipped.length;
+            const note = `Sold ${result.soldIds.length} card${result.soldIds.length === 1 ? "" : "s"} for +${result.payout.toLocaleString()} P-Credits.${
+              left > 0 ? ` ${left} could not be sold and ${left === 1 ? "stays" : "stay"} in your collection.` : ""
+            }`;
+            setOpeningState((prev) => (prev ? { ...prev, sold: [...(prev.sold ?? []), ...result.soldIds], soldNote: note } : prev));
+            toast(note, "success");
+          }}
+        />
+      )}
+
       {/* Animated Pack Opening Stage for store packs */}
       {openingState &&
         openingState.cards.length > 0 &&
@@ -811,6 +840,25 @@ export function TcgPackStore({
                           className={canPay ? stageBtn : buyBtn}
                         >
                           Open another with a pack credit ({packCredits} left)
+                        </button>
+                      )}
+                      {openingState.soldNote && (
+                        <p role="status" className="text-center text-xs font-bold text-amber-300">
+                          {openingState.soldNote}
+                        </p>
+                      )}
+                      {onCardsSold && openingState.cards.some((c) => !(openingState.sold ?? []).includes(c.id)) && (
+                        <button
+                          type="button"
+                          onClick={() => setSellOpen(true)}
+                          className="gx-tap inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-rose-500/50 bg-rose-500/10 px-4 text-sm font-bold text-rose-200 hover:bg-rose-500/20"
+                        >
+                          Quick sell this pack · +
+                          {openingState.cards
+                            .filter((c) => !(openingState.sold ?? []).includes(c.id))
+                            .reduce((sum, c) => sum + getQuickSellPrice(c), 0)
+                            .toLocaleString()}{" "}
+                          P
                         </button>
                       )}
                       <div className="grid grid-cols-2 gap-2">
