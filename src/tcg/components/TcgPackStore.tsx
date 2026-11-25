@@ -1,20 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState, useTransition, type ReactNode } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { FullArtCard } from "@/components/cards/FullArtCard";
 import { PackOpening, splitStorePackCards } from "@/components/member-cards/PackOpening";
 import { rarityLabel, type MemberCard } from "@/lib/card-roll";
 import { buyAndOpenCustomPack, buyStandardPackWithPCredits, previewOpenPackAction } from "@/tcg/actions";
-import { PackCarousel, type CarouselPack } from "@/tcg/components/PackCarousel";
+import { PackPicker, type CarouselPack } from "@/tcg/components/PackPicker";
 import { QuickSellSheet } from "@/tcg/components/QuickSellSheet";
-import { PackContentsModal, PackContentsView } from "@/tcg/components/PackContentsView";
+import { PackContentsView } from "@/tcg/components/PackContentsView";
 import { getEffectivePrice, getQuickSellPrice, getSaleDiscountPct, isOnSale } from "@/tcg/config";
 import type { TcgCustomPackWithCards } from "@/tcg/types";
 import { BottomSheet, sheetPrimary, sheetSecondary } from "@/tcg/ui/BottomSheet";
 import { buzz } from "@/tcg/ui/feedback";
-import { useBottomChromeHeight, useFillScreenHeight } from "@/tcg/ui/useBottomChrome";
+import { useBottomChromeHeight } from "@/tcg/ui/useBottomChrome";
 import { packCardsLabel, packExtraLabel, totalCardsInPack } from "@/tcg/pack-display";
 import { BusyOverlay } from "@/tcg/ui/Shimmer";
 import { useToast } from "@/tcg/ui/Toast";
@@ -25,11 +25,13 @@ const primaryBtn =
   "gx-tap inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 text-sm font-black text-black transition-colors hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50";
 const secondaryBtn =
   "gx-tap inline-flex min-h-11 items-center justify-center rounded-xl border border-zinc-300 px-4 text-sm font-bold text-zinc-800 transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800";
-/** The main button on a pack tile: full width, 48px tall. */
+/** The main button on a pack tile: full width, 48px tall. (The pack opening stage uses this too.) */
 const buyBtn = `${primaryBtn} min-h-12 w-full`;
-/** The smaller buttons in the dark dock under the pack fan. */
-const dockBtn =
-  "gx-tap inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-zinc-600 bg-zinc-900 px-2 text-center text-xs font-bold text-zinc-100 transition-colors hover:bg-zinc-800 disabled:opacity-50";
+/** The big main button in the bar that stays on screen: 56px tall, with large text. */
+const actionBtn = `${primaryBtn} min-h-14 w-full text-base`;
+/** The smaller buttons beside each other under it. */
+const moreBtn =
+  "gx-tap inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-zinc-600 bg-zinc-900 px-2 text-center text-sm font-bold text-zinc-100 transition-colors hover:bg-zinc-800 disabled:opacity-50";
 /** Buttons on the dark opening stage: 48px, thumb-sized. */
 const stageBtn =
   "gx-tap inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900 px-4 text-sm font-bold text-zinc-100 hover:bg-zinc-800 disabled:opacity-50";
@@ -76,12 +78,6 @@ export function TcgPackStore({
   const toast = useToast();
   /** How tall the bars fixed to the bottom of a phone screen are, so the docked pack fan sits just above them. */
   const chromeHeight = useBottomChromeHeight();
-  /** The shop is one screen: it is as tall as what is left under the page header, above the bottom bars. */
-  const stageRef = useRef<HTMLElement>(null);
-  const stageHeight = useFillScreenHeight(stageRef, chromeHeight + 8);
-  // The summary needs about 150px, and the buttons plus the dock's padding about 124px. The fan gets what is left: it grows on a
-  // tall screen and shrinks on a short one, so the summary stays readable without scrolling.
-  const fanScale = stageHeight ? Math.min(1.8, Math.max(0.6, (stageHeight - 150 - 8 - 124) / 168)) : 1;
   const [pending, startTransition] = useTransition();
   /** The purchase that is running, if any. `pending` alone can't say which tile it belongs to. */
   const [pendingBuy, setPendingBuy] = useState<PendingBuy | null>(null);
@@ -89,9 +85,6 @@ export function TcgPackStore({
   const [error, setError] = useState<string | null>(null);
   /** Set after a Standard Pack purchase: offers to open it right away. */
   const [boughtStandard, setBoughtStandard] = useState<{ pricePaid: number; packCredits: number } | null>(null);
-  const [inspectPack, setInspectPack] = useState<TcgCustomPackWithCards | null>(null);
-  /** The Standard Pack's "What's in the pack" window. */
-  const [showStandardContents, setShowStandardContents] = useState(false);
   const [openingState, setOpeningState] = useState<{
     packName: string;
     cards: MemberCard[];
@@ -132,6 +125,7 @@ export function TcgPackStore({
         extraLabel: packExtraLabel(p),
         heroCard: p.setList[0]?.card,
         discountPct: isOnSale(p.price, p.salePrice) ? getSaleDiscountPct(p.price, p.salePrice) : 0,
+        priceLabel: `${getEffectivePrice(p.price, p.salePrice).toLocaleString()} P`,
       })
     ),
     ...(standardPackEnabled
@@ -143,6 +137,7 @@ export function TcgPackStore({
             cardsLabel: "4 CARDS",
             extraLabel: "+ RARE CHANCE",
             discountPct: standardOnSale ? standardDiscountPct : 0,
+            priceLabel: `${effectiveStandardPrice.toLocaleString()} P`,
           },
         ]
       : []),
@@ -184,7 +179,6 @@ export function TcgPackStore({
       try {
         const res = await buyAndOpenCustomPack(pack.id, { payWith });
         if (res.success) {
-          setInspectPack(null);
           onCustomCardsPulled(res.data.cards, res.data.pCredits);
           // A pack credit leaves the P-Credits alone and takes one pack credit, so the pack credit balance is updated too.
           onBalancesChange({ pCredits: res.data.pCredits, packCredits: res.data.packCredits });
@@ -234,8 +228,133 @@ export function TcgPackStore({
 
   const isBuying = (id: string, via: PendingBuy["via"] = "pcredits") => pendingBuy?.id === id && pendingBuy.via === via;
 
+  const empty = carouselPacks.length === 0;
+  const selName = activePack ? activePack.name : "Standard Pack";
+  const selPrice = activePack ? activePack.price : standardPackPrice;
+  const selEffective = activePack ? getEffectivePrice(activePack.price, activePack.salePrice) : effectiveStandardPrice;
+  const selOnSale = activePack ? isOnSale(activePack.price, activePack.salePrice) : standardOnSale;
+
+  /**
+   * What the member can do with the selected pack: one big main button, then up to two smaller ones beside each other. They sit
+   * in a bar that stays on screen, so there is never any scrolling to find them.
+   */
+  function buildActions(): { main: ReactNode; more: ReactNode[] } {
+    let main: ReactNode;
+    const more: ReactNode[] = [];
+    if (activePack) {
+      const pack = activePack;
+      const packOnSale = isOnSale(pack.price, pack.salePrice);
+      const effectivePrice = getEffectivePrice(pack.price, pack.salePrice);
+      const canAfford = pCredits >= effectivePrice;
+      // A live pack can be shown without being for sale: members can look inside but not buy.
+      const forSale = pack.purchasable !== false;
+      if (!forSale) {
+        main = (
+          <button type="button" disabled className={actionBtn}>
+            Not available right now
+          </button>
+        );
+      } else if (pack.needsGeneration) {
+        main = canAfford ? (
+          <Link href={`/cards/new?pack=${pack.id}`} className={actionBtn}>
+            Choose car &amp; open · {effectivePrice.toLocaleString()} P
+          </Link>
+        ) : (
+          <button type="button" disabled className={actionBtn}>
+            Need {effectivePrice.toLocaleString()} P
+          </button>
+        );
+      } else {
+        main = (
+          <button type="button" onClick={() => handleBuyCustomPack(pack)} disabled={pending || !canAfford} className={actionBtn}>
+            {isBuying(pack.id) ? (
+              "Opening…"
+            ) : canAfford ? (
+              packOnSale ? (
+                <span>
+                  Buy &amp; Open · <span className="line-through opacity-60">{pack.price.toLocaleString()}</span> {effectivePrice.toLocaleString()} P
+                </span>
+              ) : (
+                `Buy & Open · ${effectivePrice.toLocaleString()} P`
+              )
+            ) : (
+              `Need ${effectivePrice.toLocaleString()} P`
+            )}
+          </button>
+        );
+      }
+      if (forSale && pack.allowCardCredits) {
+        more.push(
+          pack.needsGeneration ? (
+            packCredits > 0 ? (
+              <Link key="credit" href={`/cards/new?pack=${pack.id}`} className={moreBtn}>
+                Use a pack credit ({packCredits})
+              </Link>
+            ) : (
+              <button key="credit" type="button" disabled className={moreBtn}>
+                No pack credits
+              </button>
+            )
+          ) : (
+            <button key="credit" type="button" onClick={() => handleBuyCustomPack(pack, "cardCredit")} disabled={pending || packCredits < 1} className={moreBtn}>
+              {isBuying(pack.id, "cardCredit") ? "Opening…" : packCredits > 0 ? `Use a pack credit (${packCredits})` : "No pack credits"}
+            </button>
+          )
+        );
+      }
+      if (forSale && !canAfford) {
+        more.push(
+          <button key="topup" type="button" onClick={onOpenPCreditsTab} className={`${moreBtn} !border-amber-500/60 !text-amber-300`}>
+            Get {(effectivePrice - pCredits).toLocaleString()} more P
+          </button>
+        );
+      }
+    } else {
+      if (!standardAllowsCardCredits && pCredits >= effectiveStandardPrice) {
+        // Paid for when it is opened: the member picks their car in the wizard, which charges the price.
+        main = (
+          <Link href="/cards/new" className={actionBtn}>
+            Choose car &amp; open · {effectiveStandardPrice.toLocaleString()} P
+          </Link>
+        );
+      } else {
+        main = (
+          <button type="button" onClick={handleBuyStandardPack} disabled={pending || pCredits < effectiveStandardPrice} className={actionBtn}>
+            {isBuying(STANDARD_ID) ? (
+              "Purchasing…"
+            ) : pCredits < effectiveStandardPrice ? (
+              `Need ${effectiveStandardPrice.toLocaleString()} P`
+            ) : standardOnSale ? (
+              <span>
+                Buy · <span className="line-through opacity-60">{standardPackPrice.toLocaleString()}</span> {effectiveStandardPrice.toLocaleString()} P
+              </span>
+            ) : (
+              `Buy Pack · ${effectiveStandardPrice.toLocaleString()} P`
+            )}
+          </button>
+        );
+      }
+      if (standardAllowsCardCredits && packCredits > 0) {
+        more.push(
+          <Link key="open" href="/cards/new" className={moreBtn}>
+            Open a pack ({packCredits} ready) →
+          </Link>
+        );
+      }
+      if (pCredits < effectiveStandardPrice) {
+        more.push(
+          <button key="topup" type="button" onClick={onOpenPCreditsTab} className={`${moreBtn} !border-amber-500/60 !text-amber-300`}>
+            Get {(effectiveStandardPrice - pCredits).toLocaleString()} more P
+          </button>
+        );
+      }
+    }
+    return { main, more };
+  }
+  const actions = empty ? null : buildActions();
+
   return (
-    <div className="space-y-2 sm:space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       {/* Always in reach: what you can spend, and the way to get more. One slim line, above the page content. */}
       {showWalletBar && (
         <div className="gx-sticky-top sticky z-[35] -mx-1 hidden items-center gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/95 px-2 py-1.5 text-zinc-100 shadow-lg backdrop-blur sm:flex">
@@ -292,263 +411,153 @@ export function TcgPackStore({
         </div>
       )}
 
-      {/*
-        The pack shop as one game screen: what's in the selected pack fills the space at the top (and scrolls inside itself only
-        on a very short screen), while the fan of packs and the buy buttons are docked together at the bottom, just above the
-        app's bottom bars. The page itself never has to scroll to reach another pack.
-      */}
-      <section
-        ref={stageRef}
-        aria-label="Packs"
-        style={stageHeight ? { height: stageHeight } : undefined}
-        className="flex min-h-[22rem] flex-col gap-2"
-      >
-        <div aria-live="polite" className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain">
-          {activePack ? (
-            <PackSummary onSale={isOnSale(activePack.price, activePack.salePrice)}>
-              <TitleAndPrice
-                name={activePack.name}
-                price={activePack.price}
-                effectivePrice={getEffectivePrice(activePack.price, activePack.salePrice)}
-                onSale={isOnSale(activePack.price, activePack.salePrice)}
-              />
-              {/* Only what the pack really gives. The bonus is just a chance, so it says "Bonus card" and no percentage. */}
-              <ul className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${3 + (activePack.bonus ? 1 : 0)}, minmax(0, 1fr))` }}>
-                <ContentStat icon="🏎️" value={activePack.cardsPerPack} label={activePack.cardsPerPack === 1 ? "Card" : "Cards"} />
-                <ContentStat icon="👥" value={activePack.extraCards?.crew ?? 0} label="Crew" />
-                <ContentStat icon="🔧" value={activePack.extraCards?.repair ?? 0} label="Repair kit" />
-                {activePack.bonus && <ContentStat icon="★" value="Bonus" label="Card" accent />}
-              </ul>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {isOnSale(activePack.price, activePack.salePrice) && (
-                  <span className="rounded-full bg-gradient-to-r from-rose-600 to-amber-500 px-2.5 py-0.5 text-[11px] font-black uppercase text-white">
-                    🔥 -{getSaleDiscountPct(activePack.price, activePack.salePrice)}% sale
-                  </span>
-                )}
-                {activePack.purchasable === false && (
-                  <span className="rounded-full border border-zinc-400/60 bg-zinc-500/10 px-2.5 py-0.5 text-[11px] font-black text-zinc-700 dark:text-zinc-200">
-                    Not available right now
-                  </span>
-                )}
-                {activePack.needsGeneration && (
-                  <span className="rounded-full border border-zinc-300 px-2.5 py-0.5 text-[11px] font-bold text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">
-                    Pick a car when you open it
-                  </span>
-                )}
-                <button type="button" onClick={() => setInspectPack(activePack)} className="ml-auto rounded-lg px-2 py-1 text-xs font-black text-amber-600 hover:bg-amber-500/10 dark:text-amber-400">
-                  See pack list →
-                </button>
-              </div>
-              {activePack.setList.length > 0 && (
-                <ul className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1" aria-label="Cards in the set">
-                  {activePack.setList.slice(0, 8).map(({ card }) => (
-                    <li key={card.id} className="w-12 shrink-0 sm:w-16">
-                      <FullArtCard card={card} className="drop-shadow-md" />
-                    </li>
-                  ))}
-                  {activePack.setList.length > 8 && (
-                    <li className="flex w-12 shrink-0 items-center justify-center text-xs font-black text-zinc-500 dark:text-zinc-400 sm:w-16">
-                      +{activePack.setList.length - 8}
-                    </li>
-                  )}
-                </ul>
-              )}
-              {activePack.description && <p className="text-xs text-zinc-500 dark:text-zinc-400">{activePack.description}</p>}
-            </PackSummary>
-          ) : standardPackEnabled ? (
-            <PackSummary onSale={standardOnSale}>
-              <TitleAndPrice name="Standard Pack" price={standardPackPrice} effectivePrice={effectiveStandardPrice} onSale={standardOnSale} />
-              <ul className="grid grid-cols-4 gap-1.5">
-                <ContentStat icon="🏎️" value={2} label="Car cards" />
-                <ContentStat icon="👥" value={1} label="Crew" />
-                <ContentStat icon="🔧" value={1} label="Repair kit" />
-                <ContentStat icon="★" value="Bonus" label="Card" accent />
-              </ul>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {standardOnSale && (
-                  <span className="rounded-full bg-gradient-to-r from-rose-600 to-amber-500 px-2.5 py-0.5 text-[11px] font-black uppercase text-white">
-                    🔥 -{standardDiscountPct}% sale
-                  </span>
-                )}
-                {standardAllowsCardCredits && (
-                  <span className="rounded-full border border-amber-400/40 bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-black text-amber-700 dark:text-amber-300">
-                    You have {packCredits} unopened
-                  </span>
-                )}
-                <button type="button" onClick={() => setShowStandardContents(true)} className="ml-auto rounded-lg px-2 py-1 text-xs font-black text-amber-600 hover:bg-amber-500/10 dark:text-amber-400">
-                  See pack list →
-                </button>
-              </div>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                1 custom AI card of your car and 1 community car card, 1 Tactical Crew Card for Clash Arena, 1 Repair Kit, and a chance at a rare
-                bonus set card.
-              </p>
-            </PackSummary>
-          ) : (
-            <div role="status" className="space-y-1.5 rounded-2xl border border-dashed border-zinc-300 p-5 text-center dark:border-zinc-700">
-              <p className="text-3xl" aria-hidden>
-                🎁
-              </p>
-              <h3 className="text-base font-black text-zinc-900 dark:text-zinc-100">No packs on sale right now</h3>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">New packs are on their way. Check back soon.</p>
-              {packCredits > 0 && (
-                <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
-                  You have {packCredits} pack credit{packCredits === 1 ? "" : "s"}. They&apos;ll be ready to use as soon as a pack that takes them goes on sale.
-                </p>
-              )}
-            </div>
-          )}
 
-          {isAdmin && carouselPacks.length > 0 && (
-            <div className="space-y-2">
-              <Link href="/admin/driftclash/packs" className={`${secondaryBtn} w-full sm:hidden`}>
-                ⚙️ Manage Packs &amp; Sale Prices
-              </Link>
-              <DevPreviewButton
-                busy={previewing === (activePack?.id ?? STANDARD_ID)}
-                disabled={previewing !== null}
-                guaranteeLegend={guaranteeLegend}
-                onGuaranteeChange={setGuaranteeLegend}
-                onClick={() => handlePreviewPack(activePack?.id ?? STANDARD_ID)}
-              />
-            </div>
+      {empty || !actions ? (
+        <div role="status" className="space-y-1.5 rounded-2xl border border-dashed border-zinc-300 p-6 text-center dark:border-zinc-700">
+          <p className="text-4xl" aria-hidden>
+            🎁
+          </p>
+          <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">No packs on sale right now</h2>
+          <p className="text-base text-zinc-600 dark:text-zinc-400">New packs are on their way. Check back soon.</p>
+          {packCredits > 0 && (
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+              You have {packCredits} pack credit{packCredits === 1 ? "" : "s"}. They&apos;ll be ready to use as soon as a pack that takes them goes on sale.
+            </p>
           )}
         </div>
+      ) : (
+        <>
+          {/* 1 and 2: pick a pack, and see what it costs. Side by side on a wide screen. */}
+          <div className="grid gap-3 sm:gap-4 md:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] md:items-start">
+            <section aria-labelledby="ps-choose" className={`${panel} space-y-4`}>
+              <h2 id="ps-choose" className="text-lg font-black text-zinc-900 dark:text-zinc-100">
+                Choose a pack
+              </h2>
+              <PackPicker packs={carouselPacks} selectedId={activeId} onSelect={setSelectedId} />
+            </section>
 
-        {/* Docked at the bottom: the fan of packs, then what you can do with the selected one */}
-        {carouselPacks.length > 0 && (
-        <div className="shrink-0 space-y-2 rounded-2xl border border-zinc-800 bg-zinc-950 p-2 shadow-xl">
-          <PackCarousel packs={carouselPacks} selectedId={activeId} onSelect={setSelectedId} scale={fanScale} />
-          {(() => {
-            // The main button first, then up to two smaller ones beside each other.
-            let main: ReactNode;
-            const more: ReactNode[] = [];
-            if (activePack) {
-              const pack = activePack;
-              const packOnSale = isOnSale(pack.price, pack.salePrice);
-              const effectivePrice = getEffectivePrice(pack.price, pack.salePrice);
-              const canAfford = pCredits >= effectivePrice;
-              // A live pack can be shown without being for sale: members can look inside but not buy.
-              const forSale = pack.purchasable !== false;
-              if (!forSale) {
-                main = (
-                  <button type="button" disabled className={buyBtn}>
-                    Not available right now
-                  </button>
-                );
-              } else if (pack.needsGeneration) {
-                main = canAfford ? (
-                  <Link href={`/cards/new?pack=${pack.id}`} className={buyBtn}>
-                    Choose car &amp; open · {effectivePrice.toLocaleString()} P
-                  </Link>
-                ) : (
-                  <button type="button" disabled className={buyBtn}>
-                    Need {effectivePrice.toLocaleString()} P
-                  </button>
-                );
-              } else {
-                main = (
-                  <button type="button" onClick={() => handleBuyCustomPack(pack)} disabled={pending || !canAfford} className={buyBtn}>
-                    {isBuying(pack.id) ? (
-                      "Opening…"
-                    ) : canAfford ? (
-                      packOnSale ? (
-                        <span>
-                          Buy &amp; Open · <span className="line-through opacity-60">{pack.price.toLocaleString()}</span>{" "}
-                          {effectivePrice.toLocaleString()} P
-                        </span>
-                      ) : (
-                        `Buy & Open · ${effectivePrice.toLocaleString()} P`
-                      )
-                    ) : (
-                      `Need ${effectivePrice.toLocaleString()} P`
-                    )}
-                  </button>
-                );
-              }
-              if (forSale && pack.allowCardCredits) {
-                more.push(
-                  pack.needsGeneration ? (
-                    packCredits > 0 ? (
-                      <Link key="credit" href={`/cards/new?pack=${pack.id}`} className={dockBtn}>
-                        Use a pack credit ({packCredits})
-                      </Link>
-                    ) : (
-                      <button key="credit" type="button" disabled className={dockBtn}>
-                        No pack credits
-                      </button>
-                    )
-                  ) : (
-                    <button
-                      key="credit"
-                      type="button"
-                      onClick={() => handleBuyCustomPack(pack, "cardCredit")}
-                      disabled={pending || packCredits < 1}
-                      className={dockBtn}
-                    >
-                      {isBuying(pack.id, "cardCredit") ? "Opening…" : packCredits > 0 ? `Use a pack credit (${packCredits})` : "No pack credits"}
-                    </button>
-                  )
-                );
-              }
-              if (forSale && !canAfford) {
-                more.push(
-                  <button key="topup" type="button" onClick={onOpenPCreditsTab} className={`${dockBtn} !border-amber-500/60 !text-amber-300`}>
-                    Get {(effectivePrice - pCredits).toLocaleString()} more P
-                  </button>
-                );
-              }
-            } else {
-              if (!standardAllowsCardCredits && pCredits >= effectiveStandardPrice) {
-                // Paid for when it is opened: the member picks their car in the wizard, which charges the price.
-                main = (
-                  <Link href="/cards/new" className={buyBtn}>
-                    Choose car &amp; open · {effectiveStandardPrice.toLocaleString()} P
-                  </Link>
-                );
-              } else {
-                main = (
-                  <button type="button" onClick={handleBuyStandardPack} disabled={pending || pCredits < effectiveStandardPrice} className={buyBtn}>
-                    {isBuying(STANDARD_ID) ? (
-                      "Purchasing…"
-                    ) : pCredits < effectiveStandardPrice ? (
-                      `Need ${effectiveStandardPrice.toLocaleString()} P`
-                    ) : standardOnSale ? (
-                      <span>
-                        Buy · <span className="line-through opacity-60">{standardPackPrice.toLocaleString()}</span>{" "}
-                        {effectiveStandardPrice.toLocaleString()} P
+            <section aria-label={`${selName}: price and details`} aria-live="polite" className="space-y-3">
+              {activePack ? (
+                <PackSummary onSale={selOnSale}>
+                  <TitleAndPrice name={activePack.name} price={activePack.price} effectivePrice={selEffective} onSale={selOnSale} />
+                  {/* Only what the pack really gives. The bonus is just a chance, so it says "Bonus card" and no percentage. */}
+                  <ul className={`grid gap-2 ${activePack.bonus ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
+                    <ContentStat icon="🏎️" value={activePack.cardsPerPack} label={activePack.cardsPerPack === 1 ? "Card" : "Cards"} />
+                    <ContentStat icon="👥" value={activePack.extraCards?.crew ?? 0} label="Crew" />
+                    <ContentStat icon="🔧" value={activePack.extraCards?.repair ?? 0} label="Repair kit" />
+                    {activePack.bonus && <ContentStat icon="★" value="Bonus" label="Card" accent />}
+                  </ul>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selOnSale && (
+                      <span className="rounded-full bg-gradient-to-r from-rose-600 to-amber-500 px-3 py-1 text-xs font-black uppercase text-white">
+                        🔥 -{getSaleDiscountPct(activePack.price, activePack.salePrice)}% sale
                       </span>
-                    ) : (
-                      `Buy Pack · ${effectiveStandardPrice.toLocaleString()} P`
                     )}
-                  </button>
-                );
-              }
-              if (standardAllowsCardCredits && packCredits > 0) {
-                more.push(
-                  <Link key="open" href="/cards/new" className={dockBtn}>
-                    Open a pack ({packCredits} ready) →
+                    {activePack.purchasable === false && (
+                      <span className="rounded-full border border-zinc-400/60 bg-zinc-500/10 px-3 py-1 text-xs font-black text-zinc-700 dark:text-zinc-200">
+                        Not available right now
+                      </span>
+                    )}
+                    {activePack.needsGeneration && (
+                      <span className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-bold text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">
+                        Pick a car when you open it
+                      </span>
+                    )}
+                  </div>
+                  {activePack.description && <p className="text-sm text-zinc-600 dark:text-zinc-300">{activePack.description}</p>}
+                  <p className="text-sm font-semibold text-zinc-600 dark:text-zinc-300">
+                    {totalCardsInPack(activePack)} card{totalCardsInPack(activePack) === 1 ? "" : "s"} in every pack. The full list is just below.
+                  </p>
+                </PackSummary>
+              ) : (
+                <PackSummary onSale={standardOnSale}>
+                  <TitleAndPrice name="Standard Pack" price={standardPackPrice} effectivePrice={effectiveStandardPrice} onSale={standardOnSale} />
+                  <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <ContentStat icon="🏎️" value={2} label="Car cards" />
+                    <ContentStat icon="👥" value={1} label="Crew" />
+                    <ContentStat icon="🔧" value={1} label="Repair kit" />
+                    <ContentStat icon="★" value="Bonus" label="Card" accent />
+                  </ul>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {standardOnSale && (
+                      <span className="rounded-full bg-gradient-to-r from-rose-600 to-amber-500 px-3 py-1 text-xs font-black uppercase text-white">
+                        🔥 -{standardDiscountPct}% sale
+                      </span>
+                    )}
+                    {standardAllowsCardCredits && (
+                      <span className="rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-xs font-black text-amber-700 dark:text-amber-300">
+                        You have {packCredits} unopened
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">
+                    1 custom AI card of your car and 1 community car card, 1 Tactical Crew Card for Clash Arena, 1 Repair Kit, and a chance at a rare
+                    bonus set card. The full list is just below.
+                  </p>
+                </PackSummary>
+              )}
+
+              {isAdmin && (
+                <div className="space-y-2">
+                  <Link href="/admin/driftclash/packs" className={`${secondaryBtn} w-full sm:hidden`}>
+                    ⚙️ Manage Packs &amp; Sale Prices
                   </Link>
-                );
-              }
-              if (pCredits < effectiveStandardPrice) {
-                more.push(
-                  <button key="topup" type="button" onClick={onOpenPCreditsTab} className={`${dockBtn} !border-amber-500/60 !text-amber-300`}>
-                    Get {(effectiveStandardPrice - pCredits).toLocaleString()} more P
-                  </button>
-                );
-              }
-            }
-            return (
-              <div className="space-y-2">
-                {main}
-                {more.length > 0 && <div className={`grid gap-2 ${more.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>{more}</div>}
+                  <DevPreviewButton
+                    busy={previewing === (activePack?.id ?? STANDARD_ID)}
+                    disabled={previewing !== null}
+                    guaranteeLegend={guaranteeLegend}
+                    onGuaranteeChange={setGuaranteeLegend}
+                    onClick={() => handlePreviewPack(activePack?.id ?? STANDARD_ID)}
+                  />
+                </div>
+              )}
+            </section>
+          </div>
+
+          {/* 3: what is in the pack, right on the page (no window to open). */}
+          <section aria-labelledby="ps-contents" className="space-y-2">
+            <h2 id="ps-contents" className="px-1 text-lg font-black text-zinc-900 dark:text-zinc-100">
+              What&apos;s in this pack
+            </h2>
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 text-zinc-100 sm:p-5">
+              {activePack && <PackOddsNote pack={activePack} />}
+              <PackContentsView
+                key={activeId}
+                packId={activeId}
+                fallback={
+                  activePack ? (
+                    <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+                      {activePack.setList.map(({ card }) => (
+                        <li key={card.id} className="space-y-1.5">
+                          <FullArtCard card={card} className="drop-shadow-lg" />
+                          <div className="px-1 text-sm">
+                            <span className="font-bold text-zinc-200">{rarityLabel(card.tier)}</span>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : undefined
+                }
+              />
+            </div>
+          </section>
+
+          {/* 4: the buttons stay on screen, just above the app's bottom bar, so there is never any scrolling to find them. */}
+          <div className="sticky z-[30]" style={{ bottom: chromeHeight + 8 }}>
+            <div className="space-y-2 rounded-2xl border border-zinc-700 bg-zinc-950/95 p-2.5 text-zinc-100 shadow-2xl backdrop-blur sm:p-3">
+              <div className="flex items-center justify-between gap-3 px-1">
+                <span className="min-w-0 truncate text-sm font-black">{selName}</span>
+                <span className="shrink-0 text-sm font-black tabular-nums text-amber-300">
+                  {selOnSale && <span className="mr-2 text-xs font-bold text-zinc-400 line-through">{selPrice.toLocaleString()} P</span>}
+                  {selEffective.toLocaleString()} P-Credits
+                </span>
               </div>
-            );
-          })()}
-        </div>
-        )}
-      </section>
+              {actions.main}
+              {actions.more.length > 0 && <div className={`grid gap-2 ${actions.more.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>{actions.more}</div>}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* A purchase is going through: block taps so nothing is pressed twice */}
       {pending && pendingBuy && (
@@ -585,167 +594,6 @@ export function TcgPackStore({
           </p>
         </BottomSheet>
       )}
-
-      {/* What's in the Standard Pack */}
-      {showStandardContents && (
-        <PackContentsModal
-          packId="standard"
-          title="Penthouse Standard Pack"
-          eyebrow="Core Pack"
-          onClose={() => setShowStandardContents(false)}
-          footer={
-            <div className="space-y-2.5">
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="text-xs text-zinc-400">Pack Price</span>
-                <span className="text-xl font-black text-amber-400">{effectiveStandardPrice.toLocaleString()} P-Credits</span>
-              </div>
-              {pCredits >= effectiveStandardPrice ? (
-                standardAllowsCardCredits ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowStandardContents(false);
-                      handleBuyStandardPack();
-                    }}
-                    disabled={pending}
-                    className={`${sheetPrimary} w-full`}
-                  >
-                    Buy Pack · {effectiveStandardPrice.toLocaleString()} P
-                  </button>
-                ) : (
-                  <Link href="/cards/new" className={`${sheetPrimary} w-full`}>
-                    Choose car &amp; open · {effectiveStandardPrice.toLocaleString()} P
-                  </Link>
-                )
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowStandardContents(false);
-                    onOpenPCreditsTab();
-                  }}
-                  className={`${sheetPrimary} w-full`}
-                >
-                  Top Up P-Credits to Buy
-                </button>
-              )}
-            </div>
-          }
-        />
-      )}
-
-      {/* Set List Preview Modal */}
-      {inspectPack &&
-        (() => {
-          const inspectOnSale = isOnSale(inspectPack.price, inspectPack.salePrice);
-          const inspectEffectivePrice = getEffectivePrice(inspectPack.price, inspectPack.salePrice);
-          const inspectDiscountPct = getSaleDiscountPct(inspectPack.price, inspectPack.salePrice);
-          const total = totalCardsInPack(inspectPack);
-          return (
-            <BottomSheet
-              title={inspectPack.name}
-              subtitle={`Pack · ${total} card${total === 1 ? "" : "s"} per pack`}
-              size="lg"
-              fullHeight
-              dismissible={!pending}
-              onClose={() => setInspectPack(null)}
-              footer={
-                <div className="space-y-2.5">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-xs text-zinc-400">Pack Price</span>
-                    {inspectOnSale ? (
-                      <span className="flex items-baseline gap-2">
-                        <span className="text-sm font-bold text-zinc-500 line-through">{inspectPack.price.toLocaleString()} P</span>
-                        <span className="text-xl font-black text-emerald-400">{inspectEffectivePrice.toLocaleString()} P-Credits</span>
-                      </span>
-                    ) : (
-                      <span className="text-xl font-black text-amber-400">{inspectEffectivePrice.toLocaleString()} P-Credits</span>
-                    )}
-                  </div>
-                  <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                    {inspectPack.purchasable === false ? (
-                      <span className="flex min-h-12 items-center justify-center rounded-xl border border-zinc-700 px-4 text-sm font-bold text-zinc-300">
-                        Not available to buy right now
-                      </span>
-                    ) : pCredits >= inspectEffectivePrice ? (
-                      inspectPack.needsGeneration ? (
-                        <Link href={`/cards/new?pack=${inspectPack.id}`} className={sheetPrimary}>
-                          Choose car &amp; open · {inspectEffectivePrice.toLocaleString()} P
-                        </Link>
-                      ) : (
-                        <button type="button" onClick={() => handleBuyCustomPack(inspectPack)} disabled={pending} className={sheetPrimary}>
-                          {isBuying(inspectPack.id) ? "Opening Pack…" : `Buy & Open · ${inspectEffectivePrice.toLocaleString()} P`}
-                        </button>
-                      )
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setInspectPack(null);
-                          onOpenPCreditsTab();
-                        }}
-                        className={sheetPrimary}
-                      >
-                        Top Up P-Credits to Buy
-                      </button>
-                    )}
-                    {inspectPack.purchasable !== false &&
-                      inspectPack.allowCardCredits &&
-                      (inspectPack.needsGeneration ? (
-                        packCredits > 0 ? (
-                          <Link href={`/cards/new?pack=${inspectPack.id}`} className={sheetSecondary}>
-                            Choose car &amp; use a pack credit ({packCredits} left)
-                          </Link>
-                        ) : (
-                          <span className="flex min-h-12 items-center justify-center rounded-xl border border-zinc-700 px-4 text-sm font-bold text-zinc-300">
-                            Pack credit: none left
-                          </span>
-                        )
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleBuyCustomPack(inspectPack, "cardCredit")}
-                          disabled={pending || packCredits < 1}
-                          className={sheetSecondary}
-                        >
-                          {isBuying(inspectPack.id, "cardCredit")
-                            ? "Opening Pack…"
-                            : packCredits > 0
-                              ? `Use a pack credit (${packCredits} left)`
-                              : "Pack credit: none left"}
-                        </button>
-                      ))}
-                  </div>
-                </div>
-              }
-            >
-              {inspectOnSale && (
-                <p className="mb-3">
-                  <span className="rounded-full bg-gradient-to-r from-rose-600 to-amber-500 px-2.5 py-1 text-[11px] font-black uppercase text-white">
-                    🔥 On Sale · Save {inspectDiscountPct}%
-                  </span>
-                </p>
-              )}
-              {inspectPack.description && <p className="mb-3 text-xs text-zinc-400">{inspectPack.description}</p>}
-              <PackOddsNote pack={inspectPack} />
-              <PackContentsView
-                packId={inspectPack.id}
-                fallback={
-                  <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-                    {inspectPack.setList.map(({ card }) => (
-                      <li key={card.id} className="space-y-1.5">
-                        <FullArtCard card={card} className="drop-shadow-lg" />
-                        <div className="px-1 text-xs">
-                          <span className="font-bold text-zinc-200">{rarityLabel(card.tier)}</span>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                }
-              />
-            </BottomSheet>
-          );
-        })()}
 
       {/* Quick sell the cards from the pack that was just opened */}
       {sellOpen && openingState && !openingState.preview && onCardsSold && (
@@ -969,9 +817,9 @@ function ContentStat({ icon, value, label, accent = false }: { icon: string; val
         <span aria-hidden className="text-base leading-none">
           {icon}
         </span>
-        <span className="text-base font-black leading-tight tabular-nums">{value}</span>
+        <span className="text-lg font-black leading-tight tabular-nums">{value}</span>
       </span>
-      <span className="mt-0.5 block text-[10px] font-bold leading-tight opacity-70">{label}</span>
+      <span className="mt-0.5 block text-xs font-bold leading-tight opacity-80">{label}</span>
     </li>
   );
 }
@@ -980,7 +828,7 @@ function ContentStat({ icon, value, label, accent = false }: { icon: string; val
 function TitleAndPrice({ name, price, effectivePrice, onSale }: { name: string; price: number; effectivePrice: number; onSale: boolean }) {
   return (
     <div className="flex items-start justify-between gap-2 sm:gap-3">
-      <h4 className="text-lg font-black leading-tight text-zinc-900 dark:text-zinc-100">{name}</h4>
+      <h3 className="text-xl font-black leading-tight text-zinc-900 dark:text-zinc-100">{name}</h3>
       <div className="flex shrink-0 items-baseline gap-2 sm:justify-end">
         {onSale && <span className="text-xs font-bold text-zinc-400 line-through">{price.toLocaleString()} P</span>}
         <span

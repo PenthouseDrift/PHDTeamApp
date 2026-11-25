@@ -8,9 +8,11 @@ import {
   MAX_P_REWARD,
   MAX_TIERS,
   MIN_MAX_XP,
+  DEFAULT_LADDER,
   battlePassWarnings,
   generateTiers,
   ladderTotals,
+  ladderValue,
   sanitizeBattlePassConfig,
   type BattlePassConfig,
   type BattlePassRewardKind,
@@ -96,7 +98,7 @@ export function BattlePassAdmin({ initial }: { initial: BattlePassAdminData }) {
   // Until something is saved the starting ladder counts as a change, so it can be saved as it is.
   const [neverSaved, setNeverSaved] = useState(initial.isDefault);
   const dirty = neverSaved || JSON.stringify({ ...clean, updatedAt: 0 }) !== JSON.stringify({ ...saved, updatedAt: 0 });
-  const warnings = useMemo(() => battlePassWarnings(clean), [clean]);
+  const warnings = useMemo(() => battlePassWarnings(clean, initial.packPrice), [clean, initial.packPrice]);
   const needsConfirm = warnings.some((w) => w.needsConfirm);
   const totals = useMemo(() => ladderTotals(draft), [draft]);
 
@@ -115,6 +117,13 @@ export function BattlePassAdmin({ initial }: { initial: BattlePassAdminData }) {
     change({
       tiers: [...draft.tiers, { id: freeId(draft.tiers), xp, kind: last?.kind ?? "pcredits", amount: last?.amount ?? 50, secret: false }],
     });
+  }
+
+  /** Put the recommended ladder in the list (and its settings in the builder). Nothing is saved until you press Save. */
+  function useRecommended() {
+    if (draft.tiers.length > 0 && !confirm("Replace every gift on the ladder with the recommended one? (Nothing is saved until you press Save.)")) return;
+    setLadder({ ...DEFAULT_LADDER });
+    change({ maxXp: DEFAULT_LADDER.maxXp, tiers: generateTiers(DEFAULT_LADDER) });
   }
 
   function buildLadder() {
@@ -199,9 +208,18 @@ export function BattlePassAdmin({ initial }: { initial: BattlePassAdminData }) {
           <Num id="l-final" label="Pack credits in the last gift" value={ladder.finalPack} min={0} max={MAX_PACK_REWARD} onChange={(v) => setLadderNum("finalPack", v)} help="0 = leave the last one as it falls." />
           <Num id="l-secret" label="Hide the last N gifts" value={ladder.secretLast} min={0} max={MAX_TIERS} onChange={(v) => setLadderNum("secretLast", v)} help="Secret gifts show as a mystery until opened." />
         </div>
-        <button type="button" className={secondary} onClick={buildLadder} disabled={pending}>
-          Build this ladder
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={secondary} onClick={buildLadder} disabled={pending}>
+            Build this ladder
+          </button>
+          <button type="button" className={secondary} onClick={useRecommended} disabled={pending}>
+            Use the recommended ladder
+          </button>
+        </div>
+        <p className={hint}>
+          The recommended ladder is built so the pass feels worth playing but never beats buying: lots of small P-Credit gifts that top up a pack rather than replace
+          one, pack credits only as rare milestones, and a secret finale. A full pass is worth roughly thirteen Standard Packs, and only a very active player gets there.
+        </p>
       </section>
 
       {/* ── The gifts ── */}
@@ -214,6 +232,53 @@ export function BattlePassAdmin({ initial }: { initial: BattlePassAdminData }) {
             Whole ladder: {fmt(totals.pCredits)} P-Credits and {totals.packCredits} pack credit{totals.packCredits === 1 ? "" : "s"}
           </p>
         </div>
+
+        {draft.tiers.length > 0 && (
+          <div className="overflow-x-auto rounded-xl bg-zinc-50 p-3 dark:bg-zinc-800/60">
+            <p className="mb-1.5 text-xs font-bold text-zinc-700 dark:text-zinc-200">
+              What members have by each point (a Standard Pack is {fmt(initial.packPrice)} P)
+            </p>
+            <table className="w-full min-w-[26rem] text-left text-xs">
+              <thead className="text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                <tr>
+                  <th scope="col" className="py-1 pr-3">
+                    XP this month
+                  </th>
+                  <th scope="col" className="py-1 pr-3">
+                    About how many games*
+                  </th>
+                  <th scope="col" className="py-1 pr-3">
+                    Gifts
+                  </th>
+                  <th scope="col" className="py-1">
+                    Worth
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="text-zinc-800 dark:text-zinc-100">
+                {[0.1, 0.25, 0.5, 0.75, 1].map((share) => {
+                  const xp = Math.round(draft.maxXp * share);
+                  const got = draft.tiers.filter((t) => t.xp <= xp);
+                  const totals = ladderTotals({ tiers: got });
+                  const packs = ladderValue(got, initial.packPrice) / Math.max(1, initial.packPrice);
+                  return (
+                    <tr key={share} className="border-t border-zinc-200 dark:border-zinc-700">
+                      <td className="py-1 pr-3 font-bold tabular-nums">{fmt(xp)}</td>
+                      <td className="py-1 pr-3 tabular-nums">~{fmt(Math.round(xp / 15))}</td>
+                      <td className="py-1 pr-3 tabular-nums">
+                        {got.length} of {draft.tiers.length}
+                      </td>
+                      <td className="py-1 tabular-nums">
+                        {fmt(totals.pCredits)} P{totals.packCredits > 0 ? ` + ${totals.packCredits} pack credit${totals.packCredits === 1 ? "" : "s"}` : ""} ≈ {packs.toFixed(1)} packs
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <p className={`${hint} mt-1.5`}>*At about 15 XP a game from plain battles. Challenges and Campaign rounds earn more, so real players need fewer.</p>
+          </div>
+        )}
 
         {draft.tiers.length === 0 ? (
           <p className={hint}>No gifts yet. Build a ladder above or add one.</p>

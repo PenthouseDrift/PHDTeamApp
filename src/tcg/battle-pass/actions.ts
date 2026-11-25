@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { getCardCredits } from "@/lib/card-credits";
-import { getPCredits } from "@/tcg/storage";
+import { getPCredits, getTcgStoreConfig } from "@/tcg/storage";
+import { getEffectivePrice } from "@/tcg/config";
 import type { ActionResult } from "@/types";
 import {
   DEFAULT_LADDER,
@@ -84,6 +85,8 @@ export interface BattlePassAdminData {
   defaults: BattlePassConfig;
   ladderDefaults: LadderOptions;
   warnings: BattlePassWarning[];
+  /** What a Standard Pack costs right now, to say what the ladder is worth in packs. */
+  packPrice: number;
   log: BattlePassLogEntry[];
   thisMonth: { opens: number; pcredits: number; packcredits: number };
   /** True when no ladder has been saved yet, so what is shown is the starting one. */
@@ -93,14 +96,16 @@ export interface BattlePassAdminData {
 export async function getBattlePassAdminData(): Promise<ActionResult<BattlePassAdminData>> {
   try {
     if (!(await adminId())) return { success: false, error: "Only admins can open this page." };
-    const [config, log, thisMonth] = await Promise.all([loadBattlePassConfig(), loadBattlePassLog(10), loadMonthStats()]);
+    const [config, log, thisMonth, store] = await Promise.all([loadBattlePassConfig(), loadBattlePassLog(10), loadMonthStats(), getTcgStoreConfig()]);
+    const packPrice = getEffectivePrice(store.standardPackPrice, store.standardPackSalePrice);
     return {
       success: true,
       data: {
         config,
         defaults: defaultBattlePassConfig(),
         ladderDefaults: DEFAULT_LADDER,
-        warnings: battlePassWarnings(config),
+        warnings: battlePassWarnings(config, packPrice),
+        packPrice,
         log,
         thisMonth,
         isDefault: config.updatedAt === 0,

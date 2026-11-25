@@ -99,16 +99,24 @@ export interface LadderOptions {
   secretLast: number;
 }
 
+/**
+ * The recommended ladder. It is tuned so the pass feels rewarding to play but never beats buying:
+ *  - a gift every 150 to 700 XP, with the gaps growing, so a casual player (about 2,500 XP a month) opens around ten;
+ *  - mostly small P-Credit gifts that grow from 20 to 75, which top up a pack rather than replace one;
+ *  - pack credits only as milestones (one at about 17%, one at about 48%, and the finale), as check-ins already hand those out;
+ *  - the last three gifts secret, so the end of the pass is worth chasing.
+ * A full pass is worth roughly thirteen Standard Packs, and only a very active player gets there.
+ */
 export const DEFAULT_LADDER: LadderOptions = {
-  count: 20,
+  count: 24,
   maxXp: 10_000,
-  gapGrowth: 1.1,
-  startP: 25,
-  endP: 500,
-  packEvery: 4,
+  gapGrowth: 1.07,
+  startP: 20,
+  endP: 80,
+  packEvery: 8,
   packAmount: 1,
-  finalPack: 3,
-  secretLast: 2,
+  finalPack: 2,
+  secretLast: 3,
 };
 
 const roundTo = (n: number, step: number) => Math.round(n / step) * step;
@@ -226,7 +234,7 @@ export interface BattlePassWarning {
 }
 
 /** What a member who reaches the top earns in total. */
-export function ladderTotals(config: Pick<BattlePassConfig, "tiers">): { pCredits: number; packCredits: number } {
+export function ladderTotals(config: { tiers: Pick<BattlePassTier, "kind" | "amount">[] }): { pCredits: number; packCredits: number } {
   return config.tiers.reduce(
     (sum, t) => ({
       pCredits: sum.pCredits + (t.kind === "pcredits" ? t.amount : 0),
@@ -236,16 +244,32 @@ export function ladderTotals(config: Pick<BattlePassConfig, "tiers">): { pCredit
   );
 }
 
+/** What a gift or a whole ladder is worth in P-Credits, counting each pack credit as one Standard Pack at `packPrice`. */
+export function ladderValue(tiers: Pick<BattlePassTier, "kind" | "amount">[], packPrice: number): number {
+  const totals = ladderTotals({ tiers });
+  return totals.pCredits + totals.packCredits * Math.max(1, packPrice);
+}
+
+/** A full pass worth more than this many Standard Packs makes buying packs look pointless, so saving it needs a tick. */
+export const MAX_SENSIBLE_PACKS = 15;
+
 /** Things worth a second look before saving. They never stop a save; the ones that create money need a tick to confirm. */
-export function battlePassWarnings(config: BattlePassConfig): BattlePassWarning[] {
+export function battlePassWarnings(config: BattlePassConfig, packPrice = 100): BattlePassWarning[] {
   const out: BattlePassWarning[] = [];
   const totals = ladderTotals(config);
   if (config.tiers.length === 0) out.push({ needsConfirm: false, text: "There are no gifts on the ladder yet." });
   else {
+    const packs = ladderValue(config.tiers, packPrice) / Math.max(1, packPrice);
     out.push({
       needsConfirm: false,
-      text: `A member who reaches the top earns ${totals.pCredits.toLocaleString("en-GB")} P-Credits and ${totals.packCredits} pack credit${totals.packCredits === 1 ? "" : "s"} each month.`,
+      text: `A member who reaches the top earns ${totals.pCredits.toLocaleString("en-GB")} P-Credits and ${totals.packCredits} pack credit${totals.packCredits === 1 ? "" : "s"} each month, worth about ${packs.toFixed(1)} Standard Packs (at ${packPrice.toLocaleString("en-GB")} P each).`,
     });
+    if (packs > MAX_SENSIBLE_PACKS) {
+      out.push({
+        needsConfirm: true,
+        text: `That is more than ${MAX_SENSIBLE_PACKS} Standard Packs a month for free, which could make buying packs look pointless.`,
+      });
+    }
     const last = config.tiers[config.tiers.length - 1];
     if (last.xp < config.maxXp) out.push({ needsConfirm: false, text: `The last gift is at ${last.xp.toLocaleString("en-GB")} XP, below the top of the ladder (${config.maxXp.toLocaleString("en-GB")}).` });
   }
