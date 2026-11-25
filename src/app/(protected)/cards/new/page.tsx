@@ -10,7 +10,7 @@ import { getMergedPartCategories } from "@/actions/custom-parts";
 import { CardPackWizard } from "@/components/member-cards/CardPackWizard";
 import { redis } from "@/lib/redis";
 import { MEMBER_CARD_ID_PATTERN } from "@/lib/member-card-store";
-import { getPCredits, getTcgStoreConfig, hydrateCustomPacks, parseCustomPack, tcgCustomPackKey } from "@/tcg/storage";
+import { getPCredits, getTcgStoreConfig, hydrateCustomPacks, isStandardPackInShop, parseCustomPack, tcgCustomPackKey } from "@/tcg/storage";
 import { getEffectivePrice } from "@/tcg/config";
 import { standardPackAllowsCardCredits } from "@/lib/pack-config-store";
 
@@ -41,6 +41,9 @@ export default async function NewCardPage({ searchParams }: { searchParams: Prom
       cardCredits: await getCardCredits(userId),
     };
   }
+
+  // The Standard Pack has been removed from the shop: there is no wizard for it, so go to the Pack Store.
+  if (!customPack && !(await isStandardPackInShop())) redirect("/cards?tab=store");
 
     // A Standard Pack: its price and the member's P-Credits, so the member can buy another one when their pack credits run out.
   // With pack credit opening switched off for the Standard Pack, it is paid for in P-Credits when it is opened.

@@ -29,7 +29,7 @@ function nameList(names: string[]): string {
 }
 
 /** A ring of sparks that fly out from the middle. The positions are fixed, so it looks the same every time. */
-function Sparks({ count = 16, reach = 150 }: { count?: number; reach?: number }) {
+export function Sparks({ count = 16, reach = 150 }: { count?: number; reach?: number }) {
   return (
     <>
       {Array.from({ length: count }, (_, i) => {

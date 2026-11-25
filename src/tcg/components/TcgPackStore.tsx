@@ -44,6 +44,7 @@ export function TcgPackStore({
   standardPackPrice,
   standardPackSalePrice = null,
   standardAllowsCardCredits = true,
+  standardPackEnabled = true,
   customPacks,
   isAdmin = false,
   onBalancesChange,
@@ -59,6 +60,8 @@ export function TcgPackStore({
   standardPackSalePrice?: number | null;
   /** False when an admin has switched pack credit opening off for the Standard Pack: it is paid for in P-Credits when opened. */
   standardAllowsCardCredits?: boolean;
+  /** False when an admin has removed the Standard Pack: it is not shown, bought or opened, and only store packs are sold. */
+  standardPackEnabled?: boolean;
   customPacks: TcgCustomPackWithCards[];
   isAdmin?: boolean;
   onBalancesChange: (next: { pCredits: number; packCredits: number }) => void;
@@ -112,8 +115,10 @@ export function TcgPackStore({
   const standardDiscountPct = getSaleDiscountPct(standardPackPrice, standardPackSalePrice);
 
   /** Which pack is raised in the middle of the fan. Falls back to the first pack if the chosen one is gone (the list refreshed). */
-  const [selectedId, setSelectedId] = useState<string>(customPacks[0]?.id ?? STANDARD_ID);
-  const activeId = selectedId === STANDARD_ID || customPacks.some((p) => p.id === selectedId) ? selectedId : (customPacks[0]?.id ?? STANDARD_ID);
+  // With the Standard Pack removed there may be nothing to select at all (an empty id).
+  const firstId = customPacks[0]?.id ?? (standardPackEnabled ? STANDARD_ID : "");
+  const [selectedId, setSelectedId] = useState<string>(firstId);
+  const activeId = (standardPackEnabled && selectedId === STANDARD_ID) || customPacks.some((p) => p.id === selectedId) ? selectedId : firstId;
   /** The selected store pack, or null when the Standard Pack is selected. */
   const activePack = customPacks.find((p) => p.id === activeId) ?? null;
   // The store packs first, then the Standard Pack last.
@@ -129,15 +134,20 @@ export function TcgPackStore({
         discountPct: isOnSale(p.price, p.salePrice) ? getSaleDiscountPct(p.price, p.salePrice) : 0,
       })
     ),
-    {
-      id: STANDARD_ID,
-      name: "Standard Pack",
-      variant: "standard",
-      cardsLabel: "4 CARDS",
-      extraLabel: "+ RARE CHANCE",
-      discountPct: standardOnSale ? standardDiscountPct : 0,
-    },
+    ...(standardPackEnabled
+      ? [
+          {
+            id: STANDARD_ID,
+            name: "Standard Pack",
+            variant: "standard" as const,
+            cardsLabel: "4 CARDS",
+            extraLabel: "+ RARE CHANCE",
+            discountPct: standardOnSale ? standardDiscountPct : 0,
+          },
+        ]
+      : []),
   ];
+
 
   function handleBuyStandardPack() {
     setError(null);
@@ -345,7 +355,7 @@ export function TcgPackStore({
               )}
               {activePack.description && <p className="text-xs text-zinc-500 dark:text-zinc-400">{activePack.description}</p>}
             </PackSummary>
-          ) : (
+          ) : standardPackEnabled ? (
             <PackSummary onSale={standardOnSale}>
               <TitleAndPrice name="Standard Pack" price={standardPackPrice} effectivePrice={effectiveStandardPrice} onSale={standardOnSale} />
               <ul className="grid grid-cols-4 gap-1.5">
@@ -374,9 +384,22 @@ export function TcgPackStore({
                 bonus set card.
               </p>
             </PackSummary>
+          ) : (
+            <div role="status" className="space-y-1.5 rounded-2xl border border-dashed border-zinc-300 p-5 text-center dark:border-zinc-700">
+              <p className="text-3xl" aria-hidden>
+                🎁
+              </p>
+              <h3 className="text-base font-black text-zinc-900 dark:text-zinc-100">No packs on sale right now</h3>
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">New packs are on their way. Check back soon.</p>
+              {packCredits > 0 && (
+                <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                  You have {packCredits} pack credit{packCredits === 1 ? "" : "s"}. They&apos;ll be ready to use as soon as a pack that takes them goes on sale.
+                </p>
+              )}
+            </div>
           )}
 
-          {isAdmin && (
+          {isAdmin && carouselPacks.length > 0 && (
             <div className="space-y-2">
               <Link href="/admin/driftclash/packs" className={`${secondaryBtn} w-full sm:hidden`}>
                 ⚙️ Manage Packs &amp; Sale Prices
@@ -393,6 +416,7 @@ export function TcgPackStore({
         </div>
 
         {/* Docked at the bottom: the fan of packs, then what you can do with the selected one */}
+        {carouselPacks.length > 0 && (
         <div className="shrink-0 space-y-2 rounded-2xl border border-zinc-800 bg-zinc-950 p-2 shadow-xl">
           <PackCarousel packs={carouselPacks} selectedId={activeId} onSelect={setSelectedId} scale={fanScale} />
           {(() => {
@@ -523,6 +547,7 @@ export function TcgPackStore({
             );
           })()}
         </div>
+        )}
       </section>
 
       {/* A purchase is going through: block taps so nothing is pressed twice */}

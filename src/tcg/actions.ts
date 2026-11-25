@@ -52,6 +52,7 @@ import {
   getListingIdForCard,
   getPCredits,
   getTcgStoreConfig,
+  isStandardPackInShop,
   grantPCredits,
   hydrateCustomPacks,
   listActiveMarketListings,
@@ -493,6 +494,9 @@ export async function buyStandardPackWithPCredits(): Promise<
 > {
   const user = await currentUser();
   if (!user) return { success: false, error: "Please sign in to buy a pack." };
+
+  // Removed from the shop by an admin: nothing to buy.
+  if (!(await isStandardPackInShop())) return { success: false, error: "The Standard Pack isn't on sale right now. Have a look at the other packs in the store." };
 
   // With pack credit opening switched off, a bought credit couldn't open the Standard Pack, so don't sell one. The pack
   // is paid for with P-Credits when it is opened instead.

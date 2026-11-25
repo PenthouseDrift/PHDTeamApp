@@ -207,6 +207,7 @@ export function CardCollection({
   onPCreditsChange,
   onListingCreated,
   onListingRemoved,
+  standardPackEnabled = true,
 }: {
   initialCards: MemberCard[];
   credits: number;
@@ -217,8 +218,11 @@ export function CardCollection({
   onPCreditsChange?: (nextPCredits: number) => void;
   onListingCreated?: (listing: TcgMarketListing) => void;
   onListingRemoved?: (cardId: string) => void;
+  /** False when an admin has removed the Standard Pack: the "open a pack" links go to the Pack Store instead of its wizard. */
+  standardPackEnabled?: boolean;
 }) {
   const toast = useToast();
+  const openPackHref = standardPackEnabled ? "/cards/new" : "/cards?tab=store";
   const [cards, setCards] = useState(initialCards);
   const [prevInitialCards, setPrevInitialCards] = useState(initialCards);
   const [filters, updateFilters] = useDeckFilters();
@@ -428,10 +432,10 @@ export function CardCollection({
             </p>
           </div>
           <Link
-            href="/cards/new"
+            href={openPackHref}
             className="gx-tap inline-flex min-h-11 shrink-0 items-center rounded-xl bg-amber-500 px-4 text-xs font-black text-black shadow-sm transition-colors hover:bg-amber-400"
           >
-            Open Pack →
+            {standardPackEnabled ? "Open Pack →" : "Pack Store →"}
           </Link>
         </div>
       )}
@@ -443,8 +447,8 @@ export function CardCollection({
             Check in at the track or visit the Pack Store to open a pack and forge a custom Full-Art card of your drift car.
           </p>
           <div>
-            <Link href="/cards/new" className={`${primary} min-h-12`}>
-              {credits > 0 ? "Open your first pack" : "Forge a card"}
+            <Link href={openPackHref} className={`${primary} min-h-12`}>
+              {!standardPackEnabled ? "Visit the Pack Store" : credits > 0 ? "Open your first pack" : "Forge a card"}
             </Link>
           </div>
         </section>

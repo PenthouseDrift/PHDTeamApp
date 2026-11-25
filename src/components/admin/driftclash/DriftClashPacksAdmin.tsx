@@ -26,6 +26,7 @@ export function DriftClashPacksAdmin({
   legacyPullable,
   standardPackPrice,
   standardPackSalePrice,
+  standardPackInShop,
   pCreditBundles,
 }: {
   initialStandardConfig: PackConfig;
@@ -38,11 +39,14 @@ export function DriftClashPacksAdmin({
   legacyPullable: Record<string, number>;
   standardPackPrice: number;
   standardPackSalePrice: number | null;
+  /** The Standard Pack is sold in the pack shop (false once an admin has removed it). */
+  standardPackInShop: boolean;
   pCreditBundles: PCreditBundle[];
 }) {
   const [tab, setTab] = useState<Tab>("packs");
   const [selected, setSelected] = useState<Selection>("standard");
   const [standardConfig, setStandardConfig] = useState(initialStandardConfig);
+  const [standardInShop, setStandardInShop] = useState(standardPackInShop);
   const [fullArtCards, setFullArtCards] = useState(initialFullArtCards);
   const [styles, setStyles] = useState(initialStyles);
   const [packs, setPacks] = useState(initialPacks);
@@ -132,7 +136,7 @@ export function DriftClashPacksAdmin({
           <div className="flex flex-wrap gap-2" role="group" aria-label="Choose a pack">
             <button type="button" className={packBtn(selected === "standard")} aria-pressed={selected === "standard"} onClick={() => setSelected("standard")}>
               Standard Pack
-              <span className={chip}>{standardConfig.enabled ? "Custom ON" : "Custom OFF"}</span>
+              <span className={chip}>{standardInShop ? (standardConfig.enabled ? "Custom ON" : "Custom OFF") : "Removed from shop"}</span>
             </button>
             {packs.map((p) => (
               <button key={p.id} type="button" className={packBtn(selected === p.id)} aria-pressed={selected === p.id} onClick={() => setSelected(p.id)}>
@@ -159,6 +163,8 @@ export function DriftClashPacksAdmin({
             standardConfig={standardConfig}
             standardPrice={standardPackPrice}
             standardSalePrice={standardPackSalePrice}
+            standardInShop={standardInShop}
+            onStandardInShop={setStandardInShop}
             styles={styles}
             cards={setCards}
             legacyPullable={legacyPullable}

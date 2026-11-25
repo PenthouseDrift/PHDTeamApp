@@ -17,6 +17,7 @@ import {
 import type { PackStyle } from "@/lib/pack-styles";
 import type { Notice, SetCard } from "@/components/admin/driftclash/PackEditor";
 import { MemberCarPicker } from "@/components/admin/driftclash/MemberCarPicker";
+import { RegistrationCardPicker } from "@/components/admin/driftclash/RegistrationCardPicker";
 import { EntryEditorDialog } from "@/components/admin/driftclash/EntryEditorDialog";
 import { createFinishedSetCardAction } from "@/actions/admin/driftclash-packs";
 import { SavedSetCardPicker, describeVariant } from "@/components/admin/driftclash/SavedSetCardPicker";
@@ -70,7 +71,7 @@ export function BonusPullEditor({
   onOpenCard: (card: SetCard) => void;
 }) {
   const [adding, setAdding] = useState(false);
-  const [addTab, setAddTab] = useState<"cards" | "members">("cards");
+  const [addTab, setAddTab] = useState<"cards" | "members" | "registrations">("cards");
   /** The bonus card being edited in the card editor. */
   const [editingId, setEditingId] = useState<string | null>(null);
   const closeEditing = useCallback(() => setEditingId(null), []);
@@ -314,6 +315,7 @@ export function BonusPullEditor({
               [
                 ["cards", "Saved set cards"],
                 ["members", "Members' cars"],
+                ["registrations", "Registrations"],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -344,6 +346,18 @@ export function BonusPullEditor({
                   text: created
                     ? `Saved "${card.name}" as a new set card and added it to the bonus pull. Your original card is unchanged. Save the pack to keep your changes.`
                     : `Added "${card.name}" to the bonus pull${variant ? ` with ${describeVariant(variant)}` : ""}. The saved card is unchanged and no new card was saved. Save the pack to keep your changes.`,
+                });
+              }}
+            />
+          ) : addTab === "registrations" ? (
+            <RegistrationCardPicker
+              tier="legend"
+              styles={styles}
+              onCardAdded={(card, variant) => {
+                onCardCreated(card);
+                add(card, variant);
+                onNotify({
+                  text: `Saved "${card.name}" as a new set card from a registration and added it to the bonus pull. Save the pack to keep your changes.`,
                 });
               }}
             />

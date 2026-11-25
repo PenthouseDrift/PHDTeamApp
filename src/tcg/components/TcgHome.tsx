@@ -45,6 +45,7 @@ export function TcgHome({
   packs,
   standardPackPrice,
   standardPackSalePrice,
+  standardPackEnabled = true,
   rareCards,
   comingSoon,
   packCredits,
@@ -60,6 +61,8 @@ export function TcgHome({
   packs: TcgCustomPackWithCards[];
   standardPackPrice: number;
   standardPackSalePrice: number | null;
+  /** False when an admin has removed the Standard Pack: it is left out of the Packs row. */
+  standardPackEnabled?: boolean;
   rareCards: ShowcaseRareCard[];
   /** Teaser cards the admin has lined up. An empty list hides the row. */
   comingSoon: ComingSoonCard[];
@@ -123,6 +126,7 @@ export function TcgHome({
           <section aria-label="Packs" className="gx-fade-up space-y-2.5" style={{ animationDelay: "60ms" }}>
             <SectionHeader title="Packs" hint={packCredits > 0 ? `You have ${packCredits} pack credit${packCredits === 1 ? "" : "s"} ready` : "Spend P-Credits in the store"} action="Pack store" onAction={onOpenStore} />
             <ul className={`${rowCls} items-start pb-2 pt-1`}>
+              {standardPackEnabled && (
               <li className="w-36 shrink-0">
                 <button
                   type="button"
@@ -140,6 +144,7 @@ export function TcgHome({
                   <span className="mt-2.5 block text-center text-xs font-black text-amber-600 dark:text-amber-400">{stdPrice.toLocaleString()} P-Credits</span>
                 </button>
               </li>
+              )}
               {packs.map((pack) => {
                 const onSale = isOnSale(pack.price, pack.salePrice);
                 const price = getEffectivePrice(pack.price, pack.salePrice);

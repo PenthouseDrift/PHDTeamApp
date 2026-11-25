@@ -29,6 +29,8 @@ import { TcgMarketplace } from "./TcgMarketplace";
 import { TcgPackStore } from "./TcgPackStore";
 import { TcgPCreditsShop } from "./TcgPCreditsShop";
 import { buzz } from "@/tcg/ui/feedback";
+import { withLiveXp, type BattlePassView } from "@/tcg/battle-pass/config";
+import { BattlePassStrip } from "@/tcg/battle-pass/components/BattlePassStrip";
 import { acknowledgeReceivedCards } from "@/tcg/trade-actions";
 import type { ReceivedCard } from "@/tcg/trade-types";
 import { ReceivedCardsReveal } from "./ReceivedCardsReveal";
@@ -40,6 +42,12 @@ import { ToastProvider } from "@/tcg/ui/Toast";
 const TourTab = dynamic(() => import("@/tcg/tour/components/TourTab").then((m) => m.TourTab), {
   ssr: false,
   loading: () => <TabSkeleton label="Loading Tandem Tour" />,
+});
+
+// The Battle Pass is loaded the same way.
+const BattlePassTab = dynamic(() => import("@/tcg/battle-pass/components/BattlePassTab").then((m) => m.BattlePassTab), {
+  ssr: false,
+  loading: () => <TabSkeleton label="Loading the Battle Pass" />,
 });
 
 // Drift Campaign is loaded the same way.
@@ -62,6 +70,7 @@ const TABS: Array<{
     packs: number;
     dailyWinAvailable: boolean;
     hasEarlyAccess: boolean;
+    battlePassReady: number;
   }) => string | null;
 }> = [
   {
@@ -77,6 +86,13 @@ const TABS: Array<{
     label: "Play",
     shortLabel: "Play",
     icon: "🎮",
+  },
+  {
+    id: "battle-pass",
+    label: "Battle Pass",
+    shortLabel: "Pass",
+    icon: "🎖️",
+    badge: ({ battlePassReady }) => (battlePassReady > 0 ? `🎁 ${battlePassReady}` : null),
   },
   {
     id: "collection",
@@ -122,6 +138,7 @@ export function TcgApp({
   initialStandardPackPrice,
   initialStandardPackSalePrice = null,
   initialStandardAllowsCardCredits = true,
+  initialStandardPackEnabled = true,
   initialPCreditBundles = P_CREDIT_BUNDLES,
   initialCustomPacks,
   initialListings,
@@ -137,6 +154,8 @@ export function TcgApp({
   tourAdminPreview = false,
   gameOnly = false,
   initialReceived = [],
+  battlePassOpen = false,
+  initialBattlePass = null,
 }: {
   userId: string;
   isAdmin?: boolean;
@@ -148,6 +167,8 @@ export function TcgApp({
   initialStandardPackSalePrice?: number | null;
   /** False when pack credit opening is switched off for the Standard Pack (it is paid for in P-Credits when opened). */
   initialStandardAllowsCardCredits?: boolean;
+  /** False when an admin has removed the Standard Pack from the shop. */
+  initialStandardPackEnabled?: boolean;
   initialPCreditBundles?: PCreditBundle[];
   initialCustomPacks: TcgCustomPackWithCards[];
   initialListings: TcgMarketListing[];
@@ -167,6 +188,10 @@ export function TcgApp({
   gameOnly?: boolean;
   /** Cards the member was given (gifts, trades) and has not been shown the reveal for yet. */
   initialReceived?: ReceivedCard[];
+  /** Show the Battle Pass tab: it is switched on (or the member is an admin looking at it). */
+  battlePassOpen?: boolean;
+  /** This month's Battle Pass as the page loaded it: the tab shows it straight away, and the badge counts its waiting gifts. */
+  initialBattlePass?: BattlePassView | null;
 }) {
   const [tab, setTab] = useState<TcgTab>(initialTab);
   const [cards, setCards] = useState<MemberCard[]>(initialCards);
@@ -176,6 +201,13 @@ export function TcgApp({
   const [pCredits, setPCredits] = useState<number>(initialPCredits);
   const [listings, setListings] = useState<TcgMarketListing[]>(initialListings);
   const [clashStats, setClashStats] = useState<ClashPlayerStats>(initialClashStats);
+  // This month's Battle Pass as last loaded, with the Drift XP total at that moment. XP earned in games since then is added on
+  // top (see `battlePass` below), so the bar on the HUD moves as you play. The Battle Pass tab refreshes the loaded copy.
+  const [bp, setBp] = useState<{ view: BattlePassView | null; base: number }>({ view: initialBattlePass, base: initialClashStats.gameXp });
+  const gameXpRef = useRef(initialClashStats.gameXp);
+  useEffect(() => {
+    gameXpRef.current = clashStats.gameXp;
+  }, [clashStats.gameXp]);
   // Which view the play section on Home is showing: the two play buttons, or the full challenges list.
   const [lobbyTab, setLobbyTab] = useState<"quick" | "challenges">("quick");
   // Goes up each time Tandem Clash is opened from the Play page, so the arena starts a game instead of showing its lobby.
@@ -192,14 +224,15 @@ export function TcgApp({
   // When the page's data is refreshed (pull to refresh, or a server action that revalidates), the server's copy replaces
   // what this screen is holding, so the wallet, deck, listings and stats are never stale. This is state set while
   // rendering, which React allows for exactly this "props changed" case.
-  const [synced, setSynced] = useState({ initialTab, initialCards, initialPackCredits, initialPCredits, initialListings, initialClashStats });
+  const [synced, setSynced] = useState({ initialTab, initialCards, initialPackCredits, initialPCredits, initialListings, initialClashStats, initialBattlePass });
   if (
     synced.initialTab !== initialTab ||
     synced.initialCards !== initialCards ||
     synced.initialPackCredits !== initialPackCredits ||
     synced.initialPCredits !== initialPCredits ||
     synced.initialListings !== initialListings ||
-    synced.initialClashStats !== initialClashStats
+    synced.initialClashStats !== initialClashStats ||
+    synced.initialBattlePass !== initialBattlePass
   ) {
     if (synced.initialTab !== initialTab) setTab(initialTab);
     if (synced.initialCards !== initialCards) setCards(initialCards);
@@ -207,7 +240,8 @@ export function TcgApp({
     if (synced.initialPCredits !== initialPCredits) setPCredits(initialPCredits);
     if (synced.initialListings !== initialListings) setListings(initialListings);
     if (synced.initialClashStats !== initialClashStats) setClashStats(initialClashStats);
-    setSynced({ initialTab, initialCards, initialPackCredits, initialPCredits, initialListings, initialClashStats });
+    if (synced.initialBattlePass !== initialBattlePass) setBp({ view: initialBattlePass, base: initialClashStats.gameXp });
+    setSynced({ initialTab, initialCards, initialPackCredits, initialPCredits, initialListings, initialClashStats, initialBattlePass });
   }
 
   const drift = useMemo(() => getGameXpProgress(clashStats.gameXp), [clashStats.gameXp]);
@@ -215,6 +249,14 @@ export function TcgApp({
     () => getCollectorProgress(cards, clashStats.wins, cards.length),
     [cards, clashStats.wins]
   );
+
+  // The pass with the XP earned since it was loaded, so the HUD bar and the next reward stay current while playing.
+  const battlePass = useMemo(
+    () => (bp.view ? withLiveXp(bp.view, bp.view.xp + Math.max(0, clashStats.gameXp - bp.base)) : null),
+    [bp, clashStats.gameXp]
+  );
+  const battlePassReady = battlePass?.enabled ? battlePass.readyCount : 0;
+  const handleBattlePassView = useCallback((view: BattlePassView) => setBp({ view, base: gameXpRef.current }), []);
 
   /** Go to a section: a light tap buzz, and the page starts at the top of the new section instead of mid-scroll. */
   const selectTab = useCallback((next: TcgTab) => {
@@ -228,7 +270,7 @@ export function TcgApp({
   }, []);
 
   // The same sections and badges as the header panel, for the bar fixed to the bottom of a phone screen.
-  const visibleTabs = TABS;
+  const visibleTabs = TABS.filter((t) => t.id !== "battle-pass" || battlePassOpen);
   // A Tour or Campaign link the member has no access to lands on the Play page instead of an empty screen.
   const view: TcgTab = tab === "tour" && !hasTourAccess ? "play" : tab;
   const navActive: TcgTab = PLAY_SECTIONS.includes(view) ? "play" : view;
@@ -278,8 +320,9 @@ export function TcgApp({
         packs: initialCustomPacks.length + 1,
         dailyWinAvailable: !clashStats.dailyWinClaimed,
         hasEarlyAccess,
+        battlePassReady,
       }) ?? null,
-    urgent: t.id === "home" && !clashStats.dailyWinClaimed,
+    urgent: (t.id === "home" && !clashStats.dailyWinClaimed) || (t.id === "battle-pass" && battlePassReady > 0),
   }));
 
   return (
@@ -348,6 +391,14 @@ export function TcgApp({
           </div>
         </div>
 
+        {/* This month's Battle Pass: progress and the next reward. Tapping it opens the Battle Pass tab. */}
+        {battlePassOpen && battlePass && battlePass.tiers.length > 0 && (
+          <BattlePassStrip
+            view={battlePass.enabled ? battlePass : { ...battlePass, readyCount: 0 }}
+            onOpen={() => selectTab("battle-pass")}
+          />
+        )}
+
         {/* Your stats: cards by rarity, power, wins. Folded away on a phone until the level bar is tapped. */}
         <div
           id="gx-hud-details"
@@ -383,6 +434,7 @@ export function TcgApp({
               packs: initialCustomPacks.length + 1,
               dailyWinAvailable: !clashStats.dailyWinClaimed,
               hasEarlyAccess,
+              battlePassReady,
             });
             return (
               <button
@@ -403,7 +455,7 @@ export function TcgApp({
                     className={`rounded-full px-1.5 py-0.5 text-[10px] font-extrabold ${
                       active
                         ? "bg-black/20 text-black"
-                        : t.id === "home" && !clashStats.dailyWinClaimed
+                        : (t.id === "home" && !clashStats.dailyWinClaimed) || (t.id === "battle-pass" && battlePassReady > 0)
                           ? "bg-emerald-500 text-black"
                           : "bg-zinc-800 text-zinc-300"
                     }`}
@@ -465,6 +517,7 @@ export function TcgApp({
           packs={initialCustomPacks}
           standardPackPrice={initialStandardPackPrice}
           standardPackSalePrice={initialStandardPackSalePrice}
+          standardPackEnabled={initialStandardPackEnabled}
           rareCards={initialRareCards}
           comingSoon={initialComingSoon}
           packCredits={packCredits}
@@ -548,6 +601,7 @@ export function TcgApp({
             credits={packCredits}
             pCredits={pCredits}
             canDelete={isAdmin}
+            standardPackEnabled={initialStandardPackEnabled}
             onCardsChange={setCards}
             onPCreditsChange={setPCredits}
             onListingCreated={(newListing) => {
@@ -572,6 +626,7 @@ export function TcgApp({
           standardPackPrice={initialStandardPackPrice}
           standardPackSalePrice={initialStandardPackSalePrice}
           standardAllowsCardCredits={initialStandardAllowsCardCredits}
+          standardPackEnabled={initialStandardPackEnabled}
           customPacks={initialCustomPacks}
           isAdmin={isAdmin}
           showWalletBar={!gameOnly}
@@ -642,6 +697,18 @@ export function TcgApp({
           onOpenStoreTab={() => selectTab("store")}
           onOpenMarketplaceTab={() => setTab("marketplace")}
           onOpenCollectionTab={() => selectTab("collection")}
+        />
+      )}
+
+      {tab === "battle-pass" && battlePassOpen && (
+        <BattlePassTab
+          isAdmin={isAdmin}
+          initialView={battlePass}
+          onBalances={({ pCredits: nextP, packCredits: nextPack }) => {
+            setPCredits(nextP);
+            setPackCredits(nextPack);
+          }}
+          onViewChange={handleBattlePassView}
         />
       )}
 

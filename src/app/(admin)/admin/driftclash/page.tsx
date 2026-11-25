@@ -25,6 +25,12 @@ const SETTINGS: Array<{ href: string; title: string; desc: string; icon: string 
     icon: "🏎️",
   },
   {
+    href: "/admin/driftclash/battle-pass",
+    title: "Battle Pass",
+    desc: "The monthly XP ladder: gifts of P-Credits and pack credits, how far apart they are, and which are secret",
+    icon: "🎖️",
+  },
+  {
     href: "/admin/card-maker",
     title: "Card maker",
     desc: "Design full art cards, with frame colours and effects",

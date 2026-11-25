@@ -92,6 +92,7 @@ const TITLES: Array<[string, string]> = [
   ["/admin/click-collect", "Click & Collect"],
   ["/admin/events", "Events"],
   ["/admin/notes", "Notes"],
+  ["/admin/driftclash/battle-pass", "Battle Pass"],
   ["/admin/driftclash/packs", "Card packs"],
   ["/admin/driftclash/registrations", "Registrations"],
   ["/admin/driftclash", "DriftClash"],

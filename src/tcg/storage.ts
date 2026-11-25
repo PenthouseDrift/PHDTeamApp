@@ -263,6 +263,7 @@ export async function getTcgStoreConfig(): Promise<TcgStoreConfig> {
       return {
         standardPackPrice: DEFAULT_STANDARD_PACK_PRICE,
         standardPackSalePrice: null,
+        standardPackEnabled: true,
         pCreditBundles: P_CREDIT_BUNDLES.map((b) => ({ ...b })),
         updatedAt: 0,
       };
@@ -280,6 +281,8 @@ export async function getTcgStoreConfig(): Promise<TcgStoreConfig> {
     return {
       standardPackPrice,
       standardPackSalePrice,
+      // Only an explicit "no" removes it; a config saved before this existed still sells the Standard Pack.
+      standardPackEnabled: parsed?.standardPackEnabled !== false,
       pCreditBundles: sanitizePCreditBundles(parsed?.pCreditBundles),
       updatedAt: Number(parsed?.updatedAt) || 0,
     };
@@ -287,6 +290,7 @@ export async function getTcgStoreConfig(): Promise<TcgStoreConfig> {
     return {
       standardPackPrice: DEFAULT_STANDARD_PACK_PRICE,
       standardPackSalePrice: null,
+      standardPackEnabled: true,
       pCreditBundles: P_CREDIT_BUNDLES.map((b) => ({ ...b })),
       updatedAt: 0,
     };
@@ -314,14 +318,29 @@ export async function setTcgStoreConfig(config: Partial<TcgStoreConfig>): Promis
       ? sanitizePCreditBundles(config.pCreditBundles)
       : current.pCreditBundles;
 
+  const standardPackEnabled = config.standardPackEnabled !== undefined ? config.standardPackEnabled !== false : current.standardPackEnabled !== false;
+
   const next: TcgStoreConfig = {
     standardPackPrice,
     standardPackSalePrice,
+    standardPackEnabled,
     pCreditBundles,
     updatedAt: Date.now(),
   };
   await redis.set(TCG_STORE_CONFIG_KEY, JSON.stringify(next));
   return next;
+}
+
+/**
+ * Whether the Standard Pack is being sold. True unless an admin has removed it. If the setting can't be read it stays on, so a
+ * Redis hiccup never takes the pack away from members.
+ */
+export async function isStandardPackInShop(): Promise<boolean> {
+  try {
+    return (await getTcgStoreConfig()).standardPackEnabled !== false;
+  } catch {
+    return true;
+  }
 }
 
 export function parseCustomPack(raw: unknown): TcgCustomPack | null {
@@ -621,7 +640,8 @@ export async function getFeaturedShowcaseCards(limit = 12): Promise<ShowcaseRare
 async function buildFeaturedShowcaseCards(limit: number): Promise<ShowcaseRareCard[]> {
   try {
     const [standard, livePacks] = await Promise.all([
-      loadPackConfig(STANDARD_PACK_ID).catch(() => null),
+      // A Standard Pack that has been removed from the shop has no rare cards to show either.
+      isStandardPackInShop().then((inShop) => (inShop ? loadPackConfig(STANDARD_PACK_ID).catch(() => null) : null)),
       listLiveCustomPacks().catch(() => [] as TcgCustomPackWithCards[]),
     ]);
     const configs: PackConfig[] = [];

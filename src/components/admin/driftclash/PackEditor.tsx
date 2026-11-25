@@ -3,6 +3,7 @@
 import { useCallback, useState, useTransition } from "react";
 import { FullArtCard } from "@/components/cards/FullArtCard";
 import { MemberCarPicker } from "@/components/admin/driftclash/MemberCarPicker";
+import { RegistrationCardPicker } from "@/components/admin/driftclash/RegistrationCardPicker";
 import { SavedSetCardPicker, describeVariant } from "@/components/admin/driftclash/SavedSetCardPicker";
 import { SimulatePackDialog } from "@/components/admin/driftclash/SimulatePackDialog";
 import { EntryStatsDialog } from "@/components/admin/driftclash/StatsModeControl";
@@ -42,6 +43,7 @@ import {
   setPackStatusAction,
   setStandardPackCardCreditsAction,
   setStandardPackEnabledAction,
+  setStandardPackInShopAction,
 } from "@/actions/admin/driftclash-packs";
 import { updateCustomPackPricingAction } from "@/tcg/actions";
 import type { TcgCustomPackWithCards, TcgPackStatus } from "@/tcg/types";
@@ -81,10 +83,12 @@ export function PackEditor({
   standardConfig,
   standardPrice,
   standardSalePrice,
+  standardInShop,
   styles,
   cards,
   legacyPullable,
   onStandardConfig,
+  onStandardInShop,
   onCardCreated,
   onPackSaved,
   onPackDeleted,
@@ -94,11 +98,14 @@ export function PackEditor({
   standardConfig: PackConfig;
   standardPrice: number;
   standardSalePrice: number | null;
+  /** Whether the Standard Pack is sold in the pack shop (false once it has been removed). */
+  standardInShop: boolean;
   styles: PackStyle[];
   cards: SetCard[];
   /** The old pullable list (card id -> odds weight), which the Standard Pack can move into its bonus pull. */
   legacyPullable: Record<string, number>;
   onStandardConfig: (config: PackConfig) => void;
+  onStandardInShop: (inShop: boolean) => void;
   /** A set card was just made from a member's car, so the page's list of saved cards needs it. */
   onCardCreated: (card: SetCard) => void;
   onPackSaved: (pack: TcgCustomPackWithCards) => void;
@@ -136,7 +143,7 @@ export function PackEditor({
   const [allowCardCredits, setAllowCardCredits] = useState(pack?.allowCardCredits !== false);
 
   const [adding, setAdding] = useState<FullArtTier | null>(null);
-  const [addTab, setAddTab] = useState<"members" | "styles" | "cards">("cards");
+  const [addTab, setAddTab] = useState<"members" | "registrations" | "styles" | "cards">("cards");
   const closeAdd = useCallback(() => setAdding(null), []);
   /** The style chosen on the Styles tab, while the admin decides how to use it. */
   const [pickedStyle, setPickedStyle] = useState<PackStyle | null>(null);
@@ -440,6 +447,30 @@ export function PackEditor({
     });
   }
 
+  /** Sell the Standard Pack in the pack shop, or remove it. Takes effect straight away; nothing about the pack is deleted. */
+  function toggleStandardInShop() {
+    const next = !standardInShop;
+    if (
+      !next &&
+      !window.confirm(
+        "Remove the Standard Pack from the pack shop?\n\nMembers won't see it, buy it or open it. Pack credits will only work on store packs that allow them. Its setup is kept, and you can put it back at any time."
+      )
+    ) {
+      return;
+    }
+    startTransition(async () => {
+      const res = await setStandardPackInShopAction(next);
+      if (res.success) {
+        onStandardInShop(res.data.standardPackEnabled);
+        onNotify({
+          text: res.data.standardPackEnabled
+            ? "The Standard Pack is back in the pack shop."
+            : "The Standard Pack has been removed from the pack shop. Members can no longer see, buy or open it.",
+        });
+      } else onNotify({ text: res.error, error: true });
+    });
+  }
+
   /** Whether a pack credit can open the Standard Pack. Takes effect straight away, like the switch above it. */
   function toggleStandardCardCredits() {
     const next = standardConfig.allowCardCredits === false;
@@ -505,6 +536,29 @@ export function PackEditor({
               </button>
             </label>
           </div>
+          <label className="flex items-center justify-between gap-3 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-800/60">
+            <span>
+              <span className="block text-sm font-black text-zinc-900 dark:text-zinc-100">
+                {standardInShop ? "Sold in the pack shop" : "Removed from the pack shop"}
+              </span>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+                {standardInShop
+                  ? "Turn this off to take the Standard Pack away from members: it disappears from the pack shop and Home, and can't be bought or opened. Store packs are not affected."
+                  : "Members can't see, buy or open the Standard Pack. Its price, setup and cards are all kept, so turning this back on restores it exactly. Pack credits only work on store packs that allow them. Takes effect straight away."}
+              </span>
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={standardInShop}
+              aria-label="Sell the Standard Pack in the pack shop"
+              disabled={pending}
+              onClick={toggleStandardInShop}
+              className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-50 ${standardInShop ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-700"}`}
+            >
+              <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${standardInShop ? "left-[22px]" : "left-0.5"}`} />
+            </button>
+          </label>
           <p className="rounded-xl bg-zinc-100 p-3 text-xs text-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-300">
             {standardConfig.enabled
               ? "ON: after a card's rarity is rolled, the entries on that rarity can take its place."
@@ -927,6 +981,7 @@ export function PackEditor({
               [
                 ["cards", "Saved set cards"],
                 ["members", "Members' cars"],
+                ["registrations", "Registrations"],
                 ["styles", "Styles"],
               ] as const
             ).map(([id, label]) => (
@@ -972,6 +1027,20 @@ export function PackEditor({
                   "Each car is saved as a set card once. Set their chances below, then save the pack to keep your changes.",
                 ].filter(Boolean);
                 onNotify({ text: parts.join(" "), error: failed.length > 0 && added === 0 });
+              }}
+            />
+          )}
+
+          {addTab === "registrations" && (
+            <RegistrationCardPicker
+              tier={adding}
+              styles={styles}
+              onCardAdded={(card, variant) => {
+                onCardCreated(card);
+                addEntry(adding, "card", card.id, variant);
+                onNotify({
+                  text: `Saved "${card.name}" as a new ${tierLabel(adding)} set card from a registration and added it. Save the pack to keep your changes.`,
+                });
               }}
             />
           )}

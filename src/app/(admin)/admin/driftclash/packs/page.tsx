@@ -54,6 +54,7 @@ export default async function DriftClashPacksPage() {
         legacyPullable={legacyPullable}
         standardPackPrice={storeConfig.standardPackPrice}
         standardPackSalePrice={storeConfig.standardPackSalePrice ?? null}
+        standardPackInShop={storeConfig.standardPackEnabled !== false}
         pCreditBundles={storeConfig.pCreditBundles}
       />
     </div>

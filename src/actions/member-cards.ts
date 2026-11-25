@@ -53,6 +53,7 @@ import {
   getListingIdForCard,
   getPCredits,
   getTcgStoreConfig,
+  isStandardPackInShop,
   grantPCredits,
   spendPCredits,
 } from "@/tcg/storage";
@@ -252,6 +253,8 @@ export async function openCardPack(
     return { success: false, error: "Choose or upload a photo of your car first.", field: "referenceUrl" };
   }
 
+  // Checked on the server, whatever the browser shows: a Standard Pack that an admin has removed can't be opened at all.
+  if (!(await isStandardPackInShop())) return { success: false, error: "The Standard Pack isn't on sale right now. Have a look at the other packs in the store." };
   // Checked on the server, whatever the browser shows: with pack credit opening switched off, only P-Credits can pay.
   const payWithPCredits = input?.payWith === "pcredits";
   if (!payWithPCredits && !(await standardPackAllowsCardCredits())) {

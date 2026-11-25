@@ -22,6 +22,7 @@ export type TcgTab =
   | "store"
   | "marketplace"
   | "p-credits"
+  | "battle-pass"
   | "leaderboard";
 
 /** Fixed P-Credits payout when a member quick-sells (deletes) a card by tier. */
@@ -117,6 +118,11 @@ export interface TcgStoreConfig {
   standardPackPrice: number;
   /** Optional sale price in P-Credits for a Standard Pack (active when > 0 and < standardPackPrice). */
   standardPackSalePrice?: number | null;
+  /**
+   * Whether the Standard Pack is sold and opened at all. Left out (or true) it is, as it always has been. When an admin turns it
+   * off it is gone from the pack shop and can't be bought or opened; store packs carry on as they are.
+   */
+  standardPackEnabled?: boolean;
   /** Admin-configurable P-Credit real-money bundles (falls back to P_CREDIT_BUNDLES). */
   pCreditBundles: PCreditBundle[];
   updatedAt: number;

@@ -15,7 +15,7 @@ import {
 } from "@/lib/pack-config";
 import { loadPackConfig, loadRuntimeFor, loadSetCards, type PackRuntime } from "@/lib/pack-config-store";
 import { ALL_TIERS } from "@/lib/pack-styles";
-import { hydrateCustomPacks, parseCustomPack, tcgCustomPackKey } from "@/tcg/storage";
+import { hydrateCustomPacks, isStandardPackInShop, parseCustomPack, tcgCustomPackKey } from "@/tcg/storage";
 
 /**
  * What a member is told about the cards in a pack. Built on the server from the pack's setup and sent to the browser, so it
@@ -146,7 +146,11 @@ async function buildStandard(): Promise<PackContents> {
  * person looking is an admin. Returns null when there is no such pack.
  */
 export async function buildPackContents(packId: string, options: { isAdmin?: boolean } = {}): Promise<PackContents | null> {
-  if (packId === STANDARD_PACK_ID) return buildStandard();
+  if (packId === STANDARD_PACK_ID) {
+    // Removed from the shop: members can't look inside it any more. Admins still can, to set it up.
+    if (!options.isAdmin && !(await isStandardPackInShop())) return null;
+    return buildStandard();
+  }
   if (!MEMBER_CARD_ID_PATTERN.test(packId)) return null;
 
   const raw = parseCustomPack(await redis.get(tcgCustomPackKey(packId)));

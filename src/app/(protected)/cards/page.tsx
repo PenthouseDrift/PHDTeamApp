@@ -26,6 +26,7 @@ import { standardPackAllowsCardCredits } from "@/lib/pack-config-store";
 import { listTandemClashChallengesAction } from "@/tcg/challenges-actions";
 import { getUnseenReceived } from "@/tcg/trade-store";
 import { getTourAccess, getTourAdminPreview } from "@/tcg/tour/actions";
+import { loadBattlePassView } from "@/tcg/battle-pass/store";
 import type { TcgTab } from "@/tcg/types";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,7 @@ const VALID_TABS: TcgTab[] = [
   "store",
   "marketplace",
   "p-credits",
+  "battle-pass",
   "leaderboard",
 ];
 
@@ -104,6 +106,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
     hasTourAccess,
     tourAdminPreview,
     unseenReceived,
+    battlePass,
   ] = await Promise.all([
     listMyCards(),
     getCardCredits(userId),
@@ -121,7 +124,9 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
     getTourAccess(),
     getTourAdminPreview(),
     getUnseenReceived(userId),
+    loadBattlePassView(userId),
   ]);
+  const isAdmin = session.user.role === "admin";
 
   // ?tab=clash opens Tandem Clash itself. The Play page (?tab=play) lists it with the other game modes.
   const requestedTab = params.tab as TcgTab | undefined;
@@ -145,6 +150,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
           initialStandardPackPrice={storeConfig.standardPackPrice}
           initialStandardPackSalePrice={storeConfig.standardPackSalePrice ?? null}
           initialStandardAllowsCardCredits={standardAllowsCardCredits}
+          initialStandardPackEnabled={storeConfig.standardPackEnabled !== false}
           initialPCreditBundles={storeConfig.pCreditBundles}
           initialCustomPacks={customPacks.map(withoutOdds)}
           initialListings={listings}
@@ -160,6 +166,8 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
           checkoutConfirmed={checkoutConfirmed}
           gameOnly={gameOnly}
           initialReceived={unseenReceived}
+          battlePassOpen={battlePass.enabled || isAdmin}
+          initialBattlePass={battlePass}
         />
       </div>
     </div>

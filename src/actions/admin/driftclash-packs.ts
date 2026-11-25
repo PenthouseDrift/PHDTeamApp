@@ -41,6 +41,7 @@ import {
   parseCustomPack,
   tcgCustomPackKey,
   clearPackCaches,
+  setTcgStoreConfig,
 } from "@/tcg/storage";
 import { DEFAULT_STANDARD_PACK_PRICE, isOnSale } from "@/tcg/config";
 import { simulateManyPacks, simulateOnePack, type SimSlot, type SimStats } from "@/tcg/pack-simulate";
@@ -176,6 +177,25 @@ export async function setStandardPackCardCreditsAction(allow: boolean): Promise<
   } catch (error) {
     console.error("[driftclash-packs] standard pack credit setting failed:", error);
     return { success: false, error: error instanceof Error ? error.message : "Could not change the pack credit setting" };
+  }
+}
+
+/**
+ * Sell the Standard Pack, or remove it. Removed, it is gone from the members' pack shop and Home, and it can't be bought or
+ * opened (a pack credit can still open any store pack that allows one). Its setup, price and cards are kept, so putting it back
+ * restores it exactly. Takes effect straight away.
+ */
+export async function setStandardPackInShopAction(inShop: boolean): Promise<ActionResult<{ standardPackEnabled: boolean }>> {
+  try {
+    if (!(await requireAdmin())) return { success: false, error: "Only admins can change packs" };
+    clearPackCaches();
+    const saved = await setTcgStoreConfig({ standardPackEnabled: inShop !== false });
+    revalidate();
+    revalidatePath("/cards/new");
+    return { success: true, data: { standardPackEnabled: saved.standardPackEnabled !== false } };
+  } catch (error) {
+    console.error("[driftclash-packs] standard pack shop setting failed:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Could not change the Standard Pack setting" };
   }
 }
 

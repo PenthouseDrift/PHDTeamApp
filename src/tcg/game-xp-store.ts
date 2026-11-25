@@ -1,5 +1,6 @@
 import { redis } from "@/lib/redis";
 import { estimatedXpForPastGames } from "./game-xp";
+import { addBattlePassXp } from "./battle-pass/store";
 
 /**
  * Where a driver's Drift XP total is kept: a field on their Clash stats hash, next to their wins and losses. Server only.
@@ -8,10 +9,13 @@ import { estimatedXpForPastGames } from "./game-xp";
 const clashStatsKey = (userId: string) => `tcg:clash:stats:${userId}`;
 
 /** Add XP to a driver's total and return the new total. The add is atomic, so two games finishing together both count. */
-export async function addGameXp(userId: string, amount: number): Promise<number> {
+export async function addGameXp(userId: string, amount: number, options: { battlePass?: boolean } = {}): Promise<number> {
   const add = Math.max(0, Math.round(amount) || 0);
   if (add === 0) return Math.max(0, Number(await redis.hget(clashStatsKey(userId), "gameXp")) || 0);
-  return Number(await redis.hincrby(clashStatsKey(userId), "gameXp", add)) || add;
+  const total = Number(await redis.hincrby(clashStatsKey(userId), "gameXp", add)) || add;
+  // XP earned now also counts towards this month's Battle Pass. (The one-time catch-up below is old XP, so it doesn't.)
+  if (options.battlePass !== false) await addBattlePassXp(userId, add);
+  return total;
 }
 
 /**
@@ -28,7 +32,7 @@ export async function ensureGameXpBackfilled(
   const first = await redis.hsetnx(clashStatsKey(userId), "gameXpBackfilled", Date.now());
   if (!first) return Math.max(0, Number(await redis.hget(clashStatsKey(userId), "gameXp")) || 0);
   const missing = Math.max(0, estimatedXpForPastGames(current.wins, current.losses) - current.gameXp);
-  return missing > 0 ? addGameXp(userId, missing) : current.gameXp;
+  return missing > 0 ? addGameXp(userId, missing, { battlePass: false }) : current.gameXp;
 }
 
 /**

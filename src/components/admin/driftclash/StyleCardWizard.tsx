@@ -128,18 +128,27 @@ export function StyleCardWizard({
 }
 
 /** The words, picture and stats for a card made from an uploaded picture in a chosen style. */
-function UploadedCardForm({
+export function UploadedCardForm({
   tier,
   style,
   onCardAdded,
+  fixedPicture,
+  initialDetails,
 }: {
   tier: FullArtTier;
   style: PackStyle;
   onCardAdded: (card: SetCard, variant: EntryVariant | undefined) => void;
+  /**
+   * A picture that is already chosen (for example one from a registration). The uploader is not shown, and the picture
+   * can't be swapped here. Give the form a `key` that changes with it, because the form only reads this at the start.
+   */
+  fixedPicture?: string;
+  /** Words to start the card with. They can all be edited. */
+  initialDetails?: Partial<{ name: string; ability: string; effect: string; driver: string; team: string }>;
 }) {
-  const [pictureUrl, setPictureUrl] = useState("");
+  const [pictureUrl, setPictureUrl] = useState(fixedPicture ?? "");
   const [uploaderKey, setUploaderKey] = useState(0);
-  const [details, setDetails] = useState({ name: "", ability: "", effect: "", driver: "", team: "" });
+  const [details, setDetails] = useState({ name: "", ability: "", effect: "", driver: "", team: "", ...initialDetails });
   const [restyle, setRestyle] = useState<RestyleChoice>({ ...NO_RESTYLE, styleId: style.id });
   // A new card has no stats yet, so it starts with a roll for this rarity. "Keep" means use those.
   const [startStats] = useState(() => rollStatsForTier(tier, Math.random));
@@ -184,30 +193,37 @@ function UploadedCardForm({
 
       <div className="min-w-0 flex-1 space-y-4">
         <div className="space-y-2">
-          <p className={labelCls}>Your picture</p>
-          <ImageUploader
-            key={uploaderKey}
-            maxFiles={1}
-            label="Style card picture"
-            initialUrls={pictureUrl ? [pictureUrl] : []}
-            onUploadComplete={(urls) => {
-              setPictureUrl(urls[0] ?? "");
-              // A redraw belongs to the picture it was drawn from.
-              setRestyle({ styleId: style.id, artUrl: null });
-            }}
-          />
-          {pictureUrl && (
-            <button
-              type="button"
-              className={secondaryBtn}
-              onClick={() => {
-                setPictureUrl("");
-                setRestyle({ styleId: style.id, artUrl: null });
-                setUploaderKey((k) => k + 1);
-              }}
-            >
-              Choose a different picture
-            </button>
+          <p className={labelCls}>{fixedPicture ? "Picture from the registration" : "Your picture"}</p>
+          {fixedPicture ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={fixedPicture} alt="The picture this card is made from" className="h-28 w-auto max-w-full rounded-xl border border-zinc-200 object-cover dark:border-zinc-800" />
+          ) : (
+            <>
+              <ImageUploader
+                key={uploaderKey}
+                maxFiles={1}
+                label="Style card picture"
+                initialUrls={pictureUrl ? [pictureUrl] : []}
+                onUploadComplete={(urls) => {
+                  setPictureUrl(urls[0] ?? "");
+                  // A redraw belongs to the picture it was drawn from.
+                  setRestyle({ styleId: style.id, artUrl: null });
+                }}
+              />
+              {pictureUrl && (
+                <button
+                  type="button"
+                  className={secondaryBtn}
+                  onClick={() => {
+                    setPictureUrl("");
+                    setRestyle({ styleId: style.id, artUrl: null });
+                    setUploaderKey((k) => k + 1);
+                  }}
+                >
+                  Choose a different picture
+                </button>
+              )}
+            </>
           )}
         </div>
 
