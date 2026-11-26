@@ -730,6 +730,8 @@ type PendingBattleSave = {
   playerCorners: number;
   opponentCorners: number;
   tiedCorners: number;
+  /** One id for this game, made once and kept for a Retry, so a game that did save is never paid twice. */
+  battleId: string;
   /** The two sides' points totals, which set the Drift XP. */
   playerTotalScore: number;
   opponentTotalScore: number;
@@ -2364,6 +2366,7 @@ export function DriftClashArena({
       opponentTotalScore,
       playedCarCardIds: [...selectedCarIds],
       challenge: activeChallenge,
+      battleId: crypto.randomUUID(),
     });
   }
 
@@ -2371,7 +2374,7 @@ export function DriftClashArena({
   async function submitBattleSave(save: PendingBattleSave) {
     pendingSaveRef.current = save;
     setSaveState("saving");
-    const { won, playerCorners, opponentCorners, tiedCorners, playerTotalScore, opponentTotalScore, playedCarCardIds, challenge } = save;
+    const { won, playerCorners, opponentCorners, tiedCorners, playerTotalScore, opponentTotalScore, playedCarCardIds, challenge, battleId } = save;
     const levelBefore = getGameXpProgress(clashStats.gameXp).level;
     /** Tell the player when this game took them up a Drift level. */
     const announceLevelUp = (nextXp: number) => {
@@ -2411,6 +2414,8 @@ export function DriftClashArena({
           playerTotalScore,
           opponentTotalScore,
           playerCorners,
+          opponentCorners,
+          battleId,
         });
         if (!res.success) throw new Error(res.error || "Could not save the result.");
         setClashStats(res.data.stats);
@@ -2445,6 +2450,8 @@ export function DriftClashArena({
           playerTotalScore,
           opponentTotalScore,
           playerCorners,
+          opponentCorners,
+          battleId,
         });
         if (!res.success) throw new Error(res.error || "Could not save the result.");
         setClashStats(res.data.stats);

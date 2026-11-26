@@ -19,12 +19,6 @@ const SETTINGS: Array<{ href: string; title: string; desc: string; icon: string 
     icon: "🎴",
   },
   {
-    href: "/admin/driftclash/tour",
-    title: "Tandem Tour",
-    desc: "The long run-based game mode: switch it on, set prices, free runs and prizes, and manage early access",
-    icon: "🏎️",
-  },
-  {
     href: "/admin/driftclash/battle-pass",
     title: "Battle Pass",
     desc: "The monthly XP ladder: gifts of P-Credits and pack credits, how far apart they are, and which are secret",

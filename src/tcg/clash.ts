@@ -24,15 +24,15 @@ import {
   STARTER_LOANER_CREW_CARDS,
   STREAK_MILESTONE_REWARD_PCREDITS,
   getCardPower,
-  getCollectorProgress,
   optimizeLineupForTrack,
 } from "./progression";
 import { matchCars, matchCrew, profileOf, targetsFor, type PlayerProfile } from "./opponent-matching";
 import { loadArtPoolCached } from "./campaign/art-pool";
 import { matchFacesToTiers } from "./campaign/generate";
 import { getPCredits, grantPCredits } from "./storage";
-import { gameXpFor, getGameXpProgress, type GameXpBreakdown } from "./game-xp";
+import { battleReportProblem, gameXpFor, type GameXpBreakdown } from "./game-xp";
 import { addGameXp, ensureGameXpBackfilled } from "./game-xp-store";
+import { buildLeaderboard, freshenViewerRow, lbSetWins } from "./leaderboard";
 import type {
   ClashOpponent,
   ClashPlayerStats,
@@ -936,10 +936,92 @@ function changesAfterBattle(row: unknown, played: Set<string>): boolean {
   return Boolean(card.fault && Number(card.fault.battlesRemaining) > 0);
 }
 
-export async function completeClashBattleAction(input: {
+/** What a finished Clash game sends: who won, the cars used, and the points and corners that set its Drift XP. */
+export interface ClashBattleInput {
   won: boolean;
   playedCarCardIds?: string[];
-  /** The two sides' points totals and the corners the player won. They set the Drift XP, and are capped (see game-xp.ts). */
+  /** The two sides' points totals and the corners each side won. They set the Drift XP, and must add up (see battleReportProblem). */
+  playerTotalScore?: number;
+  opponentTotalScore?: number;
+  playerCorners?: number;
+  opponentCorners?: number;
+  /** One id for this game, made when it finished and kept for a Retry, so a result that was saved but whose reply was lost is never paid twice. */
+  battleId?: string;
+}
+
+/** The fastest a real game can be reported after the last one: three corners of racing, with a pick of cars before them. */
+const MIN_SECONDS_BETWEEN_BATTLES = 12;
+const BATTLE_RECEIPT_SECONDS = 3600;
+
+/**
+ * Record a finished Clash game: wins, streak, Drift XP, daily rewards and car wear (see recordClashBattle). Before anything is
+ * paid it checks that the report adds up, that it isn't coming faster than a game can be played, and that this exact game
+ * hasn't already been recorded: a Retry of a game that did save gets the same answer back instead of being paid again.
+ */
+export async function completeClashBattleAction(input: ClashBattleInput): Promise<ClashBattleResult> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return { success: false, error: "Please sign in to record your Clash result." };
+
+  const problem = battleReportProblem({
+    won: Boolean(input?.won),
+    playerCorners: input?.playerCorners,
+    opponentCorners: input?.opponentCorners,
+    playerTotal: input?.playerTotalScore,
+    opponentTotal: input?.opponentTotalScore,
+  });
+  if (problem) {
+    console.warn(`[driftClash] rejected a result from ${userId}: ${problem}`);
+    return { success: false, error: "That result could not be verified. Refresh the game and play the battle through." };
+  }
+
+  // This exact game, if it was sent before: finished, or still being saved.
+  const battleId = typeof input.battleId === "string" && /^[A-Za-z0-9-]{8,64}$/.test(input.battleId) ? input.battleId : null;
+  const receiptKey = battleId ? `tcg:clash:battle:${userId}:${battleId}` : null;
+  const spacingKey = `tcg:clash:lastbattle:${userId}`;
+  try {
+    if (receiptKey) {
+      // Held for a minute while the game is recorded (so a crash can't block a Retry for long), then kept as a receipt.
+      const claimed = await redis.set(receiptKey, "pending", { nx: true, ex: 60 });
+      if (claimed === null) {
+        const prior = await redis.get<unknown>(receiptKey);
+        if (prior && prior !== "pending") {
+          try {
+            const stored = typeof prior === "string" ? JSON.parse(prior) : prior;
+            if (stored && typeof stored === "object" && (stored as { success?: unknown }).success === true) return stored as ClashBattleResult;
+          } catch {
+            /* fall through to the message below */
+          }
+        }
+        return { success: false, error: "That result is already being saved. Give it a moment and tap Retry." };
+      }
+    }
+    const spaced = await redis.set(spacingKey, "1", { nx: true, ex: MIN_SECONDS_BETWEEN_BATTLES });
+    if (spaced === null) {
+      if (receiptKey) await redis.del(receiptKey).catch(() => 0);
+      return { success: false, error: "That result came in too soon after your last battle. Play the battle through and try again." };
+    }
+  } catch (error) {
+    console.error("[driftClash] could not check the battle receipt:", error);
+    // If the checks themselves can't run, don't pay.
+    return { success: false, error: "Could not save your result. Please try again." };
+  }
+
+  const result = await recordClashBattle(input);
+  if (result.success) {
+    if (receiptKey) await redis.set(receiptKey, JSON.stringify(result), { ex: BATTLE_RECEIPT_SECONDS }).catch(() => 0);
+  } else {
+    // Nothing was recorded, so a Retry must be allowed straight away.
+    await Promise.all([receiptKey ? redis.del(receiptKey) : Promise.resolve(0), redis.del(spacingKey)]).catch(() => 0);
+  }
+  return result;
+}
+
+type ClashBattleResult = Awaited<ReturnType<typeof recordClashBattle>>;
+
+async function recordClashBattle(input: {
+  won: boolean;
+  playedCarCardIds?: string[];
   playerTotalScore?: number;
   opponentTotalScore?: number;
   playerCorners?: number;
@@ -1001,8 +1083,8 @@ export async function completeClashBattleAction(input: {
       playerCorners: input.playerCorners,
     });
     const nextGameXp = await addGameXp(userId, xp.total);
-    // The Hall of Fame is kept for a short while; a finished battle changes wins and Drift XP, so the next look rebuilds it.
-    await redis.del(leaderboardCacheKey(25)).catch(() => 0);
+    // The Hall of Fame ranks on wins, so its sorted list is kept in step (Drift XP is kept in step by addGameXp).
+    await lbSetWins(userId, nextWins);
 
     let rewardGranted = 0;
     let streakBonusGranted = 0;
@@ -1172,172 +1254,46 @@ export async function completeClashBattleAction(input: {
 }
 
 /**
- * The Hall of Fame. Building it reads up to 1,000 cards and works out every member's stats, which is a lot of work for
- * something every visit to the game page asks for, so the finished board is kept in Redis for a short while and shared by
- * everyone. A finished battle clears it (see completeClashBattleAction) so the next look is fresh; pack openings and other
- * changes show up when it expires.
+ * The Hall of Fame. Each member's cards are added up once into a small summary and the board is read from sorted lists (see
+ * leaderboard.ts), so building it costs the same however many members and cards there are. The finished board is kept in Redis
+ * for a short while and shared by everyone, so a busy day costs one build a minute, not one per page view. The viewer's own row
+ * is always read fresh, so their packs opened, wins and XP are never out of date.
  */
-const LEADERBOARD_CACHE_SECONDS = 90;
-const leaderboardCacheKey = (limit: number) => `tcg:clash:leaderboard:v2:${limit}`;
+const LEADERBOARD_CACHE_SECONDS = 60;
+const leaderboardCacheKey = (limit: number) => `tcg:clash:leaderboard:v3:${limit}`;
 
 export async function getDriftClashLeaderboard(
-  limit = 25
+  limit = 25,
+  viewerId?: string
 ): Promise<DriftClashLeaderboardEntry[]> {
+  let entries: DriftClashLeaderboardEntry[] | null = null;
   try {
     const cached = await redis.get<DriftClashLeaderboardEntry[] | string>(leaderboardCacheKey(limit));
     if (cached) {
       const parsed = typeof cached === "string" ? JSON.parse(cached) : cached;
-      if (Array.isArray(parsed)) return parsed as DriftClashLeaderboardEntry[];
+      if (Array.isArray(parsed)) entries = parsed as DriftClashLeaderboardEntry[];
     }
   } catch (error) {
     console.error("[driftClash] leaderboard cache read failed, rebuilding:", error);
   }
 
-  const entries = await buildDriftClashLeaderboard(limit);
-  // An empty result can mean the build failed, so only a real board is kept.
-  if (entries.length > 0) {
+  if (!entries) {
     try {
-      await redis.set(leaderboardCacheKey(limit), JSON.stringify(entries), { ex: LEADERBOARD_CACHE_SECONDS });
+      entries = await buildLeaderboard(limit, {
+        backfillXp: (uid, current) => ensureGameXpBackfilled(uid, current),
+      });
     } catch (error) {
-      console.error("[driftClash] leaderboard cache write failed:", error);
+      console.error("[driftClash] getDriftClashLeaderboard error:", error);
+      return [];
     }
-  }
-  return entries;
-}
-
-async function buildDriftClashLeaderboard(
-  limit: number
-): Promise<DriftClashLeaderboardEntry[]> {
-  try {
-    const allCardIds = (await redis.zrange(ALL_MEMBER_CARDS_INDEX, 0, 999, { rev: true })) as string[];
-    if (!allCardIds || allCardIds.length === 0) return [];
-
-    const cardsByUser = new Map<string, MemberCard[]>();
-    const packsOpenedByUser = new Map<string, number>();
-
-    for (let i = 0; i < allCardIds.length; i += 100) {
-      const slice = allCardIds.slice(i, i + 100);
-      const rows = await redis.mget(...slice.map((id) => memberCardKey(String(id))));
-      for (const row of rows) {
-        const card = parseStoredCard(row);
-        if (!card || !card.userId) continue;
-
-        // Every primary card (not bonus, not featured bonus) counts toward packs opened
-        if (!card.bonus) {
-          packsOpenedByUser.set(card.userId, (packsOpenedByUser.get(card.userId) ?? 0) + 1);
-        }
-
-        // Only active, non-archived cards count toward current collection power
-        if (card.archived) continue;
-        const list = cardsByUser.get(card.userId) ?? [];
-        list.push(publicCard(card));
-        cardsByUser.set(card.userId, list);
+    // An empty result can mean the build failed, so only a real board is kept.
+    if (entries.length > 0) {
+      try {
+        await redis.set(leaderboardCacheKey(limit), JSON.stringify(entries), { ex: LEADERBOARD_CACHE_SECONDS });
+      } catch (error) {
+        console.error("[driftClash] leaderboard cache write failed:", error);
       }
     }
-
-    const userIds = Array.from(cardsByUser.keys());
-    if (userIds.length === 0) return [];
-
-    const entries: DriftClashLeaderboardEntry[] = await Promise.all(
-      userIds.map(async (uid) => {
-        const userCards = cardsByUser.get(uid) ?? [];
-        const [memberHash, clashHash] = await Promise.all([
-          redis.hmget<Record<string, unknown>>(
-            `member:${uid}`,
-            "nickname",
-            "name",
-            "customAvatar",
-            "image"
-          ),
-          redis.hmget<Record<string, unknown>>(clashStatsKey(uid), "wins", "losses", "gameXp", "gameXpBackfilled", "cupsWon"),
-        ]);
-
-        const nickname =
-          typeof memberHash?.nickname === "string" ? memberHash.nickname.trim() : "";
-        const fullName =
-          typeof memberHash?.name === "string" ? memberHash.name.trim() : "";
-        const fallbackDriver = userCards[0]?.driver?.trim() || "PHD Driver";
-        const driverName = nickname || fullName || fallbackDriver;
-
-        const customAvatar =
-          typeof memberHash?.customAvatar === "string" && memberHash.customAvatar
-            ? memberHash.customAvatar
-            : null;
-        const oauthImage =
-          typeof memberHash?.image === "string" && memberHash.image
-            ? memberHash.image
-            : null;
-
-        const clashWins = Math.max(0, Number(clashHash?.wins) || 0);
-        const clashLosses = Math.max(0, Number(clashHash?.losses) || 0);
-        // Drivers who played before Drift XP existed are caught up here too, so the board is right before they next open the game.
-        let driftXp = Math.max(0, Number(clashHash?.gameXp) || 0);
-        try {
-          driftXp = await ensureGameXpBackfilled(uid, {
-            wins: clashWins,
-            losses: clashLosses,
-            gameXp: driftXp,
-            alreadyDone: Boolean(clashHash?.gameXpBackfilled),
-          });
-        } catch (error) {
-          console.error("[driftClash] Drift XP catch-up failed for the leaderboard:", error);
-        }
-        const packsOpened = packsOpenedByUser.get(uid) ?? userCards.length;
-        const progress = getCollectorProgress(userCards, clashWins, packsOpened);
-
-        // Find highest-power car card for showcase
-        const carOnly = userCards.filter((c) => isPlainCarCard(c));
-        const sortedByPower = [...(carOnly.length > 0 ? carOnly : userCards)].sort(
-          (a, b) => getCardPower(b) - getCardPower(a)
-        );
-        const best = sortedByPower[0];
-
-        return {
-          userId: uid,
-          driverName,
-          avatarUrl: customAvatar || oauthImage,
-          totalCards: userCards.length,
-          mythicCount: progress.tierCounts.mythic,
-          legendCount: progress.tierCounts.legend,
-          goldCount: progress.tierCounts.gold,
-          collectorPower: progress.totalPower,
-          level: progress.level,
-          rankTitle: progress.rankTitle,
-          rankIcon: progress.rankIcon,
-          packsOpened,
-          clashWins,
-          driftXp,
-          driftLevel: getGameXpProgress(driftXp).level,
-          cupsWon: Math.max(0, Math.trunc(Number(clashHash?.cupsWon) || 0)),
-          topCard: best
-            ? {
-                carName: best.name,
-                tier: best.tier,
-                imageUrl: best.imageUrl,
-              }
-            : null,
-        };
-      })
-    );
-
-    // The board can be sorted five ways, so keep the top drivers of each (someone with little power can still lead on Drift XP).
-    const byPower = (a: DriftClashLeaderboardEntry, b: DriftClashLeaderboardEntry) => {
-      if (b.collectorPower !== a.collectorPower) return b.collectorPower - a.collectorPower;
-      if (b.mythicCount !== a.mythicCount) return b.mythicCount - a.mythicCount;
-      return b.totalCards - a.totalCards;
-    };
-    const rankings: Array<(a: DriftClashLeaderboardEntry, b: DriftClashLeaderboardEntry) => number> = [
-      byPower,
-      (a, b) => b.mythicCount - a.mythicCount || b.legendCount - a.legendCount || byPower(a, b),
-      (a, b) => b.clashWins - a.clashWins || byPower(a, b),
-      (a, b) => b.cupsWon - a.cupsWon || b.driftXp - a.driftXp || byPower(a, b),
-      (a, b) => b.driftXp - a.driftXp || b.clashWins - a.clashWins || byPower(a, b),
-    ];
-    const keep = new Map<string, DriftClashLeaderboardEntry>();
-    for (const rank of rankings) for (const e of [...entries].sort(rank).slice(0, limit)) keep.set(e.userId, e);
-    return Array.from(keep.values()).sort(byPower);
-  } catch (error) {
-    console.error("[driftClash] getDriftClashLeaderboard error:", error);
-    return [];
   }
+  return viewerId ? freshenViewerRow(entries, viewerId) : entries;
 }

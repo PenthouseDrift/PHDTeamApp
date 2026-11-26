@@ -38,13 +38,7 @@ import { useStickyTopOffset } from "@/tcg/ui/useBottomChrome";
 import { TabSkeleton } from "@/tcg/ui/Shimmer";
 import { ToastProvider } from "@/tcg/ui/Toast";
 
-// Tandem Tour is loaded only when its tab is opened, so the rest of the game does not get heavier.
-const TourTab = dynamic(() => import("@/tcg/tour/components/TourTab").then((m) => m.TourTab), {
-  ssr: false,
-  loading: () => <TabSkeleton label="Loading Tandem Tour" />,
-});
-
-// The Battle Pass is loaded the same way.
+// The Battle Pass is loaded only when its tab is opened, so the rest of the game does not get heavier.
 const BattlePassTab = dynamic(() => import("@/tcg/battle-pass/components/BattlePassTab").then((m) => m.BattlePassTab), {
   ssr: false,
   loading: () => <TabSkeleton label="Loading the Battle Pass" />,
@@ -57,7 +51,7 @@ const CampaignTab = dynamic(() => import("@/tcg/campaign/components/CampaignTab"
 });
 
 /** The sections opened from the Play page. The Play entry in the navigation stays selected while one of these is open. */
-const PLAY_SECTIONS: TcgTab[] = ["play", "clash", "tour", "campaign"];
+const PLAY_SECTIONS: TcgTab[] = ["play", "clash", "campaign"];
 
 const TABS: Array<{
   id: TcgTab;
@@ -80,7 +74,7 @@ const TABS: Array<{
     icon: "🏁",
     badge: ({ dailyWinAvailable }) => (dailyWinAvailable ? `+${DAILY_CLASH_WIN_REWARD_PCREDITS}P` : null),
   },
-  // One entry for every game mode (Tandem Clash, challenges, Tour, Campaign). They are opened from the Play page.
+  // One entry for every game mode (Tandem Clash, challenges, Campaign). They are opened from the Play page.
   {
     id: "play",
     label: "Play",
@@ -150,8 +144,6 @@ export function TcgApp({
   initialCompletedChallengeIds = [],
   initialRareCards = [],
   initialComingSoon = [],
-  hasTourAccess = false,
-  tourAdminPreview = false,
   gameOnly = false,
   initialReceived = [],
   battlePassOpen = false,
@@ -180,10 +172,6 @@ export function TcgApp({
   initialCompletedChallengeIds?: string[];
   initialRareCards?: ShowcaseRareCard[];
   initialComingSoon?: ComingSoonCard[];
-  /** Whether to show the Tandem Tour tab (an admin, or open to this member). */
-  hasTourAccess?: boolean;
-  /** Tour is only showing because this member is an admin (it is not switched on for members yet). */
-  tourAdminPreview?: boolean;
   /** True on the game-only Drift Clash app (no Penthouse Drift app around the game). */
   gameOnly?: boolean;
   /** Cards the member was given (gifts, trades) and has not been shown the reveal for yet. */
@@ -271,8 +259,7 @@ export function TcgApp({
 
   // The same sections and badges as the header panel, for the bar fixed to the bottom of a phone screen.
   const visibleTabs = TABS.filter((t) => t.id !== "battle-pass" || battlePassOpen);
-  // A Tour or Campaign link the member has no access to lands on the Play page instead of an empty screen.
-  const view: TcgTab = tab === "tour" && !hasTourAccess ? "play" : tab;
+  const view: TcgTab = tab;
   const navActive: TcgTab = PLAY_SECTIONS.includes(view) ? "play" : view;
 
   // The rival for Tandem Clash is picked when that screen opens, not on every page load: picking one reads and scores a lot of
@@ -483,7 +470,7 @@ export function TcgApp({
       {/* Active Tab Content: a short fade-up when the section changes */}
       <div key={view} className="gx-tab-enter space-y-3 sm:space-y-5">
       {/* Campaign draws its own back button, so Withdraw can sit on the same row. */}
-      {(view === "clash" || view === "tour") && (
+      {view === "clash" && (
         <button
           type="button"
           onClick={() => selectTab("play")}
@@ -502,8 +489,6 @@ export function TcgApp({
           streak={clashStats.streak}
           dailyWinAvailable={!clashStats.dailyWinClaimed}
           liveChallenges={initialChallenges.filter((c) => !initialCompletedChallengeIds.includes(c.id)).length}
-          hasTourAccess={hasTourAccess}
-          tourAdminPreview={tourAdminPreview}
         />
       )}
 
@@ -569,15 +554,6 @@ export function TcgApp({
         </TcgHome>
       )}
 
-      {view === "tour" && (
-        <TourTab
-          onBalances={({ pCredits: nextP, packCredits: nextPack }) => {
-            setPCredits(nextP);
-            setPackCredits(nextPack);
-          }}
-          onKitsUsed={(ids) => setCards((prev) => prev.filter((c) => !ids.includes(c.id)))}
-        />
-      )}
 
       {view === "campaign" && <CampaignTab
           isAdmin={isAdmin}

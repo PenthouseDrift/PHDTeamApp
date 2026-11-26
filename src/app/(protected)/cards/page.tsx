@@ -25,8 +25,8 @@ import { TcgApp } from "@/tcg/components/TcgApp";
 import { standardPackAllowsCardCredits } from "@/lib/pack-config-store";
 import { listTandemClashChallengesAction } from "@/tcg/challenges-actions";
 import { getUnseenReceived } from "@/tcg/trade-store";
-import { getTourAccess, getTourAdminPreview } from "@/tcg/tour/actions";
 import { loadBattlePassView } from "@/tcg/battle-pass/store";
+import { markLeaderboardDirty, syncSnapshotFromCards } from "@/tcg/leaderboard";
 import type { TcgTab } from "@/tcg/types";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +41,6 @@ const VALID_TABS: TcgTab[] = [
   "home",
   "play",
   "clash",
-  "tour",
   "campaign",
   "collection",
   "store",
@@ -103,8 +102,6 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
     rareCards,
     comingSoon,
     standardAllowsCardCredits,
-    hasTourAccess,
-    tourAdminPreview,
     unseenReceived,
     battlePass,
   ] = await Promise.all([
@@ -115,18 +112,26 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
     listLiveCustomPacks(),
     listActiveMarketListings(),
     getPlayerClashStats(userId),
-    getDriftClashLeaderboard(25),
+    getDriftClashLeaderboard(25, userId),
     hasClashEarlyAccess(userId, session.user.role),
     listTandemClashChallengesAction(),
     getFeaturedShowcaseCards(12),
     getComingSoonCards(),
     standardPackAllowsCardCredits(),
-    getTourAccess(),
-    getTourAdminPreview(),
     getUnseenReceived(userId),
     loadBattlePassView(userId),
   ]);
   const isAdmin = session.user.role === "admin";
+
+  // Keep this member's line on the Hall of Fame right, for free: their cards are already in hand, so one small read compares them
+  // with what the board holds, and a write happens only if something changed. (A collection too big to list in full is added up
+  // by the board itself instead.) This is what repairs the board for anyone who plays, whatever changed their cards.
+  try {
+    if (cards.length >= 500) await markLeaderboardDirty(userId);
+    else await syncSnapshotFromCards(userId, cards);
+  } catch (error) {
+    console.error("[cards] could not update the Hall of Fame summary:", error);
+  }
 
   // ?tab=clash opens Tandem Clash itself. The Play page (?tab=play) lists it with the other game modes.
   const requestedTab = params.tab as TcgTab | undefined;
@@ -161,8 +166,6 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
           initialCompletedChallengeIds={challengeData.success ? challengeData.data.completedIds : []}
           initialRareCards={rareCards}
           initialComingSoon={comingSoon}
-          hasTourAccess={hasTourAccess}
-          tourAdminPreview={tourAdminPreview}
           checkoutConfirmed={checkoutConfirmed}
           gameOnly={gameOnly}
           initialReceived={unseenReceived}

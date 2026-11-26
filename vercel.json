@@ -5,8 +5,8 @@
       "schedule": "0 3 * * *"
     },
     {
-      "path": "/api/cron/tour-sweep",
-      "schedule": "30 4 * * *"
+      "path": "/api/cron/leaderboard-sweep",
+      "schedule": "0 5 * * *"
     }
   ]
 }

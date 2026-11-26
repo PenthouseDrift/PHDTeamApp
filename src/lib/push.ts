@@ -1,4 +1,5 @@
 import webPush from "web-push";
+import { isLegacySubscriptionId } from "./push-ids";
 
 // First admin email for the VAPID contact, parsed defensively so a malformed
 // ADMIN_EMAILS value never crashes push setup (and with it the admin layout).
@@ -81,6 +82,11 @@ export async function sendToAllAdmins(
 
   let sent = 0;
   for (const subKey of subKeys) {
+    // An old-style id is shared by many members (see push-ids.ts), so it isn't known to be an admin's device.
+    if (isLegacySubscriptionId(String(subKey))) {
+      await redis.srem("push:admin:subscriptions", subKey);
+      continue;
+    }
     const subData = await redis.get(`push:subscription:${subKey}`);
     if (subData) {
       const subscription: PushSubscriptionData =

@@ -48,6 +48,31 @@ export const LEVEL_XP = 100;
 /** A game's points can't be more than this per side (three corners), so a made-up total can't pay more than it should. */
 const MAX_GAME_POINTS = 600;
 
+/**
+ * Whether a finished game's report could really have happened, or a reason it could not. The game is played in the browser,
+ * so the server can't replay it, but it can refuse a report that doesn't add up: corner counts that are impossible, points
+ * outside what a game can score, or a win that doesn't beat the rival (more corners, or level corners and at least as many
+ * points, exactly as the arena decides it). Every field is needed, because XP is paid from them.
+ */
+export function battleReportProblem(input: {
+  won: boolean;
+  playerCorners?: unknown;
+  opponentCorners?: unknown;
+  playerTotal?: unknown;
+  opponentTotal?: unknown;
+}): string | null {
+  const corner = (n: unknown): n is number => typeof n === "number" && Number.isInteger(n) && n >= 0 && n <= 3;
+  const points = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= MAX_GAME_POINTS;
+  const { playerCorners: pc, opponentCorners: oc, playerTotal: pt, opponentTotal: ot } = input;
+  if (!corner(pc) || !corner(oc) || pc + oc > 3) return "corner counts are not possible";
+  if (!points(pt) || !points(ot)) return "points are not possible";
+  if (input.won) {
+    if (pc < oc) return "a win with fewer corners than the rival";
+    if (pc === oc && pt < ot) return "a win on level corners with fewer points";
+  }
+  return null;
+}
+
 export interface GameXpBreakdown {
   /** Base XP for the game plus the margin bonus (or the small XP for a loss). */
   match: number;

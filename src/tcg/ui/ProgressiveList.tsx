@@ -18,6 +18,7 @@ export function ProgressiveList<T>({
   batch = 18,
   className = "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4",
   label,
+  bleed = false,
 }: {
   items: T[];
   render: (item: T, index: number) => ReactNode;
@@ -27,6 +28,8 @@ export function ProgressiveList<T>({
   className?: string;
   /** Names the list for screen readers. */
   label?: string;
+  /** Leave room around each item for effects that burn past its edge (Mythic card flames). Needs a gap of 0.75rem or more. */
+  bleed?: boolean;
 }) {
   const [state, setState] = useState({ key: resetKey ?? "", shown: batch });
   // A different list starts from the beginning again (state set while rendering, which React allows for this).
@@ -53,7 +56,7 @@ export function ProgressiveList<T>({
     <>
       <ul role="list" aria-label={label} className={className}>
         {items.slice(0, shown).map((item, i) => (
-          <li key={getKey(item)} className="gx-cv-auto min-w-0">
+          <li key={getKey(item)} className={`gx-cv-auto min-w-0${bleed ? " gx-cv-bleed" : ""}`}>
             {render(item, i)}
           </li>
         ))}

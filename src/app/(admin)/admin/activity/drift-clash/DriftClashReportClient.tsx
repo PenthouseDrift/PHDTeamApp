@@ -2,7 +2,7 @@
 
 import { Fragment, useState } from "react";
 import { formatGBP } from "@/lib/activity-pricing";
-import type { DriftClashReport, TourEconomy } from "@/lib/drift-clash-report";
+import type { DriftClashReport } from "@/lib/drift-clash-report";
 
 const card = "rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900";
 const th = "px-4 sm:px-6 py-4 font-semibold text-zinc-500 dark:text-zinc-400";
@@ -34,9 +34,6 @@ function Empty({ title, text }: { title: string; text: string }) {
   );
 }
 
-const netTone = (n: number) => (n > 0 ? "text-emerald-600 dark:text-emerald-400" : n < 0 ? "text-rose-600 dark:text-rose-400" : "text-zinc-500 dark:text-zinc-400");
-const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${nf.format(Math.abs(n))}`;
-
 export default function DriftClashReportClient({ report }: { report: DriftClashReport }) {
   const [open, setOpen] = useState<Set<string>>(() => new Set([currentMonthKey()]));
   const toggle = (m: string) =>
@@ -47,7 +44,7 @@ export default function DriftClashReportClient({ report }: { report: DriftClashR
       return next;
     });
 
-  const { sales, months, bundles, tour } = report;
+  const { sales, months, bundles } = report;
   const monthSum = months.reduce((s, m) => s + m.revenue, 0);
 
   return (
@@ -171,70 +168,6 @@ export default function DriftClashReportClient({ report }: { report: DriftClashR
           </div>
         )}
       </section>
-
-      {/* ── Tandem Tour ── */}
-      <section className="space-y-3" aria-label="Tandem Tour">
-        <div>
-          <h2 className="text-lg font-black text-zinc-900 dark:text-zinc-100">Tandem Tour (P-Credits)</h2>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">Entry and reroll fees taken in, prizes paid out. P-Credits, not pounds, so it is not part of the total above.</p>
-        </div>
-        {tour.months.length === 0 ? (
-          <Empty title="No Tandem Tour activity yet" text="Tours started, fees and prizes will appear here once members play." />
-        ) : (
-          <>
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-              <Stat label="Fees taken in" value={`${nf.format(tour.totals.pIn)} P`} sub={`${nf.format(tour.totals.paid)} paid · ${nf.format(tour.totals.free)} free runs`} />
-              <Stat label="Prizes paid out" value={`${nf.format(tour.totals.pOut)} P`} sub={`${nf.format(tour.totals.packCredits)} pack credits`} />
-              <Stat label="Net" value={`${signed(tour.totals.net)} P`} sub={tour.totals.net >= 0 ? "P-Credits taken out of circulation" : "More paid out than taken in"} />
-              <Stat label="Tours" value={nf.format(tour.totals.started)} sub={`${nf.format(tour.totals.completed)} finished`} />
-            </div>
-            <TourTable months={tour.months} totals={tour.totals} />
-          </>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function TourTable({ months, totals }: { months: DriftClashReport["tour"]["months"]; totals: TourEconomy }) {
-  return (
-    <div className={`${card} overflow-hidden`}>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="border-b border-zinc-200 bg-zinc-50 text-left dark:border-zinc-800 dark:bg-zinc-950/40">
-            <tr>
-              <th className={th}>Month</th>
-              <th className={`${th} text-right`}>Tours</th>
-              <th className={`${th} hidden text-right sm:table-cell`}>Paid</th>
-              <th className={`${th} text-right`}>Fees in</th>
-              <th className={`${th} text-right`}>Prizes out</th>
-              <th className={`${th} text-right`}>Net</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {months.map((m) => (
-              <tr key={m.month}>
-                <td className={`${td} font-bold text-zinc-900 dark:text-zinc-100`}>{m.label}</td>
-                <td className={`${td} text-right text-zinc-600 dark:text-zinc-300`}>{nf.format(m.started)}</td>
-                <td className={`${td} hidden text-right text-zinc-500 dark:text-zinc-400 sm:table-cell`}>{nf.format(m.paid)}</td>
-                <td className={`${td} text-right text-indigo-600 dark:text-indigo-400`}>{nf.format(m.pIn)}</td>
-                <td className={`${td} text-right text-amber-600 dark:text-amber-400`}>{nf.format(m.pOut)}</td>
-                <td className={`${td} text-right font-black ${netTone(m.net)}`}>{signed(m.net)}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot className="border-t-2 border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950/40">
-            <tr>
-              <td className={`${td} font-black text-zinc-900 dark:text-zinc-100`}>Total</td>
-              <td className={`${td} text-right font-bold text-zinc-600 dark:text-zinc-300`}>{nf.format(totals.started)}</td>
-              <td className={`${td} hidden text-right font-bold text-zinc-500 dark:text-zinc-400 sm:table-cell`}>{nf.format(totals.paid)}</td>
-              <td className={`${td} text-right font-bold text-indigo-600 dark:text-indigo-400`}>{nf.format(totals.pIn)}</td>
-              <td className={`${td} text-right font-bold text-amber-600 dark:text-amber-400`}>{nf.format(totals.pOut)}</td>
-              <td className={`${td} text-right font-black ${netTone(totals.net)}`}>{signed(totals.net)}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
     </div>
   );
 }

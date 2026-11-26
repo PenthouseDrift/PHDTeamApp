@@ -259,25 +259,26 @@ export function getRankForLevel(level: number) {
   return RANKS.find((r) => level >= r.minLevel) ?? RANKS[RANKS.length - 1];
 }
 
-export function getCollectorProgress(
-  cards: MemberCard[],
-  clashWins = 0,
-  packsOpened = 0
-): CollectorRankInfo {
-  const tierCounts: Record<FullArtTier, number> = {
-    bronze: 0,
-    silver: 0,
-    gold: 0,
-    legend: 0,
-    mythic: 0,
-  };
+/** The totals a collector's rank is worked out from, so it can be had without holding every card (the Hall of Fame keeps these per member). */
+export interface CollectorTotals {
+  totalPower: number;
+  tierCounts: Record<FullArtTier, number>;
+}
 
+/** Add up a list of cards: how many of each rarity, and their total power. */
+export function totalCollection(cards: MemberCard[]): CollectorTotals {
+  const tierCounts: Record<FullArtTier, number> = { bronze: 0, silver: 0, gold: 0, legend: 0, mythic: 0 };
   let totalPower = 0;
   for (const card of cards) {
     tierCounts[card.tier] = (tierCounts[card.tier] ?? 0) + 1;
     totalPower += getCardPower(card);
   }
+  return { totalPower, tierCounts };
+}
 
+/** The level, rank and progress for a collection's totals, with the member's Clash wins and packs opened. */
+export function getCollectorProgressFromTotals(totals: CollectorTotals, clashWins = 0, packsOpened = 0): CollectorRankInfo {
+  const { totalPower, tierCounts } = totals;
   const xp = totalPower + clashWins * 40 + packsOpened * 15;
   const level = Math.max(1, Math.floor(Math.sqrt(xp / 60)) + 1);
   const currentLevelFloorXp = 60 * Math.pow(level - 1, 2);
@@ -299,6 +300,10 @@ export function getCollectorProgress(
     progressPct,
     tierCounts,
   };
+}
+
+export function getCollectorProgress(cards: MemberCard[], clashWins = 0, packsOpened = 0): CollectorRankInfo {
+  return getCollectorProgressFromTotals(totalCollection(cards), clashWins, packsOpened);
 }
 
 // ── Track Sectors & Randomised Match Corners ───────────────────────────────

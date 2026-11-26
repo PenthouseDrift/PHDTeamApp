@@ -1184,6 +1184,13 @@ body {
   content-visibility: auto;
   contain-intrinsic-size: auto 22rem;
 }
+/* content-visibility clips painting to the item's own box, which cuts off the Mythic flames that burn past a card's edge.
+   This gives the item room for them and pulls it back with an equal negative margin, so the layout does not move. The
+   room must stay inside the grid's gap so it never covers a neighbouring tile. */
+.gx-cv-bleed {
+  margin: -0.75rem;
+  padding: 0.75rem;
+}
 @keyframes gx-shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }

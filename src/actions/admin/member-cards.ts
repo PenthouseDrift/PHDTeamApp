@@ -6,6 +6,7 @@ import { put } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
 import type { MemberCard } from "@/lib/card-roll";
+import { LB_DIRTY_KEY } from "@/tcg/leaderboard-keys";
 import {
   ALL_MEMBER_CARDS_INDEX,
   MEMBER_CARD_ID_PATTERN,
@@ -94,7 +95,7 @@ export async function deleteMemberCard(cardId: string): Promise<ActionResult<{ i
     // The record and both lists in one go. The lists are cleaned even if the record is already gone,
     // so a stray entry can't linger in the pool.
     const tx = redis.multi().del(memberCardKey(id)).zrem(ALL_MEMBER_CARDS_INDEX, id);
-    if (card) tx.zrem(memberCardsIndexKey(card.userId), id);
+    if (card) tx.zrem(memberCardsIndexKey(card.userId), id).sadd(LB_DIRTY_KEY, card.userId);
     await tx.exec();
     // If it stood in the community pool for its driver and car, another of theirs takes over (or they leave the pool).
     if (card) await removeFromCommunityPool(card);

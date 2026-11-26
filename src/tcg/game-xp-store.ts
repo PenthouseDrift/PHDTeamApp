@@ -1,6 +1,7 @@
 import { redis } from "@/lib/redis";
 import { estimatedXpForPastGames } from "./game-xp";
 import { addBattlePassXp } from "./battle-pass/store";
+import { lbSetCups, lbSetXp } from "./leaderboard";
 
 /**
  * Where a driver's Drift XP total is kept: a field on their Clash stats hash, next to their wins and losses. Server only.
@@ -15,6 +16,8 @@ export async function addGameXp(userId: string, amount: number, options: { battl
   const total = Number(await redis.hincrby(clashStatsKey(userId), "gameXp", add)) || add;
   // XP earned now also counts towards this month's Battle Pass. (The one-time catch-up below is old XP, so it doesn't.)
   if (options.battlePass !== false) await addBattlePassXp(userId, add);
+  // The Hall of Fame ranks on Drift XP, so keep its sorted list in step (one cheap write).
+  await lbSetXp(userId, total);
   return total;
 }
 
@@ -40,5 +43,7 @@ export async function ensureGameXpBackfilled(
  * The add is atomic. The caller makes sure it is only called once per cup. Returns the new total.
  */
 export async function addCupWon(userId: string): Promise<number> {
-  return Number(await redis.hincrby(clashStatsKey(userId), "cupsWon", 1)) || 1;
+  const cups = Number(await redis.hincrby(clashStatsKey(userId), "cupsWon", 1)) || 1;
+  await lbSetCups(userId, cups);
+  return cups;
 }

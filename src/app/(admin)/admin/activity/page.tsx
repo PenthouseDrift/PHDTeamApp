@@ -27,7 +27,7 @@ export default async function AdminReportsPage() {
     },
     {
       title: "Drift Clash",
-      description: "P-Credit bundle sales and the Tandem Tour economy — total and month by month",
+      description: "P-Credit bundle sales, total and month by month",
       href: "/admin/activity/drift-clash",
       icon: "🏁",
       color: "border-orange-500/40 bg-orange-500/10 text-orange-600 dark:text-orange-400",

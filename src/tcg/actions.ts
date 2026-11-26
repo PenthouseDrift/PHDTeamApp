@@ -6,6 +6,8 @@ import { randomInt, randomUUID } from "crypto";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
+import { markLeaderboardDirty } from "@/tcg/leaderboard";
+import { LB_DIRTY_KEY } from "@/tcg/leaderboard-keys";
 import { grantCardCredits, getCardCredits, refundCardCredit, spendCardCredit } from "@/lib/card-credits";
 import { deleteImage } from "@/lib/blob";
 import { isBlobUrl } from "@/lib/card-art-generate";
@@ -234,6 +236,7 @@ export async function quickSellCard(
       .del(memberCardKey(cardId))
       .zrem(memberCardsIndexKey(user.id), cardId)
       .zrem(ALL_MEMBER_CARDS_INDEX, cardId)
+      .sadd(LB_DIRTY_KEY, user.id)
       .exec();
 
     // Update community pool
@@ -456,6 +459,7 @@ export async function buyCardFromMarket(
       .del(tcgMarketListingKey(listingId))
       .zrem(TCG_MARKET_ACTIVE_KEY, listingId)
       .hdel(TCG_MARKET_BY_CARD_KEY, transferredCard.id)
+      .sadd(LB_DIRTY_KEY, freshListing.sellerId, buyer.id)
       .exec();
 
     // Update community pool for the old owner
@@ -722,6 +726,8 @@ export async function buyAndOpenCustomPack(
     revalidatePath("/cards");
     revalidatePath("/admin/member-cards");
     revalidateTag("admin-members", "max");
+    // New cards (and a pack opened) change this member's line on the Hall of Fame; it is added up again the next time the board is built.
+    await markLeaderboardDirty(user.id);
 
     return {
       success: true,
@@ -1087,6 +1093,8 @@ export async function openCustomPackWithCar(
     revalidatePath("/cards");
     revalidatePath("/admin/member-cards");
     revalidateTag("admin-members", "max");
+    // New cards (and a pack opened) change this member's line on the Hall of Fame; it is added up again the next time the board is built.
+    await markLeaderboardDirty(user.id);
 
     return {
       success: true,
@@ -1561,6 +1569,7 @@ export async function applyMaintenanceRepairAction(input: {
       redis.del(memberCardKey(maint.id)),
       redis.zrem(memberCardsIndexKey(user.id), maint.id),
       redis.zrem(ALL_MEMBER_CARDS_INDEX, maint.id),
+      redis.sadd(LB_DIRTY_KEY, user.id),
     ]);
 
     revalidatePath("/cards");

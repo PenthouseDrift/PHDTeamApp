@@ -4,6 +4,7 @@ import { cache } from "react";
 
 import { redis } from "@/lib/redis";
 import { sendPushNotification, type PushSubscriptionData } from "@/lib/push";
+import { isLegacySubscriptionId } from "@/lib/push-ids";
 import type { ActionResult } from "@/types";
 
 export interface AppNotification {
@@ -383,14 +384,25 @@ async function sendPushToUser(userId: string, payload: { title: string; body: st
     const sentEndpoints = new Set<string>();
 
     for (const subId of subIds) {
+      // An old-style id is shared by many members, so it can't be trusted to reach this one. They get a proper one the next time
+      // they open the app (it re-sends their device on every load).
+      if (isLegacySubscriptionId(String(subId))) {
+        await redis.srem(`push:user:${userId}:subscriptions`, subId);
+        continue;
+      }
       const subData = await redis.get(`push:subscription:${subId}`);
       if (!subData) {
         await redis.srem(`push:user:${userId}:subscriptions`, subId);
         continue;
       }
 
-      const subscription: PushSubscriptionData =
+      const subscription: PushSubscriptionData & { userId?: string } =
         typeof subData === "string" ? JSON.parse(subData) : (subData as unknown as PushSubscriptionData);
+      // The device now belongs to somebody else (they signed in on it): it is not this member's any more.
+      if (subscription.userId && subscription.userId !== userId) {
+        await redis.srem(`push:user:${userId}:subscriptions`, subId);
+        continue;
+      }
 
       if (subscription?.endpoint && !sentEndpoints.has(subscription.endpoint)) {
         sentEndpoints.add(subscription.endpoint);

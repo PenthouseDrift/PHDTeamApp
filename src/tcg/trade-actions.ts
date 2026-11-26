@@ -52,7 +52,7 @@ import {
 
 /**
  * Gifts and trade offers. Every action works out who is asking from the session, never from what the browser sends, and
- * checks the cards again on the server: who owns them, whether they are listed, whether they are in a cup or a tour.
+ * checks the cards again on the server: who owns them, whether they are listed, whether they are in a cup.
  */
 
 const MEMBER_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
@@ -305,7 +305,7 @@ export async function declineTradeOffer(offerId: string): Promise<ActionResult<T
 
 /**
  * Say yes to an offer on one of your listings. Under a lock on every card involved, everything is checked again (the
- * listing, who owns each card, that none is listed or in a cup or tour, and that the buyer still has the P-Credits).
+ * listing, who owns each card, that none is listed or in a cup, and that the buyer still has the P-Credits).
  * Then the P-Credits are taken from the buyer, the cards swap owners in one transaction, and the seller is paid. If the
  * swap fails, the buyer's P-Credits are given back.
  */

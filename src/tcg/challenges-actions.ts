@@ -544,6 +544,9 @@ export async function completeChallengeBattleAction(input: {
   playerTotalScore?: number;
   opponentTotalScore?: number;
   playerCorners?: number;
+  opponentCorners?: number;
+  /** One id for this game, kept for a Retry, so it is never paid twice (see completeClashBattleAction). */
+  battleId?: string;
 }): Promise<
   ActionResult<{
     won: boolean;
@@ -570,12 +573,29 @@ export async function completeChallengeBattleAction(input: {
     const userId = session?.user?.id;
     if (!userId) return { success: false, error: "Authentication required" };
 
-    const { challengeId, won, playedCarCardIds = [], playerTotalScore, opponentTotalScore, playerCorners } = input;
+    const { challengeId, won, playedCarCardIds = [], playerTotalScore, opponentTotalScore, playerCorners, opponentCorners, battleId } = input;
 
     const challenge = await getChallengeById(challengeId);
 
+    // 0. A challenge win is checked BEFORE anything is recorded or paid: the three cars must be the member's own and meet the
+    // challenge's rules. (This used to run after the battle was recorded, and only when three cars were sent, so a result sent
+    // with no cars skipped the check altogether.)
+    if (won && challenge) {
+      const lineup = playedCarCardIds.slice(0, 3);
+      const rows = lineup.length === 3 ? await redis.mget(...lineup.map((id) => memberCardKey(String(id)))) : [];
+      const cards = rows
+        .map(parseStoredCard)
+        .filter((c): c is StoredMemberCard => c !== null && c.userId === userId)
+        .map(toPublicCard);
+      const allEligible =
+        cards.length === 3 && new Set(lineup).size === 3 && cards.every((c) => isCarEligibleForChallenge(c, challenge).eligible);
+      if (!allEligible) {
+        return { success: false, error: "One or more cars in your lineup did not meet this challenge's requirements." };
+      }
+    }
+
     // 1. Process Clash battle result + streak + durability wear via clash core action
-    const battleRes = await completeClashBattleAction({ won, playedCarCardIds, playerTotalScore, opponentTotalScore, playerCorners });
+    const battleRes = await completeClashBattleAction({ won, playedCarCardIds, playerTotalScore, opponentTotalScore, playerCorners, opponentCorners, battleId });
     if (!battleRes.success) {
       return { success: false, error: battleRes.error };
     }
@@ -589,27 +609,6 @@ export async function completeChallengeBattleAction(input: {
     // 2. Award Challenge P-Credits if won and mark as completed for today
     const today = todayUtc();
     if (won && challenge) {
-      // Server-side verification: Ensure played cars meet challenge restrictions
-      if (playedCarCardIds.length >= 3) {
-        const rows = await redis.mget(
-          ...playedCarCardIds.slice(0, 3).map((id) => memberCardKey(String(id)))
-        );
-        const cards = rows
-          .map(parseStoredCard)
-          .filter((c): c is StoredMemberCard => c !== null)
-          .map(toPublicCard);
-        const allEligible =
-          cards.length === 3 &&
-          cards.every((c) => isCarEligibleForChallenge(c, challenge).eligible);
-        if (!allEligible) {
-          return {
-            success: false,
-            error:
-              "One or more cars in your lineup did not meet this challenge's requirements.",
-          };
-        }
-      }
-
       const alreadyWonToday = await redis.sismember(
         userCompletedChallengesKey(userId, today),
         challenge.id

@@ -112,8 +112,8 @@ export interface DebuffCardDefinition {
   isCustom?: boolean;
   /**
    * Set only for Clash and the Campaign (see src/tcg/debuff-impact.ts): the debuff as it is dealt. It always cuts `primary`
-   * by `baseCut` (set by its rarity), and the attack game can add up to `bonusMax` more off `secondary`. Tandem Tour never
-   * sets this.
+   * by `baseCut` (set by its rarity), and the attack game can add up to `bonusMax` more off `secondary`. Other modes
+   * never set this.
    */
   clash?: DebuffClashSpec;
   /** Set once the attack and defend games have been played: what they decided. The penalties on the card already include it. */

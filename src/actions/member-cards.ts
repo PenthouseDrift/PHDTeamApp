@@ -4,6 +4,7 @@ import { randomInt, randomUUID } from "crypto";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
+import { markLeaderboardDirty } from "@/tcg/leaderboard";
 import { getCardCredits, refundCardCredit, spendCardCredit } from "@/lib/card-credits";
 import { CardArtError, isBlobUrl } from "@/lib/card-art-generate";
 import {
@@ -565,6 +566,8 @@ export async function openCardPack(
 
     revalidatePath("/cards");
     revalidateTag("admin-members", "max");
+    // New cards (and a pack opened) change this member's line on the Hall of Fame; it is added up again the next time the board is built.
+    await markLeaderboardDirty(user.id);
     return {
       success: true,
       data: {
@@ -627,6 +630,8 @@ export async function rerollCard(cardId: string): Promise<ActionResult<{ card: M
     };
     await redis.set(cardKey(updated.id), JSON.stringify(updated));
 
+    // New stats mean new power on the Hall of Fame.
+    await markLeaderboardDirty(user.id);
     // The card the member gave up is kept, picture included, as an archived copy that only admins can see.
     try {
       const archivedId = randomUUID();

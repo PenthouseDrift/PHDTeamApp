@@ -1,10 +1,10 @@
 import { auth } from "@/lib/auth";
 import { redis } from "@/lib/redis";
+import { LB_DIRTY_KEY } from "./leaderboard-keys";
 import type { MemberCard, StoredMemberCard } from "@/lib/card-roll";
 import { memberCardKey, memberCardsIndexKey, parseStoredCard } from "@/lib/member-card-store";
 import { getListingIdForCard, parseMarketListing, tcgMarketListingKey, tcgMarketLockKey } from "./storage";
 import { loadActiveRun } from "./campaign/store";
-import { getActiveRunId, loadRun as loadTourRun } from "./tour/store";
 import { OFFER_OPEN_DAYS, OFFER_RESULT_DAYS, type OfferStatus, type ReceivedCard, type TradeOffer } from "./trade-types";
 
 /**
@@ -90,31 +90,21 @@ export async function withCardLocks<T>(cardIds: string[], task: () => Promise<T>
 export async function cardBlockedReason(card: StoredMemberCard | null, ownerId: string): Promise<string | null> {
   if (!card || card.userId !== ownerId || card.archived) return "isn't in the collection any more";
   if (await getListingIdForCard(card.id)) return "is listed on the Marketplace";
-  // A card in a cup or a tour in progress is still being played, so it stays with its owner until that ends.
+  // A card in a cup in progress is still being played, so it stays with its owner until that ends.
   const run = await loadActiveRun(ownerId);
   if (run && run.status === "active" && [...run.cars, ...run.crew].some((c) => c.id === card.id)) return "is in a Campaign cup in progress";
-  const tourId = await getActiveRunId(ownerId);
-  const tour = tourId ? await loadTourRun(tourId) : null;
-  if (tour && tour.status === "active" && [...tour.loadout.cars, ...tour.loadout.crew, ...tour.loadout.kits].some((c) => c.id === card.id)) {
-    return "is on a Tandem Tour in progress";
-  }
   return null;
 }
 
 /**
- * Every card of this member's that is in a Campaign cup or a Tandem Tour in progress, with why. The cup and the tour are each
- * read once, so checking a whole batch of cards costs the same as checking one.
+ * Every card of this member's that is in a Campaign cup in progress, with why. The cup is read once, so checking a whole
+ * batch of cards costs the same as checking one.
  */
 export async function cardsInUse(ownerId: string): Promise<Map<string, string>> {
   const inUse = new Map<string, string>();
   const run = await loadActiveRun(ownerId);
   if (run && run.status === "active") {
     for (const c of [...run.cars, ...run.crew]) inUse.set(c.id, "is in a Campaign cup in progress");
-  }
-  const tourId = await getActiveRunId(ownerId);
-  const tour = tourId ? await loadTourRun(tourId) : null;
-  if (tour && tour.status === "active") {
-    for (const c of [...tour.loadout.cars, ...tour.loadout.crew, ...tour.loadout.kits]) inUse.set(c.id, "is on a Tandem Tour in progress");
   }
   return inUse;
 }
@@ -126,7 +116,9 @@ export function queueTransfer(tx: Tx, card: StoredMemberCard, toUserId: string, 
   const moved: StoredMemberCard = { ...card, userId: toUserId, ownerName: toName, kept: true };
   tx.set(memberCardKey(card.id), JSON.stringify(moved))
     .zrem(memberCardsIndexKey(card.userId), card.id)
-    .zadd(memberCardsIndexKey(toUserId), { score: now, member: card.id });
+    .zadd(memberCardsIndexKey(toUserId), { score: now, member: card.id })
+    // Both members' cards changed, so both lines on the Hall of Fame need adding up again.
+    .sadd(LB_DIRTY_KEY, card.userId, toUserId);
   return moved;
 }
 

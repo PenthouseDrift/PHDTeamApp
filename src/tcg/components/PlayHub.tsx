@@ -2,7 +2,7 @@
 
 import { DAILY_CLASH_WIN_REWARD_PCREDITS } from "@/tcg/progression";
 
-export type PlayMode = "quick" | "challenges" | "tour" | "campaign";
+export type PlayMode = "quick" | "challenges" | "campaign";
 
 interface ModeCard {
   mode: PlayMode;
@@ -19,7 +19,7 @@ interface ModeCard {
 
 /**
  * The Play landing page: every way to play DriftClash in one place. Picking a mode opens it, and each mode
- * has a way back here. The modes themselves (arena, challenges, Tour, Campaign) are rendered by TcgApp.
+ * has a way back here. The modes themselves (arena, challenges, Campaign) are rendered by TcgApp.
  */
 export function PlayHub({
   onSelect,
@@ -28,8 +28,6 @@ export function PlayHub({
   streak,
   dailyWinAvailable,
   liveChallenges,
-  hasTourAccess,
-  tourAdminPreview,
 }: {
   onSelect: (mode: PlayMode) => void;
   wins: number;
@@ -38,9 +36,6 @@ export function PlayHub({
   dailyWinAvailable: boolean;
   /** Challenge cups the member has not won yet. */
   liveChallenges: number;
-  hasTourAccess: boolean;
-  /** Tour is only visible because the member is an admin; it is not open to members yet. */
-  tourAdminPreview: boolean;
 }) {
   const modes: ModeCard[] = [
     {
@@ -64,19 +59,6 @@ export function PlayHub({
       ctaCls: "bg-purple-500 text-white",
     },
   ];
-
-  if (hasTourAccess) {
-    modes.push({
-      mode: "tour",
-      icon: "🏎️",
-      title: "Tandem Tour",
-      blurb: "A run of Rounds. Draft upgrades, then drive each one yourself.",
-      tag: tourAdminPreview ? "Admin preview" : "New",
-      cta: "Start a Tour",
-      surface: "border-sky-500/40 from-sky-950/60 via-zinc-950 to-black",
-      ctaCls: "bg-sky-500 text-black",
-    });
-  }
 
   modes.push({
     mode: "campaign",

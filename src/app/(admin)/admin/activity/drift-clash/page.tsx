@@ -25,7 +25,7 @@ export default async function AdminDriftClashReportPage() {
             </div>
             <div>
               <h1 className="text-2xl font-black text-zinc-900 dark:text-zinc-100 tracking-tight">Drift Clash Report</h1>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">P-Credit sales in total and month by month, plus the Tandem Tour economy</p>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">P-Credit sales in total and month by month</p>
             </div>
           </div>
           <Link
@@ -42,8 +42,7 @@ export default async function AdminDriftClashReportPage() {
         <p className="text-[11px] text-zinc-400 dark:text-zinc-500 leading-relaxed">
           Money is P-Credit bundle sales, taken from the activity log (&quot;TCG Store&quot; purchases) at the amount actually paid. These
           sales are also counted in the Revenue report&apos;s Online column. P-Credits sold use today&apos;s bundle sizes, so a bundle whose size was
-          changed later is counted at the new size. Tandem Tour figures come from the Tour ledger, which keeps the most recent 5000
-          entries, so older months may be incomplete. Months and days are UTC, matching Revenue. Spending P-Credits on packs, marketplace
+          changed later is counted at the new size. Months and days are UTC, matching Revenue. Spending P-Credits on packs, marketplace
           sales, quick sells, Clash rewards and challenges are not recorded with dates and amounts, so they are not in this report.
         </p>
       </div>

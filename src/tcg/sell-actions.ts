@@ -8,6 +8,7 @@ import type { StoredMemberCard } from "@/lib/card-roll";
 import { ALL_MEMBER_CARDS_INDEX, MEMBER_CARD_ID_PATTERN, memberCardKey, memberCardsIndexKey, removeFromCommunityPool } from "@/lib/member-card-store";
 import type { ActionResult } from "@/types";
 import { getQuickSellPrice } from "./config";
+import { LB_DIRTY_KEY } from "./leaderboard-keys";
 import { getListingIdForCard, grantPCredits, removeMarketListingRecord } from "./storage";
 import { cardsInUse, loadCard, tradeUser, withCardLocks } from "./trade-store";
 
@@ -29,8 +30,8 @@ export interface QuickSellBatchResult {
  * Quick sell several cards at once (a whole pack, or a selection from the deck) for one payout.
  *
  * It follows the single quick sell: each card pays out by rarity (less if a car is broken), a card that is listed on the
- * Marketplace has its listing removed, and the card is deleted for good. On top of that, a card in a Campaign cup or on a
- * Tandem Tour in progress is left alone. Cards that can't be sold (busy, not theirs, in a cup) are skipped and reported, and
+ * Marketplace has its listing removed, and the card is deleted for good. On top of that, a card in a Campaign cup in
+ * progress is left alone. Cards that can't be sold (busy, not theirs, in a cup) are skipped and reported, and
  * the rest still go through. The P-Credits are paid in one go, after the cards are deleted.
  */
 export async function quickSellCards(cardIds: string[]): Promise<ActionResult<QuickSellBatchResult>> {
@@ -61,6 +62,8 @@ export async function quickSellCards(cardIds: string[]): Promise<ActionResult<Qu
       }
       const tx = redis.multi();
       for (const card of toSell) tx.del(memberCardKey(card.id)).zrem(memberCardsIndexKey(user.id), card.id).zrem(ALL_MEMBER_CARDS_INDEX, card.id);
+      // Fewer cards changes this member's line on the Hall of Fame.
+      tx.sadd(LB_DIRTY_KEY, user.id);
       await tx.exec();
 
       const payout = toSell.reduce((sum, card) => sum + getQuickSellPrice(card), 0);

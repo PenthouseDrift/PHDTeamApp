@@ -10,8 +10,8 @@
  *      gusts push it around. A perfect defence blocks half of the debuff and no more.
  *
  * Pure and seedable, so the arena, the battle simulator and the Campaign calibration all agree. The result is baked into a copy
- * of the debuff card (`applyDebuffImpact`), so the scoring engine needs no changes. Tandem Tour never calls anything in this
- * file and keeps its own debuffs exactly as they were.
+ * of the debuff card (`applyDebuffImpact`), so the scoring engine needs no changes. The older `rollThreeDebuffCards` keeps
+ * its own debuffs exactly as they were.
  */
 
 import {
@@ -124,7 +124,7 @@ export function toClashDebuff(def: DebuffCardDefinition): DebuffCardDefinition {
 
 /**
  * Deal three debuffs the way Clash always has (three different cards, each with its own rolled rarity), as Clash debuffs.
- * Tandem Tour keeps calling `rollThreeDebuffCards` directly and is not affected.
+ * `rollThreeDebuffCards` is unchanged and is not affected.
  */
 export function rollThreeClashDebuffCards(
   pool?: DebuffCardDefinition[],
