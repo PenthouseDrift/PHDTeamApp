@@ -18,7 +18,7 @@
  * Math.random unless the caller passes it as `rng`) so it can be tested on its own.
  */
 
-import type { CornerFinalStats, CornerScoreParts, EvaluatedCornerResult } from "./progression";
+import { BATTLE_STAT_CEILING, type CornerFinalStats, type CornerScoreParts, type EvaluatedCornerResult } from "./progression";
 import { pickIndex, type Rng } from "./rival-ai";
 
 export type FinaleMode = "stat_duel" | "timing" | "allocation";
@@ -229,7 +229,7 @@ function gaussian(rng: Rng): number {
 function estimateStats(real: CornerFinalStats, skill: number, rng: Rng): CornerFinalStats {
   const spread = 3.5 + (1 - clamp(skill, 0, 1)) * 4;
   const out = { ...real };
-  for (const s of FINALE_STATS) out[s] = clamp(real[s] + gaussian(rng) * spread, 1, 25);
+  for (const s of FINALE_STATS) out[s] = clamp(real[s] + gaussian(rng) * spread, 1, BATTLE_STAT_CEILING);
   return out;
 }
 

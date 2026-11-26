@@ -51,6 +51,7 @@ import {
   DAILY_CLASH_WIN_REWARD_PCREDITS,
   STARTER_LOANER_CREW_CARDS,
   STREAK_MILESTONE_REWARD_PCREDITS,
+  BATTLE_STAT_CEILING,
   computeDebuffBreakdown,
   computeTrackBreakdown,
   trackStatBuffs,
@@ -4095,10 +4096,10 @@ export function DriftClashArena({
                       const base = getNormalizedCardStats(car);
                       const buffs = trackStatBuffs(car, activeTrackDef);
                       const buffed = {
-                        drift: Math.min(25, base.drift + buffs.drift),
-                        accel: Math.min(25, base.accel + buffs.accel),
-                        grip: Math.min(25, base.grip + buffs.grip),
-                        steer: Math.min(25, base.steer + buffs.steer),
+                        drift: Math.min(BATTLE_STAT_CEILING, base.drift + buffs.drift),
+                        accel: Math.min(BATTLE_STAT_CEILING, base.accel + buffs.accel),
+                        grip: Math.min(BATTLE_STAT_CEILING, base.grip + buffs.grip),
+                        steer: Math.min(BATTLE_STAT_CEILING, base.steer + buffs.steer),
                       };
                       const statGain = computeSectorStatScore(sector.id, buffed).score - computeSectorStatScore(sector.id, base).score;
                       const trackPts = computeTrackBreakdown({ card: car, trackCard: activeTrackDef }).totalNetPoints;
@@ -4375,16 +4376,16 @@ export function DriftClashArena({
                     });
 
                     const pTrackStats = {
-                      drift: Math.min(25, pCrewStats.drift + pBuffs.drift),
-                      accel: Math.min(25, pCrewStats.accel + pBuffs.accel),
-                      grip: Math.min(25, pCrewStats.grip + pBuffs.grip),
-                      steer: Math.min(25, pCrewStats.steer + pBuffs.steer),
+                      drift: Math.min(BATTLE_STAT_CEILING, pCrewStats.drift + pBuffs.drift),
+                      accel: Math.min(BATTLE_STAT_CEILING, pCrewStats.accel + pBuffs.accel),
+                      grip: Math.min(BATTLE_STAT_CEILING, pCrewStats.grip + pBuffs.grip),
+                      steer: Math.min(BATTLE_STAT_CEILING, pCrewStats.steer + pBuffs.steer),
                     };
                     const rTrackStats = {
-                      drift: Math.min(25, rCrewStats.drift + rBuffs.drift),
-                      accel: Math.min(25, rCrewStats.accel + rBuffs.accel),
-                      grip: Math.min(25, rCrewStats.grip + rBuffs.grip),
-                      steer: Math.min(25, rCrewStats.steer + rBuffs.steer),
+                      drift: Math.min(BATTLE_STAT_CEILING, rCrewStats.drift + rBuffs.drift),
+                      accel: Math.min(BATTLE_STAT_CEILING, rCrewStats.accel + rBuffs.accel),
+                      grip: Math.min(BATTLE_STAT_CEILING, rCrewStats.grip + rBuffs.grip),
+                      steer: Math.min(BATTLE_STAT_CEILING, rCrewStats.steer + rBuffs.steer),
                     };
 
                     const pFinalStatsLocal = {
@@ -4457,16 +4458,16 @@ export function DriftClashArena({
                     });
 
                     const pBaseTrackStats = {
-                      drift: Math.min(25, pBase.drift + pBuffs.drift),
-                      accel: Math.min(25, pBase.accel + pBuffs.accel),
-                      grip: Math.min(25, pBase.grip + pBuffs.grip),
-                      steer: Math.min(25, pBase.steer + pBuffs.steer),
+                      drift: Math.min(BATTLE_STAT_CEILING, pBase.drift + pBuffs.drift),
+                      accel: Math.min(BATTLE_STAT_CEILING, pBase.accel + pBuffs.accel),
+                      grip: Math.min(BATTLE_STAT_CEILING, pBase.grip + pBuffs.grip),
+                      steer: Math.min(BATTLE_STAT_CEILING, pBase.steer + pBuffs.steer),
                     };
                     const rBaseTrackStats = {
-                      drift: Math.min(25, rBase.drift + rBuffs.drift),
-                      accel: Math.min(25, rBase.accel + rBuffs.accel),
-                      grip: Math.min(25, rBase.grip + rBuffs.grip),
-                      steer: Math.min(25, rBase.steer + rBuffs.steer),
+                      drift: Math.min(BATTLE_STAT_CEILING, rBase.drift + rBuffs.drift),
+                      accel: Math.min(BATTLE_STAT_CEILING, rBase.accel + rBuffs.accel),
+                      grip: Math.min(BATTLE_STAT_CEILING, rBase.grip + rBuffs.grip),
+                      steer: Math.min(BATTLE_STAT_CEILING, rBase.steer + rBuffs.steer),
                     };
 
                     const pDebuffedStats = {
@@ -4495,10 +4496,10 @@ export function DriftClashArena({
                     });
                     const previewCrewBase = applyCrewModsToStats(pBase, previewMods);
                     const previewTrackStats = {
-                      drift: Math.min(25, previewCrewBase.drift + pBuffs.drift),
-                      accel: Math.min(25, previewCrewBase.accel + pBuffs.accel),
-                      grip: Math.min(25, previewCrewBase.grip + pBuffs.grip),
-                      steer: Math.min(25, previewCrewBase.steer + pBuffs.steer),
+                      drift: Math.min(BATTLE_STAT_CEILING, previewCrewBase.drift + pBuffs.drift),
+                      accel: Math.min(BATTLE_STAT_CEILING, previewCrewBase.accel + pBuffs.accel),
+                      grip: Math.min(BATTLE_STAT_CEILING, previewCrewBase.grip + pBuffs.grip),
+                      steer: Math.min(BATTLE_STAT_CEILING, previewCrewBase.steer + pBuffs.steer),
                     };
                     const previewCrewStats = {
                       drift: Math.max(1, previewTrackStats.drift - pPreviewDebuff.effectiveDriftPenalty),

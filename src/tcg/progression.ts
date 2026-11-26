@@ -21,6 +21,14 @@ import {
 import { rollTrackHazardPreset, type HazardGarageSample } from "@/lib/track-hazards";
 
 /**
+ * The highest a stat can reach DURING a battle once Crew and track buffs are added. A card's own stats stop at 25 (see
+ * `getNormalizedCardStats`), but buffs are meant to take their full effect on top of that, so a 25 still gains from a Crew
+ * card. This is far above anything the cards can add today (a Legend Crew card gives +8, track buffs are small), so in
+ * practice nothing is clipped; it is only a safety net against a badly configured custom card.
+ */
+export const BATTLE_STAT_CEILING = 50;
+
+/**
  * DriftClash Gamified Progression, UK Track Cards, Random Debuff Cards & Crew Advantage Scoring Engine
  */
 
@@ -480,7 +488,7 @@ export function scoreCardForSector(
     : rawCrewDef;
   const crewMods = crewDef?.modifiers;
 
-  // Symmetric / Self Stat Modifiers from Crew Card (100% positive buffs, capped at max 25)
+  // Symmetric / Self Stat Modifiers from Crew Card (100% positive buffs, capped at BATTLE_STAT_CEILING)
   if (crewMods) {
     if (crewMods.minStatFloor && crewMods.minStatFloor > 0) {
       drift = Math.max(drift, crewMods.minStatFloor);
@@ -490,22 +498,22 @@ export function scoreCardForSector(
     }
     if (crewMods.boostWeakestStat && crewMods.boostWeakestStat > 0) {
       const minVal = Math.min(drift, accel, grip, steer);
-      if (drift === minVal) drift = Math.max(drift, Math.min(25, drift + crewMods.boostWeakestStat));
-      else if (accel === minVal) accel = Math.max(accel, Math.min(25, accel + crewMods.boostWeakestStat));
-      else if (grip === minVal) grip = Math.max(grip, Math.min(25, grip + crewMods.boostWeakestStat));
-      else steer = Math.max(steer, Math.min(25, steer + crewMods.boostWeakestStat));
+      if (drift === minVal) drift = Math.max(drift, Math.min(BATTLE_STAT_CEILING, drift + crewMods.boostWeakestStat));
+      else if (accel === minVal) accel = Math.max(accel, Math.min(BATTLE_STAT_CEILING, accel + crewMods.boostWeakestStat));
+      else if (grip === minVal) grip = Math.max(grip, Math.min(BATTLE_STAT_CEILING, grip + crewMods.boostWeakestStat));
+      else steer = Math.max(steer, Math.min(BATTLE_STAT_CEILING, steer + crewMods.boostWeakestStat));
     }
     if (crewMods.driftBonus && crewMods.driftBonus > 0) {
-      drift = Math.max(drift, Math.min(25, drift + crewMods.driftBonus));
+      drift = Math.max(drift, Math.min(BATTLE_STAT_CEILING, drift + crewMods.driftBonus));
     }
     if (crewMods.accelBonus && crewMods.accelBonus > 0) {
-      accel = Math.max(accel, Math.min(25, accel + crewMods.accelBonus));
+      accel = Math.max(accel, Math.min(BATTLE_STAT_CEILING, accel + crewMods.accelBonus));
     }
     if (crewMods.gripBonus && crewMods.gripBonus > 0) {
-      grip = Math.max(grip, Math.min(25, grip + crewMods.gripBonus));
+      grip = Math.max(grip, Math.min(BATTLE_STAT_CEILING, grip + crewMods.gripBonus));
     }
     if (crewMods.steerBonus && crewMods.steerBonus > 0) {
-      steer = Math.max(steer, Math.min(25, steer + crewMods.steerBonus));
+      steer = Math.max(steer, Math.min(BATTLE_STAT_CEILING, steer + crewMods.steerBonus));
     }
   }
 
@@ -710,27 +718,27 @@ function evaluateOneSideInSector(params: {
       else steer = Math.min(18, steer + 3);
     }
   }
-  if (myCrewId === "crew-06-shallow-protest") steer = Math.min(25, steer + 3);
-  if (myCrewId === "crew-17-fresh-asphalt") grip = Math.min(25, grip + 3);
+  if (myCrewId === "crew-06-shallow-protest") steer = Math.min(BATTLE_STAT_CEILING, steer + 3);
+  if (myCrewId === "crew-17-fresh-asphalt") grip = Math.min(BATTLE_STAT_CEILING, grip + 3);
   if (myCrewId === "crew-21-turbo-map") {
-    accel = Math.min(25, accel + 3);
-    drift = Math.min(25, drift + 3);
+    accel = Math.min(BATTLE_STAT_CEILING, accel + 3);
+    drift = Math.min(BATTLE_STAT_CEILING, drift + 3);
   }
   if (myCrewId === "crew-22-ackerman-knuckles") {
-    steer = Math.min(25, steer + 3);
-    drift = Math.min(25, drift + 3);
+    steer = Math.min(BATTLE_STAT_CEILING, steer + 3);
+    drift = Math.min(BATTLE_STAT_CEILING, drift + 3);
   }
   if (myCrewId === "crew-23-brass-bulkhead") {
-    grip = Math.min(25, grip + 3);
-    accel = Math.min(25, accel + 3);
+    grip = Math.min(BATTLE_STAT_CEILING, grip + 3);
+    accel = Math.min(BATTLE_STAT_CEILING, accel + 3);
   }
-  if (myCrewId === "crew-24-dual-gain-gyro") steer = Math.min(25, steer + 3);
+  if (myCrewId === "crew-24-dual-gain-gyro") steer = Math.min(BATTLE_STAT_CEILING, steer + 3);
   if (
     myCrewId === "crew-26-carbon-flex-deck" &&
     (sector.id === "chase" || sector.id === "wallride")
   ) {
-    grip = Math.min(25, grip + 3);
-    steer = Math.min(25, steer + 3);
+    grip = Math.min(BATTLE_STAT_CEILING, grip + 3);
+    steer = Math.min(BATTLE_STAT_CEILING, steer + 3);
   }
 
   // 2. Opponent Crew Stat Debuffs against this car
@@ -1550,16 +1558,16 @@ export function applyCrewModsToStats(
   // 2. Boost the weakest stat
   if (mods.boostWeakestStat && mods.boostWeakestStat > 0) {
     const minVal = Math.min(drift, accel, grip, steer);
-    if (drift === minVal) drift = Math.min(25, drift + mods.boostWeakestStat);
-    else if (accel === minVal) accel = Math.min(25, accel + mods.boostWeakestStat);
-    else if (grip === minVal) grip = Math.min(25, grip + mods.boostWeakestStat);
-    else steer = Math.min(25, steer + mods.boostWeakestStat);
+    if (drift === minVal) drift = Math.min(BATTLE_STAT_CEILING, drift + mods.boostWeakestStat);
+    else if (accel === minVal) accel = Math.min(BATTLE_STAT_CEILING, accel + mods.boostWeakestStat);
+    else if (grip === minVal) grip = Math.min(BATTLE_STAT_CEILING, grip + mods.boostWeakestStat);
+    else steer = Math.min(BATTLE_STAT_CEILING, steer + mods.boostWeakestStat);
   }
   // 3. Stat bonuses
-  if (mods.driftBonus && mods.driftBonus > 0) drift = Math.min(25, drift + mods.driftBonus);
-  if (mods.accelBonus && mods.accelBonus > 0) accel = Math.min(25, accel + mods.accelBonus);
-  if (mods.gripBonus && mods.gripBonus > 0) grip = Math.min(25, grip + mods.gripBonus);
-  if (mods.steerBonus && mods.steerBonus > 0) steer = Math.min(25, steer + mods.steerBonus);
+  if (mods.driftBonus && mods.driftBonus > 0) drift = Math.min(BATTLE_STAT_CEILING, drift + mods.driftBonus);
+  if (mods.accelBonus && mods.accelBonus > 0) accel = Math.min(BATTLE_STAT_CEILING, accel + mods.accelBonus);
+  if (mods.gripBonus && mods.gripBonus > 0) grip = Math.min(BATTLE_STAT_CEILING, grip + mods.gripBonus);
+  if (mods.steerBonus && mods.steerBonus > 0) steer = Math.min(BATTLE_STAT_CEILING, steer + mods.steerBonus);
   return { drift, accel, grip, steer };
 }
 
@@ -1627,10 +1635,10 @@ function evaluateDriverOnCorner(params: {
 
   // 3. UK Track Card Stat Buffs
   const trackBuffs = trackStatBuffs(myCard, trackCard);
-  drift = Math.min(25, drift + trackBuffs.drift);
-  accel = Math.min(25, accel + trackBuffs.accel);
-  grip = Math.min(25, grip + trackBuffs.grip);
-  steer = Math.min(25, steer + trackBuffs.steer);
+  drift = Math.min(BATTLE_STAT_CEILING, drift + trackBuffs.drift);
+  accel = Math.min(BATTLE_STAT_CEILING, accel + trackBuffs.accel);
+  grip = Math.min(BATTLE_STAT_CEILING, grip + trackBuffs.grip);
+  steer = Math.min(BATTLE_STAT_CEILING, steer + trackBuffs.steer);
   const afterTrack: CornerFinalStats = { drift, accel, grip, steer };
 
   // 4. Random Corner Debuff Stat Penalties (Applied to both, reduced by Crew debuffShield!)

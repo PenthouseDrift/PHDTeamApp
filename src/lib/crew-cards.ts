@@ -1387,6 +1387,24 @@ export function formatScaledDebuffTexts(
   return { ability, effect };
 }
 
+/**
+ * What a Crew card's numbers become at each rarity, Bronze, Silver, Gold, Legend (Mythic counts as Legend). This is the one
+ * place to tune how strong Crew cards are. `scripts/check-mythic-crew.ts` and `scripts/simulate-clash.ts` show the effect.
+ * Flat points are the card's own flat number times `flatMultiplier`, but never less than `flatMinimum`.
+ */
+export const CREW_RARITY_SCALE = {
+  statBonus: [2, 3, 4, 6],
+  boostWeakestStat: [2, 3, 4, 6],
+  minStatFloor: [15, 17, 19, 21],
+  debuffShield: [0.25, 0.5, 0.75, 1.0],
+  underdogBonus: [5, 8, 11, 15],
+  bronzeExtraBonus: [3, 5, 7, 10],
+  giantSlayerBonus: [5, 8, 11, 15],
+  cornerSpecialist: [3, 5, 8, 12],
+  flatMultiplier: [1.5, 2.5, 3.5, 5.0],
+  flatMinimum: [2, 5, 8, 12],
+};
+
 function computeScaledCrewCardDefinition(
   baseDef: CrewCardDefinition,
   targetTier: FullArtTier
@@ -1402,7 +1420,8 @@ function computeScaledCrewCardDefinition(
   const baseMods = baseDef.modifiers ?? {};
   const scaledMods: CrewCardModifiers = {};
 
-  const statScale = [2, 3, 5, 8];
+  const R = CREW_RARITY_SCALE;
+  const statScale = R.statBonus;
   const scaleStat = (val?: number) => {
     if (!val || val <= 0) return undefined;
     return statScale[tIdx];
@@ -1414,50 +1433,37 @@ function computeScaledCrewCardDefinition(
   if (baseMods.steerBonus) scaledMods.steerBonus = scaleStat(baseMods.steerBonus);
 
   if (baseMods.flatBonus !== undefined) {
-    const flatScale = [
-      Math.max(2, Math.round(baseMods.flatBonus * 1.5)),
-      Math.max(5, Math.round(baseMods.flatBonus * 2.5)),
-      Math.max(10, Math.round(baseMods.flatBonus * 4.0)),
-      Math.max(15, Math.round(baseMods.flatBonus * 6.0)),
-    ];
-    scaledMods.flatBonus = flatScale[tIdx];
+    scaledMods.flatBonus = Math.max(R.flatMinimum[tIdx], Math.round(baseMods.flatBonus * R.flatMultiplier[tIdx]));
   }
 
   if (baseMods.boostWeakestStat !== undefined) {
-    const weakestScale = [2, 3, 5, 8];
-    scaledMods.boostWeakestStat = weakestScale[tIdx];
+    scaledMods.boostWeakestStat = R.boostWeakestStat[tIdx];
   }
 
   if (baseMods.minStatFloor !== undefined) {
-    const floorScale = [15, 17, 20, 23];
-    scaledMods.minStatFloor = floorScale[tIdx];
+    scaledMods.minStatFloor = R.minStatFloor[tIdx];
   }
 
   if (baseMods.debuffShield !== undefined) {
-    const shieldScale = [0.25, 0.50, 0.75, 1.00];
-    scaledMods.debuffShield = shieldScale[tIdx];
+    scaledMods.debuffShield = R.debuffShield[tIdx];
   }
 
   if (baseMods.underdogBonus !== undefined) {
-    const underdogScale = [5, 8, 12, 18];
-    scaledMods.underdogBonus = underdogScale[tIdx];
+    scaledMods.underdogBonus = R.underdogBonus[tIdx];
   }
 
   if (baseMods.bronzeExtraBonus !== undefined) {
-    const bronzeExtraScale = [3, 5, 8, 12];
-    scaledMods.bronzeExtraBonus = bronzeExtraScale[tIdx];
+    scaledMods.bronzeExtraBonus = R.bronzeExtraBonus[tIdx];
   }
 
   if (baseMods.giantSlayerBonus !== undefined) {
-    const slayerScale = [5, 8, 12, 18];
-    scaledMods.giantSlayerBonus = slayerScale[tIdx];
+    scaledMods.giantSlayerBonus = R.giantSlayerBonus[tIdx];
   }
 
   if (baseMods.cornerSpecialist) {
-    const specScale = [3, 5, 10, 15];
     scaledMods.cornerSpecialist = {
       corners: baseMods.cornerSpecialist.corners,
-      bonusPoints: specScale[tIdx],
+      bonusPoints: R.cornerSpecialist[tIdx],
     };
   }
 
