@@ -11,6 +11,8 @@ import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { InstallBanner } from "@/components/InstallBanner";
 import { DriftWheelIntro } from "@/components/ui/DriftWheelIntro";
 import { isDriftClashHost } from "@/lib/app-host";
+import { baseViewport, gameViewport } from "@/lib/viewport";
+import { NoPinchZoom } from "@/components/NoPinchZoom";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -53,16 +55,11 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  viewportFit: "cover",
-  colorScheme: "light dark",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
-  ],
-};
+// The game-only Drift Clash app can't be pinch-zoomed (it should feel like an app); the full Penthouse Drift site can, as before.
+export async function generateViewport(): Promise<Viewport> {
+  const h = await headers();
+  return isDriftClashHost(h.get("x-forwarded-host") ?? h.get("host")) ? gameViewport : baseViewport;
+}
 
 export default async function RootLayout({
   children,
@@ -89,6 +86,7 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col bg-zinc-50 dark:bg-zinc-950">
         <SessionProvider>
           <ThemeProvider>
+            {driftClash && <NoPinchZoom />}
             <DriftWheelIntro autoPlayInitial={!driftClash} />
             <InstallBanner appName={driftClash ? "Drift Clash" : "Penthouse Drift"} />
             <ServiceWorkerRegister />

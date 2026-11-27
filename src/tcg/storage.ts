@@ -25,7 +25,7 @@ import { entryRefs, loadAllPackConfigs, loadPackConfig, loadRuntimeFor } from "@
 import { ALL_TIERS, type PackStyle } from "@/lib/pack-styles";
 import { loadPackStyles } from "@/lib/pack-styles-store";
 import { RARITY_RANK, type MemberCard } from "@/lib/card-roll";
-import { DEFAULT_STANDARD_PACK_PRICE, P_CREDIT_BUNDLES, describeBundle, isOnSale } from "./config";
+import { CUSTOM_BUNDLE_ID, DEFAULT_STANDARD_PACK_PRICE, MAX_CUSTOM_BUNDLES, P_CREDIT_BUNDLES, describeBundle, isOnSale } from "./config";
 import type {
   PCreditBundle,
   TcgCustomPack,
@@ -224,7 +224,7 @@ function sanitizePCreditBundles(rawBundles: unknown): PCreditBundle[] {
       byId.set((item as PCreditBundle).id, item as Partial<PCreditBundle>);
     }
   }
-  return P_CREDIT_BUNDLES.map((def) => {
+  const builtIn = P_CREDIT_BUNDLES.map((def) => {
     const custom = byId.get(def.id);
     if (!custom) return { ...def };
     const pCredits = Math.max(10, Math.min(1_000_000, Math.round(Number(custom.pCredits) || def.pCredits)));
@@ -255,6 +255,29 @@ function sanitizePCreditBundles(rawBundles: unknown): PCreditBundle[] {
           : describeBundle(def, pCredits),
     };
   });
+  // Bundles the admin added: kept in the order they were saved, after the built-in ones. One that is missing a name or a usable
+  // amount or price is dropped rather than guessed at.
+  const added: PCreditBundle[] = [];
+  for (const item of rawBundles) {
+    if (added.length >= MAX_CUSTOM_BUNDLES) break;
+    const c = (item && typeof item === "object" ? item : {}) as Partial<PCreditBundle>;
+    const id = typeof c.id === "string" ? c.id : "";
+    if (!CUSTOM_BUNDLE_ID.test(id) || added.some((x) => x.id === id)) continue;
+    const name = typeof c.name === "string" ? c.name.trim().slice(0, 40) : "";
+    const pCredits = Math.round(Number(c.pCredits));
+    const priceGbp = Math.round(Number(c.priceGbp) * 100) / 100;
+    if (!name || !Number.isFinite(pCredits) || pCredits < 10 || pCredits > 1_000_000) continue;
+    if (!Number.isFinite(priceGbp) || priceGbp < 0.5) continue;
+    const saleRaw = c.salePriceGbp !== null && c.salePriceGbp !== undefined && String(c.salePriceGbp) !== "" ? Number(c.salePriceGbp) : null;
+    const salePriceGbp = saleRaw !== null && Number.isFinite(saleRaw) && saleRaw >= 0.5 && saleRaw < priceGbp ? Math.round(saleRaw * 100) / 100 : null;
+    const badge = typeof c.badge === "string" ? c.badge.trim().slice(0, 24) || undefined : undefined;
+    const description =
+      typeof c.description === "string" && c.description.trim()
+        ? c.description.trim().slice(0, 140)
+        : `${pCredits.toLocaleString("en-GB")} P-Credits.`;
+    added.push({ id, name, pCredits, priceGbp, salePriceGbp, ...(badge ? { badge } : {}), description });
+  }
+  return [...builtIn, ...added];
 }
 
 export async function getTcgStoreConfig(): Promise<TcgStoreConfig> {

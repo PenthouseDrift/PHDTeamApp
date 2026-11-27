@@ -39,7 +39,9 @@ import { rollAndDrawSlot, slotOverrides } from "@/lib/pack-draw";
 import { rollCarInitialDurability } from "@/lib/mechanical-faults";
 import type { ActionResult } from "@/types";
 import {
+  CUSTOM_BUNDLE_ID,
   DEFAULT_STANDARD_PACK_PRICE,
+  MAX_CUSTOM_BUNDLES,
   MAX_MARKET_LISTING_PRICE,
   MIN_MARKET_LISTING_PRICE,
   getEffectivePrice,
@@ -1175,6 +1177,19 @@ export async function updatePCreditBundlesAction(
   try {
     if (!(await requireAdmin())) {
       return { success: false, error: "Only admins can update P-Credit bundle prices." };
+    }
+    if (!Array.isArray(bundles)) return { success: false, error: "Nothing to save." };
+    const added = bundles.filter((b) => CUSTOM_BUNDLE_ID.test(String(b?.id ?? "")));
+    if (added.length > MAX_CUSTOM_BUNDLES) {
+      return { success: false, error: `You can add up to ${MAX_CUSTOM_BUNDLES} bundles of your own.` };
+    }
+    for (const b of added) {
+      const label = String(b.name ?? "").trim() || "a new bundle";
+      if (!String(b.name ?? "").trim()) return { success: false, error: "Give each new bundle a name." };
+      const credits = Number(b.pCredits);
+      if (!Number.isFinite(credits) || credits < 10 || credits > 1_000_000) {
+        return { success: false, error: `"${label}" needs between 10 and 1,000,000 P-Credits.` };
+      }
     }
     for (const b of bundles) {
       const priceGbp = Number(b.priceGbp);

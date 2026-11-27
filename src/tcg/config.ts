@@ -80,6 +80,10 @@ export const P_CREDIT_BUNDLES: PCreditBundle[] = [
   },
 ];
 
+/** Ids of bundles the admin added. The four built-in bundles keep their own ids. */
+export const CUSTOM_BUNDLE_ID = /^custom_[a-z0-9]{6,24}$/;
+/** The most bundles the P-Credits shop can hold: the built-in ones plus the admin's own. */
+export const MAX_CUSTOM_BUNDLES = 8;
 /**
  * The default description of a bundle, with the P-Credit amount it really sells. The built-in text names the default amount
  * ("1,000 P-Credits for..."), so when an admin changes the amount in the TCG Store settings the text would otherwise still

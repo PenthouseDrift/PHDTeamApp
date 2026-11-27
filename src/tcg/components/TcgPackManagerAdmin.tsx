@@ -12,7 +12,7 @@ import {
   updatePCreditBundlesAction,
   updateStandardPackPriceAction,
 } from "@/tcg/actions";
-import { P_CREDIT_BUNDLES, getEffectivePrice, getSaleDiscountPct, isOnSale } from "@/tcg/config";
+import { CUSTOM_BUNDLE_ID, MAX_CUSTOM_BUNDLES, P_CREDIT_BUNDLES, getEffectivePrice, getSaleDiscountPct, isOnSale } from "@/tcg/config";
 import type { PCreditBundle, TcgCustomPackWithCards, TcgPackStatus } from "@/tcg/types";
 import { MAX_CARDS_PER_PACK } from "@/lib/pack-config";
 
@@ -167,13 +167,14 @@ export function TcgPackManagerAdmin({
 
   function updateBundleField(
     id: string,
-    field: "name" | "pCredits" | "priceGbp" | "salePriceGbp",
+    field: "name" | "pCredits" | "priceGbp" | "salePriceGbp" | "badge",
     value: string
   ) {
     setBundles((prev) =>
       prev.map((b) => {
         if (b.id !== id) return b;
         if (field === "name") return { ...b, name: value };
+        if (field === "badge") return { ...b, badge: value };
         if (field === "pCredits") return { ...b, pCredits: Math.max(1, Math.round(Number(value) || 0)) };
         if (field === "priceGbp") return { ...b, priceGbp: Number(value) || 0 };
         if (field === "salePriceGbp") {
@@ -185,6 +186,18 @@ export function TcgPackManagerAdmin({
     );
   }
 
+  const customCount = bundles.filter((b) => CUSTOM_BUNDLE_ID.test(b.id)).length;
+  /** A new bundle of the admin's own, starting from a sensible example. It is only kept once the prices are saved. */
+  function addBundle() {
+    const id = `custom_${Math.random().toString(36).slice(2, 10).padEnd(8, "0")}`;
+    setBundles((prev) => [
+      ...prev,
+      { id, name: "New bundle", pCredits: 100, priceGbp: 2, salePriceGbp: null, description: "" },
+    ]);
+  }
+  function removeBundle(id: string) {
+    setBundles((prev) => prev.filter((b) => b.id !== id));
+  }
   function handleSaveBundles() {
     setMessage(null);
     startTransition(async () => {
@@ -332,7 +345,7 @@ export function TcgPackManagerAdmin({
               P-Credits Bundles &amp; Sale Prices (£ GBP)
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Edit the P-Credits amount, regular £ price, and optional Sale £ price for each bundle in the P-Credits Shop.
+              Edit the P-Credits amount, regular £ price, and optional Sale £ price for each bundle in the P-Credits Shop. You can also add bundles of your own (up to {MAX_CUSTOM_BUNDLES}); the four built-in bundles can be changed but not removed.
             </p>
           </div>
           <button
@@ -412,6 +425,17 @@ export function TcgPackManagerAdmin({
                   </div>
                 </div>
 
+                <div>
+                  <label className={labelCls}>Badge (optional)</label>
+                  <input
+                    type="text"
+                    maxLength={24}
+                    placeholder="e.g. Popular"
+                    value={b.badge ?? ""}
+                    onChange={(e) => updateBundleField(b.id, "badge", e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
                 {onSale && (
                   <div className="flex items-center justify-between pt-1 text-[11px]">
                     <span className="font-bold text-emerald-600 dark:text-emerald-400">
@@ -427,9 +451,24 @@ export function TcgPackManagerAdmin({
                     </button>
                   </div>
                 )}
+                {CUSTOM_BUNDLE_ID.test(b.id) && (
+                  <div className="flex justify-end pt-1">
+                    <button type="button" onClick={() => removeBundle(b.id)} className="text-[11px] font-bold text-zinc-500 hover:text-rose-500 hover:underline">
+                      Remove this bundle
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" onClick={addBundle} disabled={pending || customCount >= MAX_CUSTOM_BUNDLES} className={secondaryBtn}>
+            + Add a bundle
+          </button>
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+            {customCount} of {MAX_CUSTOM_BUNDLES} custom bundles. New bundles appear in the shop after the last built-in one, once you save.
+          </span>
         </div>
       </section>
 
