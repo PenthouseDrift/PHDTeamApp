@@ -59,6 +59,9 @@ interface FormState {
   effect: StyleFrameEffect;
   shine: boolean;
   flameColour: string;
+  /** The picture overlay: a hex colour (blank for none) and how strong it is, 1 to 100. */
+  overlayColour: string;
+  overlayOpacity: number;
   colours: PackStyleColours;
   sampleImageUrl?: string;
 }
@@ -71,6 +74,8 @@ const emptyForm = (): FormState => ({
   effect: "tier",
   shine: false,
   flameColour: "",
+  overlayColour: "",
+  overlayOpacity: 25,
   colours: {},
 });
 
@@ -84,6 +89,8 @@ const fromStyle = (s: PackStyle): FormState => ({
   effect: s.frame.effect,
   shine: s.frame.shine,
   flameColour: s.frame.flameColour ?? "",
+  overlayColour: s.frame.overlay?.colour ?? "",
+  overlayOpacity: s.frame.overlay?.opacity ?? 25,
   colours: { ...s.frame.colours },
   sampleImageUrl: s.sampleImageUrl,
 });
@@ -150,6 +157,7 @@ export function StyleEditor({
           effect: form.effect,
           shine: form.shine,
           flameColour: form.effect === "flames" && HEX.test(form.flameColour) ? form.flameColour : undefined,
+          overlay: HEX.test(form.overlayColour) && form.overlayOpacity > 0 ? { colour: form.overlayColour, opacity: form.overlayOpacity } : undefined,
         },
         sampleImageUrl: form.sampleImageUrl,
       });
@@ -201,6 +209,7 @@ export function StyleEditor({
       effect: form.effect,
       shine: form.shine,
       ...(form.effect === "flames" && HEX.test(form.flameColour) ? { flameColour: form.flameColour } : {}),
+      ...(HEX.test(form.overlayColour) && form.overlayOpacity > 0 ? { overlay: { colour: form.overlayColour, opacity: form.overlayOpacity } } : {}),
     },
     sampleImageUrl: form.sampleImageUrl,
     createdAt: 0,
@@ -356,6 +365,44 @@ export function StyleEditor({
                     </div>
                   );
                 })}
+              </div>
+              <div className="space-y-2 rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
+                <div>
+                  <p className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">Picture overlay (optional)</p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    A soft wash of colour over the picture, under the text and the frame. Use it to make the art sit better with the card&apos;s
+                    colours, for example a light green at a low strength.
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <label htmlFor="st-overlay" className="mb-1 block text-xs font-semibold text-zinc-600 dark:text-zinc-300">Overlay colour</label>
+                      <input id="st-overlay" className={inputCls} maxLength={7} value={form.overlayColour} placeholder="#9be7a5 (blank for none)" onChange={(e) => setForm((f) => ({ ...f, overlayColour: e.target.value }))} />
+                    </div>
+                    <input type="color" aria-label="Overlay colour picker" className="h-10 w-12 cursor-pointer rounded-lg border border-zinc-300 bg-transparent p-1 dark:border-zinc-700" value={HEX.test(form.overlayColour) ? form.overlayColour : "#9be7a5"} onChange={(e) => setForm((f) => ({ ...f, overlayColour: e.target.value }))} />
+                    {form.overlayColour && (
+                      <button type="button" className={secondaryBtn} onClick={() => setForm((f) => ({ ...f, overlayColour: "" }))}>Clear</button>
+                    )}
+                  </div>
+                  <div>
+                    <label htmlFor="st-overlay-strength" className="mb-1 flex items-center justify-between text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                      <span>Strength</span>
+                      <span className="tabular-nums">{form.overlayOpacity}%</span>
+                    </label>
+                    <input
+                      id="st-overlay-strength"
+                      type="range"
+                      min={1}
+                      max={100}
+                      step={1}
+                      className="h-10 w-full cursor-pointer"
+                      value={form.overlayOpacity}
+                      disabled={!HEX.test(form.overlayColour)}
+                      onChange={(e) => setForm((f) => ({ ...f, overlayOpacity: Number(e.target.value) }))}
+                    />
+                  </div>
+                </div>
               </div>
             </fieldset>
 

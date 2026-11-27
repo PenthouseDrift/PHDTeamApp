@@ -31,10 +31,13 @@ import {
   variantStatsMode,
   type EntryVariant,
   type PackConfig,
+  MAX_CARDS_PER_PACK,
 } from "@/lib/pack-config";
 import { loadPackConfig, loadRuntimeFor, savePackConfig, deletePackConfig } from "@/lib/pack-config-store";
 import { ALL_TIERS, ID_PATTERN, frameFieldsFor, stylePrompt, type PackStyle } from "@/lib/pack-styles";
 import { loadPackStyle } from "@/lib/pack-styles-store";
+import { getMemberIds } from "@/lib/member-roster";
+import { sanitizeSpecSheet, specSheetSummary } from "@/lib/spec-sheets";
 import {
   TCG_CUSTOM_PACKS_INDEX_KEY,
   hydrateCustomPacks,
@@ -234,7 +237,7 @@ export async function savePackAction(input: SavePackInput): Promise<ActionResult
       salePrice = isOnSale(price, parsed) ? parsed : null;
     }
     const status: TcgPackStatus = input.status === "live" ? "live" : "draft";
-    const cardsPerPack = Math.max(1, Math.min(3, Math.round(Number(input.cardsPerPack) || 1)));
+    const cardsPerPack = Math.max(1, Math.min(MAX_CARDS_PER_PACK, Math.round(Number(input.cardsPerPack) || 1)));
 
     const id = input.id && MEMBER_CARD_ID_PATTERN.test(input.id) ? input.id : randomUUID();
     const existing = input.id ? parseCustomPack(await redis.get(tcgCustomPackKey(id))) : null;
@@ -553,6 +556,78 @@ export async function listMemberCarCardsAction(input: {
   }
 }
 
+/**
+ * A member's own car photo from a spec sheet they saved: the picture before any card was drawn from it. No member id and no
+ * email. `id` is the spec sheet's id.
+ */
+export interface MemberRawPhoto {
+  id: string;
+  /** The picture, in our own file store. */
+  photoUrl: string;
+  /** The spec sheet's name (usually the car). */
+  label: string;
+  chassis: string;
+  driver: string;
+  team: string;
+  /** The parts line, e.g. "Motor · ESC · Gyro". */
+  parts: string;
+  /** The member's display name (nickname first). */
+  owner: string;
+  updatedAt: number;
+}
+/** Most photos sent to the picker at once. The newest come first. */
+const RAW_PHOTO_LIMIT = 200;
+/**
+ * The raw car photos members have saved on their spec sheets, newest first, for making a card from in a style. Only members
+ * who have saved a spec sheet with a photo are listed, and only pictures in our own file store. The same picture used on
+ * several sheets shows once. Admin only. The list is not searched here; the picker filters what it has.
+ */
+export async function listMemberRawPhotosAction(): Promise<ActionResult<{ photos: MemberRawPhoto[]; truncated: boolean }>> {
+  try {
+    if (!(await requireAdmin())) return { success: false, error: "Only admins can browse members' photos" };
+    const ids = await getMemberIds();
+    if (ids.length === 0) return { success: true, data: { photos: [], truncated: false } };
+    const pipeline = redis.pipeline();
+    for (const id of ids) {
+      pipeline.hgetall(`member:${id}:specsheets`);
+      pipeline.hmget(`member:${id}`, "nickname", "name");
+    }
+    const rows = (await pipeline.exec()) as unknown[];
+    const photos: MemberRawPhoto[] = [];
+    const seen = new Set<string>();
+    ids.forEach((_, i) => {
+      const sheets = rows[i * 2] as Record<string, unknown> | null;
+      if (!sheets || typeof sheets !== "object") return;
+      const profile = rows[i * 2 + 1] as Record<string, unknown> | unknown[] | null;
+      const field = (key: "nickname" | "name", index: number): string => {
+        const v = Array.isArray(profile) ? profile[index] : (profile as Record<string, unknown> | null)?.[key];
+        return typeof v === "string" ? v.trim() : "";
+      };
+      const owner = field("nickname", 0) || field("name", 1) || "Member";
+      for (const raw of Object.values(sheets)) {
+        const sheet = sanitizeSpecSheet(raw);
+        if (!sheet || !sheet.photoUrl || !isBlobUrl(sheet.photoUrl) || seen.has(sheet.photoUrl)) continue;
+        seen.add(sheet.photoUrl);
+        photos.push({
+          id: sheet.id,
+          photoUrl: sheet.photoUrl,
+          label: sheet.name,
+          chassis: sheet.chassis,
+          driver: sheet.driver,
+          team: sheet.team,
+          parts: specSheetSummary({ chassis: "", parts: sheet.parts }).replace(/^No parts listed yet$/, ""),
+          owner,
+          updatedAt: sheet.updatedAt,
+        });
+      }
+    });
+    photos.sort((a, b) => b.updatedAt - a.updatedAt);
+    return { success: true, data: { photos: photos.slice(0, RAW_PHOTO_LIMIT), truncated: photos.length > RAW_PHOTO_LIMIT } };
+  } catch (error) {
+    console.error("[driftclash-packs] listing members' photos failed:", error);
+    return { success: false, error: "Could not load the members' photos" };
+  }
+}
 /** A picture made for a set card lives under set-cards/ in our own file store (see generateArtImage and copyCardImage). */
 function isSetCardArtUrl(value: string): boolean {
   if (!isBlobUrl(value)) return false;
@@ -856,6 +931,8 @@ export async function createFinishedSetCardAction(input: {
             customFrameEffect: base.customFrameEffect,
             customFrameShine: base.customFrameShine,
             customFlameColor: base.customFlameColor,
+            customOverlayColor: base.customOverlayColor,
+            customOverlayOpacity: base.customOverlayOpacity,
           }),
     };
 

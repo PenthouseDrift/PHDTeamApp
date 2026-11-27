@@ -180,8 +180,14 @@ export interface FullArtCardData {
   customFrameShine?: boolean;
   /** Tints the Mythic flames this colour (hex), e.g. "#000000" for black fire. Unset keeps the fire colours. */
   customFlameColor?: string;
+  /**
+   * A colour wash over the picture (hex), to make the art sit better with the card's colours. It needs `customOverlayOpacity` as
+   * well. Unset means no overlay. It sits under the text, the stats and the frame, so they stay readable.
+   */
+  customOverlayColor?: string;
+  /** How strong the overlay is, as a whole percentage from 1 to 100. */
+  customOverlayOpacity?: number;
 }
-
 /** Frame effects a card can be set to show, whatever its tier. */
 export type FrameEffect = "none" | "flames" | "prismatic";
 export const FRAME_EFFECTS: FrameEffect[] = ["none", "flames", "prismatic"];
@@ -249,6 +255,19 @@ export const clampHexColor = (v: unknown): string | undefined => {
   return short ? `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}` : undefined;
 };
 
+/** An overlay strength as a whole percentage from 1 to 100, or undefined (nothing, or 0, means no overlay). */
+export const clampOverlayOpacity = (v: unknown): number | undefined => {
+  const n = Number(v);
+  if (v === null || v === "" || !Number.isFinite(n)) return undefined;
+  const pct = Math.round(Math.min(100, Math.max(0, n)));
+  return pct > 0 ? pct : undefined;
+};
+/** A picture overlay only counts when it has both a colour and a strength. */
+export function cleanOverlay(colour: unknown, opacity: unknown): { colour: string; opacity: number } | undefined {
+  const c = clampHexColor(colour);
+  const o = clampOverlayOpacity(opacity);
+  return c && o ? { colour: c, opacity: o } : undefined;
+}
 /** Coerce anything the client sends into a safe, well-formed full art card. */
 export function sanitizeFullArtCard(input: Partial<FullArtCardData> | null | undefined): FullArtCardData {
   const i = input ?? {};
@@ -298,5 +317,9 @@ export function sanitizeFullArtCard(input: Partial<FullArtCardData> | null | und
     ...(FRAME_EFFECTS.includes(i.customFrameEffect as FrameEffect) ? { customFrameEffect: i.customFrameEffect } : {}),
     ...(typeof i.customFrameShine === "boolean" ? { customFrameShine: i.customFrameShine } : {}),
     ...(clampHexColor(i.customFlameColor) ? { customFlameColor: clampHexColor(i.customFlameColor) } : {}),
+    ...(() => {
+      const overlay = cleanOverlay(i.customOverlayColor, i.customOverlayOpacity);
+      return overlay ? { customOverlayColor: overlay.colour, customOverlayOpacity: overlay.opacity } : {};
+    })(),
   };
 }

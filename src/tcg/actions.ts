@@ -23,7 +23,7 @@ import {
 } from "@/lib/member-card-store";
 import { MEMBER_ART_ZOOM, cardTitle, type MemberCard, type StoredMemberCard } from "@/lib/card-roll";
 import { CardArtError } from "@/lib/card-art-generate";
-import { STANDARD_PACK_ID, applyVariant, emptyPackConfig, rollPackCard, rollStatsForTier } from "@/lib/pack-config";
+import { STANDARD_PACK_ID, applyVariant, emptyPackConfig, rollPackCard, rollStatsForTier, MAX_CARDS_PER_PACK } from "@/lib/pack-config";
 import type { FullArtCardData } from "@/lib/full-art-card";
 import type { PackConfig } from "@/lib/pack-config";
 import {
@@ -629,7 +629,7 @@ export async function buyAndOpenCustomPack(
       return pickOne();
     };
 
-    const count = Math.max(1, Math.min(3, hydrated.cardsPerPack || 1));
+    const count = Math.max(1, Math.min(MAX_CARDS_PER_PACK, hydrated.cardsPerPack || 1));
     const pulled: StoredMemberCard[] = [];
     const baseNow = Date.now();
 
@@ -669,6 +669,8 @@ export async function buyAndOpenCustomPack(
               customFrameEffect: source.customFrameEffect,
               customFrameShine: source.customFrameShine,
               customFlameColor: source.customFlameColor,
+              customOverlayColor: source.customOverlayColor,
+              customOverlayOpacity: source.customOverlayOpacity,
             }
           : { featured: true }),
         bonusFromCardId: source.id,
@@ -779,7 +781,7 @@ export async function previewOpenPackAction(
       if (!hydrated) return { success: false, error: "That pack can't be previewed." };
       packName = hydrated.name;
       config = hydrated.config ?? null;
-      cardsPerPack = Math.max(1, Math.min(3, hydrated.cardsPerPack || 1));
+      cardsPerPack = Math.max(1, Math.min(MAX_CARDS_PER_PACK, hydrated.cardsPerPack || 1));
       legacyList = hydrated.setList;
     }
 
@@ -883,6 +885,8 @@ export async function previewOpenPackAction(
         target.customFrameEffect = undefined;
         target.customFrameShine = undefined;
         target.customFlameColor = undefined;
+        target.customOverlayColor = undefined;
+        target.customOverlayOpacity = undefined;
       }
     }
     return { success: true, data: { cards: pulled.map(publicCard), packName } };
@@ -952,7 +956,7 @@ export async function openCustomPackWithCar(
   // Set once the member has been charged, and cleared once the cards are saved. If anything fails in between it gives the charge back.
   let refund: (() => Promise<void>) | null = null;
   try {
-    const count = Math.max(1, Math.min(3, hydrated.cardsPerPack || 1));
+    const count = Math.max(1, Math.min(MAX_CARDS_PER_PACK, hydrated.cardsPerPack || 1));
     const title = cardTitle({ carName, chassis, driver });
 
     // Who each card is built from: the member's own car for the first card, community cars for the rest.
@@ -1256,7 +1260,7 @@ export async function saveCustomPackAction(
     }
 
     const status: TcgPackStatus = input.status === "live" ? "live" : "draft";
-    const cardsPerPack = Math.max(1, Math.min(3, Math.round(Number(input.cardsPerPack) || 1)));
+    const cardsPerPack = Math.max(1, Math.min(MAX_CARDS_PER_PACK, Math.round(Number(input.cardsPerPack) || 1)));
 
     const seen = new Set<string>();
     const cleanCards: TcgCustomPackCardEntry[] = [];

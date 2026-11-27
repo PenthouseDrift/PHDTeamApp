@@ -13,6 +13,7 @@ import {
   rollBonusHit,
   rollPackCard,
   type PackConfig,
+  MAX_CARDS_PER_PACK,
 } from "@/lib/pack-config";
 import { entryAvailable, loadRuntimeFor, loadSetCards, type PackRuntime } from "@/lib/pack-config-store";
 import { ALL_TIERS } from "@/lib/pack-styles";
@@ -50,7 +51,7 @@ function availability(config: PackConfig, runtime: PackRuntime) {
 }
 
 function slotsPerPack(input: SimPackInput): number {
-  return isStandardPack(input.config) ? 2 : Math.max(1, Math.min(3, Math.round(input.cardsPerPack) || 1));
+  return isStandardPack(input.config) ? 2 : Math.max(1, Math.min(MAX_CARDS_PER_PACK, Math.round(input.cardsPerPack) || 1));
 }
 
 /** The Standard Pack, before its bonus pull is set up in the pack maker, uses the old pullable list at 1 in 100. */

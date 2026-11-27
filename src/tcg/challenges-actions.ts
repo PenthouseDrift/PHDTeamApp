@@ -248,6 +248,8 @@ async function buildChallengeOpponent(
               customStatValueColor: san.customStatValueColor,
               customBottomBarBgColor: san.customBottomBarBgColor,
               customBottomBarBorderColor: san.customBottomBarBorderColor,
+              customOverlayColor: san.customOverlayColor,
+              customOverlayOpacity: san.customOverlayOpacity,
               styleIds: [],
               kept: true,
               rerolled: false,

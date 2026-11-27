@@ -153,6 +153,14 @@ export function BonusPullEditor({
     setAdding(false);
   };
 
+  /** Add several saved cards at once. A bonus card has no stats or restyle to carry, so each just starts with the usual share. */
+  const addMany = (items: { card: SetCard }[]) => {
+    const have = new Set(bonus.entries.map((e) => e.refId));
+    const fresh = items.filter((i) => !have.has(i.card.id)).slice(0, Math.max(0, MAX_BONUS_ENTRIES - bonus.entries.length));
+    onChange({ ...bonus, entries: [...bonus.entries, ...fresh.map((i) => ({ refId: i.card.id, weight: 10 }))] });
+    setAdding(false);
+    return fresh.length;
+  };
   const taken = new Set(bonus.entries.map((e) => e.refId));
   const off = bonus.chancePct <= 0;
   const full = bonus.entries.length >= MAX_BONUS_ENTRIES;
@@ -346,6 +354,13 @@ export function BonusPullEditor({
                   text: created
                     ? `Saved "${card.name}" as a new set card and added it to the bonus pull. Your original card is unchanged. Save the pack to keep your changes.`
                     : `Added "${card.name}" to the bonus pull${variant ? ` with ${describeVariant(variant)}` : ""}. The saved card is unchanged and no new card was saved. Save the pack to keep your changes.`,
+                });
+              }}
+              room={Math.max(0, MAX_BONUS_ENTRIES - bonus.entries.length)}
+              onAddMany={(items) => {
+                const added = addMany(items);
+                onNotify({
+                  text: `Added ${added} saved card${added === 1 ? "" : "s"} to the bonus pull. The saved cards are unchanged and nothing new was saved. Save the pack to keep your changes.`,
                 });
               }}
             />

@@ -14,6 +14,7 @@ import {
 } from "@/tcg/actions";
 import { P_CREDIT_BUNDLES, getEffectivePrice, getSaleDiscountPct, isOnSale } from "@/tcg/config";
 import type { PCreditBundle, TcgCustomPackWithCards, TcgPackStatus } from "@/tcg/types";
+import { MAX_CARDS_PER_PACK } from "@/lib/pack-config";
 
 const panel =
   "space-y-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900";
@@ -827,9 +828,11 @@ export function TcgPackManagerAdmin({
                 onChange={(e) => setCardsPerPack(e.target.value)}
                 className={inputCls}
               >
-                <option value="1">1 Card</option>
-                <option value="2">2 Cards</option>
-                <option value="3">3 Cards</option>
+                {Array.from({ length: MAX_CARDS_PER_PACK }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>
+                    {n} {n === 1 ? "Card" : "Cards"}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

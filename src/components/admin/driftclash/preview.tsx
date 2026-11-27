@@ -179,6 +179,13 @@ export function StyleDetails({ style, tier }: { style: PackStyle; tier: FullArtT
             {frame.flameColour}
           </span>
         )}
+        {frame.overlay && (
+          <span className={chip}>
+            Overlay
+            <span aria-hidden="true" className="inline-block h-3 w-3 rounded-full border border-black/20" style={{ background: frame.overlay.colour }} />
+            {frame.overlay.colour} at {frame.overlay.opacity}%
+          </span>
+        )}
         {Object.entries(frame.colours).map(([field, value]) => (
           <span key={field} className={chip}>
             {field.replace(/^custom/, "").replace(/([A-Z])/g, " $1").trim()}

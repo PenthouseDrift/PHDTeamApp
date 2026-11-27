@@ -7,21 +7,22 @@ import type { FullArtCardData, FullArtTier } from "@/lib/full-art-card";
 import { rollStatsForTier, type EntryVariant } from "@/lib/pack-config";
 import { QUESTION_IMAGE, frameFieldsFor, type PackStyle } from "@/lib/pack-styles";
 import { statFieldsOf, statsChoiceError, type StatsChoice } from "@/lib/stats-choice";
-import { createCardFromPictureAction } from "@/actions/admin/driftclash-packs";
+import { createCardFromPictureAction, type MemberRawPhoto } from "@/actions/admin/driftclash-packs";
 import { MemberCarPicker } from "@/components/admin/driftclash/MemberCarPicker";
+import { MemberPhotoPicker } from "@/components/admin/driftclash/MemberPhotoPicker";
 import { NO_RESTYLE, RestylePanel, type RestyleChoice } from "@/components/admin/driftclash/RestylePanel";
 import { StatsModeControl } from "@/components/admin/driftclash/StatsModeControl";
 import type { SetCard } from "@/components/admin/driftclash/PackEditor";
 import { generatedPreviewCard, inputCls, labelCls, primaryBtn, secondaryBtn, stylePreviewCard, tierLabel } from "@/components/admin/driftclash/preview";
 
-type Step = "choose" | "member" | "upload";
+type Step = "choose" | "member" | "photo" | "photoCard" | "upload";
 
 /**
  * What happens when a style is chosen on a rarity. Two ways to use it:
  *  1. "Use this style": the style takes a share of the rarity, and a card in this style is drawn from a car photo each time
  *     it comes up (a member's own car, or a community car). Nothing is chosen here.
- *  2. "Make a card in this style": pick one picture yourself, either a member's car or one you upload, redraw it in the
- *     style, and save the result as a card this pack gives out.
+ *  2. "Make a card in this style": pick one picture yourself (a member's car, a member's raw car photo from a spec sheet, or one
+ *     you upload), redraw it in the style, and save the result as a card this pack gives out.
  */
 export function StyleCardWizard({
   tier,
@@ -44,6 +45,8 @@ export function StyleCardWizard({
   onBack: () => void;
 }) {
   const [step, setStep] = useState<Step>("choose");
+  /** The raw member photo chosen on the "photo" step. */
+  const [photo, setPhoto] = useState<MemberRawPhoto | null>(null);
 
   const back = (to: Step) => (
     <button type="button" className={secondaryBtn} onClick={() => (to === "choose" && step === "choose" ? onBack() : setStep(to))}>
@@ -63,6 +66,45 @@ export function StyleCardWizard({
     );
   }
 
+  if (step === "photo") {
+    return (
+      <div className="space-y-4">
+        {back("choose")}
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          Pick a car photo a member saved on their spec sheet. You can redraw it in <strong>{style.name}</strong> or keep the photo and just use the
+          style&apos;s frame.
+        </p>
+        <MemberPhotoPicker
+          onPick={(p) => {
+            setPhoto(p);
+            setStep("photoCard");
+          }}
+        />
+      </div>
+    );
+  }
+  if (step === "photoCard" && photo) {
+    return (
+      <div className="space-y-4">
+        {back("photo")}
+        <UploadedCardForm
+          key={photo.id}
+          tier={tier}
+          style={style}
+          onCardAdded={onCardAdded}
+          fixedPicture={photo.photoUrl}
+          pictureLabel={`Photo from ${photo.owner}'s spec sheet`}
+          initialDetails={{
+            name: photo.label.slice(0, 40),
+            ability: photo.chassis.slice(0, 48),
+            effect: photo.parts.slice(0, 160),
+            driver: photo.driver.slice(0, 30),
+            team: photo.team.slice(0, 30),
+          }}
+        />
+      </div>
+    );
+  }
   if (step === "upload") {
     return (
       <div className="space-y-4">
@@ -112,6 +154,17 @@ export function StyleCardWizard({
 
           <button
             type="button"
+            onClick={() => setStep("photo")}
+            className="block w-full rounded-xl border border-zinc-300 p-3 text-left hover:border-amber-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-zinc-700"
+          >
+            <span className="block text-sm font-black">Make a card in this style from a member&apos;s car photo</span>
+            <span className="block text-xs text-zinc-600 dark:text-zinc-400">
+              Browse the raw car photos members saved on their spec sheets, with the car&apos;s name, chassis and parts filled in for you. Redrawing
+              uses one AI image.
+            </span>
+          </button>
+          <button
+            type="button"
             onClick={() => setStep("upload")}
             className="block w-full rounded-xl border border-zinc-300 p-3 text-left hover:border-amber-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-zinc-700"
           >
@@ -133,6 +186,7 @@ export function UploadedCardForm({
   style,
   onCardAdded,
   fixedPicture,
+  pictureLabel,
   initialDetails,
 }: {
   tier: FullArtTier;
@@ -143,6 +197,8 @@ export function UploadedCardForm({
    * can't be swapped here. Give the form a `key` that changes with it, because the form only reads this at the start.
    */
   fixedPicture?: string;
+  /** What to call a fixed picture above it. Defaults to the registration wording. */
+  pictureLabel?: string;
   /** Words to start the card with. They can all be edited. */
   initialDetails?: Partial<{ name: string; ability: string; effect: string; driver: string; team: string }>;
 }) {
@@ -193,7 +249,7 @@ export function UploadedCardForm({
 
       <div className="min-w-0 flex-1 space-y-4">
         <div className="space-y-2">
-          <p className={labelCls}>{fixedPicture ? "Picture from the registration" : "Your picture"}</p>
+          <p className={labelCls}>{fixedPicture ? (pictureLabel ?? "Picture from the registration") : "Your picture"}</p>
           {fixedPicture ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={fixedPicture} alt="The picture this card is made from" className="h-28 w-auto max-w-full rounded-xl border border-zinc-200 object-cover dark:border-zinc-800" />

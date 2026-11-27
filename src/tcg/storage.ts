@@ -19,6 +19,7 @@ import {
   packExtraCounts,
   packNeedsGeneration,
   type PackConfig,
+  MAX_CARDS_PER_PACK,
 } from "@/lib/pack-config";
 import { entryRefs, loadAllPackConfigs, loadPackConfig, loadRuntimeFor } from "@/lib/pack-config-store";
 import { ALL_TIERS, type PackStyle } from "@/lib/pack-styles";
@@ -374,7 +375,7 @@ export function parseCustomPack(raw: unknown): TcgCustomPack | null {
       // Only an explicit "no" turns buying off; packs saved before this existed stay purchasable.
       purchasable: p.purchasable !== false,
       allowCardCredits: p.allowCardCredits !== false,
-      cardsPerPack: Math.max(1, Math.min(3, Math.floor(Number(p.cardsPerPack) || 1))),
+      cardsPerPack: Math.max(1, Math.min(MAX_CARDS_PER_PACK, Math.floor(Number(p.cardsPerPack) || 1))),
       cards,
       createdAt: Number(p.createdAt) || Date.now(),
       updatedAt: Number(p.updatedAt) || Date.now(),

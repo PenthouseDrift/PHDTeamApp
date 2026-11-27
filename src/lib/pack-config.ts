@@ -12,7 +12,7 @@
  */
 
 import { RARITY_ODDS, RARITY_STAT_BRACKETS, rollStats, rollStatsAndRarity, statTotal, type Rng } from "@/lib/card-roll";
-import { FRAME_EFFECTS, ROLLED_STAT, clampColor, clampHexColor, type FrameEffect, type FullArtCardData, type FullArtTier } from "@/lib/full-art-card";
+import { FRAME_EFFECTS, ROLLED_STAT, cleanOverlay, clampColor, clampHexColor, type FrameEffect, type FullArtCardData, type FullArtTier } from "@/lib/full-art-card";
 import { ALL_TIERS, ID_PATTERN, frameFieldsFor, type PackStyle } from "@/lib/pack-styles";
 
 /** The id of the always-present Standard Pack's config. Custom packs use their own pack id. */
@@ -45,8 +45,9 @@ export interface CardEdits {
   customFrameEffect?: FrameEffect;
   customFrameShine?: boolean;
   customFlameColor?: string;
+  customOverlayColor?: string;
+  customOverlayOpacity?: number;
 }
-
 export interface EntryVariant {
   /** This pack's edits to the card's words, picture position, colours and frame effect. */
   edits?: CardEdits;
@@ -165,7 +166,13 @@ export const MAX_BONUS_WEIGHT = 100;
 /** The Standard Pack's bonus pull has always been 1 in 100. */
 export const DEFAULT_BONUS_CHANCE_PCT = 1;
 
-export const MAX_ENTRIES_PER_RARITY = 30;
+/**
+ * The most cards a custom pack can give when opened (not counting its bonus pull, Crew and Repair Kit cards). Each one that is
+ * not a fixed set card is drawn by the AI, all at once, so this is kept modest.
+ */
+export const MAX_CARDS_PER_PACK = 10;
+/** The most styles and cards one rarity of a pack can hold. */
+export const MAX_ENTRIES_PER_RARITY = 100;
 /** A rounding allowance when comparing percentages that should add up to 100. */
 const EPSILON = 1e-4;
 
@@ -248,6 +255,11 @@ export function cleanEdits(v: unknown): CardEdits | undefined {
   if (typeof src.customFrameShine === "boolean") out.customFrameShine = src.customFrameShine;
   const flame = clampHexColor(src.customFlameColor);
   if (flame) out.customFlameColor = flame;
+  const overlay = cleanOverlay(src.customOverlayColor, src.customOverlayOpacity);
+  if (overlay) {
+    out.customOverlayColor = overlay.colour;
+    out.customOverlayOpacity = overlay.opacity;
+  }
 
   return Object.keys(out).length > 0 ? out : undefined;
 }

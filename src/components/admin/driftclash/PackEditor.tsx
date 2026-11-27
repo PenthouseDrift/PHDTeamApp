@@ -22,6 +22,7 @@ import {
   packExtraCounts,
   entryOverallPct,
   generatedPct,
+  MAX_ENTRIES_PER_RARITY,
   oneInFromPct,
   packNeedsGeneration,
   pctFromOneIn,
@@ -30,6 +31,7 @@ import {
   type OddsTier,
   type PackConfig,
   type PackEntry,
+  MAX_CARDS_PER_PACK,
 } from "@/lib/pack-config";
 import { ALL_TIERS, type PackStyle } from "@/lib/pack-styles";
 import {
@@ -182,21 +184,24 @@ export function PackEditor({
     setAdding(null);
   }
   /**
-   * Add several set cards to a rarity in one go. A card already in the rarity is skipped. Each new entry starts with a share of
-   * what is left (up to 5%), the same as adding one at a time, and the chances can be set afterwards. Returns how many were
-   * added and how many were skipped as already there.
+   * Add several set cards to a rarity in one go. A card already in the rarity is skipped. What is left of the 100% is shared
+   * evenly between the new entries, up to 5% each (the same cap as adding one at a time), so a big batch is not left with 0%
+   * on the last cards. The chances can be set afterwards. Returns how many were added and how many were skipped as already there.
    */
   function addCardEntries(tier: FullArtTier, items: { refId: string; variant?: EntryVariant }[]): { added: number; skipped: number } {
     const entries = [...draft.rarities[tier]];
     let used = entries.reduce((s, e) => s + e.chancePct, 0);
     let added = 0;
     let skipped = 0;
+    const fresh = items.filter((item) => !entries.some((e) => e.kind === "card" && e.refId === item.refId));
+    // Rounded down to two places so the shares never add up to more than what was left.
+    const share = fresh.length > 0 ? Math.max(0, Math.min(5, Math.floor(((100 - used) / fresh.length) * 100) / 100)) : 0;
     for (const item of items) {
       if (entries.some((e) => e.kind === "card" && e.refId === item.refId)) {
         skipped++;
         continue;
       }
-      const chancePct = Math.max(0, Math.min(5, Math.round((100 - used) * 100) / 100));
+      const chancePct = share;
       used += chancePct;
       entries.push({ kind: "card", refId: item.refId, chancePct, ...(item.variant ? { variant: item.variant } : {}) });
       added++;
@@ -678,7 +683,7 @@ export function PackEditor({
                 <div>
                   <label htmlFor="pk-count" className={labelCls}>Cards per pack</label>
                   <select id="pk-count" className={inputCls} value={cardsPerPack} onChange={(e) => setCardsPerPack(e.target.value)}>
-                    {[1, 2, 3].map((n) => (
+                    {Array.from({ length: MAX_CARDS_PER_PACK }, (_, i) => i + 1).map((n) => (
                       <option key={n} value={n}>{n}</option>
                     ))}
                   </select>
@@ -1057,6 +1062,22 @@ export function PackEditor({
                   text: created
                     ? `Saved "${card.name}" as a new ${tierLabel(adding)} set card and added it. Your original card is unchanged. Save the pack to keep your changes.`
                     : `Added "${card.name}" to ${tierLabel(adding)}${variant ? ` with ${describeVariant(variant)}` : ""}. The saved card is unchanged and no new card was saved. Save the pack to keep your changes.`,
+                });
+              }}
+              room={Math.max(0, MAX_ENTRIES_PER_RARITY - draft.rarities[adding].length)}
+              onAddMany={(items) => {
+                const { added, skipped } = addCardEntries(
+                  adding,
+                  items.map((i) => ({ refId: i.card.id, variant: i.variant }))
+                );
+                onNotify({
+                  text: [
+                    `Added ${added} saved card${added === 1 ? "" : "s"} to ${tierLabel(adding)}.`,
+                    skipped > 0 ? `${skipped} ${skipped === 1 ? "was" : "were"} already there and skipped.` : "",
+                    "The saved cards are unchanged and nothing new was saved. Set their chances below, then save the pack to keep your changes.",
+                  ]
+                    .filter(Boolean)
+                    .join(" "),
                 });
               }}
             />

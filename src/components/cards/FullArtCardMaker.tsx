@@ -687,7 +687,8 @@ export function FullArtCardMaker({
               card.customBottomBarBgColor ||
               card.customBottomBarBorderColor ||
               card.customFrameEffect ||
-              card.customFlameColor) && (
+              card.customFlameColor ||
+              card.customOverlayColor) && (
               <button
                 type="button"
                 onClick={() =>
@@ -701,6 +702,8 @@ export function FullArtCardMaker({
                     customFrameEffect: undefined,
                     customFrameShine: undefined,
                     customFlameColor: undefined,
+                    customOverlayColor: undefined,
+                    customOverlayOpacity: undefined,
                   }))
                 }
                 className="shrink-0 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400 dark:hover:bg-red-900/60"
@@ -802,6 +805,41 @@ export function FullArtCardMaker({
                   Glint and sparkles over the picture
                 </label>
               )}
+            </div>
+
+            {/* Overlay: a soft wash of colour over the picture, to tie the art to the card's colours. */}
+            <div className="space-y-2 rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
+              <ColorSettingRow
+                label="Picture overlay colour"
+                value={card.customOverlayColor}
+                placeholder="e.g. #9be7a5 for a light green wash (blank for none)"
+                fallbackColor="#9be7a5"
+                presets={BORDER_PRESETS}
+                onChange={(val) =>
+                  setCard((c) => ({
+                    ...c,
+                    customOverlayColor: val,
+                    customOverlayOpacity: val ? (c.customOverlayOpacity ?? 25) : undefined,
+                  }))
+                }
+              />
+              <div>
+                <label htmlFor="fa-overlay-strength" className="mb-1 flex items-center justify-between text-xs font-bold text-zinc-700 dark:text-zinc-200">
+                  <span>Overlay strength</span>
+                  <span className="tabular-nums">{card.customOverlayOpacity ?? 25}%</span>
+                </label>
+                <input
+                  id="fa-overlay-strength"
+                  type="range"
+                  min={1}
+                  max={100}
+                  step={1}
+                  value={card.customOverlayOpacity ?? 25}
+                  disabled={!card.customOverlayColor}
+                  onChange={(e) => set("customOverlayOpacity", Number(e.target.value))}
+                  className="h-8 w-full cursor-pointer"
+                />
+              </div>
             </div>
           </div>
         </section>

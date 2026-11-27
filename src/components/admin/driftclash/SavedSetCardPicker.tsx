@@ -32,6 +32,9 @@ export function variantFrom(stats: StatsChoice | null, restyle: RestyleChoice): 
   return Object.keys(variant).length > 0 ? variant : undefined;
 }
 
+/** The most saved cards that can be added in one go. */
+const MAX_BATCH = 100;
+
 /** A short description of what a variant changes, for the notice after adding. */
 export function describeVariant(variant: EntryVariant | undefined): string {
   if (!variant) return "no changes";
@@ -56,6 +59,8 @@ export function SavedSetCardPicker({
   styles,
   mode = "rarity",
   onAdd,
+  onAddMany,
+  room = MAX_BATCH,
 }: {
   /** The rarity being added to. For the bonus pull this is Legend, the rarity bonus cards are given out as. */
   tier: FullArtTier;
@@ -70,6 +75,13 @@ export function SavedSetCardPicker({
   styles: PackStyle[];
   /** `created` is true when a new set card was saved (see "Save the finished card"), so the page's list of saved cards needs it. */
   onAdd: (card: SetCard, variant: EntryVariant | undefined, created: boolean) => void;
+  /**
+   * When given, a "Select several" switch appears: tick many saved cards and add them all at once. Nothing new is saved, so
+   * this is instant. A card keeps its stats if they fit the rarity, otherwise they are rerolled at each pull.
+   */
+  onAddMany?: (items: { card: SetCard; variant: EntryVariant | undefined }[]) => void;
+  /** How many more cards fit in the place being added to. A batch can't be bigger than this. */
+  room?: number;
 }) {
   const [saveAsNew, setSaveAsNew] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -80,14 +92,54 @@ export function SavedSetCardPicker({
   /** What happens to the card's stats on this rarity. Null in a bonus pull, where stats are set when the card is given out. */
   const [statsChoice, setStatsChoice] = useState<StatsChoice | null>(null);
   const [restyle, setRestyle] = useState<RestyleChoice>(NO_RESTYLE);
+  /** "Select several": clicking a card ticks it instead of opening it. */
+  const [multi, setMulti] = useState(false);
+  /** The ticked cards, in the order they were ticked. Kept while searching. */
+  const [picked, setPicked] = useState<Map<string, SetCard>>(new Map());
+  /** "match": each card keeps its stats if they fit the rarity, otherwise they are rerolled at the pull. "reroll": all are rerolled. */
+  const [batchStats, setBatchStats] = useState<"match" | "reroll">("match");
 
   const bonus = mode === "bonus";
+  const limit = Math.max(0, Math.min(MAX_BATCH, room));
   const q = search.trim().toLowerCase();
   const shown = cards.filter(
     (c) =>
       (bonus || !sameRarityOnly || c.tier === tier) &&
       (!q || [c.name, c.driver, c.team, c.ability].some((v) => v.toLowerCase().includes(q)))
   );
+
+  function togglePicked(card: SetCard) {
+    setPicked((prev) => {
+      const next = new Map(prev);
+      if (next.has(card.id)) next.delete(card.id);
+      else if (next.size < limit) next.set(card.id, card);
+      return next;
+    });
+  }
+
+  /** Tick every card on screen, up to the room there is. */
+  function tickAllShown() {
+    setPicked((prev) => {
+      const next = new Map(prev);
+      for (const c of shown) {
+        if (next.size >= limit) break;
+        next.set(c.id, c);
+      }
+      return next;
+    });
+  }
+
+  /** The pack-entry changes for one card in a batch. A restyle is not part of a batch: restyle a card from its own page. */
+  function batchVariant(card: SetCard): EntryVariant | undefined {
+    if (bonus) return undefined;
+    const choice: StatsChoice = batchStats === "reroll" ? { mode: "reroll", stats: card.stats } : defaultStatsChoice(card, tier);
+    return variantFrom(choice, NO_RESTYLE);
+  }
+
+  function addMany() {
+    if (!onAddMany || picked.size === 0) return;
+    onAddMany([...picked.values()].map((card) => ({ card, variant: batchVariant(card) })));
+  }
 
   function choose(card: SetCard) {
     setSelected(card);
@@ -207,6 +259,7 @@ export function SavedSetCardPicker({
     );
   }
 
+  const canSelectSeveral = Boolean(onAddMany) && limit > 0;
   return (
     <div className="space-y-4">
       <div className={`grid gap-3 ${bonus ? "" : "sm:grid-cols-[1fr_auto]"} sm:items-end`}>
@@ -232,27 +285,114 @@ export function SavedSetCardPicker({
         )}
       </div>
 
+      {canSelectSeveral && (
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex min-h-11 items-center gap-2 text-sm font-bold">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={multi}
+              onChange={(e) => {
+                setMulti(e.target.checked);
+                if (!e.target.checked) setPicked(new Map());
+              }}
+            />
+            Select several cards to add at once
+          </label>
+          {multi && shown.length > 0 && (
+            <>
+              <button type="button" className={secondaryBtn} onClick={tickAllShown} disabled={picked.size >= limit}>
+                Tick all shown
+              </button>
+              {picked.size > 0 && (
+                <button type="button" className={secondaryBtn} onClick={() => setPicked(new Map())}>
+                  Clear ticks
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {shown.length === 0 ? (
         <p role="status" className="text-sm text-zinc-500 dark:text-zinc-400">
           No saved cards match.
         </p>
       ) : (
         <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4">
-          {shown.map((c) => (
-            <li key={c.id}>
-              <button
-                type="button"
-                onClick={() => choose(c)}
-                aria-label={`Choose saved card ${c.name}, ${tierLabel(c.tier)}`}
-                className="w-full rounded-xl text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-              >
-                <FullArtCard card={c} showDurability={false} />
-                <span className="mt-1 block truncate text-xs font-bold">{c.name}</span>
-                <span className="block truncate text-[11px] text-zinc-500 dark:text-zinc-400">{tierLabel(c.tier)}</span>
-              </button>
-            </li>
-          ))}
+          {shown.map((c) => {
+            const isPicked = picked.has(c.id);
+            return (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  onClick={() => (multi ? togglePicked(c) : choose(c))}
+                  aria-pressed={multi ? isPicked : undefined}
+                  aria-label={`${multi ? (isPicked ? "Untick" : "Tick") : "Choose"} saved card ${c.name}, ${tierLabel(c.tier)}`}
+                  className={`relative w-full rounded-xl text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
+                    isPicked ? "ring-4 ring-amber-500" : ""
+                  }`}
+                >
+                  <FullArtCard card={c} showDurability={false} />
+                  {multi && (
+                    <span
+                      aria-hidden="true"
+                      className={`absolute left-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full border-2 text-sm font-black ${
+                        isPicked ? "border-amber-500 bg-amber-500 text-black" : "border-white bg-black/50 text-transparent"
+                      }`}
+                    >
+                      ✓
+                    </span>
+                  )}
+                  <span className="mt-1 block truncate text-xs font-bold">{c.name}</span>
+                  <span className="block truncate text-[11px] text-zinc-500 dark:text-zinc-400">{tierLabel(c.tier)}</span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
+      )}
+
+      {multi && canSelectSeveral && (
+        <div className="sticky bottom-0 space-y-3 rounded-xl border border-zinc-200 bg-white p-3 shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+          <p className="text-sm font-black" role="status" aria-live="polite">
+            {picked.size === 0
+              ? "Tick the cards you want to add"
+              : `${picked.size} card${picked.size === 1 ? "" : "s"} selected${picked.size >= limit ? ` (the most that fit here is ${limit})` : ""}`}
+          </p>
+
+          {!bonus && (
+            <fieldset className="space-y-2">
+              <legend className="mb-1 text-xs font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Stats on {tierLabel(tier)}</legend>
+              {(
+                [
+                  ["match", "Keep stats that fit, reroll the rest", `Cards already ${tierLabel(tier)} keep their stats. Others are rerolled each time they are pulled.`],
+                  ["reroll", "Reroll all at the time of pull", `Every card gets fresh ${tierLabel(tier)} stats each time a member pulls it.`],
+                ] as const
+              ).map(([id, title, text]) => (
+                <label
+                  key={id}
+                  className={`flex items-start gap-2.5 rounded-xl border p-2.5 text-sm ${
+                    batchStats === id ? "border-amber-500 bg-amber-500/10" : "border-zinc-200 dark:border-zinc-700"
+                  }`}
+                >
+                  <input type="radio" name="saved-batch-stats" className="mt-1 h-4 w-4" checked={batchStats === id} onChange={() => setBatchStats(id)} />
+                  <span className="min-w-0">
+                    <span className="block font-bold">{title}</span>
+                    <span className="block text-xs text-zinc-600 dark:text-zinc-400">{text}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          )}
+          <p className="text-xs text-zinc-600 dark:text-zinc-400">
+            The saved cards are not changed and nothing new is saved. Restyle or set your own stats on one card afterwards by opening it in the pack.
+          </p>
+
+          <button type="button" className={primaryBtn} onClick={addMany} disabled={picked.size === 0}>
+            {picked.size > 0 ? `Add ${picked.size} to ${bonus ? "the bonus pull" : tierLabel(tier)}` : `Add to ${bonus ? "the bonus pull" : tierLabel(tier)}`}
+          </button>
+        </div>
       )}
     </div>
   );

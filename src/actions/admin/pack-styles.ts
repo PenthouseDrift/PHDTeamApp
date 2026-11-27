@@ -66,7 +66,7 @@ export async function savePackStyle(input: PackStyleInput): Promise<ActionResult
     if (!styleChangesCard({ prompt, frame })) {
       return {
         success: false,
-        error: "Add a prompt, a card colour or a frame effect, otherwise the style changes nothing",
+        error: "Add a prompt, a card colour, a frame effect or a picture overlay, otherwise the style changes nothing",
         field: "prompt",
       };
     }

@@ -13,6 +13,7 @@ import {
   FULL_ART_TIERS,
   clampColor,
   clampHexColor,
+  cleanOverlay,
   customStyleArtPrompt,
   tierArtPrompt,
   type FrameEffect,
@@ -55,6 +56,8 @@ export interface StyleFrame {
   shine: boolean;
   /** Tints the flames this colour (hex). Only used when `effect` is "flames". */
   flameColour?: string;
+  /** A colour wash over the picture, to make the art fit the card's colours. Works with any frame effect. */
+  overlay?: { colour: string; opacity: number };
 }
 
 export interface PackStyle {
@@ -103,11 +106,14 @@ export function cleanFrame(v: unknown): StyleFrame {
   const src = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
   const effect = STYLE_FRAME_EFFECTS.includes(src.effect as StyleFrameEffect) ? (src.effect as StyleFrameEffect) : "tier";
   const flameColour = clampHexColor(src.flameColour);
+  const overlaySrc = (src.overlay && typeof src.overlay === "object" ? src.overlay : {}) as Record<string, unknown>;
+  const overlay = cleanOverlay(overlaySrc.colour, overlaySrc.opacity);
   return {
     colours: cleanColours(src.colours),
     effect,
     shine: src.shine === true,
     ...(effect === "flames" && flameColour ? { flameColour } : {}),
+    ...(overlay ? { overlay } : {}),
   };
 }
 
@@ -152,12 +158,12 @@ export function sanitizePackStyle(input: unknown): PackStyle | null {
 
 /** True when the style would actually change how a card looks. */
 export function styleChangesCard(style: Pick<PackStyle, "prompt" | "frame">): boolean {
-  return style.prompt.trim().length > 0 || Object.keys(style.frame.colours).length > 0 || style.frame.effect !== "tier";
+  return style.prompt.trim().length > 0 || Object.keys(style.frame.colours).length > 0 || style.frame.effect !== "tier" || !!style.frame.overlay;
 }
 
 type FrameCardFields = Pick<
   FullArtCardData,
-  PackStyleColourField | "customFrameEffect" | "customFrameShine" | "customFlameColor"
+  PackStyleColourField | "customFrameEffect" | "customFrameShine" | "customFlameColor" | "customOverlayColor" | "customOverlayOpacity"
 >;
 
 /** The card fields a style sets. Every key is present, so spreading them also clears an older style's look. */
@@ -173,6 +179,8 @@ export function frameFieldsFor(frame: StyleFrame | undefined): FrameCardFields {
     customFrameEffect: custom ? (frame.effect as FrameEffect) : undefined,
     customFrameShine: custom ? frame.shine : undefined,
     customFlameColor: custom && frame.effect === "flames" ? frame.flameColour : undefined,
+    customOverlayColor: frame?.overlay?.colour,
+    customOverlayOpacity: frame?.overlay?.opacity,
   };
 }
 

@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { Barlow_Condensed } from "next/font/google";
 import { darken, lighten } from "@/lib/card-maker";
-import { ROLLED_STAT, tierInfo, type FullArtCardData } from "@/lib/full-art-card";
+import { ROLLED_STAT, cleanOverlay, tierInfo, type FullArtCardData } from "@/lib/full-art-card";
 import { getCrewCardDefinition } from "@/lib/crew-cards";
 import { HEADER_LOGO_SRC, headerLogoStyle, headerTagLayout } from "@/components/cards/card-header";
 
@@ -670,6 +670,8 @@ export function FullArtCard({
   const frameEffect = card.customFrameEffect;
   const showPrismatic = frameEffect ? frameEffect === "prismatic" : isLegend && !borderCustom;
   const showFlames = frameEffect ? frameEffect === "flames" : isMythic && !borderCustom;
+  // A colour wash over the picture, if the card has one (under the text and the frame).
+  const pictureOverlay = cleanOverlay(card.customOverlayColor, card.customOverlayOpacity);
   const showShine = frameEffect ? (card.customFrameShine ?? (isLegend || isMythic)) : isLegend || isMythic;
 
   const customBorderPale = safeLighten(borderCustom, 0.45, "#ffffff");
@@ -878,6 +880,12 @@ export function FullArtCard({
               {card.crewIcon || getCrewCardDefinition(card.crewCardId || card.name)?.icon || (isCrew ? "⚡" : isDebuff ? "⚠️" : isMaintenance ? "🛠️" : "🏁")}
             </span>
           </div>
+        )}
+
+        {/* Overlay: a colour wash over the picture to tie the art to the card's colours. */}
+
+        {pictureOverlay && (
+          <div aria-hidden style={{ ...abs({ inset: 0 }), background: pictureOverlay.colour, opacity: pictureOverlay.opacity / 100, pointerEvents: "none" }} />
         )}
 
         {/* Foil: a soft diagonal sheen, plus a rainbow wash on Legend cards */}

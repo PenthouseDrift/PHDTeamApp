@@ -35,6 +35,27 @@ export function isBlobUrl(value: unknown): value is string {
   }
 }
 
+/**
+ * Gemini's own errors, in words a person can act on. A billing or quota problem is the usual reason a redraw "doesn't work", and
+ * the generic message hid it. Anything else is passed on unchanged (and logged by the caller).
+ */
+function friendlyGeminiError(error: unknown): unknown {
+  const status = Number((error as { status?: unknown } | null)?.status);
+  const text = String((error as { message?: unknown } | null)?.message ?? "");
+  if (status === 402 || /prepayment credits are depleted|billing/i.test(text)) {
+    return new CardArtError("The AI image service is out of credits, so nothing can be drawn right now. Top up the Gemini API billing, then try again.");
+  }
+  if (status === 429 || /RESOURCE_EXHAUSTED|quota/i.test(text)) {
+    return new CardArtError("The AI image service has hit its usage limit. Wait a minute and try again, or check the Gemini API quota.");
+  }
+  if (status === 503 || status === 500 || /overloaded|UNAVAILABLE/i.test(text)) {
+    return new CardArtError("The AI image service is busy right now. Please try again in a moment.");
+  }
+  if (status === 401 || status === 403) {
+    return new CardArtError("The AI image service rejected the API key. Check GEMINI_API_KEY.");
+  }
+  return error;
+}
 export async function generateArtImage(input: {
   referenceUrl: string;
   prompt: string;
@@ -59,20 +80,24 @@ export async function generateArtImage(input: {
   // Generate.
   const { GoogleGenAI } = await import("@google/genai");
   const ai = new GoogleGenAI({ apiKey });
-  const response = await ai.models.generateContent({
-    model: MODEL,
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: input.prompt }, { inlineData: { mimeType, data: refBytes.toString("base64") } }],
+  let response;
+  try {
+    response = await ai.models.generateContent({
+      model: MODEL,
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: input.prompt }, { inlineData: { mimeType, data: refBytes.toString("base64") } }],
+        },
+      ],
+      config: {
+        responseModalities: ["IMAGE", "TEXT"],
+        imageConfig: { aspectRatio: input.aspectRatio },
       },
-    ],
-    config: {
-      responseModalities: ["IMAGE", "TEXT"],
-      imageConfig: { aspectRatio: input.aspectRatio },
-    },
-  });
-
+    });
+  } catch (error) {
+    throw friendlyGeminiError(error);
+  }
   const parts = response.candidates?.[0]?.content?.parts ?? [];
   const imagePart = parts.find((p) => p.inlineData?.data);
   if (!imagePart?.inlineData?.data) {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { FullArtCard } from "@/components/cards/FullArtCard";
+import { MemberPhotoPicker } from "@/components/admin/driftclash/MemberPhotoPicker";
 import ImageUploader from "@/components/ui/ImageUploader";
 import type { FullArtTier } from "@/lib/full-art-card";
 import { FRAME_EFFECTS } from "@/lib/full-art-card";
@@ -106,6 +107,7 @@ export function EntryEditorDialog({
     const [displayPullable, setDisplayPullable] = useState(initialDisplayPullable);
   const [uploaderKey, setUploaderKey] = useState(0);
   const [showMembers, setShowMembers] = useState(false);
+  const [showPhotos, setShowPhotos] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [adopting, startAdopt] = useTransition();
   const [saving, startSave] = useTransition();
@@ -241,8 +243,27 @@ export function EntryEditorDialog({
                 }}
               />
               <div className="flex flex-wrap gap-2">
-                <button type="button" className={secondaryBtn} disabled={busy} onClick={() => setShowMembers((s) => !s)}>
+                <button
+                  type="button"
+                  className={secondaryBtn}
+                  disabled={busy}
+                  onClick={() => {
+                    setShowMembers((s) => !s);
+                    setShowPhotos(false);
+                  }}
+                >
                   {showMembers ? "Hide members' cars" : "Use a member's car picture"}
+                </button>
+                <button
+                  type="button"
+                  className={secondaryBtn}
+                  disabled={busy}
+                  onClick={() => {
+                    setShowPhotos((s) => !s);
+                    setShowMembers(false);
+                  }}
+                >
+                  {showPhotos ? "Hide members' photos" : "Use a member's raw car photo"}
                 </button>
                 {(sourcePicture || restyle.artUrl) && (
                   <button
@@ -261,6 +282,17 @@ export function EntryEditorDialog({
                 {adopting && <span className="self-center text-xs text-zinc-500">Getting the picture…</span>}
               </div>
               {showMembers && <MemberPicturePicker disabled={busy} onPick={adopt} />}
+              {showPhotos && (
+                <div className="rounded-xl bg-zinc-100 p-3 dark:bg-zinc-900">
+                  <MemberPhotoPicker
+                    disabled={busy}
+                    onPick={(p) => {
+                      adopt(p.photoUrl);
+                      setShowPhotos(false);
+                    }}
+                  />
+                </div>
+              )}
 
               <div className="grid grid-cols-3 gap-3">
                 <div>

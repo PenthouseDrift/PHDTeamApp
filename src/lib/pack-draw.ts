@@ -123,6 +123,8 @@ export function slotOverrides(drawn: Pick<DrawnSlot, "style" | "fixed">): Partia
       customFrameEffect: fixed.customFrameEffect,
       customFrameShine: fixed.customFrameShine,
       customFlameColor: fixed.customFlameColor,
+      customOverlayColor: fixed.customOverlayColor,
+      customOverlayOpacity: fixed.customOverlayOpacity,
     };
   }
   return {
