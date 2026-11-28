@@ -15,6 +15,7 @@ import { getDashboardVersion } from "@/lib/dashboard-pref";
 import { NewAdminHome } from "@/components/admin/NewAdminHome";
 import { getUnpaidSummary } from "@/actions/admin/unpaid";
 import { UnpaidPanel } from "@/components/admin/UnpaidPanel";
+import { OrdersToCollect } from "@/components/admin/OrdersToCollect";
 
 export const dynamic = "force-dynamic";
 
@@ -213,6 +214,11 @@ async function AdminDashboardData({ session, isModerator }: { session: any, isMo
               <span className="text-emerald-600 dark:text-emerald-400 group-hover:translate-x-0.5 transition-transform text-lg">→</span>
             </div>
           </Link>
+          {pendingOrderCount > 0 && (
+            <div className="rounded-2xl border border-emerald-500/30 bg-white p-4 shadow-sm dark:bg-zinc-900">
+              <OrdersToCollect orders={clickCollectOrders} />
+            </div>
+          )}
           <Link
             href="/marketplace"
             className="flex items-center justify-between gap-2 rounded-xl border border-teal-500/30 bg-teal-500/5 px-4 py-3 text-sm font-bold text-teal-700 transition-colors hover:bg-teal-500/10 dark:text-teal-300"

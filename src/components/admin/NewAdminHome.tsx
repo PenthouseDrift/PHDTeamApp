@@ -12,6 +12,7 @@ import { UnpaidPanel } from "@/components/admin/UnpaidPanel";
 import { ShellIcon } from "@/components/new-shell/shell-icons";
 import { getEventTiming } from "@/lib/event-utils";
 import { excludeAdminCheckIns } from "@/lib/checkin-stats";
+import { OrdersToCollect } from "@/components/admin/OrdersToCollect";
 
 /**
  * "Today" for staff in the new experience. It answers three questions in
@@ -240,42 +241,7 @@ export async function NewAdminHome({ isModerator }: { isModerator: boolean }) {
               </div>
             </dl>
 
-            {orders.length > 0 && (
-              <div>
-                <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  Awaiting collection
-                </h3>
-                <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                  {orders.slice(0, 4).map((o) => {
-                    const count = o.items.reduce((n, i) => n + i.quantity, 0);
-                    return (
-                      <li key={o.id} className="flex items-center justify-between gap-3 py-2">
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                            {o.userName ?? "Member"}
-                          </span>
-                          <span className="block text-xs text-zinc-500 dark:text-zinc-400">
-                            {count} item{count === 1 ? "" : "s"}
-                          </span>
-                        </span>
-                        <span
-                          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                            o.status === "ready_for_collection"
-                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300"
-                              : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
-                          }`}
-                        >
-                          {o.status === "ready_for_collection" ? "Ready" : "Processing"}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-                {orders.length > 4 && (
-                  <p className="pt-1 text-xs text-zinc-500 dark:text-zinc-400">+ {orders.length - 4} more</p>
-                )}
-              </div>
-            )}
+            <OrdersToCollect orders={orders} />
 
             {reserved.length > 0 && (
               <div>
@@ -284,7 +250,7 @@ export async function NewAdminHome({ isModerator }: { isModerator: boolean }) {
                   <span className="text-emerald-700 dark:text-emerald-400">{formatGbp(reservedValue)} total value</span>
                 </h3>
                 <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                  {reserved.slice(0, 4).map((l) => {
+                  {reserved.slice(0, 10).map((l) => {
                     const holders = holdersText(reservationCtx.all[l.listingId], l.reservedCount);
                     return (
                       <li key={l.listingId} className="flex items-center justify-between gap-3 py-2">
@@ -305,8 +271,8 @@ export async function NewAdminHome({ isModerator }: { isModerator: boolean }) {
                     );
                   })}
                 </ul>
-                {reserved.length > 4 && (
-                  <p className="pt-1 text-xs text-zinc-500 dark:text-zinc-400">+ {reserved.length - 4} more</p>
+                {reserved.length > 10 && (
+                  <p className="pt-1 text-xs text-zinc-500 dark:text-zinc-400">+ {reserved.length - 10} more</p>
                 )}
               </div>
             )}
