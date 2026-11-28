@@ -12,7 +12,10 @@ import { packCardsLabel, packExtraLabel } from "@/tcg/pack-display";
 import type { TcgCustomPackWithCards } from "@/tcg/types";
 
 // Rows swipe sideways and settle on a card; overscroll-x-contain stops a swipe at the end of a row dragging the whole page.
-const rowCls = "no-scrollbar -mx-1 flex snap-x snap-proximity gap-3 overflow-x-auto overscroll-x-contain px-1 pb-1 [&>li]:snap-start";
+// A row that scrolls sideways clips whatever is drawn outside it, which cut off the pack shadows and the Mythic flames. The padding
+// gives them room, and the equal negative margins keep the row exactly where it was (10px sideways is the page's own padding, and
+// the top one is the gap above the row).
+const rowCls = "no-scrollbar -mx-2.5 -mt-2.5 -mb-4 flex snap-x snap-proximity gap-3 overflow-x-auto overscroll-x-contain scroll-px-2.5 px-2.5 pb-4 pt-2.5 [&>li]:snap-start";
 const sectionTitle = "text-sm font-black uppercase tracking-wider text-zinc-900 dark:text-zinc-100";
 const linkBtn =
   "gx-tap inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-xs font-black text-amber-600 hover:bg-amber-500/10 dark:text-amber-400";
@@ -125,7 +128,7 @@ export function TcgHome({
           {/* ── Packs ───────────────────────────────────────────────────── */}
           <section aria-label="Packs" className="gx-fade-up space-y-2.5" style={{ animationDelay: "60ms" }}>
             <SectionHeader title="Packs" hint={packCredits > 0 ? `You have ${packCredits} pack credit${packCredits === 1 ? "" : "s"} ready` : "Spend P-Credits in the store"} action="Pack store" onAction={onOpenStore} />
-            <ul className={`${rowCls} items-start pb-2 pt-1`}>
+            <ul className={`${rowCls} items-start`}>
               {standardPackEnabled && (
               <li className="w-36 shrink-0">
                 <button

@@ -102,9 +102,18 @@ export function PackArt({
         width: "100%",
         aspectRatio: "5 / 8",
         containerType: "inline-size",
-        filter: bare ? undefined : `drop-shadow(0 1.6cqw 2.4cqw rgba(0,0,0,0.55)) drop-shadow(0 0 3cqw rgba(${foil.glow},0.14))`,
       }}
     >
+      {/* The shadow is on this inner layer, not on the element above. An element's own cqw units come from the container ABOVE it, so
+          on the element that is the container they measured the page (a huge shadow on a wide screen, clipped into a grey box by the
+          row the pack sits in). Here they measure the pack. */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          filter: bare ? undefined : `drop-shadow(0 1.6cqw 2.4cqw rgba(0,0,0,0.55)) drop-shadow(0 0 3cqw rgba(${foil.glow},0.14))`,
+        }}
+      >
       <div
         className="group/pack"
         style={{
@@ -297,6 +306,7 @@ export function PackArt({
           -{discountPct}%
         </span>
       ) : null}
+      </div>
     </div>
   );
 }
