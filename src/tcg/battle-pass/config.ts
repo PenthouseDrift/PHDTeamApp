@@ -25,11 +25,28 @@ export interface BattlePassConfig {
   enabled: boolean;
   /** The top of the ladder. */
   maxXp: number;
+  /**
+   * Every gift on the ladder: the ones an admin set, plus the steady "every N XP" gifts below, in XP order. The steady ones are worked
+   * out from `milestoneXp` and `milestoneP` each time the config is cleaned (they are never saved as gifts of their own), and their
+   * ids start with "ms-".
+   */
   tiers: BattlePassTier[];
+  /** A free gift of `milestoneP` P-Credits for every this many XP, on top of the other gifts. 0 = none. */
+  milestoneXp: number;
+  milestoneP: number;
   updatedAt: number;
 }
 
 export const MAX_TIERS = 60;
+/** The most steady "every N XP" gifts one ladder can have, so a small step on a tall ladder can't make thousands. */
+export const MAX_MILESTONE_GIFTS = 40;
+/** The smallest step for the steady gifts. */
+export const MIN_MILESTONE_XP = 50;
+/** What the steady gifts are unless an admin changes them: 25 P-Credits for every 500 XP. */
+export const DEFAULT_MILESTONE_XP = 500;
+export const DEFAULT_MILESTONE_P = 25;
+/** The ids of the steady gifts start with this. They are derived, so they are left out of what an admin edits. */
+export const MILESTONE_ID_PREFIX = "ms-";
 export const MIN_MAX_XP = 100;
 export const MAX_MAX_XP = 1_000_000;
 export const MAX_P_REWARD = 100_000;
@@ -169,7 +186,20 @@ export function generateTiers(input: Partial<LadderOptions> = {}): BattlePassTie
 
 /** What the game starts with until an admin saves their own. It is switched off, so nothing is paid until it is reviewed. */
 export function defaultBattlePassConfig(): BattlePassConfig {
-  return { enabled: false, maxXp: DEFAULT_LADDER.maxXp, tiers: generateTiers(), updatedAt: 0 };
+  return sanitizeBattlePassConfig({ enabled: false, maxXp: DEFAULT_LADDER.maxXp, tiers: generateTiers(), updatedAt: 0 });
+}
+/** The gifts an admin sets by hand, without the steady "every N XP" ones that are worked out from the settings. */
+export function withoutMilestones<T extends { tiers: BattlePassTier[] }>(config: T): T {
+  return { ...config, tiers: config.tiers.filter((t) => !t.id.startsWith(MILESTONE_ID_PREFIX)) };
+}
+/** The steady gifts for these settings: `milestoneP` P-Credits at every multiple of `milestoneXp`, up to the top of the ladder. */
+export function milestoneTiers(milestoneXp: number, milestoneP: number, maxXp: number): BattlePassTier[] {
+  if (!(milestoneXp >= MIN_MILESTONE_XP) || !(milestoneP > 0)) return [];
+  const out: BattlePassTier[] = [];
+  for (let xp = milestoneXp; xp <= maxXp && out.length < MAX_MILESTONE_GIFTS; xp += milestoneXp) {
+    out.push({ id: `${MILESTONE_ID_PREFIX}${xp}`, xp, kind: "pcredits", amount: milestoneP, secret: false });
+  }
+  return out;
 }
 
 // ── Cleaning what an admin sends ────────────────────────────────────────────
@@ -178,7 +208,6 @@ const ID_PATTERN = /^[a-z0-9_-]{1,24}$/i;
 
 /** Coerce anything into a well-formed config: steps in XP order, each with a unique id and a sensible reward. */
 export function sanitizeBattlePassConfig(input: unknown): BattlePassConfig {
-  const d = defaultBattlePassConfig();
   let v: Record<string, unknown> = {};
   try {
     const parsed = typeof input === "string" ? JSON.parse(input) : input;
@@ -186,9 +215,9 @@ export function sanitizeBattlePassConfig(input: unknown): BattlePassConfig {
   } catch {
     /* use the defaults */
   }
-  const maxXp = clampInt(v.maxXp, d.maxXp, MIN_MAX_XP, MAX_MAX_XP);
+  const maxXp = clampInt(v.maxXp, DEFAULT_LADDER.maxXp, MIN_MAX_XP, MAX_MAX_XP);
 
-  const raw = Array.isArray(v.tiers) ? (v.tiers as unknown[]) : d.tiers;
+  const raw = Array.isArray(v.tiers) ? (v.tiers as unknown[]) : generateTiers();
   const rows = raw
     .slice(0, MAX_TIERS * 2)
     .map((r) => {
@@ -202,7 +231,7 @@ export function sanitizeBattlePassConfig(input: unknown): BattlePassConfig {
         secret: t.secret === true,
       };
     })
-    .filter((t) => t.xp > 0)
+    .filter((t) => t.xp > 0 && !t.id.startsWith(MILESTONE_ID_PREFIX))
     .sort((a, b) => a.xp - b.xp)
     .slice(0, MAX_TIERS);
 
@@ -219,10 +248,18 @@ export function sanitizeBattlePassConfig(input: unknown): BattlePassConfig {
     return { ...r, id };
   });
 
+  // A config saved before the steady gifts existed gets them (25 P for every 500 XP); an admin turns them off with 0.
+  const milestoneXpRaw = v.milestoneXp === undefined ? DEFAULT_MILESTONE_XP : clampInt(v.milestoneXp, 0, 0, MAX_MAX_XP);
+  const milestoneXp = milestoneXpRaw === 0 ? 0 : Math.max(MIN_MILESTONE_XP, milestoneXpRaw);
+  const milestoneP = v.milestoneP === undefined ? DEFAULT_MILESTONE_P : clampInt(v.milestoneP, DEFAULT_MILESTONE_P, 1, MAX_P_REWARD);
+  // The steady gifts go in XP order with the rest; at the same XP the admin's own gift comes first.
+  const merged = [...tiers, ...milestoneTiers(milestoneXp, milestoneP, maxXp)].sort((a, b) => a.xp - b.xp);
   return {
     enabled: v.enabled === true,
     maxXp,
-    tiers,
+    tiers: merged,
+    milestoneXp,
+    milestoneP,
     updatedAt: clampInt(v.updatedAt, 0, 0, Number.MAX_SAFE_INTEGER),
   };
 }

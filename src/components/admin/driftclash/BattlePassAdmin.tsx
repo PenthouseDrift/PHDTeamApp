@@ -6,14 +6,17 @@ import {
   MAX_MAX_XP,
   MAX_PACK_REWARD,
   MAX_P_REWARD,
+  MAX_MILESTONE_GIFTS,
   MAX_TIERS,
   MIN_MAX_XP,
+  MIN_MILESTONE_XP,
   DEFAULT_LADDER,
   battlePassWarnings,
   generateTiers,
   ladderTotals,
   ladderValue,
   sanitizeBattlePassConfig,
+  withoutMilestones,
   type BattlePassConfig,
   type BattlePassRewardKind,
   type BattlePassTier,
@@ -87,8 +90,9 @@ function freeId(tiers: BattlePassTier[]): string {
 }
 
 export function BattlePassAdmin({ initial }: { initial: BattlePassAdminData }) {
+  // What was saved includes the steady "every N XP" gifts. The list being edited does not: those are worked out from the two settings.
   const [saved, setSaved] = useState<BattlePassConfig>(initial.config);
-  const [draft, setDraft] = useState<BattlePassConfig>(initial.config);
+  const [draft, setDraft] = useState<BattlePassConfig>(withoutMilestones(initial.config));
   const [ladder, setLadder] = useState<LadderOptions>({ ...initial.ladderDefaults, maxXp: initial.config.maxXp });
   const [confirmed, setConfirmed] = useState(false);
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
@@ -100,7 +104,8 @@ export function BattlePassAdmin({ initial }: { initial: BattlePassAdminData }) {
   const dirty = neverSaved || JSON.stringify({ ...clean, updatedAt: 0 }) !== JSON.stringify({ ...saved, updatedAt: 0 });
   const warnings = useMemo(() => battlePassWarnings(clean, initial.packPrice), [clean, initial.packPrice]);
   const needsConfirm = warnings.some((w) => w.needsConfirm);
-  const totals = useMemo(() => ladderTotals(draft), [draft]);
+  // Totals and the "by each point" table count every gift, the steady ones included.
+  const totals = useMemo(() => ladderTotals(clean), [clean]);
 
   const change = (next: Partial<BattlePassConfig>) => {
     setDraft((d) => ({ ...d, ...next }));
@@ -137,7 +142,7 @@ export function BattlePassAdmin({ initial }: { initial: BattlePassAdminData }) {
       const res = await saveBattlePassConfigAction(draft);
       if (res.success) {
         setSaved(res.data.config);
-        setDraft(res.data.config);
+        setDraft(withoutMilestones(res.data.config));
         setNeverSaved(false);
         setConfirmed(false);
         setMessage({ text: res.data.config.enabled ? "Saved. The Battle Pass is live." : "Saved. The Battle Pass is switched off, so members can't see it yet." });
@@ -222,6 +227,43 @@ export function BattlePassAdmin({ initial }: { initial: BattlePassAdminData }) {
         </p>
       </section>
 
+      {/* ── Steady gifts ── */}
+      <section className={`${panel} space-y-3`} aria-label="Steady gifts">
+        <div>
+          <h2 className={h3}>Free gift every so often</h2>
+          <p className={hint}>
+            On top of the gifts below, members get a free gift of P-Credits for every set amount of XP they earn in the month. They are added to the ladder for you, and
+            are not edited one by one.
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Num
+            id="ms-xp"
+            label="A gift every (XP)"
+            value={draft.milestoneXp}
+            min={0}
+            max={draft.maxXp}
+            step={50}
+            onChange={(v) => change({ milestoneXp: v })}
+            help={`0 = none. At least ${MIN_MILESTONE_XP}, and no more than ${MAX_MILESTONE_GIFTS} gifts in all.`}
+          />
+          <Num
+            id="ms-p"
+            label="P-Credits in each"
+            value={draft.milestoneP}
+            min={1}
+            max={MAX_P_REWARD}
+            onChange={(v) => change({ milestoneP: v })}
+          />
+          <div className="self-end text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+            {(() => {
+              const n = clean.tiers.filter((t) => t.id.startsWith("ms-")).length;
+              return n === 0 ? "None" : `${n} gift${n === 1 ? "" : "s"}, ${fmt(n * clean.milestoneP)} P-Credits a month at the top`;
+            })()}
+          </div>
+        </div>
+      </section>
+
       {/* ── The gifts ── */}
       <section className={`${panel} space-y-3`} aria-label="Gifts on the ladder">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -233,7 +275,7 @@ export function BattlePassAdmin({ initial }: { initial: BattlePassAdminData }) {
           </p>
         </div>
 
-        {draft.tiers.length > 0 && (
+        {clean.tiers.length > 0 && (
           <div className="overflow-x-auto rounded-xl bg-zinc-50 p-3 dark:bg-zinc-800/60">
             <p className="mb-1.5 text-xs font-bold text-zinc-700 dark:text-zinc-200">
               What members have by each point (a Standard Pack is {fmt(initial.packPrice)} P)
@@ -258,7 +300,7 @@ export function BattlePassAdmin({ initial }: { initial: BattlePassAdminData }) {
               <tbody className="text-zinc-800 dark:text-zinc-100">
                 {[0.1, 0.25, 0.5, 0.75, 1].map((share) => {
                   const xp = Math.round(draft.maxXp * share);
-                  const got = draft.tiers.filter((t) => t.xp <= xp);
+                  const got = clean.tiers.filter((t) => t.xp <= xp);
                   const totals = ladderTotals({ tiers: got });
                   const packs = ladderValue(got, initial.packPrice) / Math.max(1, initial.packPrice);
                   return (
@@ -266,7 +308,7 @@ export function BattlePassAdmin({ initial }: { initial: BattlePassAdminData }) {
                       <td className="py-1 pr-3 font-bold tabular-nums">{fmt(xp)}</td>
                       <td className="py-1 pr-3 tabular-nums">~{fmt(Math.round(xp / 15))}</td>
                       <td className="py-1 pr-3 tabular-nums">
-                        {got.length} of {draft.tiers.length}
+                        {got.length} of {clean.tiers.length}
                       </td>
                       <td className="py-1 tabular-nums">
                         {fmt(totals.pCredits)} P{totals.packCredits > 0 ? ` + ${totals.packCredits} pack credit${totals.packCredits === 1 ? "" : "s"}` : ""} ≈ {packs.toFixed(1)} packs
@@ -434,7 +476,7 @@ export function BattlePassAdmin({ initial }: { initial: BattlePassAdminData }) {
             className={secondary}
             disabled={pending || !dirty}
             onClick={() => {
-              setDraft(saved);
+              setDraft(withoutMilestones(saved));
               setConfirmed(false);
               setMessage(null);
             }}

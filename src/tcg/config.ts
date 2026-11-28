@@ -15,8 +15,8 @@ import type { MemberCard } from "@/lib/card-roll";
  * pack), so quick selling clears cards but can't pay for the next pack. Gold and above are unchanged, so a good pull still pays well.
  */
 export const QUICK_SELL_PRICES: QuickSellRateTable = {
-  bronze: 8,
-  silver: 15,
+  bronze: 10,
+  silver: 20,
   gold: 40,
   legend: 80,
   mythic: 250,
@@ -29,9 +29,9 @@ export const QUICK_SELL_PRICES: QuickSellRateTable = {
 export const BROKEN_QUICK_SELL_PRICES: QuickSellRateTable = {
   bronze: 5,
   silver: 8,
-  gold: 15,
-  legend: 25,
-  mythic: 50,
+  gold: 20,
+  legend: 45,
+  mythic: 100,
 };
 
 /**
@@ -39,8 +39,8 @@ export const BROKEN_QUICK_SELL_PRICES: QuickSellRateTable = {
  * cars, so they pay less than a car or selling a pack would pay for the next one.
  */
 export const UTILITY_QUICK_SELL_PRICES: QuickSellRateTable = {
-  bronze: 2,
-  silver: 6,
+  bronze: 5,
+  silver: 8,
   gold: 20,
   legend: 40,
   mythic: 100,
