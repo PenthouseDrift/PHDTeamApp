@@ -205,7 +205,7 @@ export async function createPCreditsCheckout(
 
 /**
  * Quick-sell a card for its fixed rarity P-Credits payout:
- *   Bronze: 10, Silver: 25, Gold: 50, Legend: 100, Mythic: 250 P-Credits.
+ *   Cars: Bronze 5, Silver 15, Gold 50, Legend 100, Mythic 250 P-Credits. Crew and Repair Kit cards: 2, 6, 20, 40, 100.
  * Permanently deletes the card and credits the member's P-Credits balance.
  */
 export async function quickSellCard(

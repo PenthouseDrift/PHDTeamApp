@@ -8,12 +8,15 @@ import type { MemberCard } from "@/lib/card-roll";
  */
 
 /**
- * Fixed Quick Sell payouts in P-Credits per card rarity tier (healthy state).
+ * Fixed Quick Sell payouts in P-Credits per car card rarity tier (healthy state).
  * Quick selling permanently deletes the card and immediately credits the owner.
+ *
+ * Tuned so that selling every card from an average pack returns about half of what the pack cost (about 49% of a 100 P pack),
+ * so quick selling clears cards but can't pay for the next pack. Gold and above are unchanged, so a good pull still pays well.
  */
 export const QUICK_SELL_PRICES: QuickSellRateTable = {
-  bronze: 10,
-  silver: 25,
+  bronze: 5,
+  silver: 15,
   gold: 50,
   legend: 100,
   mythic: 250,
@@ -31,6 +34,21 @@ export const BROKEN_QUICK_SELL_PRICES: QuickSellRateTable = {
   mythic: 50,
 };
 
+/**
+ * Quick Sell payouts for Crew and Repair Kit cards, about 40% of a car of the same rarity. Every pack gives these on top of its
+ * cars, so they pay less than a car or selling a pack would pay for the next one.
+ */
+export const UTILITY_QUICK_SELL_PRICES: QuickSellRateTable = {
+  bronze: 2,
+  silver: 6,
+  gold: 20,
+  legend: 40,
+  mythic: 100,
+};
+/** True for the cards that come with a pack as extras (Crew and Repair Kit cards), which have their own Quick Sell prices. */
+export function isUtilityCard(card: { cardType?: string }): boolean {
+  return card.cardType === "crew" || card.cardType === "maintenance";
+}
 /** Default price in P-Credits for a Standard Pack in the Pack Store. */
 export const DEFAULT_STANDARD_PACK_PRICE = 100;
 
@@ -111,11 +129,19 @@ export function getQuickSellPrice(
   }
 
   const tier = tierOrCard.tier;
+  if (isUtilityCard(tierOrCard)) return UTILITY_QUICK_SELL_PRICES[tier] ?? UTILITY_QUICK_SELL_PRICES.bronze;
   const broken = isBroken !== undefined ? isBroken : isCarBroken(tierOrCard);
   const table = broken ? BROKEN_QUICK_SELL_PRICES : QUICK_SELL_PRICES;
   return table[tier] ?? table.bronze;
 }
 
+/**
+ * The asking price the Marketplace forms start with: twice the Quick Sell value, so listing beats quick selling, but never less
+ * than the lowest price a card can be listed at (a Bronze Crew card would otherwise start below it and be refused).
+ */
+export function suggestedListPrice(card: Parameters<typeof getQuickSellPrice>[0]): number {
+  return Math.max(MIN_MARKET_LISTING_PRICE, getQuickSellPrice(card) * 2);
+}
 /** True when a sale price is valid and strictly lower than the regular price. */
 export function isOnSale(regularPrice: number, salePrice?: number | null): salePrice is number {
   return (

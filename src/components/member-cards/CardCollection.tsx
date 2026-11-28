@@ -33,7 +33,7 @@ import {
 } from "@/lib/card-roll";
 import { ART_STYLES } from "@/lib/card-maker";
 import { FULL_ART_TIERS, type FullArtTierInfo } from "@/lib/full-art-card";
-import { getQuickSellPrice } from "@/tcg/config";
+import { getQuickSellPrice, suggestedListPrice } from "@/tcg/config";
 import { giftCard, searchGiftRecipients } from "@/tcg/trade-actions";
 import type { GiftRecipient } from "@/tcg/trade-types";
 import {
@@ -1080,7 +1080,7 @@ function CardViewer({
     setShowRepairModal(false);
     setError(null);
     setStatusMessage(null);
-    setListPriceText(card ? String(getQuickSellPrice(card) * 2) : "");
+    setListPriceText(card ? String(suggestedListPrice(card)) : "");
   }
 
   // Take over the screen while open: lock the page behind, move focus in, and give it back on close.

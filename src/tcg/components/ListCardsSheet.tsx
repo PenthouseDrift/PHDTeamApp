@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { FullArtCard } from "@/components/cards/FullArtCard";
 import { rarityLabel, type MemberCard } from "@/lib/card-roll";
-import { MAX_MARKET_LISTING_PRICE, MIN_MARKET_LISTING_PRICE, getQuickSellPrice } from "@/tcg/config";
+import { MAX_MARKET_LISTING_PRICE, MIN_MARKET_LISTING_PRICE, getQuickSellPrice, suggestedListPrice } from "@/tcg/config";
 import { listCardOnMarket } from "@/tcg/actions";
 import type { TcgMarketListing } from "@/tcg/types";
 import { BottomSheet, sheetPrimary, sheetSecondary } from "@/tcg/ui/BottomSheet";
@@ -36,7 +36,7 @@ export function ListCardsSheet({
     const open = cards.filter((c) => !c.listedPrice);
     return { todo: open, alreadyListed: cards.length - open.length };
   });
-  const [prices, setPrices] = useState<Record<string, string>>(() => Object.fromEntries(todo.map((c) => [c.id, String(getQuickSellPrice(c) * 2)])));
+  const [prices, setPrices] = useState<Record<string, string>>(() => Object.fromEntries(todo.map((c) => [c.id, String(suggestedListPrice(c))])));
   const [status, setStatus] = useState<Record<string, Status>>({});
   const [running, setRunning] = useState(false);
   const [sameText, setSameText] = useState("");

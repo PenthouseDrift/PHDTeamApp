@@ -7,6 +7,7 @@ import { FULL_ART_TIERS } from "@/lib/full-art-card";
 import {
   P_CREDIT_BUNDLES,
   QUICK_SELL_PRICES,
+  UTILITY_QUICK_SELL_PRICES,
   getEffectivePrice,
   getSaleDiscountPct,
   isOnSale,
@@ -304,7 +305,10 @@ export function TcgPCreditsShop({
               <span className="mt-0.5 block text-lg font-black text-amber-600 dark:text-amber-400">
                 {QUICK_SELL_PRICES[tier.id]} P-Credits
               </span>
-              <span className="text-[11px] text-zinc-400">Instant Quick Sell</span>
+              <span className="block text-[11px] text-zinc-400">Instant Quick Sell (cars)</span>
+              <span className="block text-[11px] text-zinc-400">
+                Crew &amp; repair cards: {UTILITY_QUICK_SELL_PRICES[tier.id]} P
+              </span>
             </li>
           ))}
         </ul>
