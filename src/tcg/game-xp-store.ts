@@ -7,7 +7,7 @@ import { lbSetCups, lbSetXp } from "./leaderboard";
  * Where a driver's Drift XP total is kept: a field on their Clash stats hash, next to their wins and losses. Server only.
  * (The rules for how much XP a game is worth are in game-xp.ts.)
  */
-const clashStatsKey = (userId: string) => `tcg:clash:stats:${userId}`;
+export const clashStatsKey = (userId: string) => `tcg:clash:stats:${userId}`;
 
 /** Add XP to a driver's total and return the new total. The add is atomic, so two games finishing together both count. */
 export async function addGameXp(userId: string, amount: number, options: { battlePass?: boolean } = {}): Promise<number> {

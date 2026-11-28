@@ -26,6 +26,7 @@ import { standardPackAllowsCardCredits } from "@/lib/pack-config-store";
 import { listTandemClashChallengesAction } from "@/tcg/challenges-actions";
 import { getUnseenReceived } from "@/tcg/trade-store";
 import { loadBattlePassView } from "@/tcg/battle-pass/store";
+import { loadXpGiftView } from "@/tcg/xp-gift-store";
 import { markLeaderboardDirty, syncSnapshotFromCards } from "@/tcg/leaderboard";
 import type { TcgTab } from "@/tcg/types";
 
@@ -104,6 +105,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
     standardAllowsCardCredits,
     unseenReceived,
     battlePass,
+    xpGift,
   ] = await Promise.all([
     listMyCards(),
     getCardCredits(userId),
@@ -120,6 +122,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
     standardPackAllowsCardCredits(),
     getUnseenReceived(userId),
     loadBattlePassView(userId),
+    loadXpGiftView(userId),
   ]);
   const isAdmin = session.user.role === "admin";
 
@@ -171,6 +174,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
           initialReceived={unseenReceived}
           battlePassOpen={battlePass.enabled || isAdmin}
           initialBattlePass={battlePass}
+          initialXpGift={xpGift}
         />
       </div>
     </div>

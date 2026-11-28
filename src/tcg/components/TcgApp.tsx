@@ -31,6 +31,8 @@ import { TcgPCreditsShop } from "./TcgPCreditsShop";
 import { buzz } from "@/tcg/ui/feedback";
 import { withLiveXp, type BattlePassView } from "@/tcg/battle-pass/config";
 import { BattlePassStrip } from "@/tcg/battle-pass/components/BattlePassStrip";
+import { XpGiftCard } from "@/tcg/components/XpGiftCard";
+import type { XpGiftView } from "@/tcg/xp-gifts";
 import { acknowledgeReceivedCards } from "@/tcg/trade-actions";
 import type { ReceivedCard } from "@/tcg/trade-types";
 import { ReceivedCardsReveal } from "./ReceivedCardsReveal";
@@ -148,6 +150,7 @@ export function TcgApp({
   initialReceived = [],
   battlePassOpen = false,
   initialBattlePass = null,
+  initialXpGift = null,
 }: {
   userId: string;
   isAdmin?: boolean;
@@ -180,6 +183,8 @@ export function TcgApp({
   battlePassOpen?: boolean;
   /** This month's Battle Pass as the page loaded it: the tab shows it straight away, and the badge counts its waiting gifts. */
   initialBattlePass?: BattlePassView | null;
+  /** The free XP gift settings and where this driver's gifts are paid up to. Null while the gifts are off. */
+  initialXpGift?: XpGiftView | null;
 }) {
   const [tab, setTab] = useState<TcgTab>(initialTab);
   const [cards, setCards] = useState<MemberCard[]>(initialCards);
@@ -192,6 +197,7 @@ export function TcgApp({
   // This month's Battle Pass as last loaded, with the Drift XP total at that moment. XP earned in games since then is added on
   // top (see `battlePass` below), so the bar on the HUD moves as you play. The Battle Pass tab refreshes the loaded copy.
   const [bp, setBp] = useState<{ view: BattlePassView | null; base: number }>({ view: initialBattlePass, base: initialClashStats.gameXp });
+  const [xpGift, setXpGift] = useState<XpGiftView | null>(initialXpGift);
   const gameXpRef = useRef(initialClashStats.gameXp);
   useEffect(() => {
     gameXpRef.current = clashStats.gameXp;
@@ -212,7 +218,7 @@ export function TcgApp({
   // When the page's data is refreshed (pull to refresh, or a server action that revalidates), the server's copy replaces
   // what this screen is holding, so the wallet, deck, listings and stats are never stale. This is state set while
   // rendering, which React allows for exactly this "props changed" case.
-  const [synced, setSynced] = useState({ initialTab, initialCards, initialPackCredits, initialPCredits, initialListings, initialClashStats, initialBattlePass });
+  const [synced, setSynced] = useState({ initialTab, initialCards, initialPackCredits, initialPCredits, initialListings, initialClashStats, initialBattlePass, initialXpGift });
   if (
     synced.initialTab !== initialTab ||
     synced.initialCards !== initialCards ||
@@ -220,7 +226,8 @@ export function TcgApp({
     synced.initialPCredits !== initialPCredits ||
     synced.initialListings !== initialListings ||
     synced.initialClashStats !== initialClashStats ||
-    synced.initialBattlePass !== initialBattlePass
+    synced.initialBattlePass !== initialBattlePass ||
+    synced.initialXpGift !== initialXpGift
   ) {
     if (synced.initialTab !== initialTab) setTab(initialTab);
     if (synced.initialCards !== initialCards) setCards(initialCards);
@@ -229,7 +236,8 @@ export function TcgApp({
     if (synced.initialListings !== initialListings) setListings(initialListings);
     if (synced.initialClashStats !== initialClashStats) setClashStats(initialClashStats);
     if (synced.initialBattlePass !== initialBattlePass) setBp({ view: initialBattlePass, base: initialClashStats.gameXp });
-    setSynced({ initialTab, initialCards, initialPackCredits, initialPCredits, initialListings, initialClashStats, initialBattlePass });
+    if (synced.initialXpGift !== initialXpGift) setXpGift(initialXpGift);
+    setSynced({ initialTab, initialCards, initialPackCredits, initialPCredits, initialListings, initialClashStats, initialBattlePass, initialXpGift });
   }
 
   const drift = useMemo(() => getGameXpProgress(clashStats.gameXp), [clashStats.gameXp]);
@@ -514,13 +522,23 @@ export function TcgApp({
           onOpenStore={() => selectTab("store")}
         >
           {view === "home" ? (
-            <PlayBanner
-              onPlay={() => selectTab("play")}
-              wins={clashStats.wins}
-              losses={clashStats.losses}
-              streak={clashStats.streak}
-              dailyWinAvailable={!clashStats.dailyWinClaimed}
-            />
+            <>
+              <PlayBanner
+                onPlay={() => selectTab("play")}
+                wins={clashStats.wins}
+                losses={clashStats.losses}
+                streak={clashStats.streak}
+                dailyWinAvailable={!clashStats.dailyWinClaimed}
+              />
+              <XpGiftCard
+                view={xpGift}
+                xp={clashStats.gameXp}
+                onClaimed={(next, balance) => {
+                  setXpGift(next);
+                  setPCredits(balance);
+                }}
+              />
+            </>
           ) : !clashOpponent ? (
             opponentFailed ? (
               <div role="alert" className="space-y-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 p-4 text-center">

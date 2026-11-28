@@ -25,6 +25,12 @@ const SETTINGS: Array<{ href: string; title: string; desc: string; icon: string 
     icon: "🎖️",
   },
   {
+    href: "/admin/driftclash/xp-gifts",
+    title: "Free XP gifts",
+    desc: "The dial for a free P-Credit gift every time a driver earns a set amount of Drift XP",
+    icon: "🎁",
+  },
+  {
     href: "/admin/card-maker",
     title: "Card maker",
     desc: "Design full art cards, with frame colours and effects",
