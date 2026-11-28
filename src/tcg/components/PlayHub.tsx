@@ -86,15 +86,18 @@ export function PlayHub({
         </p>
       </div>
 
-      <ModeButton card={primary} onSelect={onSelect} featured />
+      {/* A phone stacks the modes. From a desktop the main mode is a large panel with the other two stacked beside it. */}
+      <div className="space-y-3 sm:space-y-4 lg:grid lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] lg:items-stretch lg:gap-5 lg:space-y-0">
+        <ModeButton card={primary} onSelect={onSelect} featured />
 
-      <ul className="grid gap-3 sm:grid-cols-2">
-        {others.map((card) => (
-          <li key={card.mode} className="flex">
-            <ModeButton card={card} onSelect={onSelect} />
-          </li>
-        ))}
-      </ul>
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 lg:grid-rows-2 lg:gap-5">
+          {others.map((card) => (
+            <li key={card.mode} className="flex">
+              <ModeButton card={card} onSelect={onSelect} />
+            </li>
+          ))}
+        </ul>
+      </div>
     </section>
   );
 }
@@ -118,26 +121,28 @@ export function PlayBanner({
   return (
     <section
       aria-label="Play"
-      className="relative overflow-hidden rounded-3xl border-2 border-amber-500/50 bg-gradient-to-br from-amber-950/70 via-zinc-950 to-black p-4 text-white shadow-[0_0_30px_rgba(245,158,11,0.15)] sm:p-6"
+      className="relative overflow-hidden rounded-3xl border-2 border-amber-500/50 bg-gradient-to-br from-amber-950/70 via-zinc-950 to-black p-4 text-white shadow-[0_0_30px_rgba(245,158,11,0.15)] sm:p-6 lg:flex lg:items-center lg:justify-between lg:gap-10 lg:p-10"
     >
       <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-amber-500/20 blur-3xl" aria-hidden />
-      <div className="relative flex flex-wrap items-center justify-between gap-2">
+      <div className="relative min-w-0 lg:flex-1">
+      <div className="relative flex flex-wrap items-center justify-between gap-2 lg:justify-start lg:gap-4">
         <p className="text-[11px] font-black uppercase tracking-widest text-amber-400">DriftClash</p>
         <p className="rounded-lg bg-zinc-900 px-2.5 py-1.5 text-[11px] font-bold text-zinc-300">
           ⚔️ <strong className="text-emerald-400">{wins}W</strong>/{losses}L
           {streak > 0 && <span className="ml-1.5 text-amber-400">🔥{streak}</span>}
         </p>
       </div>
-      <h2 className="relative mt-2 text-2xl font-black uppercase tracking-tight sm:text-3xl">Ready to drift?</h2>
-      <p className="relative mt-1 text-sm text-zinc-300">
+      <h2 className="relative mt-2 text-2xl font-black uppercase tracking-tight sm:text-3xl lg:mt-4 lg:text-5xl">Ready to drift?</h2>
+      <p className="relative mt-1 text-sm text-zinc-300 lg:mt-3 lg:max-w-xl lg:text-base">
         {dailyWinAvailable
           ? `Your daily win bonus is waiting: +${DAILY_CLASH_WIN_REWARD_PCREDITS}P for your first win today.`
           : "Tandem Clash, challenges and more game modes."}
       </p>
+      </div>
       <button
         type="button"
         onClick={onPlay}
-        className="gx-tap relative mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-amber-500 px-6 text-sm font-black uppercase tracking-wider text-black shadow-[0_0_24px_rgba(245,158,11,0.45)] transition-all hover:bg-amber-400 active:scale-[0.98]"
+        className="gx-tap relative mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-amber-500 px-6 text-sm font-black uppercase tracking-wider text-black shadow-[0_0_24px_rgba(245,158,11,0.45)] transition-all hover:bg-amber-400 active:scale-[0.98] lg:mt-0 lg:min-h-16 lg:w-auto lg:shrink-0 lg:px-12 lg:text-base"
       >
         <span aria-hidden>▶</span> Play now <span aria-hidden>→</span>
       </button>
@@ -159,30 +164,30 @@ function ModeButton({
       type="button"
       onClick={() => onSelect(card.mode)}
       aria-label={`${card.title}. ${card.blurb}`}
-      className={`gx-tap group flex w-full flex-col gap-3 rounded-3xl border-2 bg-gradient-to-br p-4 text-left text-white transition-transform hover:scale-[1.01] focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 sm:p-5 ${card.surface}`}
+      className={`gx-tap group flex w-full flex-col gap-3 rounded-3xl border-2 bg-gradient-to-br p-4 text-left text-white transition-transform hover:scale-[1.01] focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 sm:p-5 ${featured ? "lg:min-h-[22rem] lg:justify-between lg:p-8" : "lg:p-6"} ${card.surface}`}
     >
       <div className="flex items-start gap-3">
         <span
           aria-hidden
-          className={`flex shrink-0 items-center justify-center rounded-2xl bg-white/10 ${featured ? "h-14 w-14 text-3xl" : "h-12 w-12 text-2xl"}`}
+          className={`flex shrink-0 items-center justify-center rounded-2xl bg-white/10 ${featured ? "h-14 w-14 text-3xl lg:h-20 lg:w-20 lg:text-5xl" : "h-12 w-12 text-2xl"}`}
         >
           {card.icon}
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className={`font-black uppercase tracking-tight ${featured ? "text-xl sm:text-2xl" : "text-lg"}`}>{card.title}</h3>
+            <h3 className={`font-black uppercase tracking-tight ${featured ? "text-xl sm:text-2xl lg:text-4xl" : "text-lg"}`}>{card.title}</h3>
             {card.tag && (
               <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-300">
                 {card.tag}
               </span>
             )}
           </div>
-          <p className="mt-1 text-xs leading-snug text-zinc-300 sm:text-sm">{card.blurb}</p>
+          <p className={`mt-1 text-xs leading-snug text-zinc-300 sm:text-sm ${featured ? "lg:mt-3 lg:max-w-md lg:text-base" : ""}`}>{card.blurb}</p>
         </div>
       </div>
       <span
         aria-hidden
-        className={`mt-auto inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-4 text-sm font-black uppercase tracking-wider ${card.ctaCls}`}
+        className={`mt-auto inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl px-4 text-sm font-black uppercase tracking-wider ${featured ? "lg:min-h-14 lg:w-fit lg:self-start lg:px-8 lg:text-base" : "lg:w-fit"} ${card.ctaCls}`}
       >
         {featured && "▶"} {card.cta} <span className="transition-transform group-hover:translate-x-0.5">→</span>
       </span>

@@ -31,6 +31,7 @@ export function PackPicker({ packs, selectedId, onSelect }: { packs: CarouselPac
   const many = packs.length > 1;
   const dragStartX = useRef<number | null>(null);
   const radios = useRef<Array<HTMLButtonElement | null>>([]);
+  const shelf = useRef<Array<HTMLButtonElement | null>>([]);
 
   if (!selected) return null;
 
@@ -38,7 +39,8 @@ export function PackPicker({ packs, selectedId, onSelect }: { packs: CarouselPac
     const next = Math.min(packs.length - 1, Math.max(0, index));
     if (next === selectedIndex) return;
     onSelect(packs[next].id);
-    if (focus) radios.current[next]?.focus();
+    // Focus whichever of the two lists is on screen (the name buttons on a phone, the shelf on a desktop).
+    if (focus) [shelf.current[next], radios.current[next]].find((el) => el && el.offsetParent !== null)?.focus();
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -70,7 +72,41 @@ export function PackPicker({ packs, selectedId, onSelect }: { packs: CarouselPac
     "gx-tap flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-zinc-300 bg-white text-3xl font-black text-zinc-800 shadow-md transition-colors hover:border-amber-500 hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-400/70 disabled:cursor-not-allowed disabled:opacity-30 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800";
 
   return (
-    <div className="space-y-4">
+    <div>
+    {/* A desktop shows every pack at once as a shelf you pick from. */}
+    <div role="radiogroup" aria-label="Choose a pack" onKeyDown={onKeyDown} className="hidden gap-3 lg:grid lg:grid-cols-3">
+      {packs.map((pack, index) => {
+        const active = pack.id === selected.id;
+        return (
+          <button
+            key={pack.id}
+            ref={(el) => {
+              shelf.current[index] = el;
+            }}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            tabIndex={active ? 0 : -1}
+            onClick={() => onSelect(pack.id)}
+            className={`gx-tap rounded-2xl p-2.5 text-center transition-all focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-400/70 ${
+              active ? "bg-amber-500/15 ring-2 ring-amber-500" : "opacity-80 hover:-translate-y-1 hover:bg-zinc-100 hover:opacity-100 dark:hover:bg-zinc-800"
+            }`}
+          >
+            <PackArt
+              name={pack.name}
+              variant={pack.variant}
+              cardsLabel={pack.cardsLabel}
+              extraLabel={pack.extraLabel}
+              heroCard={pack.heroCard}
+              discountPct={pack.discountPct}
+            />
+            <span className="mt-2 block truncate text-xs font-black text-zinc-900 dark:text-zinc-100">{pack.name}</span>
+            {pack.priceLabel && <span className="block text-[11px] font-bold text-amber-700 dark:text-amber-300">{pack.priceLabel}</span>}
+          </button>
+        );
+      })}
+    </div>
+    <div className="space-y-4 lg:hidden">
       {/* The selected pack, large. Swiping sideways changes pack; the page still scrolls up and down. */}
       <div
         onPointerDown={onPointerDown}
@@ -140,6 +176,7 @@ export function PackPicker({ packs, selectedId, onSelect }: { packs: CarouselPac
           </div>
         </>
       )}
+    </div>
     </div>
   );
 }

@@ -316,17 +316,17 @@ export function TcgApp({
     <ToastProvider>
     <div ref={rootRef} className="space-y-3 pb-4 sm:space-y-5 sm:pb-8">
       {/* The HUD: one row on a phone (level, rank and XP on the left, wallet on the right); your stats open when you tap the level bar. */}
-      <header className="relative overflow-hidden rounded-2xl border border-zinc-200/90 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-2.5 text-white shadow-lg dark:border-zinc-800 sm:rounded-3xl sm:p-5">
+      <header className="relative overflow-hidden rounded-2xl border border-zinc-200/90 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-2.5 text-white shadow-lg dark:border-zinc-800 sm:rounded-3xl sm:p-5 lg:flex lg:flex-wrap lg:items-center lg:gap-x-6 lg:gap-y-3 lg:p-6">
         <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-amber-500/15 blur-2xl" />
 
-        <div className="relative flex items-center gap-2">
+        <div className="relative flex items-center gap-2 lg:contents">
           <button
             type="button"
             onClick={() => setHudOpen((open) => !open)}
             aria-expanded={hudOpen}
             aria-controls="gx-hud-details"
             aria-label={`Drift level ${drift.level}, ${progress.rankTitle}. ${hudOpen ? "Hide" : "Show"} your stats`}
-            className="gx-tap flex min-h-12 min-w-0 flex-1 items-center gap-2.5 rounded-xl text-left sm:pointer-events-none"
+            className="gx-tap flex min-h-12 min-w-0 flex-1 items-center gap-2.5 rounded-xl text-left sm:pointer-events-none lg:order-1 lg:w-[22rem] lg:flex-none"
           >
             <span className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-br from-emerald-300 via-emerald-400 to-cyan-500 text-black shadow-md shadow-emerald-500/20">
               <span className="text-[9px] font-black uppercase leading-none opacity-80">Drift</span>
@@ -354,7 +354,7 @@ export function TcgApp({
             </span>
           </button>
 
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1.5 lg:order-3">
             <button
               type="button"
               onClick={() => selectTab("p-credits")}
@@ -380,16 +380,18 @@ export function TcgApp({
 
         {/* This month's Battle Pass: progress and the next reward. Tapping it opens the Battle Pass tab. */}
         {battlePassOpen && battlePass && battlePass.tiers.length > 0 && (
-          <BattlePassStrip
-            view={battlePass.enabled ? battlePass : { ...battlePass, readyCount: 0 }}
-            onOpen={() => selectTab("battle-pass")}
-          />
+          <div className="lg:order-4 lg:basis-full">
+            <BattlePassStrip
+              view={battlePass.enabled ? battlePass : { ...battlePass, readyCount: 0 }}
+              onOpen={() => selectTab("battle-pass")}
+            />
+          </div>
         )}
 
         {/* Your stats: cards by rarity, power, wins. Folded away on a phone until the level bar is tapped. */}
         <div
           id="gx-hud-details"
-          className={`relative ${hudOpen ? "mt-2.5 flex" : "hidden sm:mt-3 sm:flex"} gx-fade-up items-center justify-between gap-2 overflow-x-auto border-t border-zinc-800/90 pt-2.5 text-[11px] no-scrollbar`}
+          className={`relative ${hudOpen ? "mt-2.5 flex" : "hidden sm:mt-3 sm:flex"} gx-fade-up items-center justify-between gap-2 overflow-x-auto border-t border-zinc-800/90 pt-2.5 text-[11px] no-scrollbar lg:order-2 lg:mt-0 lg:min-w-0 lg:flex-1 lg:justify-center lg:gap-4 lg:border-t-0 lg:pt-0 lg:text-xs`}
         >
           <div className="flex shrink-0 items-center gap-1.5">
             <span className="rounded-md bg-zinc-800 px-2 py-1 font-extrabold text-zinc-200">⚡ {progress.totalPower.toLocaleString()}</span>
@@ -411,7 +413,7 @@ export function TcgApp({
         <nav
           aria-label="DriftClash game navigation"
           style={{ gridTemplateColumns: `repeat(${visibleTabs.length}, minmax(0, 1fr))` }}
-          className="mt-3 hidden gap-1.5 rounded-2xl bg-zinc-900/90 p-1.5 md:grid"
+          className="mt-3 hidden gap-1.5 rounded-2xl bg-zinc-900/90 p-1.5 md:grid lg:order-5 lg:mt-0 lg:basis-full"
         >
           {visibleTabs.map((t) => {
             const active = navActive === t.id;
@@ -429,14 +431,15 @@ export function TcgApp({
                 type="button"
                 onClick={() => selectTab(t.id)}
                 aria-current={active ? "page" : undefined}
-                className={`flex min-h-10 items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-xs font-black transition-all ${
+                className={`flex min-h-10 flex-col items-center justify-center gap-0.5 rounded-xl px-1.5 py-1.5 text-[11px] font-black transition-all md:min-h-14 lg:min-h-11 lg:flex-row lg:gap-1.5 lg:px-2 lg:text-xs ${
                   active
                     ? "bg-amber-500 text-black shadow-sm"
                     : "text-zinc-300 hover:bg-zinc-800 hover:text-white"
                 }`}
               >
                 <span aria-hidden>{t.icon}</span>
-                <span>{t.label}</span>
+                <span className="flex items-center gap-1">
+                <span className="whitespace-nowrap">{t.label}</span>
                 {badgeText && (
                   <span
                     className={`rounded-full px-1.5 py-0.5 text-[10px] font-extrabold ${
@@ -450,6 +453,7 @@ export function TcgApp({
                     {badgeText}
                   </span>
                 )}
+                </span>
               </button>
             );
           })}

@@ -361,9 +361,10 @@ export function TcgMarketplace({
       {/* One sticky bar: search, filters, balance and tier chips */}
       <section
         aria-label="Marketplace controls"
-        className="sticky gx-sticky-top z-[35] space-y-2 rounded-2xl border border-zinc-800 bg-zinc-950/95 p-2 shadow-lg backdrop-blur"
+        className="sticky gx-sticky-top z-[35] space-y-2 rounded-2xl border border-zinc-800 bg-zinc-950/95 p-2 shadow-lg backdrop-blur lg:flex lg:items-center lg:gap-3 lg:space-y-0 lg:p-2.5"
       >
-        <div className="flex items-center gap-2">
+        {/* On a desktop the search, the balance with the rarity chips, and the filters button share one row. */}
+        <div className="flex items-center gap-2 lg:contents">
           <input
             type="search"
             inputMode="search"
@@ -372,12 +373,12 @@ export function TcgMarketplace({
             onChange={(e) => patchFilters({ search: e.target.value })}
             placeholder="Search car, driver, team, seller…"
             aria-label="Search marketplace listings"
-            className="h-11 min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 text-base text-zinc-100 placeholder-zinc-500 focus:border-amber-500 focus:outline-none"
+            className="h-11 min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 text-base text-zinc-100 placeholder-zinc-500 focus:border-amber-500 focus:outline-none lg:order-1 lg:w-72 lg:flex-none"
           />
           <button
             type="button"
             onClick={() => setFiltersOpen(true)}
-            className="gx-tap relative inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 text-xs font-black text-zinc-100 hover:bg-zinc-800"
+            className="gx-tap relative inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3.5 text-xs font-black text-zinc-100 hover:bg-zinc-800 lg:order-3"
           >
             <svg aria-hidden className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}>
               <path strokeLinecap="round" d="M4 6h16M7 12h10M10 18h4" />
@@ -394,7 +395,7 @@ export function TcgMarketplace({
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 lg:order-2 lg:min-w-0 lg:flex-1">
           <div className="flex h-11 shrink-0 items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 pl-3 pr-1">
             <span className="text-xs font-black text-zinc-100">
               <span aria-hidden>🪙 </span>
@@ -502,7 +503,7 @@ export function TcgMarketplace({
           batch={12}
           label="Marketplace listings"
           bleed
-          className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4"
+          className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5"
           render={(item) => {
             const isMine = item.sellerId === userId;
             const canAfford = pCredits >= item.price;

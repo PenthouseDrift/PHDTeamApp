@@ -2785,12 +2785,12 @@ export function DriftClashArena({
       ) : (
         <section
           aria-label="Play Tandem Clash"
-          className="relative overflow-hidden rounded-2xl border border-amber-500/40 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-3 text-white shadow-xl sm:rounded-3xl sm:p-4"
+          className="relative overflow-hidden rounded-2xl border border-amber-500/40 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-3 text-white shadow-xl sm:rounded-3xl sm:p-4 lg:p-8"
         >
           <div className="pointer-events-none absolute -right-12 -top-12 h-52 w-52 rounded-full bg-amber-500/15 blur-3xl" aria-hidden />
-          <div className="relative z-10 space-y-2.5">
+          <div className="relative z-10 space-y-2.5 lg:space-y-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-base font-black tracking-tight sm:text-lg">Tandem Clash</h2>
+              <h2 className="text-base font-black tracking-tight sm:text-lg lg:text-3xl">Tandem Clash</h2>
               <div className="flex items-center gap-2 text-xs font-black tabular-nums">
                 <span className="rounded-lg bg-zinc-900 px-2.5 py-1">
                   <span className="text-emerald-400">{clashStats.wins}W</span>
@@ -2809,7 +2809,7 @@ export function DriftClashArena({
               </p>
             )}
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 lg:gap-4">
               {hasEarlyAccess ? (
                 <button
                   type="button"
@@ -2817,7 +2817,7 @@ export function DriftClashArena({
                     buzz(12);
                     handleLaunchGame();
                   }}
-                  className="gx-tap group flex min-h-[72px] flex-col items-start justify-center gap-0.5 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 px-3 py-3 text-left text-black shadow-[0_0_18px_rgba(245,158,11,0.3)] transition-all hover:scale-[1.01]"
+                  className="gx-tap group flex min-h-[72px] flex-col items-start justify-center gap-0.5 rounded-xl bg-gradient-to-r lg:min-h-[120px] lg:px-6 from-amber-400 via-amber-500 to-orange-500 px-3 py-3 text-left text-black shadow-[0_0_18px_rgba(245,158,11,0.3)] transition-all hover:scale-[1.01]"
                 >
                   <span className="flex items-center gap-1.5 text-sm font-black uppercase tracking-wide sm:text-base">
                     <span aria-hidden>🎮</span> Normal game
@@ -2858,7 +2858,7 @@ export function DriftClashArena({
                   buzz(12);
                   setArenaLobbyTab("challenges");
                 }}
-                className="gx-tap group flex min-h-[72px] flex-col items-start justify-center gap-0.5 rounded-xl bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500 px-3 py-3 text-left text-white shadow-[0_0_18px_rgba(168,85,247,0.3)] transition-all hover:scale-[1.01]"
+                className="gx-tap group flex min-h-[72px] flex-col items-start justify-center gap-0.5 rounded-xl bg-gradient-to-r lg:min-h-[120px] lg:px-6 from-purple-500 via-fuchsia-500 to-pink-500 px-3 py-3 text-left text-white shadow-[0_0_18px_rgba(168,85,247,0.3)] transition-all hover:scale-[1.01]"
               >
                 <span className="flex items-center gap-1.5 text-sm font-black uppercase tracking-wide sm:text-base">
                   <span aria-hidden>🏆</span> Challenge

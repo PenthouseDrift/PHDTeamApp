@@ -16,6 +16,8 @@ import type { TcgCustomPackWithCards } from "@/tcg/types";
 // gives them room, and the equal negative margins keep the row exactly where it was (10px sideways is the page's own padding, and
 // the top one is the gap above the row).
 const rowCls = "no-scrollbar -mx-2.5 -mt-2.5 -mb-4 flex snap-x snap-proximity gap-3 overflow-x-auto overscroll-x-contain scroll-px-2.5 px-2.5 pb-4 pt-2.5 [&>li]:snap-start";
+// From a tablet up there is room to show everything, so a row becomes a grid and stops scrolling sideways. Phones keep the swipe row.
+const gridReset = "md:m-0 md:grid md:snap-none md:gap-4 md:overflow-visible md:p-0";
 const sectionTitle = "text-sm font-black uppercase tracking-wider text-zinc-900 dark:text-zinc-100";
 const linkBtn =
   "gx-tap inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-xs font-black text-amber-600 hover:bg-amber-500/10 dark:text-amber-400";
@@ -89,12 +91,12 @@ export function TcgHome({
           {shownChallenges.length > 0 && (
             <section aria-label="Live challenges" className="gx-fade-up space-y-2.5">
               <SectionHeader title="Live challenges" hint="Win a cup for P-Credits. Cups reset daily." action="See all" onAction={onOpenChallenges} />
-              <ul className={rowCls}>
+              <ul className={`${rowCls} ${gridReset} md:grid-cols-2 lg:grid-cols-4`}>
                 {shownChallenges.map((c) => {
                   const theme = CHALLENGE_THEME_CONFIGS[c.themeStyle] ?? CHALLENGE_THEME_CONFIGS.cyber;
                   const completed = done.has(c.id);
                   return (
-                    <li key={c.id} className="w-48 shrink-0">
+                    <li key={c.id} className="w-48 shrink-0 md:w-auto">
                       <button
                         type="button"
                         onClick={onOpenChallenges}
@@ -125,12 +127,14 @@ export function TcgHome({
             </section>
           )}
 
+          {/* On a desktop the packs sit beside the rare cards instead of one above the other. */}
+          <div className={rareCards.length > 0 ? "space-y-4 sm:space-y-5 lg:grid lg:grid-cols-[minmax(0,23rem)_minmax(0,1fr)] lg:items-start lg:gap-8 lg:space-y-0" : "space-y-4 sm:space-y-5"}>
           {/* ── Packs ───────────────────────────────────────────────────── */}
           <section aria-label="Packs" className="gx-fade-up space-y-2.5" style={{ animationDelay: "60ms" }}>
             <SectionHeader title="Packs" hint={packCredits > 0 ? `You have ${packCredits} pack credit${packCredits === 1 ? "" : "s"} ready` : "Spend P-Credits in the store"} action="Pack store" onAction={onOpenStore} />
-            <ul className={`${rowCls} items-start`}>
+            <ul className={`${rowCls} ${gridReset} items-start md:grid-cols-[repeat(auto-fill,minmax(9rem,10.5rem))] md:gap-5`}>
               {standardPackEnabled && (
-              <li className="w-36 shrink-0">
+              <li className="w-36 shrink-0 md:w-auto">
                 <button
                   type="button"
                   onClick={onOpenStore}
@@ -152,7 +156,7 @@ export function TcgHome({
                 const onSale = isOnSale(pack.price, pack.salePrice);
                 const price = getEffectivePrice(pack.price, pack.salePrice);
                 return (
-                  <li key={pack.id} className="w-36 shrink-0">
+                  <li key={pack.id} className="w-36 shrink-0 md:w-auto">
                     <button
                       type="button"
                       onClick={onOpenStore}
@@ -179,9 +183,9 @@ export function TcgHome({
           {rareCards.length > 0 && (
             <section aria-label="Rare cards to pull" className="gx-fade-up space-y-2.5" style={{ animationDelay: "120ms" }}>
               <SectionHeader title="Rare cards to pull" hint="Rare cards that can drop in packs" action="Open a pack" onAction={onOpenStore} />
-              <ul className={rowCls}>
+              <ul className={`${rowCls} ${gridReset} md:grid-cols-5 lg:grid-cols-4`}>
                 {rareCards.map(({ card }) => (
-                  <li key={card.id} className="w-28 shrink-0 space-y-1">
+                  <li key={card.id} className="w-28 shrink-0 space-y-1 md:w-auto">
                     <FullArtCard card={card} className="drop-shadow-lg" />
                     <p className="truncate text-xs font-black text-zinc-900 dark:text-zinc-100">{card.name}</p>
                     <p className="text-[11px] font-bold text-amber-600 dark:text-amber-400">{rarityLabel(card.tier)}</p>
@@ -190,13 +194,14 @@ export function TcgHome({
               </ul>
             </section>
           )}
+          </div>
           {/* ── Coming soon ─────────────────────────────────────────────── */}
           {comingSoon.length > 0 && (
             <section aria-label="Coming soon" className="gx-fade-up space-y-2.5" style={{ animationDelay: "180ms" }}>
               <SectionHeader title="Coming soon" hint="Cards on their way to the game" />
-              <ul className={rowCls}>
+              <ul className={`${rowCls} ${gridReset} md:grid-cols-5 lg:grid-cols-6`}>
                 {comingSoon.map((item) => (
-                  <li key={item.id} className="w-28 shrink-0 space-y-1">
+                  <li key={item.id} className="w-28 shrink-0 space-y-1 md:w-auto">
                     <FullArtCard card={item.card} className="drop-shadow-lg" />
                     {item.when && <p className="text-[11px] font-bold text-amber-600 dark:text-amber-400">{item.when}</p>}
                     {item.note && <p className="line-clamp-2 text-[11px] leading-tight text-zinc-500 dark:text-zinc-400">{item.note}</p>}

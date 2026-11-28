@@ -35,7 +35,7 @@ export function DriftClashShell({
     <div className="min-h-dvh flex flex-col bg-zinc-100 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
       {/* Compact Single-Row Top Game Bar */}
       <header className="sticky top-0 z-40 border-b border-zinc-200/80 bg-white/90 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-900/90">
-        <div className="mx-auto flex h-13 max-w-6xl items-center justify-between gap-2 px-3 sm:px-6">
+        <div className="mx-auto flex h-13 max-w-6xl items-center justify-between gap-2 px-3 sm:px-6 2xl:max-w-7xl">
           {/* Brand Logo */}
           <Link href="/cards" className="flex items-center gap-2 shrink-0">
             <img

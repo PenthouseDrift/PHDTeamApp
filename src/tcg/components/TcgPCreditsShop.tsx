@@ -256,18 +256,18 @@ export function TcgPCreditsShop({
       </section>
 
       {/* Where else to spend or earn */}
-      <section aria-label="Shortcuts" className="grid grid-cols-2 gap-2.5">
+      <section aria-label="Shortcuts" className="grid grid-cols-2 gap-2.5 lg:flex lg:gap-3">
         <button
           type="button"
           onClick={onOpenStoreTab}
-          className="gx-tap min-h-12 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-bold text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          className="gx-tap min-h-12 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-bold text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 lg:min-w-56 lg:px-6"
         >
           Spend in Pack Store
         </button>
         <button
           type="button"
           onClick={onOpenMarketplaceTab}
-          className="gx-tap min-h-12 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-bold text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          className="gx-tap min-h-12 rounded-xl border border-zinc-300 bg-white px-3 text-sm font-bold text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 lg:min-w-56 lg:px-6"
         >
           Browse Marketplace
         </button>

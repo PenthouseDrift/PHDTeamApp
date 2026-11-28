@@ -144,7 +144,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
 
   return (
     <div className="min-h-full bg-zinc-100 px-2.5 py-2.5 dark:bg-zinc-950 sm:px-6 sm:py-5 lg:px-8">
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-6xl 2xl:max-w-7xl">
         <TcgApp
           userId={userId}
           isAdmin={session.user.role === "admin"}

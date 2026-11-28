@@ -11,14 +11,14 @@ import type { MemberCard } from "@/lib/card-roll";
  * Fixed Quick Sell payouts in P-Credits per car card rarity tier (healthy state).
  * Quick selling permanently deletes the card and immediately credits the owner.
  *
- * Tuned so that selling every card from an average pack returns about half of what the pack cost (about 49% of a 100 P pack),
- * so quick selling clears cards but can't pay for the next pack. Gold and above are unchanged, so a good pull still pays well.
+ * Tuned so that selling every card from an average pack returns a bit over half of what the pack cost (about 55% of a 100 P
+ * pack), so quick selling clears cards but can't pay for the next pack. Gold and above are unchanged, so a good pull still pays well.
  */
 export const QUICK_SELL_PRICES: QuickSellRateTable = {
-  bronze: 5,
+  bronze: 8,
   silver: 15,
-  gold: 50,
-  legend: 100,
+  gold: 40,
+  legend: 80,
   mythic: 250,
 };
 
@@ -27,8 +27,8 @@ export const QUICK_SELL_PRICES: QuickSellRateTable = {
  * Legend: 25p, Gold: 15p, Silver: 5p, Bronze: 2p, Mythic: 50p.
  */
 export const BROKEN_QUICK_SELL_PRICES: QuickSellRateTable = {
-  bronze: 2,
-  silver: 5,
+  bronze: 5,
+  silver: 8,
   gold: 15,
   legend: 25,
   mythic: 50,

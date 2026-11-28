@@ -455,9 +455,10 @@ export function CardCollection({
       ) : (
         <>
           {/* One control bar that stays under the app header: search, filters, and the rarity quick chips. */}
-          <div className="gx-sticky-top sticky z-[35] space-y-2 rounded-2xl border border-zinc-800 bg-zinc-950/95 p-2 shadow-lg backdrop-blur-md">
-            <div className="flex items-center gap-2">
-              <div className="relative min-w-0 flex-1">
+          <div className="gx-sticky-top sticky z-[35] space-y-2 rounded-2xl border border-zinc-800 bg-zinc-950/95 p-2 shadow-lg backdrop-blur-md lg:flex lg:items-center lg:gap-3 lg:space-y-0 lg:p-2.5">
+            {/* On a desktop the search, the rarity chips and the filters button share one row. */}
+            <div className="flex items-center gap-2 lg:contents">
+              <div className="relative min-w-0 flex-1 lg:order-1 lg:w-80 lg:flex-none">
                 <span
                   aria-hidden
                   className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-zinc-500"
@@ -485,7 +486,7 @@ export function CardCollection({
                 aria-label={
                   activeFilterCount > 0 ? `Filters and sort, ${activeFilterCount} active` : "Filters and sort"
                 }
-                className="gx-tap relative inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 px-3.5 text-xs font-black text-zinc-100 hover:bg-zinc-700"
+                className="gx-tap relative inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 px-3.5 text-xs font-black text-zinc-100 hover:bg-zinc-700 lg:order-3"
               >
                 <span aria-hidden>⚙️</span>
                 <span>Filters</span>
@@ -502,7 +503,7 @@ export function CardCollection({
 
             {/* Rarity quick chips: one scrolling row, with a fade on the right edge to show there is more. */}
             <div
-              className="no-scrollbar -mx-0.5 flex items-center gap-1.5 overflow-x-auto px-0.5"
+              className="no-scrollbar -mx-0.5 flex items-center gap-1.5 overflow-x-auto px-0.5 lg:order-2 lg:mx-0 lg:min-w-0 lg:flex-1"
               role="group"
               aria-label="Filter by rarity"
               style={{
@@ -593,7 +594,7 @@ export function CardCollection({
               batch={18}
               label="Your cards"
               bleed
-              className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4"
+              className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5"
               render={(c) => (
                 <DeckTile
                   card={c}

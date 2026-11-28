@@ -428,7 +428,7 @@ export function TcgPackStore({
       ) : (
         <>
           {/* 1 and 2: pick a pack, and see what it costs. Side by side on a wide screen. */}
-          <div className="grid gap-3 sm:gap-4 md:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] md:items-start">
+          <div className="grid gap-3 sm:gap-4 md:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] md:items-start lg:grid-cols-[minmax(0,34rem)_minmax(0,1fr)] lg:gap-6">
             <section aria-labelledby="ps-choose" className={`${panel} space-y-4`}>
               <h2 id="ps-choose" className="text-lg font-black text-zinc-900 dark:text-zinc-100">
                 Choose a pack
@@ -526,7 +526,7 @@ export function TcgPackStore({
                 packId={activeId}
                 fallback={
                   activePack ? (
-                    <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+                    <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                       {activePack.setList.map(({ card }) => (
                         <li key={card.id} className="space-y-1.5">
                           <FullArtCard card={card} className="drop-shadow-lg" />
@@ -543,8 +543,8 @@ export function TcgPackStore({
           </section>
 
           {/* 4: the buttons stay on screen, just above the app's bottom bar, so there is never any scrolling to find them. */}
-          <div className="sticky z-[30]" style={{ bottom: chromeHeight + 8 }}>
-            <div className="space-y-2 rounded-2xl border border-zinc-700 bg-zinc-950/95 p-2.5 text-zinc-100 shadow-2xl backdrop-blur sm:p-3">
+          <div className="sticky z-[30] lg:flex lg:justify-center" style={{ bottom: chromeHeight + 8 }}>
+            <div className="space-y-2 rounded-2xl border border-zinc-700 bg-zinc-950/95 p-2.5 text-zinc-100 shadow-2xl backdrop-blur sm:p-3 lg:w-full lg:max-w-2xl lg:p-4">
               <div className="flex items-center justify-between gap-3 px-1">
                 <span className="min-w-0 truncate text-sm font-black">{selName}</span>
                 <span className="shrink-0 text-sm font-black tabular-nums text-amber-300">

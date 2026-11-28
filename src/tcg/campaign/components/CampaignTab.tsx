@@ -642,7 +642,7 @@ export function CampaignTab({
           {!view && (
             <section className={panel} aria-label="How it works">
               <h3 className="text-sm font-black uppercase tracking-wide text-zinc-300">How it works</h3>
-              <ol className="mt-2.5 space-y-2.5 text-sm">
+              <ol className="mt-2.5 space-y-2.5 text-sm lg:mt-4 lg:grid lg:grid-cols-3 lg:gap-6 lg:space-y-0">
                 {[
                   ["💳", "Choose an entry", "Pay once. The bigger the entry, the bigger the prizes."],
                   ["🃏", "Pick 3 cars, then 3 Crew", `Six of each are dealt from your own deck across bronze to legend. You need ${MIN_BRONZE_CARS} bronze cars to enter. Re-roll the cars and the Crew up to 3 times each.`],
@@ -661,6 +661,8 @@ export function CampaignTab({
               </ol>
             </section>
           )}
+          {/* On a desktop the result and the prize ladder sit side by side. */}
+          <div className={`space-y-3 ${status === "champion" || status === "eliminated" ? "lg:grid lg:grid-cols-2 lg:items-stretch lg:gap-4 lg:space-y-0" : ""}`}>
           {status === "champion" && (
             <div className="rounded-2xl border-2 border-amber-400/70 bg-gradient-to-b from-amber-950/70 to-zinc-950 p-4 text-center text-white">
               <p className="text-4xl" aria-hidden>
@@ -688,6 +690,7 @@ export function CampaignTab({
             </div>
           )}
           {view && <PrizeLadder compact fee={view.entry.fee} wins={view.wins} />}
+          </div>
           <Bracket rounds={view?.rounds ?? null} status={view?.status} fee={view?.entry.fee} />
           <DockSpacer />
           {deckIssue && (

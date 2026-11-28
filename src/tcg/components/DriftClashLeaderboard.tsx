@@ -61,7 +61,8 @@ function medalClass(rank: number): string {
 }
 
 /** A driver's picture, or their initial when they have none or it won't load. */
-function Avatar({ url, name }: { url: string | null; name: string }) {
+function Avatar({ url, name, big = false }: { url: string | null; name: string; big?: boolean }) {
+  const size = big ? "h-16 w-16 text-xl" : "h-10 w-10 text-sm";
   // Remembers which address failed, so a new picture gets its own try.
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const initials = name
@@ -84,17 +85,87 @@ function Avatar({ url, name }: { url: string | null; name: string }) {
         decoding="async"
         referrerPolicy="no-referrer"
         onError={() => setFailedUrl(url)}
-        className="h-10 w-10 shrink-0 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
+        className={`${size.split(" ").slice(0, 2).join(" ")} shrink-0 rounded-full border border-zinc-300 object-cover dark:border-zinc-700`}
       />
     );
   }
   return (
     <span
       aria-hidden
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-sm font-black text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+      className={`${size} flex shrink-0 items-center justify-center rounded-full bg-zinc-200 font-black text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300`}
     >
       {initials || "?"}
     </span>
+  );
+}
+
+/**
+ * The top three as a podium (second, first, third), for a desktop. A phone shows the plain list instead. The first place card stands
+ * tallest. Each card carries what the list's expanded row would, because those three rows are hidden on a desktop.
+ */
+function Podium({
+  top,
+  sortBy,
+  currentUserId,
+}: {
+  top: DriftClashLeaderboardEntry[];
+  sortBy: LeaderboardSort;
+  currentUserId: string;
+}) {
+  // Second place on the left, first in the middle, third on the right.
+  const order = [1, 0, 2].filter((i) => top[i]);
+  return (
+    <ol className="hidden items-end gap-5 lg:grid lg:grid-cols-3" aria-label="Top three collectors">
+      {order.map((i) => {
+        const entry = top[i];
+        const rank = i + 1;
+        const isMe = entry.userId === currentUserId;
+        const stats = statsFor(entry);
+        const key = stats[sortBy];
+        return (
+          <li
+            key={entry.userId}
+            id={`gx-podium-${entry.userId}`}
+            className={`scroll-mt-32 rounded-3xl border p-5 text-center shadow-sm ${
+              rank === 1 ? "pb-8 pt-8" : "pb-6 pt-6"
+            } ${
+              isMe
+                ? "border-amber-500 bg-amber-500/10"
+                : rank === 1
+                  ? "border-amber-400/60 bg-gradient-to-b from-amber-500/15 to-white dark:to-zinc-900"
+                  : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+            }`}
+          >
+            <span className={`mx-auto flex h-10 w-10 items-center justify-center rounded-xl text-xl font-black ${medalClass(rank)}`}>
+              <span className="sr-only">Rank </span>
+              {medalFor(rank)}
+            </span>
+            <div className="mt-3 flex justify-center">
+              <Avatar url={entry.avatarUrl} name={entry.driverName} big />
+            </div>
+            <p className="mt-2 flex items-center justify-center gap-1.5">
+              <span className="truncate text-base font-black text-zinc-900 dark:text-zinc-100">{entry.driverName}</span>
+              {isMe && (
+                <span className="shrink-0 rounded-full bg-amber-500 px-1.5 py-0.5 text-[11px] font-black uppercase leading-none text-black">You</span>
+              )}
+            </p>
+            <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+              {entry.rankIcon} {entry.rankTitle} · Collector Lv.{entry.level}
+            </p>
+            <p className={`mt-3 font-black leading-tight ${key.tone} ${rank === 1 ? "text-2xl" : "text-xl"}`}>{key.value}</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-400">{key.label}</p>
+            <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+              {entry.totalCards.toLocaleString()} cards · {entry.packsOpened.toLocaleString()} packs opened
+            </p>
+            {entry.topCard && (
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Ace card: <strong className="text-zinc-700 dark:text-zinc-200">{entry.topCard.carName}</strong> ({rarityLabel(entry.topCard.tier)})
+              </p>
+            )}
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -142,7 +213,9 @@ export function DriftClashLeaderboard({
   const outsideList = sorted.length > 0 && !me && Boolean(currentUserId);
 
   function jumpToMe() {
-    const row = rowRefs.current.get(currentUserId);
+    const listRow = rowRefs.current.get(currentUserId);
+    // On a desktop the top three rows are hidden (the podium shows them), so go to the podium card instead.
+    const row = listRow && listRow.offsetParent !== null ? listRow : (document.getElementById(`gx-podium-${currentUserId}`) ?? listRow);
     if (!row) return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     row.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
@@ -152,7 +225,7 @@ export function DriftClashLeaderboard({
   return (
     <div className="space-y-3">
       {/* Header */}
-      <section className="rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-5">
+      <section className="rounded-3xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-5 lg:p-6 lg:text-center">
         <span className="text-[11px] font-black uppercase tracking-wider text-amber-500">
           Shared rankings · Penthouse Drift &amp; DriftClash
         </span>
@@ -166,7 +239,7 @@ export function DriftClashLeaderboard({
       <div
         role="group"
         aria-label="Rank collectors by"
-        className="sticky gx-sticky-top z-[35] grid grid-cols-5 gap-1 rounded-2xl border border-zinc-800 bg-zinc-950/95 p-1.5 shadow-lg backdrop-blur"
+        className="sticky gx-sticky-top z-[35] grid grid-cols-5 gap-1 rounded-2xl border border-zinc-800 bg-zinc-950/95 p-1.5 shadow-lg backdrop-blur lg:mx-auto lg:max-w-3xl"
       >
         {SORT_TABS.map((tab) => {
           const active = sortBy === tab.id;
@@ -205,7 +278,8 @@ export function DriftClashLeaderboard({
         </section>
       ) : (
         <>
-          <ol className="space-y-2" aria-label="Leaderboard">
+          <Podium top={sorted.slice(0, 3)} sortBy={sortBy} currentUserId={currentUserId} />
+          <ol className="space-y-2 lg:grid lg:grid-cols-2 lg:items-start lg:gap-3 lg:space-y-0" aria-label="Leaderboard">
             {sorted.map((entry, idx) => {
               const rank = idx + 1;
               const isMe = entry.userId === currentUserId;
@@ -222,7 +296,7 @@ export function DriftClashLeaderboard({
                     if (el) rowRefs.current.set(entry.userId, el);
                     else rowRefs.current.delete(entry.userId);
                   }}
-                  className={`gx-cv-auto scroll-mt-32 overflow-hidden rounded-2xl border ${
+                  className={`gx-cv-auto scroll-mt-32 overflow-hidden rounded-2xl border ${rank <= 3 ? "lg:hidden" : ""} ${
                     isMe
                       ? "border-amber-500 bg-amber-500/10 shadow-sm"
                       : rank <= 3

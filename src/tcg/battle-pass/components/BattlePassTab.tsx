@@ -133,16 +133,18 @@ export function BattlePassTab({
         </p>
       )}
 
+      {/* On a desktop the progress card and the waiting gifts sit side by side. */}
+      <div className={`space-y-4 lg:space-y-0 ${ready.length > 0 && view.enabled ? "lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:gap-5" : ""}`}>
       {/* ── This month ── */}
       <section
         aria-label="Your progress"
-        className="relative overflow-hidden rounded-2xl border border-zinc-200/90 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-4 text-white shadow-lg dark:border-zinc-800"
+        className="relative overflow-hidden rounded-2xl border border-zinc-200/90 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black p-4 text-white shadow-lg dark:border-zinc-800 lg:p-6"
       >
         <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-amber-500/15 blur-2xl" />
         <div className="relative flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.25em] text-amber-300">Battle Pass · {view.monthLabel}</p>
-            <p className="mt-0.5 text-2xl font-black tabular-nums">
+            <p className="mt-0.5 text-2xl font-black tabular-nums lg:text-4xl">
               {fmt(Math.min(view.xp, view.maxXp))}
               <span className="text-base font-bold text-zinc-400"> / {fmt(view.maxXp)} XP</span>
             </p>
@@ -158,7 +160,7 @@ export function BattlePassTab({
           aria-valuemin={0}
           aria-valuemax={view.maxXp}
           aria-valuenow={Math.min(view.xp, view.maxXp)}
-          className="relative mt-3 h-3 overflow-hidden rounded-full bg-zinc-800"
+          className="relative mt-3 h-3 overflow-hidden rounded-full bg-zinc-800 lg:mt-5 lg:h-4"
         >
           <div className="h-full rounded-full bg-gradient-to-r from-amber-500 to-yellow-300 transition-[width] duration-700" style={{ width: `${pct}%` }} />
         </div>
@@ -173,8 +175,8 @@ export function BattlePassTab({
 
       {/* ── Gifts waiting ── */}
       {ready.length > 0 && view.enabled && (
-        <section aria-label="Gifts ready to open" className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <section aria-label="Gifts ready to open" className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4 lg:flex lg:items-center lg:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 lg:w-full lg:flex-col lg:items-start lg:justify-center lg:gap-4">
             <div>
               <p className="text-base font-black text-zinc-900 dark:text-zinc-100">
                 <span aria-hidden>🎁</span> {ready.length} gift{ready.length === 1 ? "" : "s"} ready
@@ -191,11 +193,12 @@ export function BattlePassTab({
           </div>
         </section>
       )}
+      </div>
 
       {/* ── Every gift on the pass ── */}
       <section aria-label="All Battle Pass rewards">
         <h2 className="mb-2 px-1 text-sm font-black uppercase tracking-wide text-zinc-500 dark:text-zinc-400">All rewards</h2>
-        <ol className="space-y-2">
+        <ol className="space-y-2 md:grid md:grid-cols-2 md:gap-3 md:space-y-0 lg:grid-cols-3">
           {view.tiers.map((t, i) => (
             <TierRow
               key={t.id}
